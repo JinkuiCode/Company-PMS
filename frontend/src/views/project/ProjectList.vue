@@ -1,79 +1,40 @@
 <template>
-  <div class="page">
-    <el-card>
-      <template #header>
-        <div class="page-header">
-          <span>项目列表</span>
-          <el-button type="primary" @click="openDialog()">新增项目</el-button>
-        </div>
-      </template>
+  <div class="project-list-page">
+    <!-- 工具栏 -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <el-button type="primary" size="small" @click="openCreateDialog">
+          <el-icon style="margin-right:4px;"><Plus /></el-icon>
+          新增项目
+        </el-button>
+      </div>
+      <div class="toolbar-right">
+        <span class="row-count" v-if="rowData.length">共 {{ rowData.length }} 个项目</span>
+      </div>
+    </div>
 
-      <el-row :gutter="12" style="margin-bottom: 16px;">
-        <el-col :span="6">
-          <el-tree-select
-            v-model="filterDeptId" placeholder="所属部门" clearable
-            :data="deptList" :props="{ label: 'dept_name', value: 'id', children: 'children' }"
-            check-strictly style="width: 100%;" @change="fetchList"
-          />
-        </el-col>
-        <el-col :span="4">
-          <el-select v-model="filterStatus" placeholder="项目状态" clearable @change="fetchList" style="width: 100%;">
-            <el-option label="进行中" :value="1" />
-            <el-option label="已完结" :value="2" />
-            <el-option label="暂停" :value="3" />
-          </el-select>
-        </el-col>
-      </el-row>
+    <!-- AG Grid 表格 -->
+    <ag-grid-vue
+      class="ag-theme-alpine wechat-table"
+      :rowData="rowData"
+      :columnDefs="columnDefs"
+      :defaultColDef="defaultColDef"
+      :domLayout="'autoHeight'"
+      :pagination="true"
+      :paginationPageSize="15"
+      :paginationPageSizeSelector="[10, 15, 20, 50]"
+      :suppressPaginationPanel="false"
+      :enableCellTextSelection="true"
+      :suppressRowClickSelection="true"
+      @cell-value-changed="onCellValueChanged"
+      style="width: 100%;"
+    />
 
-      <el-table :data="projectList" v-loading="loading" border stripe>
-        <el-table-column prop="id" label="ID" width="60" />
-        <el-table-column prop="project_code" label="项目编号" width="150" />
-        <el-table-column prop="project_name" label="项目名称" width="200">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="goProgress(row)">{{ row.project_name }}</el-button>
-          </template>
-        </el-table-column>
-        <el-table-column prop="dept_name" label="所属部门" width="100" />
-        <el-table-column prop="pm_name" label="项目经理" width="100" />
-        <el-table-column prop="total_progress" label="总进度" width="120">
-          <template #default="{ row }">
-            <el-progress :percentage="row.total_progress" :color="progressColor(row.total_progress)" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="['', '', 'success', 'warning'][row.status] || 'info'" size="small">
-              {{ { 1: '进行中', 2: '已完结', 3: '暂停' }[row.status] }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="task_count" label="任务数" width="80" />
-        <el-table-column prop="budget" label="预算(万)" width="100" />
-        <el-table-column prop="start_date" label="开始日期" width="110" />
-        <el-table-column prop="end_date" label="结束日期" width="110" />
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDialog(row)">编辑</el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <el-pagination
-        v-model:current-page="page" :total="total" :page-size="pageSize"
-        layout="total, prev, pager, next" @current-change="fetchList"
-        style="margin-top: 16px; justify-content: flex-end;"
-      />
-    </el-card>
-
-    <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目' : '新增项目'" width="600px">
+    <!-- 新增项目弹窗 -->
+    <el-dialog v-model="dialogVisible" title="新增项目" width="520px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
-        <el-form-item label="项目编号" prop="project_code">
-          <el-input v-model="form.project_code" :disabled="isEdit" />
-        </el-form-item>
         <el-form-item label="项目名称" prop="project_name">
-          <el-input v-model="form.project_name" />
+          <el-input v-model="form.project_name" placeholder="请输入项目名称" />
         </el-form-item>
         <el-form-item label="所属部门" prop="dept_id">
           <el-tree-select
@@ -87,30 +48,20 @@
             <el-option v-for="u in userList" :key="u.id" :label="u.real_name + ' (' + u.username + ')'" :value="u.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-radio-group v-model="form.status">
-            <el-radio :value="1">进行中</el-radio>
-            <el-radio :value="2">已完结</el-radio>
-            <el-radio :value="3">暂停</el-radio>
-          </el-radio-group>
-        </el-form-item>
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="开始日期">
-              <el-date-picker v-model="form.start_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" />
+              <el-date-picker v-model="form.start_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="结束日期">
-              <el-date-picker v-model="form.end_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" />
+              <el-date-picker v-model="form.end_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-form-item label="预算(万)">
-          <el-input-number v-model="form.budget" :min="0" :precision="2" style="width: 100%;" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="3" />
+          <el-input-number v-model="form.budget" :min="0" :precision="2" style="width: 100%;" placeholder="请输入预算" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -125,75 +76,232 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
+import { AgGridVue } from 'ag-grid-vue3'
+import 'ag-grid-community/styles/ag-grid.css'
+import 'ag-grid-community/styles/ag-theme-alpine.css'
+import { ModuleRegistry, AllCommunityModule, type ColDef, type CellValueChangedEvent } from 'ag-grid-community'
+
+ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
 
 const router = useRouter()
-const projectList = ref([])
-const deptList = ref<any[]>([])
-const userList = ref<any[]>([])
-const loading = ref(false)
-const dialogVisible = ref(false)
-const isEdit = ref(false)
-const formRef = ref<FormInstance>()
-const page = ref(1); const pageSize = ref(15); const total = ref(0)
-const filterDeptId = ref(); const filterStatus = ref()
 
+// ========== 数据状态 ==========
+const rowData = ref<any[]>([])
+const deptList = ref<any[]>([])       // 部门树（弹窗用）
+const deptNames = ref<string[]>([])   // 部门名称列表（下拉编辑器用）
+const deptFlatList = ref<any[]>([])   // 扁平部门（名称→ID 映射）
+const userList = ref<any[]>([])       // 用户列表
+const userNames = ref<string[]>([])   // 用户姓名列表（下拉编辑器用）
+
+// ========== 弹窗 ==========
+const dialogVisible = ref(false)
+const formRef = ref<FormInstance>()
 const form = reactive({
-  id: 0, project_code: '', project_name: '', dept_id: 0, pm_id: 0,
-  status: 1, start_date: '', end_date: '', budget: null as number | null, description: '',
+  id: 0,
+  project_code: '',
+  project_name: '',
+  dept_id: 0,
+  pm_id: 0,
+  status: 1,
+  start_date: '',
+  end_date: '',
+  budget: null as number | null,
 })
 
 const rules: FormRules = {
-  project_code: [{ required: true, message: '请输入项目编号' }],
   project_name: [{ required: true, message: '请输入项目名称' }],
   dept_id: [{ required: true, message: '请选择部门' }],
   pm_id: [{ required: true, message: '请选择项目经理' }],
 }
 
+// ========== AG Grid 列定义 ==========
 function progressColor(v: number) { return v < 30 ? '#F56C6C' : v < 80 ? '#E6A23C' : '#67C23A' }
 
+const columnDefs: ColDef[] = [
+  { field: 'id', headerName: 'ID', width: 70, filter: false },
+  { field: 'project_code', headerName: '项目编号', width: 140, editable: true },
+  {
+    field: 'project_name', headerName: '项目名称', width: 220, editable: true, pinned: 'left',
+    cellRenderer: (params: any) => {
+      return `<a class="proj-link" data-id="${params.data.id}" data-name="${params.data.project_name}">${params.value}</a>`
+    },
+    onCellClicked: (params: any) => {
+      if (params.event.target.classList.contains('proj-link')) {
+        goProgress(params.data)
+      }
+    },
+  },
+  {
+    field: 'dept_name', headerName: '所属部门', width: 130, editable: true,
+    cellEditor: 'agSelectCellEditor',
+    cellEditorParams: () => ({ values: deptNames.value }),
+  },
+  {
+    field: 'pm_name', headerName: '项目经理', width: 120, editable: true,
+    cellEditor: 'agSelectCellEditor',
+    cellEditorParams: () => ({ values: userNames.value }),
+  },
+  {
+    field: 'total_progress', headerName: '总进度', width: 160, filter: false,
+    cellRenderer: (params: any) => {
+      const v = params.value || 0
+      const c = progressColor(v)
+      return `<div style="display:flex;align-items:center;gap:8px;height:100%;">
+        <div style="flex:1;height:8px;background:#ebeef5;border-radius:4px;overflow:hidden;">
+          <div style="height:100%;width:${v}%;background:${c};border-radius:4px;transition:width 0.3s;"></div>
+        </div>
+        <span style="font-size:13px;color:#606266;white-space:nowrap;">${v}%</span></div>`
+    },
+  },
+  {
+    field: 'status', headerName: '状态', width: 100, editable: true,
+    cellEditor: 'agSelectCellEditor',
+    cellEditorParams: { values: ['进行中', '已完结', '暂停'] },
+    cellRenderer: (params: any) => {
+      const map: Record<number, string> = { 1: '进行中', 2: '已完结', 3: '暂停' }
+      const colors: Record<number, string> = { 1: '#409EFF', 2: '#67C23A', 3: '#E6A23C' }
+      const v = params.value
+      return `<span style="display:inline-block;padding:2px 10px;border-radius:12px;
+        background:${colors[v]}1a;color:${colors[v]};font-size:13px;font-weight:500;">
+        ${map[v] || '-'}</span>`
+    },
+  },
+  { field: 'task_count', headerName: '任务数', width: 90, filter: 'agNumberColumnFilter' },
+  {
+    field: 'budget', headerName: '预算(万)', width: 110, editable: true, type: 'numericColumn',
+    filter: 'agNumberColumnFilter',
+  },
+  { field: 'start_date', headerName: '开始日期', width: 120, editable: true },
+  { field: 'end_date', headerName: '结束日期', width: 120, editable: true },
+  {
+    headerName: '', width: 55, pinned: 'right', filter: false, sortable: false, resizable: false,
+    cellRenderer: () => `<button class="more-btn" title="更多操作">⋮</button>`,
+    onCellClicked: (params: any) => {
+      if (params.event.target.classList.contains('more-btn')) {
+        handleRowMenu(params.data)
+      }
+    },
+  },
+]
+
+const defaultColDef = {
+  sortable: true,
+  resizable: true,
+  filter: true,
+}
+
+// ========== 数据加载 ==========
 async function fetchList() {
-  loading.value = true
-  const res: any = await request.get('/projects', { params: { page: page.value, page_size: pageSize.value, dept_id: filterDeptId.value, status: filterStatus.value } })
-  projectList.value = res.items; total.value = res.total
-  loading.value = false
+  const res: any = await request.get('/projects', { params: { page: 1, page_size: 1000 } })
+  rowData.value = res.items
 }
 
 async function fetchOptions() {
   deptList.value = (await request.get('/depts/tree')) as any
-  const res: any = await request.get('/users', { params: { page: 1, page_size: 999 } })
+  // 扁平化部门树
+  const flat: any[] = []
+  function walk(nodes: any[]) {
+    for (const node of nodes) {
+      flat.push(node)
+      if (node.children?.length) walk(node.children)
+    }
+  }
+  walk(deptList.value)
+  deptFlatList.value = flat
+  deptNames.value = flat.map((d: any) => d.dept_name)
+
+  const res: any = await request.get('/users', { params: { page: 1, page_size: 1000 } })
   userList.value = res.items
+  userNames.value = res.items.map((u: any) => u.real_name)
 }
 
-function openDialog(row?: any) {
-  isEdit.value = !!row; formRef.value?.resetFields()
-  if (row) {
-    Object.assign(form, { id: row.id, project_code: row.project_code, project_name: row.project_name, dept_id: row.dept_id, pm_id: row.pm_id, status: row.status, start_date: row.start_date, end_date: row.end_date, budget: row.budget, description: row.description })
-  } else {
-    Object.assign(form, { id: 0, project_code: '', project_name: '', dept_id: 0, pm_id: 0, status: 1, start_date: '', end_date: '', budget: null, description: '' })
+// ========== 内联编辑自动保存 ==========
+async function onCellValueChanged(event: CellValueChangedEvent) {
+  const field = event.colDef.field!
+  const value = event.newValue
+  const projectId = event.data.id
+
+  if (field === 'status') {
+    const map: Record<string, number> = { '进行中': 1, '已完结': 2, '暂停': 3 }
+    await request.put(`/projects/${projectId}`, { status: map[value] || 1 })
+    ElMessage.success('已自动保存')
+    return
   }
+
+  if (field === 'dept_name') {
+    const dept = deptFlatList.value.find((d: any) => d.dept_name === value)
+    await request.put(`/projects/${projectId}`, { dept_id: dept?.id })
+    ElMessage.success('已自动保存')
+    return
+  }
+
+  if (field === 'pm_name') {
+    const user = userList.value.find((u: any) => u.real_name === value)
+    await request.put(`/projects/${projectId}`, { pm_id: user?.id })
+    ElMessage.success('已自动保存')
+    return
+  }
+
+  await request.put(`/projects/${projectId}`, { [field]: value })
+  ElMessage.success('已自动保存')
+}
+
+// ========== 右键菜单 / 更多操作 ==========
+async function handleRowMenu(row: any) {
+  // 用 MessageBox 模拟菜单
+  try {
+    await ElMessageBox.confirm(
+      `对项目「${row.project_name}」的操作`,
+      '更多操作',
+      {
+        confirmButtonText: '删除项目',
+        cancelButtonText: '查看详情',
+        distinguishCancelAndClose: true,
+        type: 'warning',
+      }
+    )
+    // 点了确认 = 删除
+    await handleDelete(row.id)
+  } catch (action: any) {
+    // 点了取消 = 查看详情
+    if (action === 'cancel') {
+      goProgress(row)
+    }
+  }
+}
+
+async function handleDelete(id: number) {
+  await ElMessageBox.confirm('确定删除该项目吗？任务数据也将被删除', '提示', { type: 'warning' })
+  await request.delete(`/projects/${id}`)
+  ElMessage.success('删除成功')
+  fetchList()
+}
+
+// ========== 新增项目 ==========
+function openCreateDialog() {
+  formRef.value?.resetFields()
+  Object.assign(form, {
+    id: 0, project_code: '', project_name: '', dept_id: 0, pm_id: 0,
+    status: 1, start_date: '', end_date: '', budget: null,
+  })
   dialogVisible.value = true
 }
 
 async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
-  const payload: any = { ...form }
-  delete payload.id
-  if (isEdit.value) {
-    await request.put('/projects/' + form.id, payload); ElMessage.success('更新成功')
-  } else {
-    await request.post('/projects', form); ElMessage.success('创建成功')
-  }
-  dialogVisible.value = false; fetchList()
-}
-
-async function handleDelete(id: number) {
-  await ElMessageBox.confirm('确定删除该项目吗？任务数据也将被删除', '提示', { type: 'warning' })
-  await request.delete('/projects/' + id); ElMessage.success('删除成功')
+  // 自动生成项目编号
+  const now = new Date()
+  const code = 'PMS-' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '-' + String(rowData.value.length + 1).padStart(3, '0')
+  await request.post('/projects', { ...form, project_code: code })
+  ElMessage.success('创建成功')
+  dialogVisible.value = false
   fetchList()
 }
 
+// ========== 导航 ==========
 function goProgress(row: any) {
   router.push({ name: 'ProjectProgress', params: { id: row.id }, query: { name: row.project_name } })
 }
@@ -202,5 +310,93 @@ onMounted(() => { fetchList(); fetchOptions() })
 </script>
 
 <style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; }
+.project-list-page {
+  background: #fff;
+  border-radius: 4px;
+  padding: 16px;
+}
+
+/* 工具栏 */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 0 12px 0;
+}
+.toolbar-left { display: flex; align-items: center; gap: 8px; }
+.toolbar-right { display: flex; align-items: center; gap: 8px; }
+.row-count { font-size: 13px; color: #909399; }
+
+/* ===== AG Grid 企微风格覆盖 ===== */
+/* 去掉外层边框 */
+:deep(.ag-root-wrapper) {
+  border: none;
+}
+
+/* 单元格：无边框 */
+:deep(.ag-cell) {
+  border-right: none;
+  border-bottom: none;
+  font-size: 14px;
+  color: #303133;
+}
+
+:deep(.ag-row) {
+  border-bottom: none;
+}
+
+/* 表头：浅灰底色 + 加粗 */
+:deep(.ag-header) {
+  background-color: #f5f6f7;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+:deep(.ag-header-cell) {
+  background-color: #f5f6f7;
+  border-right: none;
+  padding: 0 12px;
+}
+
+:deep(.ag-header-cell-text) {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+
+/* 斑马纹 */
+:deep(.ag-row-even) { background-color: #fafbfc; }
+:deep(.ag-row-odd) { background-color: #ffffff; }
+
+/* 行悬停高亮 */
+:deep(.ag-row:hover) { background-color: #e8f4fd; }
+
+/* 去掉选中行高亮 */
+:deep(.ag-row-selected) { background-color: inherit; }
+
+/* 更多按钮 */
+:deep(.more-btn) {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: #909399;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+}
+:deep(.more-btn:hover) {
+  background: #f0f2f5;
+  color: #303133;
+}
+
+/* 项目名称链接 */
+:deep(.proj-link) {
+  color: #409EFF;
+  cursor: pointer;
+  text-decoration: none;
+}
+:deep(.proj-link:hover) {
+  text-decoration: underline;
+}
+
 </style>

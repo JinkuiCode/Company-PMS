@@ -40,7 +40,9 @@ import { Back } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
-import type { ColDef, CellValueChangedEvent } from 'ag-grid-community'
+import { ModuleRegistry, AllCommunityModule, type ColDef, type CellValueChangedEvent } from 'ag-grid-community'
+
+ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
 
 const route = useRoute()

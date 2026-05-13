@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/users", tags=["用户管理"])
 
 
 @router.get("", summary="用户列表", dependencies=[Depends(get_current_user_id)])
-def list_users(page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=100), db: Session = Depends(get_db)):
+def list_users(page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000), db: Session = Depends(get_db)):
     return rbac_service.get_user_list(db, page, page_size)
 
 

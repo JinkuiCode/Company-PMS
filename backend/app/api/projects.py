@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/projects", tags=["项目管理"])
 
 @router.get("", summary="项目列表", dependencies=[Depends(get_current_user_id)])
 def list_projects(
-    page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=100),
+    page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000),
     dept_id: int | None = Query(None), status: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
