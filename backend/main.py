@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.api import auth, users, roles, menus, depts, projects
-from app.api.auth import get_current_user_id
+from app.api import auth, users, roles, menus, depts, projects, sso
+from app.api.auth import get_current_user_id, get_current_user_context
 from app.models.init_db import init_db
 from app.models.user import SysUser
 from app.models.rbac import SysRoleMenu, SysMenu, SysUserRole
@@ -15,7 +15,7 @@ app = FastAPI(title=settings.APP_NAME, version="0.1.0")
 # CORS 中间件（开发阶段允许所有来源）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],  # 内网环境允许所有来源
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,6 +28,7 @@ app.include_router(roles.router)
 app.include_router(menus.router)
 app.include_router(depts.router)
 app.include_router(projects.router)
+app.include_router(sso.router)
 
 
 @app.get("/api/my-menus", tags=["系统"])
@@ -69,6 +70,16 @@ def get_my_menus(user_id: int = Depends(get_current_user_id), db: Session = Depe
             menu_dict[m.parent_id]["children"].append(menu_dict[m.id])
 
     return tree
+
+
+@app.get("/api/dashboard/stats", tags=["仪表盘"])
+def dashboard_stats(
+    scope_ctx: dict = Depends(get_current_user_context),
+    db: Session = Depends(get_db),
+):
+    """获取仪表盘统计数据"""
+    from app.services import dashboard as dashboard_service
+    return dashboard_service.get_dashboard_stats(db, scope_ctx)
 
 
 @app.on_event("startup")

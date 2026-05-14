@@ -23,6 +23,7 @@
         </el-form-item>
       </el-form>
       <p class="login-hint">默认账号: admin / admin123</p>
+      <p class="login-hint sso-hint">泛微 OA 用户请从 OA 门户进入</p>
     </div>
   </div>
 </template>
@@ -106,5 +107,9 @@ async function handleLogin() {
   text-align: center;
   font-size: 12px;
   color: #c0c4cc;
+}
+.sso-hint {
+  margin-top: 4px;
+  color: #b0b7c4;
 }
 </style>

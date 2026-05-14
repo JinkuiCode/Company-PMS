@@ -25,5 +25,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 小时
 
+    # 泛微 OA SSO 单点登录
+    SSO_ENABLED: bool = True
+    SSO_SECRET_KEY: str = "weaver-sso-secret-32byte-key!!"  # 与泛微约定，32字节用于 AES-256
+    SSO_AUTO_CREATE_USER: bool = True  # SSO 用户首次登录自动创建账号
+    SSO_TOKEN_EXPIRE_SECONDS: int = 300  # token 有效期 5 分钟
+    SSO_OA_DOMAIN: str = "oa.aelsystem.cn"  # OA 域名，用于 Referer 校验（空字符串跳过校验）
+
 
 settings = Settings()

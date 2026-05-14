@@ -12,9 +12,39 @@ from app.schemas.project import (
 )
 
 
+def get_child_dept_ids(db: Session, parent_id: int) -> list[int]:
+    """递归获取某部门及其所有子部门 ID 列表"""
+    result = [parent_id]
+    children = db.query(SysDept).filter(SysDept.parent_id == parent_id).all()
+    for child in children:
+        result.extend(get_child_dept_ids(db, child.id))
+    return result
+
+
 # ==================== 项目 ====================
-def get_project_list(db: Session, page: int = 1, page_size: int = 15, dept_id: int | None = None, status: int | None = None):
+def get_project_list(db: Session, page: int = 1, page_size: int = 15,
+                     dept_id: int | None = None, status: int | None = None,
+                     scope_context: dict | None = None):
     query = db.query(PmsProject)
+
+    # ---------- 数据权限过滤 ----------
+    if scope_context:
+        scope = scope_context["data_scope"]
+        if scope == 1:
+            # 只能看自己负责的项目
+            query = query.filter(PmsProject.pm_id == scope_context["user_id"])
+        elif scope == 2:
+            # 只能看本部门的项目
+            if scope_context["dept_id"]:
+                query = query.filter(PmsProject.dept_id == scope_context["dept_id"])
+        elif scope == 3:
+            # 本部门及子部门
+            if scope_context["dept_id"]:
+                allowed_depts = get_child_dept_ids(db, scope_context["dept_id"])
+                query = query.filter(PmsProject.dept_id.in_(allowed_depts))
+        # scope == 4: 不附加过滤
+    # ----------------------------------
+
     if dept_id:
         query = query.filter(PmsProject.dept_id == dept_id)
     if status:
@@ -75,8 +105,26 @@ def delete_project(db: Session, project_id: int):
 
 
 # ==================== 任务 & 进度 ====================
-def get_tasks(db: Session, project_id: int) -> list[TaskResponse]:
-    tasks = db.query(PmsTask).filter(PmsTask.project_id == project_id).order_by(PmsTask.sort, PmsTask.id).all()
+def get_tasks(db: Session, project_id: int,
+              scope_context: dict | None = None) -> list[TaskResponse]:
+    # JOIN 项目表以应用数据权限
+    query = db.query(PmsTask).join(PmsProject, PmsTask.project_id == PmsProject.id)
+
+    if scope_context:
+        scope = scope_context["data_scope"]
+        if scope == 1:
+            query = query.filter(PmsProject.pm_id == scope_context["user_id"])
+        elif scope == 2:
+            if scope_context["dept_id"]:
+                query = query.filter(PmsProject.dept_id == scope_context["dept_id"])
+        elif scope == 3:
+            if scope_context["dept_id"]:
+                allowed_depts = get_child_dept_ids(db, scope_context["dept_id"])
+                query = query.filter(PmsProject.dept_id.in_(allowed_depts))
+        # scope == 4: 不附加过滤
+
+    query = query.filter(PmsTask.project_id == project_id)
+    tasks = query.order_by(PmsTask.sort, PmsTask.id).all()
     result = []
     for t in tasks:
         user = db.query(SysUser).filter(SysUser.id == t.assignee_id).first()

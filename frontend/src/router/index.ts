@@ -8,6 +8,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '登录' },
   },
   {
+    path: '/sso/login',
+    name: 'SsoLogin',
+    component: () => import('@/views/SsoLogin.vue'),
+    meta: { title: 'OA 单点登录' },
+  },
+  {
+    path: '/admin/token',
+    name: 'TokenGenerator',
+    component: () => import('@/views/TokenGenerator.vue'),
+    meta: { title: 'SSO 链接生成器' },
+  },
+  {
     path: '/',
     component: () => import('@/layout/AppLayout.vue'),
     redirect: '/dashboard',
@@ -63,10 +75,13 @@ const router = createRouter({
   routes,
 })
 
+/** 无需登录即可访问的路由 */
+const PUBLIC_PATHS = ['/login', '/sso/login', '/admin/token']
+
 // 路由守卫：未登录跳转到登录页
 router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('access_token')
-  if (to.path !== '/login' && !token) {
+  if (!PUBLIC_PATHS.includes(to.path) && !token) {
     next('/login')
   } else {
     next()

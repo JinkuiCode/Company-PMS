@@ -41,6 +41,7 @@ def init_db():
                 SysMenu(id=12, parent_id=1, menu_name="角色管理", menu_type="C", path="/system/role", permission_code="system:role:list", icon="Avatar", sort=2),
                 SysMenu(id=13, parent_id=1, menu_name="菜单管理", menu_type="C", path="/system/menu", permission_code="system:menu:list", icon="Menu", sort=3),
                 SysMenu(id=14, parent_id=1, menu_name="部门管理", menu_type="C", path="/system/dept", permission_code="system:dept:list", icon="OfficeBuilding", sort=4),
+                SysMenu(id=3, parent_id=0, menu_name="仪表盘", menu_type="C", path="/dashboard", icon="DataAnalysis", sort=0),
                 SysMenu(id=2, parent_id=0, menu_name="项目管理", menu_type="M", icon="Folder", sort=2),
                 SysMenu(id=21, parent_id=2, menu_name="项目列表", menu_type="C", path="/project/list", permission_code="project:list", icon="List", sort=1),
             ]
