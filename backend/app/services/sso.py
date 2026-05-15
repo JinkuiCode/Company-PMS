@@ -3,9 +3,12 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
+from urllib.parse import urlencode
 
+import httpx
 from sqlalchemy.orm import Session
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from fastapi import HTTPException
@@ -14,6 +17,8 @@ from app.core.config import settings
 from app.core.security import hash_password, create_access_token
 from app.models.user import SysUser
 from app.models.rbac import SysDept, SysRole, SysUserRole
+
+logger = logging.getLogger(__name__)
 
 
 def _get_aes_key() -> bytes:
@@ -176,15 +181,82 @@ def sso_login_by_params(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-def sso_login_by_loginid(
+async def sso_login_by_loginid(
     db: Session, loginid: str, username: str = "", dept_name: str = ""
 ) -> dict:
-    """OA 菜单直接登录（由 Referer 校验保证安全）：查找/创建用户 → 签发 JWT"""
+    """OA 登录：调用 OA getToken 验证用户 → 查找/创建用户 → 签发 JWT"""
+    # 调用 OA getToken 验证该 loginid 是否存在于 OA 中
+    _ = await oa_get_token(loginid)
+
     user = find_or_create_user(
         db, loginid,
         username or loginid,
         dept_name,
     )
 
+    access_token = create_access_token(subject=str(user.id))
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+# ==================== OA 统一认证中心集成（CAS 流程） ====================
+
+
+async def oa_get_token(loginid: str) -> str:
+    """调用 OA 的 getToken API，为指定 loginid 获取 token"""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(settings.OA_GET_TOKEN_URL, data={
+            "appid": settings.OA_APP_ID,
+            "loginid": loginid,
+        })
+        text = resp.text.strip()
+        if resp.status_code != 200 or text.startswith("Token获取失败"):
+            raise HTTPException(status_code=401, detail=f"OA getToken 失败: {text}")
+        return text  # 返回 token 字符串
+
+
+async def oa_check_token(token: str) -> bool:
+    """调用 OA 的 checkToken API，验证 token 是否有效"""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(settings.OA_CHECK_TOKEN_URL, data={
+            "appid": settings.OA_APP_ID,
+            "token": token,
+        })
+        return resp.text.strip() == "true"
+
+
+def build_oa_login_url() -> str:
+    """构造 OA 统一认证登录页 URL（带 service 回调地址）"""
+    params = {
+        "appid": settings.OA_APP_ID,
+        "service": settings.PMS_CALLBACK_URL,
+    }
+    return f"{settings.OA_LOGIN_URL}?{urlencode(params)}"
+
+
+async def handle_oa_callback(db: Session, ticket: str, loginid: str = "") -> dict:
+    """
+    处理 OA 统一认证回调：验证 ticket → 获取或创建用户 → 签发 JWT
+
+    OA 回调时可能携带 ticket 参数（CAS 协议）或直接带 loginid。
+    优先通过 checkToken 验证 ticket，若 loginid 存在则直接使用。
+    """
+    username = loginid
+
+    if ticket:
+        # 用 checkToken 验证 ticket 有效性
+        valid = await oa_check_token(ticket)
+        if not valid:
+            raise HTTPException(status_code=401, detail="OA ticket 验证失败")
+
+        if not loginid:
+            raise HTTPException(
+                status_code=400,
+                detail="OA 验证通过但缺少 loginid，请确认 OA 回调包含用户标识",
+            )
+
+    if not loginid:
+        raise HTTPException(status_code=400, detail="缺少 OA 用户标识（loginid）")
+
+    user = find_or_create_user(db, loginid, username, "")
     access_token = create_access_token(subject=str(user.id))
     return {"access_token": access_token, "token_type": "bearer"}

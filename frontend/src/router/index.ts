@@ -14,6 +14,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'OA 单点登录' },
   },
   {
+    path: '/sso/start',
+    name: 'SsoStart',
+    component: () => import('@/views/SsoStart.vue'),
+    meta: { title: 'OA 统一认证' },
+  },
+  {
+    path: '/sso/callback',
+    name: 'SsoCallback',
+    component: () => import('@/views/SsoCallback.vue'),
+    meta: { title: 'OA 认证回调' },
+  },
+  {
     path: '/admin/token',
     name: 'TokenGenerator',
     component: () => import('@/views/TokenGenerator.vue'),
@@ -76,10 +88,19 @@ const router = createRouter({
 })
 
 /** 无需登录即可访问的路由 */
-const PUBLIC_PATHS = ['/login', '/sso/login', '/admin/token']
+const PUBLIC_PATHS = ['/login', '/sso/login', '/sso/start', '/sso/callback', '/admin/token']
 
-// 路由守卫：未登录跳转到登录页
+// 路由守卫：URL 参数 token 自动保存，未登录跳转到登录页
 router.beforeEach((to, _from, next) => {
+  // 处理 URL 参数中的 token（来自 SSO 登录页重定向）
+  const urlToken = to.query.token as string
+  if (urlToken) {
+    localStorage.setItem('access_token', urlToken)
+    // 清除 URL 中的 token 参数，跳转到首页
+    next({ name: 'Dashboard', query: {} })
+    return
+  }
+
   const token = localStorage.getItem('access_token')
   if (!PUBLIC_PATHS.includes(to.path) && !token) {
     next('/login')

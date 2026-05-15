@@ -32,5 +32,14 @@ class Settings(BaseSettings):
     SSO_TOKEN_EXPIRE_SECONDS: int = 300  # token 有效期 5 分钟
     SSO_OA_DOMAIN: str = "oa.aelsystem.cn"  # OA 域名，用于 Referer 校验（空字符串跳过校验）
 
+    # OA 统一认证中心配置
+    OA_BASE_URL: str = "http://10.10.1.149:8081"
+    OA_APP_ID: str = "ssss"  # 认证应用标识（TODO: 切回 PMS 应用 1b26f14a-...）
+    OA_APP_SECRET: str = "yjcust"  # 认证应用密钥
+    OA_GET_TOKEN_URL: str = "http://10.10.1.149:8081/ssologin/getToken"
+    OA_CHECK_TOKEN_URL: str = "http://10.10.1.149:8081/ssologin/checkToken"
+    OA_LOGIN_URL: str = "http://10.10.1.149:8081/login/login.jsp"
+    PMS_CALLBACK_URL: str = "http://10.10.91.60:5174/sso/callback"
+
 
 settings = Settings()
