@@ -1,3 +1,5 @@
+import hashlib
+import secrets
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -24,3 +26,13 @@ def create_access_token(subject: str | Any, expires_delta: timedelta | None = No
     expire = datetime.utcnow() + expires_delta
     to_encode = {"exp": expire, "sub": str(subject)}
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def generate_remember_token() -> str:
+    """生成 64 位随机字符串作为免密登录令牌"""
+    return secrets.token_hex(32)
+
+
+def hash_remember_token(token: str) -> str:
+    """对免密令牌做 SHA256 哈希，数据库中只存储哈希值"""
+    return hashlib.sha256(token.encode()).hexdigest()

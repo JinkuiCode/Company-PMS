@@ -25,7 +25,7 @@ echo   后端已启动
 :: 启动前端 vite
 echo [3/3] 启动前端服务 (端口 5174)...
 cd /d "D:\Code\Company-PMS\frontend"
-start "" /B npx vite --host 0.0.0.0 --port 5174
+start "" /B "D:\Program Files\nodejs\npx.cmd" vite --host 0.0.0.0 --port 5174
 echo   前端已启动
 
 echo ============================================

@@ -2,7 +2,7 @@
 from app.core.database import engine, SessionLocal, Base
 from app.core.security import hash_password
 
-from app.models.user import SysUser  # noqa: F401
+from app.models.user import SysUser, RememberToken  # noqa: F401
 from app.models.rbac import SysRole, SysMenu, SysDept, SysUserRole, SysRoleMenu  # noqa: F401
 from app.models.project import PmsProject, PmsTask, PmsProgressLog  # noqa: F401
 

@@ -181,6 +181,43 @@ def sso_login_by_params(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
+async def sso_login_by_password(db: Session, loginid: str, password: str, remember_me: bool = False) -> dict:
+    """OA 密码登录：先验证 OA 密码，失败则回退到 PMS 本地密码验证 → 查找/创建用户 → 签发 JWT"""
+    # 第一步：尝试 OA 密码验证
+    is_oa_valid = await oa_verify_password(loginid, password)
+    if is_oa_valid:
+        user = find_or_create_user(db, loginid, loginid, "")
+    else:
+        # 第二步：OA 验证失败，回退到 PMS 本地密码验证
+        from app.core.security import verify_password
+        user = db.query(SysUser).filter(SysUser.username == loginid).first()
+        if not user or not verify_password(password, user.password_hash):
+            raise HTTPException(status_code=401, detail="OA 工号或密码错误，请检查后重试（提示：OA 密码与 PMS 密码可能不同）")
+        if user.status == 0:
+            raise HTTPException(status_code=403, detail="账号已被禁用，请联系管理员")
+    access_token = create_access_token(subject=str(user.id))
+    result: dict = {"access_token": access_token, "token_type": "bearer"}
+
+    if remember_me:
+        from datetime import datetime, timedelta
+        from app.models.user import RememberToken
+        from app.core.security import generate_remember_token, hash_remember_token
+        from app.core.config import settings as app_settings
+
+        raw_token = generate_remember_token()
+        expires_at = datetime.utcnow() + timedelta(days=app_settings.REMEMBER_TOKEN_EXPIRE_DAYS)
+        record = RememberToken(
+            user_id=user.id,
+            token_hash=hash_remember_token(raw_token),
+            expires_at=expires_at,
+        )
+        db.add(record)
+        db.commit()
+        result["remember_token"] = raw_token
+
+    return result
+
+
 async def sso_login_by_loginid(
     db: Session, loginid: str, username: str = "", dept_name: str = ""
 ) -> dict:
@@ -198,6 +235,84 @@ async def sso_login_by_loginid(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
+# ==================== OA 密码验证 ====================
+
+
+async def oa_verify_password(loginid: str, password: str) -> bool:
+    """验证 OA 用户的密码是否正确
+
+    依次尝试：
+    1. REST API: POST /ssologin/checkUserPassword
+    2. SOAP WebService: checkUser 方法
+    """
+    # 方式1: REST-like API
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(settings.OA_CHECK_USER_PWD_URL, data={
+                "appid": settings.OA_APP_ID,
+                "loginid": loginid,
+                "password": password,
+            })
+            text = resp.text.strip()
+            logger.info(f"OA checkUserPassword(REST): loginid={loginid}, status={resp.status_code}, body={text[:200]}")
+            if resp.status_code == 200:
+                if text == "true" or text.lower() == "true":
+                    return True
+                # 某些 OA 返回 JSON
+                try:
+                    data = json.loads(text)
+                    if data.get("result") is True or data.get("success") is True:
+                        return True
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning(f"OA checkUserPassword REST 失败，尝试 SOAP: {e}")
+
+    # 方式2: SOAP WebService
+    try:
+        soap_body = _build_check_user_soap(loginid, password)
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                settings.OA_HRM_SERVICE_URL,
+                content=soap_body,
+                headers={
+                    "Content-Type": "text/xml; charset=utf-8",
+                    "SOAPAction": "",
+                },
+            )
+            text = resp.text
+            logger.info(f"OA checkUser(SOAP): loginid={loginid}, status={resp.status_code}, body={text[:300]}")
+            if resp.status_code == 200:
+                # 解析 SOAP 响应，查找 "true"
+                import re
+                m = re.search(r'<checkUserReturn>\s*true\s*</checkUserReturn>', text, re.IGNORECASE)
+                if m:
+                    return True
+                # 也尝试检查 body 中是否包含 true
+                if re.search(r'>\s*true\s*<', text, re.IGNORECASE):
+                    return True
+    except Exception as e:
+        logger.error(f"OA checkUser SOAP 失败: {e}")
+
+    return False
+
+
+def _build_check_user_soap(loginid: str, password: str) -> str:
+    """构造 SOAP 请求体，调用 HrmService 的 checkUser 方法"""
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:hrm="http://localhost/services/HrmService">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <hrm:checkUser>
+      <hrm:ipaddress>10.10.91.60</hrm:ipaddress>
+      <hrm:loginid>{loginid}</hrm:loginid>
+      <hrm:password>{password}</hrm:password>
+    </hrm:checkUser>
+  </soapenv:Body>
+</soapenv:Envelope>"""
+
+
 # ==================== OA 统一认证中心集成（CAS 流程） ====================
 
 
@@ -209,19 +324,34 @@ async def oa_get_token(loginid: str) -> str:
             "loginid": loginid,
         })
         text = resp.text.strip()
+        logger.info(f"OA getToken(loginid={loginid}): status={resp.status_code}, body={text[:200]}")
         if resp.status_code != 200 or text.startswith("Token获取失败"):
             raise HTTPException(status_code=401, detail=f"OA getToken 失败: {text}")
-        return text  # 返回 token 字符串
+        return text
 
 
-async def oa_check_token(token: str) -> bool:
-    """调用 OA 的 checkToken API，验证 token 是否有效"""
+async def oa_check_token(token: str) -> dict:
+    """调用 OA checkToken API 验证 token，返回原始响应供上层解析"""
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(settings.OA_CHECK_TOKEN_URL, data={
             "appid": settings.OA_APP_ID,
             "token": token,
         })
-        return resp.text.strip() == "true"
+        text = resp.text.strip()
+        logger.info(f"OA checkToken: status={resp.status_code}, body={text[:200]}")
+        return {"valid": text == "true", "raw": text, "status_code": resp.status_code}
+
+
+async def oa_validate_cas_ticket(ticket: str, service_url: str) -> dict:
+    """调用 OA CAS /sso/serviceValidate 验证 ticket 并获取用户信息"""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(settings.OA_SERVICE_VALIDATE_URL, params={
+            "ticket": ticket,
+            "service": service_url,
+        })
+        text = resp.text.strip()
+        logger.info(f"OA serviceValidate: status={resp.status_code}, body={text[:500]}")
+        return {"status_code": resp.status_code, "raw": text}
 
 
 def build_oa_login_url() -> str:
@@ -233,26 +363,42 @@ def build_oa_login_url() -> str:
     return f"{settings.OA_LOGIN_URL}?{urlencode(params)}"
 
 
-async def handle_oa_callback(db: Session, ticket: str, loginid: str = "") -> dict:
+async def handle_oa_callback(db: Session, ticket: str, loginid: str = "", service_url: str = "") -> dict:
     """
-    处理 OA 统一认证回调：验证 ticket → 获取或创建用户 → 签发 JWT
+    处理 OA 统一认证回调：验证 ticket → 获取用户身份 → 签发 JWT
 
-    OA 回调时可能携带 ticket 参数（CAS 协议）或直接带 loginid。
-    优先通过 checkToken 验证 ticket，若 loginid 存在则直接使用。
+    验证策略（按优先级）：
+    1. 若 callback 已携带 loginid → 用 checkToken 验票即可
+    2. 若只有 ticket → 先用 checkToken 验票，再用 CAS serviceValidate 获取用户 loginid
     """
     username = loginid
 
     if ticket:
-        # 用 checkToken 验证 ticket 有效性
-        valid = await oa_check_token(ticket)
-        if not valid:
-            raise HTTPException(status_code=401, detail="OA ticket 验证失败")
+        # 验证 ticket 有效性
+        check_result = await oa_check_token(ticket)
+        if not check_result["valid"]:
+            # checkToken 失败，尝试 CAS serviceValidate
+            if service_url:
+                cas_result = await oa_validate_cas_ticket(ticket, service_url)
+                if cas_result["status_code"] != 200:
+                    raise HTTPException(status_code=401, detail=f"OA ticket 验证失败（checkToken + CAS 双重失败）")
+                # 尝试从 CAS 响应中提取用户标识
+                loginid = _extract_user_from_cas_response(cas_result["raw"]) or loginid
+
+            if not loginid:
+                raise HTTPException(
+                    status_code=401,
+                    detail="OA ticket 验证失败，且无法获取用户标识",
+                )
 
         if not loginid:
-            raise HTTPException(
-                status_code=400,
-                detail="OA 验证通过但缺少 loginid，请确认 OA 回调包含用户标识",
-            )
+            # ticket 有效但无 loginid，尝试从 checkToken 原始响应中提取
+            loginid = _extract_user_from_check_token_response(check_result["raw"])
+            if not loginid:
+                raise HTTPException(
+                    status_code=400,
+                    detail="OA 验证通过但缺少 loginid，请确认 OA 回调包含用户标识",
+                )
 
     if not loginid:
         raise HTTPException(status_code=400, detail="缺少 OA 用户标识（loginid）")
@@ -260,3 +406,33 @@ async def handle_oa_callback(db: Session, ticket: str, loginid: str = "") -> dic
     user = find_or_create_user(db, loginid, username, "")
     access_token = create_access_token(subject=str(user.id))
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+def _extract_user_from_cas_response(xml_text: str) -> str | None:
+    """从 CAS serviceValidate 的 XML 响应中提取用户名"""
+    import re
+    # CAS 2.0: <cas:user>loginid</cas:user>
+    m = re.search(r'<cas:user>(.*?)</cas:user>', xml_text)
+    if m: return m.group(1)
+    # CAS 3.0: <cas:authenticationSuccess><cas:user>...</cas:user>
+    m = re.search(r'<cas:authenticationSuccess>.*?<cas:user>(.*?)</cas:user>', xml_text, re.DOTALL)
+    if m: return m.group(1)
+    # 泛微可能用其他标签
+    m = re.search(r'<user>(.*?)</user>', xml_text)
+    if m: return m.group(1)
+    return None
+
+
+def _extract_user_from_check_token_response(text: str) -> str | None:
+    """尝试从 checkToken 的非标准响应中提取用户标识"""
+    import re
+    # 尝试 JSON
+    try:
+        data = json.loads(text)
+        return data.get("loginid") or data.get("username") or data.get("user")
+    except Exception:
+        pass
+    # 尝试 XML 中的 loginid
+    m = re.search(r'<loginid>(.*?)</loginid>', text)
+    if m: return m.group(1)
+    return None

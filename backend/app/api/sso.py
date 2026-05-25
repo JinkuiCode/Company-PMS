@@ -30,6 +30,42 @@ class SsoOaLoginRequest(BaseModel):
     dept: str = ""
 
 
+class SsoOaPasswordLoginRequest(BaseModel):
+    loginid: str  # OA 工号
+    password: str  # OA 密码
+    remember_me: bool = False  # 是否开启长期免密登录
+
+
+@router.post("/oa-password-login", summary="OA 密码验证登录")
+async def sso_oa_password_login(req: SsoOaPasswordLoginRequest, db: Session = Depends(get_db)):
+    """通过 OA 密码验证用户身份，成功后签发 JWT。勾选记住我时额外生成长期免密令牌并种 Cookie。"""
+    result = await sso_service.sso_login_by_password(
+        db, req.loginid, req.password, req.remember_me,
+    )
+    resp = JSONResponse(content=result)
+    resp.set_cookie(
+        key="pms_token",
+        value=result["access_token"],
+        max_age=8 * 3600,
+        httponly=False,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
+    # 勾选记住我：种长期 Cookie（SameSite=Lax，HTTP 环境可用，OA 链接跳转时自动携带）
+    if req.remember_me and "remember_token" in result:
+        resp.set_cookie(
+            key="pms_remember",
+            value=result["remember_token"],
+            max_age=settings.REMEMBER_TOKEN_EXPIRE_DAYS * 24 * 3600,
+            httponly=True,  # JS 不可读，防 XSS
+            samesite="lax",
+            secure=False,
+            path="/",
+        )
+    return resp
+
+
 @router.post("/verify", summary="验证 SSO Token（AES 加密）并返回 JWT")
 def sso_verify(req: SsoVerifyRequest, db: Session = Depends(get_db)):
     """泛微 OA 传来的加密 token，验证后签发 PMS 的 JWT"""
@@ -62,7 +98,7 @@ async def sso_oa_login(req: SsoOaLoginRequest, db: Session = Depends(get_db)):
         value=result["access_token"],
         max_age=8 * 3600,  # 8 小时
         httponly=False,  # 允许 JS 读取，方便登录页检测
-        samesite="none",  # 允许 OA iframe 跨站携带
+        samesite="lax",  # 允许 OA iframe 跨站携带
         secure=False,  # 内网 HTTP，不要求 HTTPS
         path="/",
     )
@@ -97,163 +133,53 @@ async def sso_oa_callback(
 ):
     """
     OA 统一认证回调端点。OA 登录成功后重定向到此地址。
-    记录所有参数以便调试，当前支持：
-    - ticket: CAS ticket（通过 checkToken 验证）
+    当前支持：
+    - ticket: CAS ticket（通过 checkToken 验证，必要时用 serviceValidate 获取用户）
     - token: ssoToken（与 ticket 同等对待）
-    - loginid: 用户登录名（若 OA 直接传递）
+    - loginid: 用户登录名（若 OA 直接传递，可跳过 CAS 解析步骤）
     """
-    # 合并 ticket 和 token 参数
     tkt = ticket or token
+    service_url = settings.PMS_CALLBACK_URL
 
     logger.info(
         f"SSO 回调: ticket={tkt}, loginid={loginid}, username={username}"
     )
 
-    # 用 checkToken 验证 ticket，并通过 loginid 确定用户身份
-    result = await sso_service.handle_oa_callback(db, ticket=tkt, loginid=loginid)
+    result = await sso_service.handle_oa_callback(
+        db, ticket=tkt, loginid=loginid, service_url=service_url
+    )
     return result
 
 
-@router.get("/oa-login-page", summary="OA 统一认证登录页面（后端直出 HTML）")
-def sso_oa_login_page():
-    """返回完整的 OA 统一认证登录 HTML 页面，绕过 SPA 适合 OA iframe 嵌入"""
-    html = f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OA 统一认证 - PMS</title>
-<style>
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-body {{
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  display: flex; align-items: center; justify-content: center;
-  min-height: 100vh; background: #f0f2f5;
-}}
-.card {{
-  background: #fff; border-radius: 8px; padding: 40px 36px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08); width: 380px; text-align: center;
-}}
-.icon {{ margin-bottom: 16px; font-size: 48px; }}
-.title {{ font-size: 20px; color: #303133; margin-bottom: 8px; }}
-.hint {{ color: #909399; margin-bottom: 24px; font-size: 14px; }}
-.input {{
-  width: 100%; padding: 10px 14px; font-size: 15px;
-  border: 1px solid #dcdfe6; border-radius: 6px; outline: none;
-  box-sizing: border-box;
-}}
-.input:focus {{ border-color: #409EFF; }}
-.btn {{
-  width: 100%; padding: 10px; font-size: 16px; margin-top: 16px;
-  background: #409EFF; color: #fff; border: none; border-radius: 6px;
-  cursor: pointer;
-}}
-.btn:hover {{ background: #337ECC; }}
-.btn:disabled {{ background: #a0cfff; cursor: not-allowed; }}
-.error {{ color: #F56C6C; margin-top: 12px; font-size: 13px; }}
-.footer {{ margin-top: 20px; color: #b0b0b0; font-size: 13px; }}
-.footer a {{ color: #409EFF; text-decoration: none; }}
-</style>
-</head>
-<body>
-<div class="card">
-  <div class="icon">&#128274;</div>
-  <div class="title">OA 统一认证登录</div>
-  <!-- 自动登录状态 -->
-  <div class="hint" id="autoStatus" style="color:#E6A23C;">正在自动登录...</div>
-  <!-- 登录表单（自动登录成功则隐藏） -->
-  <div class="hint" id="formHint">请输入您的 OA 工号，系统将自动验证身份</div>
-  <form id="loginForm" style="display:none">
-    <input class="input" id="loginid" name="loginid" placeholder="请输入 OA 工号" required autofocus />
-    <button class="btn" type="submit" id="submitBtn">统一认证登录</button>
-  </form>
-  <div class="error" id="error"></div>
-  <div class="footer">
-    也可使用 <a href="/login">账号密码登录</a>
-  </div>
-</div>
-<script>
-// 跳转到 PMS 前台（iframe 内导航，始终可用）
-function goToPms(token) {{
-  // 保存 token 到 localStorage，下次自动登录
-  try {{ localStorage.setItem('pms_token', token); }} catch(e) {{}}
-  var pmsUrl = 'http://10.10.91.60:5174/?token=' + encodeURIComponent(token);
-  // 优先在 iframe 内跳转到 PMS（作为 OA 子页面展示）
-  window.location.href = pmsUrl;
-}}
+@router.get("/oa-login-page", summary="OA 统一认证登录入口")
+def sso_oa_login_page(request: Request, db: Session = Depends(get_db)):
+    """OA 统一认证入口：Cookie 免密 → 直接跳转；无 Cookie → 重定向到前端 SSO 登录页"""
+    ft = settings.PMS_FRONTEND_URL
 
-// 页面加载时检查 localStorage 中是否有 pms_token，有则自动登录
-async function autoLogin() {{
-  var token = null;
-  try {{ token = localStorage.getItem('pms_token'); }} catch(e) {{}}
-  if (!token) return false;
+    # 检查长期免密 Cookie（新窗口模式下 SameSite=Lax Cookie 会被发送）
+    remember = request.cookies.get("pms_remember")
+    if remember:
+        from app.services import auth as auth_service
+        try:
+            result = auth_service.auto_login(db, remember)
+            new_token = result.access_token
+            resp = RedirectResponse(url=f"{ft}/?token={new_token}", status_code=302)
+            resp.set_cookie(
+                key="pms_token", value=new_token, max_age=8 * 3600,
+                httponly=False, samesite="lax", secure=False, path="/",
+            )
+            return resp
+        except Exception:
+            # Cookie 失效，清除并继续重定向到前端
+            pass
 
-  try {{
-    var resp = await fetch('/api/auth/me', {{
-      headers: {{ 'Authorization': 'Bearer ' + token }}
-    }});
-    if (resp.ok) {{
-      goToPms(token);
-      return true;
-    }} else {{
-      // token 过期，清除
-      try {{ localStorage.removeItem('pms_token'); }} catch(e) {{}}
-    }}
-  }} catch(e) {{}}
-  return false;
-}}
-
-// 显示登录表单
-function showLoginForm() {{
-  document.getElementById('loginForm').style.display = '';
-  document.getElementById('formHint').style.display = '';
-  document.getElementById('autoStatus').style.display = 'none';
-}}
-
-// 提交登录
-document.getElementById('loginForm').addEventListener('submit', async function(e) {{
-  e.preventDefault();
-  var loginid = document.getElementById('loginid').value.trim();
-  var btn = document.getElementById('submitBtn');
-  var errorEl = document.getElementById('error');
-
-  if (!loginid) {{
-    errorEl.textContent = '请输入 OA 工号';
-    return;
-  }}
-
-  btn.disabled = true;
-  btn.textContent = '正在验证...';
-  errorEl.textContent = '';
-
-  try {{
-    var resp = await fetch('/api/sso/oa-login', {{
-      method: 'POST',
-      headers: {{ 'Content-Type': 'application/json' }},
-      body: JSON.stringify({{ loginid: loginid }}),
-    }});
-
-    if (resp.ok) {{
-      var data = await resp.json();
-      goToPms(data.access_token);
-    }} else {{
-      var data = await resp.json();
-      errorEl.textContent = data.detail || 'OA 认证失败，请检查工号是否正确';
-    }}
-  }} catch (err) {{
-    errorEl.textContent = '网络错误，请重试';
-  }} finally {{
-    btn.disabled = false;
-    btn.textContent = '统一认证登录';
-  }}
-}});
-
-// 启动：尝试自动登录，失败则显示表单
-autoLogin().then(function(ok) {{
-  if (!ok) showLoginForm();
-}});
-</script>
-</body>
-</html>"""
-    from fastapi.responses import HTMLResponse
-    return HTMLResponse(content=html)
+    # 重定向到前端 SSO 登录页，由前端统一处理免密登录和表单登录
+    # 前端在同源环境下使用 localStorage，不受 iframe 跨域存储分区影响
+    target = f"{ft}/sso/start"
+    resp = RedirectResponse(url=target, status_code=302)
+    # 清除可能已失效的 pms_remember Cookie
+    resp.set_cookie(
+        key="pms_remember", value="", max_age=0,
+        path="/", samesite="lax", secure=False,
+    )
+    return resp

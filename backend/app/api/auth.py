@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.models.user import SysUser
 from app.models.rbac import SysUserRole, SysRole
-from app.schemas.user import LoginRequest, TokenResponse, UserInfo
+from app.schemas.user import LoginRequest, AutoLoginRequest, TokenResponse, UserInfo
 from app.services import auth as auth_service
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import HTTPException, status
@@ -58,6 +58,22 @@ def get_current_user_context(
     effective_scope = max(scopes)  # 取最大权限
 
     return {"user_id": user_id, "dept_id": dept_id, "data_scope": effective_scope}
+
+
+@router.post("/auto-login", response_model=TokenResponse, summary="免密自动登录")
+def auto_login(req: AutoLoginRequest, db: Session = Depends(get_db)):
+    """使用长期免密令牌自动登录，签发新的 JWT"""
+    return auth_service.auto_login(db, req.remember_token)
+
+
+@router.post("/logout", summary="退出登录")
+def logout(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """退出登录，清除当前用户所有免密令牌"""
+    auth_service.invalidate_user_tokens(db, user_id)
+    return {"detail": "已退出登录"}
 
 
 @router.get("/me", response_model=UserInfo, summary="获取当前用户信息")

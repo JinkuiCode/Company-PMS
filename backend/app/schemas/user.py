@@ -5,11 +5,17 @@ from datetime import datetime
 class LoginRequest(BaseModel):
     username: str
     password: str
+    remember_me: bool = False  # 是否启用长期免密登录
+
+
+class AutoLoginRequest(BaseModel):
+    remember_token: str  # 免密登录令牌
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    remember_token: str | None = None  # 勾选记住我时返回长期令牌
 
 
 class UserInfo(BaseModel):
@@ -35,6 +41,7 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     real_name: str | None = None
+    password: str | None = None  # 重置密码，变更后所有免密令牌失效
     dept_id: int | None = None
     mobile: str | None = None
     status: int | None = None

@@ -2,7 +2,8 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
-from app.models.user import SysUser
+from app.core.security import hash_password
+from app.models.user import SysUser, RememberToken
 from app.models.rbac import SysRole, SysMenu, SysDept, SysUserRole, SysRoleMenu
 from app.core.security import hash_password
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
@@ -60,14 +61,30 @@ def create_user(db: Session, data: UserCreate):
 
 
 def update_user(db: Session, user_id: int, data: UserUpdate):
-    """更新用户，可重新分配角色"""
+    """更新用户，可重新分配角色。密码变更或账号禁用时清除所有免密令牌"""
     user = db.query(SysUser).filter(SysUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    update_data = data.model_dump(exclude_unset=True, exclude={"role_ids"})
+    should_invalidate = False
+
+    update_data = data.model_dump(exclude_unset=True, exclude={"role_ids", "password"})
+
+    # 密码变更：哈希后写入，并标记失效免密令牌
+    if data.password is not None:
+        user.password_hash = hash_password(data.password)
+        should_invalidate = True
+
+    # 账号禁用：标记失效免密令牌
+    if data.status is not None:
+        if data.status == 0 and user.status == 1:
+            should_invalidate = True
+
     for key, val in update_data.items():
         setattr(user, key, val)
+
+    if should_invalidate:
+        db.query(RememberToken).filter(RememberToken.user_id == user_id).delete()
 
     # 重新分配角色
     if data.role_ids is not None:
