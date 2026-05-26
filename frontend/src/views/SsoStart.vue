@@ -4,17 +4,16 @@
       <div class="sso-icon">
         <el-icon :size="48" color="#409EFF"><Connection /></el-icon>
       </div>
-      <h2 class="sso-title">OA 统一认证登录</h2>
+      <h2 class="sso-title">PMS 项目管理系统</h2>
 
-      <!-- 自动登录检测中 -->
+      <!-- SSO 自动登录中 / 验证登录状态中 -->
       <template v-if="checking">
-        <p class="sso-hint" style="color:#E6A23C;">正在验证登录状态...</p>
+        <p class="sso-hint" style="color:#E6A23C;">{{ checkingMsg }}</p>
       </template>
 
-      <!-- 登录表单 -->
+      <!-- 登录表单（SSO 失败或无 SSO 参数时显示） -->
       <template v-else>
-        <p class="sso-hint">请输入您的 <strong>OA 工号和 OA 密码</strong>验证身份</p>
-        <p class="sso-sub-hint">注意：此处使用 OA 系统密码，非 PMS 密码</p>
+        <p class="sso-hint">请输入您的 <strong>PMS 账号和密码</strong></p>
 
         <el-form
           ref="formRef"
@@ -26,7 +25,7 @@
           <el-form-item prop="loginid">
             <el-input
               v-model="form.loginid"
-              placeholder="OA 工号"
+              placeholder="PMS 账号"
               :prefix-icon="User"
               size="large"
               clearable
@@ -36,7 +35,7 @@
             <el-input
               v-model="form.password"
               type="password"
-              placeholder="OA 密码"
+              placeholder="PMS 密码"
               :prefix-icon="Lock"
               size="large"
               show-password
@@ -56,7 +55,7 @@
               @click="handleLogin"
               style="width: 100%"
             >
-              {{ loading ? '正在验证...' : 'OA 统一认证登录' }}
+              {{ loading ? '正在验证...' : '登录 PMS' }}
             </el-button>
           </el-form-item>
         </el-form>
@@ -74,19 +73,21 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { User, Lock, Connection } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { oaPasswordLogin } from '@/api/auth'
+import { oaPasswordLogin, ssoLogin } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const error = ref('')
 const checking = ref(true)
+const checkingMsg = ref('正在验证登录状态...')
 
 const form = reactive({
   loginid: '',
@@ -95,8 +96,35 @@ const form = reactive({
 })
 
 const rules: FormRules = {
-  loginid: [{ required: true, message: '请输入 OA 工号', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入 OA 密码', trigger: 'blur' }],
+  loginid: [{ required: true, message: '请输入 PMS 账号', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入 PMS 密码', trigger: 'blur' }],
+}
+
+/** 通道0：OA JSP 重定向过来的 SSO 免密登录（最高优先级） */
+async function tryOaSsoLogin(): Promise<boolean> {
+  const ssoLoginId = route.query.sso_login_id as string
+  const ts = route.query.ts as string
+  const sign = route.query.sign as string
+
+  if (!ssoLoginId || !ts || !sign) return false
+
+  checkingMsg.value = 'OA 单点登录验证中...'
+
+  try {
+    const res = await ssoLogin(ssoLoginId, Number(ts), sign)
+    localStorage.setItem('access_token', res.access_token)
+    if (res.remember_token) {
+      localStorage.setItem('pms_remember_token', res.remember_token)
+    }
+    await authStore.fetchUser()
+    // 清除 URL 中的 SSO 参数，防止重复用过期参数请求
+    router.replace({ name: 'Dashboard', query: {} })
+    return true
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail || 'OA 认证失败'
+    error.value = detail
+    return false
+  }
 }
 
 /** 用原始 fetch 验证 JWT 是否有效（绕过 axios 401 拦截器的强制跳转） */
@@ -136,14 +164,17 @@ async function tryAutoLoginWithFetch(): Promise<boolean> {
       }
     }
   } catch { /* 网络错误 */ }
-  // 免密令牌失效，清理
   localStorage.removeItem('pms_remember_token')
   return false
 }
 
-/** 自动登录：先验证 JWT，JWT 过期则用免密令牌换取新 JWT */
+/** 自动登录：OA SSO → JWT → 免密令牌 */
 async function autoLogin(): Promise<boolean> {
-  // 第一步：检查 localStorage 中的 JWT 是否仍有效
+  // 通道0：OA JSP 重定向过来的 SSO 免密登录（最高优先级，每次进入都尝试）
+  const oaOk = await tryOaSsoLogin()
+  if (oaOk) return true
+
+  // 通道1：检查 localStorage 中的 JWT 是否仍有效
   const token = localStorage.getItem('access_token')
   if (token) {
     const jwtValid = await verifyJwt(token)
@@ -152,11 +183,10 @@ async function autoLogin(): Promise<boolean> {
       router.replace({ name: 'Dashboard' })
       return true
     }
-    // JWT 失效，清理
     localStorage.removeItem('access_token')
   }
 
-  // 第二步：尝试用免密令牌换取新 JWT
+  // 通道2：尝试用免密令牌换取新 JWT
   const ok = await tryAutoLoginWithFetch()
   if (ok) {
     router.replace({ name: 'Dashboard' })
@@ -181,17 +211,14 @@ async function handleLogin() {
       password: form.password,
       remember_me: form.rememberMe,
     })
-
-    // 保存 JWT 和免密令牌到 localStorage（同源 port 5174，不受 iframe 分区影响）
     localStorage.setItem('access_token', res.access_token)
     if (res.remember_token) {
       localStorage.setItem('pms_remember_token', res.remember_token)
     }
-
     await authStore.fetchUser()
     router.replace({ name: 'Dashboard' })
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || e?.message || '认证失败，请检查工号和密码'
+    const detail = e?.response?.data?.detail || e?.message || '认证失败，请检查账号和密码'
     error.value = detail
   } finally {
     loading.value = false
@@ -229,7 +256,6 @@ onMounted(async () => {
 .sso-icon { margin-bottom: 20px; }
 .sso-title { font-size: 20px; color: #303133; margin: 0 0 8px 0; }
 .sso-hint { color: #909399; margin-bottom: 8px; font-size: 14px; }
-.sso-sub-hint { color: #c0c4cc; margin-bottom: 20px; font-size: 12px; }
 .sso-error { color: #F56C6C; margin-top: 12px; font-size: 13px; }
 .sso-footnote { color: #b0b0b0; font-size: 13px; }
 </style>

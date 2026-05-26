@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     OA_CHECK_TOKEN_URL: str = "http://10.10.1.149:8081/ssologin/checkToken"
     OA_LOGIN_URL: str = "http://10.10.1.149:8081/login/login.jsp"
     PMS_CALLBACK_URL: str = "http://10.10.91.60:5174/sso/callback"
-    PMS_FRONTEND_URL: str = "http://10.10.91.60:5174"  # PMS 前端地址，OA 回到此地址的 /sso/callback
+    PMS_FRONTEND_URL: str = "http://10.10.91.60:5174"
     OA_SERVICE_VALIDATE_URL: str = "http://10.10.1.149:8081/sso/serviceValidate"  # CAS ticket 验证端点
     OA_CHECK_USER_PWD_URL: str = "http://10.10.1.149:8081/ssologin/checkUserPassword"  # OA 密码验证 REST 端点
     OA_HRM_SERVICE_URL: str = "http://10.10.1.149:8081/services/HrmService"  # OA 人力资源 WebService（checkUser SOAP）

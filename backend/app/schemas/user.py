@@ -12,6 +12,13 @@ class AutoLoginRequest(BaseModel):
     remember_token: str  # 免密登录令牌
 
 
+class SsoLoginRequest(BaseModel):
+    """OA JSP 重定向携带的 SSO 免密登录参数"""
+    sso_login_id: str  # OA 用户的 loginId
+    ts: int  # 秒级时间戳（防重放）
+    sign: str  # HMAC-SHA256 签名（防伪造）
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

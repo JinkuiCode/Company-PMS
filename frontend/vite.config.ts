@@ -10,9 +10,8 @@ export default defineConfig({
     },
   },
   server: {
-    host: '0.0.0.0',  // 监听所有网卡，允许内网访问
+    host: '0.0.0.0',
     port: 5173,
-    // 开发环境禁用缓存，确保总是加载最新代码
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
     },

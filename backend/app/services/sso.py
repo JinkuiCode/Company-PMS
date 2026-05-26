@@ -181,20 +181,32 @@ def sso_login_by_params(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-async def sso_login_by_password(db: Session, loginid: str, password: str, remember_me: bool = False) -> dict:
-    """OA 密码登录：先验证 OA 密码，失败则回退到 PMS 本地密码验证 → 查找/创建用户 → 签发 JWT"""
-    # 第一步：尝试 OA 密码验证
-    is_oa_valid = await oa_verify_password(loginid, password)
-    if is_oa_valid:
-        user = find_or_create_user(db, loginid, loginid, "")
-    else:
-        # 第二步：OA 验证失败，回退到 PMS 本地密码验证
-        from app.core.security import verify_password
-        user = db.query(SysUser).filter(SysUser.username == loginid).first()
-        if not user or not verify_password(password, user.password_hash):
-            raise HTTPException(status_code=401, detail="OA 工号或密码错误，请检查后重试（提示：OA 密码与 PMS 密码可能不同）")
-        if user.status == 0:
-            raise HTTPException(status_code=403, detail="账号已被禁用，请联系管理员")
+def sso_login_by_oa_redirect(db: Session, loginid: str, ts: int, sign: str) -> dict:
+    """OA JSP 302 重定向过来的 SSO 免密登录：验证 HMAC 签名 + 时间戳 → 签发 JWT"""
+    # 1. 验证时间戳（5 分钟内有效，防重放攻击）
+    if abs(time.time() - ts) > settings.SSO_TOKEN_EXPIRE_SECONDS:
+        raise HTTPException(status_code=401, detail="SSO 请求已过期，请刷新 OA 页面后重试")
+
+    # 2. 验证 HMAC-SHA256 签名（防伪造 loginId）
+    expected_sign = _make_sign(loginid, "", "", ts)
+    if not hmac.compare_digest(expected_sign, sign):
+        raise HTTPException(status_code=401, detail="SSO 签名无效")
+
+    # 3. 查找或创建用户 → 签发 JWT
+    user = find_or_create_user(db, loginid, loginid, "")
+    access_token = create_access_token(subject=str(user.id))
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+def sso_login_by_password(db: Session, username: str, password: str, remember_me: bool = False) -> dict:
+    """PMS 账号密码登录（OA 菜单跳转入口）：验证 PMS 本地密码 → 签发 JWT → 可选记住我"""
+    from app.core.security import verify_password
+    user = db.query(SysUser).filter(SysUser.username == username).first()
+    if not user or not verify_password(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="账号或密码错误")
+    if user.status == 0:
+        raise HTTPException(status_code=403, detail="账号已被禁用，请联系管理员")
+
     access_token = create_access_token(subject=str(user.id))
     result: dict = {"access_token": access_token, "token_type": "bearer"}
 

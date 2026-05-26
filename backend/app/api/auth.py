@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.models.user import SysUser
 from app.models.rbac import SysUserRole, SysRole
-from app.schemas.user import LoginRequest, AutoLoginRequest, TokenResponse, UserInfo
+from app.schemas.user import LoginRequest, AutoLoginRequest, SsoLoginRequest, TokenResponse, UserInfo
 from app.services import auth as auth_service
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import HTTPException, status
@@ -64,6 +64,13 @@ def get_current_user_context(
 def auto_login(req: AutoLoginRequest, db: Session = Depends(get_db)):
     """使用长期免密令牌自动登录，签发新的 JWT"""
     return auth_service.auto_login(db, req.remember_token)
+
+
+@router.post("/sso-login", response_model=TokenResponse, summary="OA JSP 重定向 SSO 免密登录")
+def sso_login(req: SsoLoginRequest, db: Session = Depends(get_db)):
+    """OA 服务器 JSP 获取 loginId 后 302 重定向到 PMS 前端，前端调用此接口完成免密登录"""
+    from app.services import sso as sso_service
+    return sso_service.sso_login_by_oa_redirect(db, req.sso_login_id, req.ts, req.sign)
 
 
 @router.post("/logout", summary="退出登录")

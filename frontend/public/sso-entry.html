@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OA 统一认证 - PMS</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; background: #f0f2f5;
+  }
+  .card {
+    background: #fff; border-radius: 8px; padding: 48px 40px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08); min-width: 360px; text-align: center;
+  }
+  .icon { margin-bottom: 16px; font-size: 48px; }
+  .title { font-size: 20px; color: #303133; margin-bottom: 12px; }
+  .hint { color: #909399; margin-bottom: 24px; font-size: 14px; }
+  .error { color: #F56C6C; margin: 12px 0; font-size: 14px; }
+  .btn {
+    width: 100%; padding: 10px; font-size: 16px;
+    background: #409EFF; color: #fff; border: none; border-radius: 6px;
+    cursor: pointer; margin-top: 8px;
+  }
+  .btn:hover { background: #337ECC; }
+  .footer { margin-top: 20px; color: #b0b0b0; font-size: 13px; }
+  .footer a { color: #409EFF; text-decoration: none; }
+  .spinner {
+    display: inline-block; width: 20px; height: 20px;
+    border: 2px solid #e0e0e0; border-top-color: #409EFF;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+    vertical-align: middle; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">&#128274;</div>
+  <div class="title" id="title">OA 统一认证登录</div>
+  <div id="loadingArea">
+    <p class="hint"><span class="spinner"></span>正在验证登录状态...</p>
+  </div>
+  <div id="redirectArea" style="display:none;">
+    <p class="hint">正在跳转到 OA 统一认证登录页...</p>
+    <button class="btn" onclick="doRedirect()">手动跳转 OA 登录</button>
+  </div>
+  <div id="errorArea" style="display:none;">
+    <p class="error" id="errorMsg"></p>
+    <button class="btn" onclick="doRedirect()">重新尝试 OA 认证</button>
+  </div>
+  <div class="footer">
+    也可使用 <a href="/login">账号密码登录</a>
+  </div>
+</div>
+
+<script>
+(function() {
+  var VER = '20260518-v2';  // 版本标识，确认新代码已加载
+
+  // 跳转到 OA CAS 登录
+  function doRedirect() {
+    window.location.href = '/api/sso/oa-redirect';
+  }
+  // 暴露到全局
+  window.doRedirect = doRedirect;
+
+  // 登录成功后跳转到 PMS
+  function goToPms(token) {
+    try { localStorage.setItem('access_token', token); } catch(e) {}
+    try { localStorage.setItem('pms_token', token); } catch(e) {}
+    window.location.href = '/dashboard?ver=' + VER;
+  }
+
+  // 显示加载区
+  function showLoading() {
+    document.getElementById('loadingArea').style.display = '';
+    document.getElementById('redirectArea').style.display = 'none';
+    document.getElementById('errorArea').style.display = 'none';
+  }
+
+  // 显示跳转区
+  function showRedirect() {
+    document.getElementById('loadingArea').style.display = 'none';
+    document.getElementById('redirectArea').style.display = '';
+    document.getElementById('errorArea').style.display = 'none';
+  }
+
+  // 显示错误
+  function showError(msg) {
+    document.getElementById('loadingArea').style.display = 'none';
+    document.getElementById('redirectArea').style.display = 'none';
+    document.getElementById('errorArea').style.display = '';
+    document.getElementById('errorMsg').textContent = msg;
+  }
+
+  // 尝试自动登录
+  async function autoLogin() {
+    var token = null;
+    try { token = localStorage.getItem('access_token'); } catch(e) {}
+    if (!token) {
+      try { token = localStorage.getItem('pms_token'); } catch(e) {}
+    }
+    if (!token) return false;
+
+    try {
+      var resp = await fetch('/api/auth/me', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (resp.ok) {
+        var data = await resp.json();
+        if (data && data.username) {
+          goToPms(token);
+          return true;
+        }
+      }
+      // token 无效，清除
+      try { localStorage.removeItem('access_token'); } catch(e) {}
+      try { localStorage.removeItem('pms_token'); } catch(e) {}
+    } catch(e) {}
+    return false;
+  }
+
+  // 主流程
+  autoLogin().then(function(ok) {
+    if (ok) return;  // 自动登录成功，已跳转
+
+    // 无有效 token → 跳转 OA CAS 登录
+    showRedirect();
+    document.getElementById('title').textContent = 'OA 统一认证登录 [' + VER + ']';
+
+    // 自动跳转
+    setTimeout(function() {
+      doRedirect();
+    }, 1000);
+  }).catch(function(err) {
+    showError('检测登录状态时出错: ' + (err.message || '未知错误'));
+  });
+})();
+</script>
+</body>
+</html>
