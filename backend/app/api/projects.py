@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.api.auth import get_current_user_id, get_current_user_context
 from app.schemas.project import ProjectCreate, ProjectUpdate, TaskCreate, TaskUpdate
+from app.schemas.project import ArchiveCreate, ArchiveUpdate
 from app.services import project as project_service
 
 router = APIRouter(prefix="/api/projects", tags=["项目管理"])
@@ -34,7 +35,35 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
     return project_service.delete_project(db, project_id)
 
 
-# ==================== 任务 ====================
+# ==================== 项目档案 ====================
+@router.get("/archives/list", summary="项目档案列表")
+def list_archives(
+    page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000),
+    keyword: str | None = Query(None), status: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _user_id: int = Depends(get_current_user_id),
+):
+    return project_service.get_archive_list(db, page, page_size, keyword, status)
+
+
+@router.get("/archives/options", summary="项目档案下拉选项")
+def archive_options(db: Session = Depends(get_db), _user_id: int = Depends(get_current_user_id)):
+    return project_service.get_archive_options(db)
+
+
+@router.post("/archives", summary="创建项目档案", dependencies=[Depends(get_current_user_id)])
+def create_archive(data: ArchiveCreate, db: Session = Depends(get_db)):
+    return project_service.create_archive(db, data)
+
+
+@router.put("/archives/{archive_id}", summary="更新项目档案", dependencies=[Depends(get_current_user_id)])
+def update_archive(archive_id: int, data: ArchiveUpdate, db: Session = Depends(get_db)):
+    return project_service.update_archive(db, archive_id, data)
+
+
+@router.delete("/archives/{archive_id}", summary="删除项目档案", dependencies=[Depends(get_current_user_id)])
+def delete_archive(archive_id: int, db: Session = Depends(get_db)):
+    return project_service.delete_archive(db, archive_id)
 @router.get("/{project_id}/tasks", summary="项目任务列表")
 def list_tasks(
     project_id: int,

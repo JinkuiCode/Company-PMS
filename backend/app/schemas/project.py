@@ -2,8 +2,47 @@ from pydantic import BaseModel, Field
 from datetime import date, datetime
 
 
+# ========== 项目档案 ==========
+class ArchiveCreate(BaseModel):
+    project_code: str = Field(..., max_length=32)
+    project_name: str = Field(..., max_length=128)
+    status: int = 1
+    manager_id: int | None = None
+    product_type: str | None = Field(None, max_length=64)
+
+
+class ArchiveUpdate(BaseModel):
+    project_code: str | None = None
+    project_name: str | None = None
+    status: int | None = None
+    manager_id: int | None = None
+    product_type: str | None = None
+
+
+class ArchiveResponse(BaseModel):
+    id: int
+    project_code: str
+    project_name: str
+    status: int
+    manager_id: int | None = None
+    product_type: str | None = None
+    manager_name: str = ""    # 关联查询
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    model_config = {"from_attributes": True}
+
+
+class ArchiveOption(BaseModel):
+    """下拉选项（精简版）"""
+    id: int
+    project_code: str
+    project_name: str
+    model_config = {"from_attributes": True}
+
+
 # ========== 项目 ==========
 class ProjectCreate(BaseModel):
+    archive_id: int | None = None
     project_code: str = Field(..., max_length=32)
     project_name: str = Field(..., max_length=128)
     dept_id: int

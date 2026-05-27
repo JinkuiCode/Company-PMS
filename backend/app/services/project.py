@@ -3,12 +3,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from fastapi import HTTPException
 
-from app.models.project import PmsProject, PmsTask, PmsProgressLog
+from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive
 from app.models.user import SysUser
 from app.models.rbac import SysDept
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
     TaskCreate, TaskUpdate, TaskResponse,
+    ArchiveCreate, ArchiveUpdate, ArchiveResponse, ArchiveOption,
 )
 
 
@@ -187,3 +188,83 @@ def get_progress_logs(db: Session, task_id: int) -> list[dict]:
          "remark": l.remark, "created_at": str(l.created_at)}
         for l in logs
     ]
+
+
+# ==================== 项目档案 ====================
+def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
+                     keyword: str | None = None, status: int | None = None):
+    """查询项目档案列表"""
+    query = db.query(PmsProjectArchive)
+
+    if keyword:
+        query = query.filter(
+            (PmsProjectArchive.project_code.contains(keyword)) |
+            (PmsProjectArchive.project_name.contains(keyword))
+        )
+    if status is not None:
+        query = query.filter(PmsProjectArchive.status == status)
+
+    total = query.count()
+    rows = query.order_by(PmsProjectArchive.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    items = []
+    for a in rows:
+        manager = db.query(SysUser).filter(SysUser.id == a.manager_id).first()
+        items.append(ArchiveResponse(
+            id=a.id, project_code=a.project_code, project_name=a.project_name,
+            status=a.status, manager_id=a.manager_id, product_type=a.product_type,
+            manager_name=manager.real_name if manager else "",
+            created_at=a.created_at, updated_at=a.updated_at,
+        ))
+    return {"total": total, "items": items}
+
+
+def get_archive_options(db: Session):
+    """获取档案下拉选项（精简版，不分页）"""
+    rows = db.query(PmsProjectArchive).order_by(PmsProjectArchive.project_code).all()
+    return [ArchiveOption(id=a.id, project_code=a.project_code, project_name=a.project_name) for a in rows]
+
+
+def create_archive(db: Session, data: ArchiveCreate):
+    """创建项目档案"""
+    if db.query(PmsProjectArchive).filter(PmsProjectArchive.project_code == data.project_code).first():
+        raise HTTPException(status_code=400, detail="项目编号已存在")
+    archive = PmsProjectArchive(**data.model_dump())
+    db.add(archive)
+    db.commit()
+    db.refresh(archive)
+    return {"msg": "创建成功", "id": archive.id}
+
+
+def update_archive(db: Session, archive_id: int, data: ArchiveUpdate):
+    """更新项目档案"""
+    archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id).first()
+    if not archive:
+        raise HTTPException(status_code=404, detail="档案不存在")
+
+    update_data = data.model_dump(exclude_unset=True)
+    # 项目编号唯一性校验
+    if "project_code" in update_data and update_data["project_code"] != archive.project_code:
+        if db.query(PmsProjectArchive).filter(PmsProjectArchive.project_code == update_data["project_code"]).first():
+            raise HTTPException(status_code=400, detail="项目编号已存在")
+
+    for key, val in update_data.items():
+        setattr(archive, key, val)
+    db.commit()
+    return {"msg": "更新成功"}
+
+
+def delete_archive(db: Session, archive_id: int):
+    """删除项目档案（需检查是否被项目引用）"""
+    archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id).first()
+    if not archive:
+        raise HTTPException(status_code=404, detail="档案不存在")
+
+    # 检查是否被项目进度引用
+    ref_count = db.query(PmsProject).filter(PmsProject.archive_id == archive_id).count()
+    if ref_count > 0:
+        raise HTTPException(status_code=400, detail=f"该档案已被 {ref_count} 个项目引用，无法删除")
+
+    db.delete(archive)
+    db.commit()
+    return {"msg": "删除成功"}

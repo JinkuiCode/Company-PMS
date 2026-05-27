@@ -4,16 +4,13 @@ echo ============================================
 echo   PMS 服务启动脚本
 echo ============================================
 
-:: 启动 MySQL（如果未运行）
-echo [1/3] 检查 MySQL...
-"D:\MySQL\mysql-8.0.33-winx64\bin\mysqladmin.exe" -u root -proot123456 --port=3306 ping >nul 2>&1
+:: 检查 MSSQL 连接（远程服务器，无需本地启动）
+echo [1/3] 检查 MSSQL 连接...
+"C:\Program Files\Python313\python.exe" -c "import pyodbc; pyodbc.connect('DRIVER={ODBC Driver 17 for SQL Server};SERVER=10.10.1.149;PORT=1433;DATABASE=PMS;UID=sa-jinky;PWD=Qwerty1234.')" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo   正在启动 MySQL...
-    start "" /B "D:\MySQL\mysql-8.0.33-winx64\bin\mysqld.exe" --standalone --datadir="D:\MySQL\data" --basedir="D:\MySQL\mysql-8.0.33-winx64" --port=3306
-    timeout /t 5 /nobreak >nul
-    echo   MySQL 已启动
+    echo   [警告] 无法连接 MSSQL 服务器 10.10.1.149:1433
 ) else (
-    echo   MySQL 已在运行
+    echo   MSSQL 连接正常
 )
 
 :: 启动后端 uvicorn

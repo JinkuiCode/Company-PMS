@@ -4,7 +4,7 @@ from app.core.security import hash_password
 
 from app.models.user import SysUser, RememberToken  # noqa: F401
 from app.models.rbac import SysRole, SysMenu, SysDept, SysUserRole, SysRoleMenu  # noqa: F401
-from app.models.project import PmsProject, PmsTask, PmsProgressLog  # noqa: F401
+from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive  # noqa: F401
 
 
 def init_db():
@@ -43,7 +43,8 @@ def init_db():
                 SysMenu(id=14, parent_id=1, menu_name="部门管理", menu_type="C", path="/system/dept", permission_code="system:dept:list", icon="OfficeBuilding", sort=4),
                 SysMenu(id=3, parent_id=0, menu_name="仪表盘", menu_type="C", path="/dashboard", icon="DataAnalysis", sort=0),
                 SysMenu(id=2, parent_id=0, menu_name="项目管理", menu_type="M", icon="Folder", sort=2),
-                SysMenu(id=21, parent_id=2, menu_name="项目列表", menu_type="C", path="/project/list", permission_code="project:list", icon="List", sort=1),
+                SysMenu(id=21, parent_id=2, menu_name="项目进度", menu_type="C", path="/project/list", permission_code="project:list", icon="List", sort=1),
+                SysMenu(id=22, parent_id=2, menu_name="项目档案", menu_type="C", path="/project/archive", permission_code="project:archive:list", icon="FolderOpened", sort=2),
             ]
             db.add_all(menus)
             db.commit()
@@ -55,6 +56,28 @@ def init_db():
             if not db.query(SysRoleMenu).filter_by(role_id=role.id, menu_id=menu.id).first():
                 db.add(SysRoleMenu(role_id=role.id, menu_id=menu.id))
         db.commit()
+
+        # 5.1 迁移：将旧菜单"项目列表"改名为"项目进度"，并创建"项目档案"菜单
+        old_menu = db.query(SysMenu).filter(SysMenu.id == 21).first()
+        if old_menu and old_menu.menu_name == "项目列表":
+            old_menu.menu_name = "项目进度"
+            db.commit()
+            print("菜单已迁移：项目列表 → 项目进度")
+
+        archive_menu = db.query(SysMenu).filter(SysMenu.id == 22).first()
+        if not archive_menu:
+            archive_menu = SysMenu(
+                id=22, parent_id=2, menu_name="项目档案", menu_type="C",
+                path="/project/archive", permission_code="project:archive:list",
+                icon="FolderOpened", sort=2,
+            )
+            db.add(archive_menu)
+            db.commit()
+            # 给管理员角色分配新菜单权限
+            if role:
+                db.add(SysRoleMenu(role_id=role.id, menu_id=22))
+                db.commit()
+            print("项目档案菜单已创建")
 
         # 6. 创建示例部门
         if not db.query(SysDept).first():

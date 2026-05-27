@@ -9,7 +9,7 @@
         </el-button>
       </div>
       <div class="toolbar-right">
-        <span class="row-count" v-if="rowData.length">共 {{ rowData.length }} 个项目</span>
+        <span class="row-count" v-if="rowData.length">共 {{ total }} 个项目</span>
       </div>
     </div>
 
@@ -20,21 +20,60 @@
       :columnDefs="columnDefs"
       :defaultColDef="defaultColDef"
       :domLayout="'autoHeight'"
-      :pagination="true"
-      :paginationPageSize="15"
-      :paginationPageSizeSelector="[10, 15, 20, 50]"
-      :suppressPaginationPanel="false"
+      :pagination="false"
       :enableCellTextSelection="true"
       :suppressRowClickSelection="true"
       @cell-value-changed="onCellValueChanged"
       style="width: 100%;"
     />
 
+    <!-- 自定义分页 -->
+    <div class="custom-pagination" v-if="total > 0">
+      <div class="pagination-left">
+        <span class="pagination-total">{{ total }} total</span>
+      </div>
+      <div class="pagination-center">
+        <button class="page-btn nav-btn" :disabled="page === 1" @click="goPage(page - 1)">‹</button>
+        <template v-for="p in visiblePages" :key="p">
+          <button v-if="p === -1" class="page-btn ellipsis" disabled>···</button>
+          <button v-else class="page-btn" :class="{ active: p === page }" @click="goPage(p)">{{ p }}</button>
+        </template>
+        <button class="page-btn nav-btn" :disabled="page === totalPages" @click="goPage(page + 1)">›</button>
+      </div>
+      <div class="pagination-right">
+        <select class="page-size-select" v-model="pageSize" @change="onPageSizeChange">
+          <option :value="15">15 条/页</option>
+          <option :value="20">20 条/页</option>
+          <option :value="50">50 条/页</option>
+          <option :value="100">100 条/页</option>
+        </select>
+      </div>
+    </div>
+
     <!-- 新增项目弹窗 -->
     <el-dialog v-model="dialogVisible" title="新增项目" width="520px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
-        <el-form-item label="项目名称" prop="project_name">
-          <el-input v-model="form.project_name" placeholder="请输入项目名称" />
+        <el-form-item label="项目档案" prop="archive_id">
+          <el-select
+            v-model="form.archive_id"
+            filterable
+            placeholder="请选择项目档案（自动带出编号和名称）"
+            style="width: 100%;"
+            @change="onArchiveChange"
+          >
+            <el-option
+              v-for="a in archiveList"
+              :key="a.id"
+              :label="`${a.project_code} - ${a.project_name}`"
+              :value="a.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目编号">
+          <el-input v-model="form.project_code" disabled placeholder="由档案自动带出" />
+        </el-form-item>
+        <el-form-item label="项目名称">
+          <el-input v-model="form.project_name" disabled placeholder="由档案自动带出" />
         </el-form-item>
         <el-form-item label="所属部门" prop="dept_id">
           <el-tree-select
@@ -73,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -89,17 +128,22 @@ const router = useRouter()
 
 // ========== 数据状态 ==========
 const rowData = ref<any[]>([])
+const archiveList = ref<any[]>([])  // 项目档案下拉列表
 const deptList = ref<any[]>([])       // 部门树（弹窗用）
 const deptNames = ref<string[]>([])   // 部门名称列表（下拉编辑器用）
 const deptFlatList = ref<any[]>([])   // 扁平部门（名称→ID 映射）
 const userList = ref<any[]>([])       // 用户列表
 const userNames = ref<string[]>([])   // 用户姓名列表（下拉编辑器用）
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(15)
 
 // ========== 弹窗 ==========
 const dialogVisible = ref(false)
 const formRef = ref<FormInstance>()
 const form = reactive({
   id: 0,
+  archive_id: null as number | null,
   project_code: '',
   project_name: '',
   dept_id: 0,
@@ -111,9 +155,37 @@ const form = reactive({
 })
 
 const rules: FormRules = {
-  project_name: [{ required: true, message: '请输入项目名称' }],
+  archive_id: [{ required: true, message: '请选择项目档案' }],
   dept_id: [{ required: true, message: '请选择部门' }],
   pm_id: [{ required: true, message: '请选择项目经理' }],
+}
+
+// ========== 分页计算 ==========
+const totalPages = computed(() => Math.ceil(total.value / pageSize.value) || 1)
+
+const visiblePages = computed(() => {
+  const pages: number[] = []
+  pages.push(1)
+  let start = Math.max(2, page.value - 1)
+  let end = Math.min(totalPages.value - 1, page.value + 1)
+  if (page.value <= 3) { start = 2; end = Math.min(5, totalPages.value - 1) }
+  else if (page.value >= totalPages.value - 2) { start = Math.max(totalPages.value - 4, 2); end = totalPages.value - 1 }
+  if (start > 2) pages.push(-1)
+  for (let i = start; i <= end; i++) pages.push(i)
+  if (end < totalPages.value - 1) pages.push(-1)
+  if (totalPages.value > 1) pages.push(totalPages.value)
+  return [...new Set(pages)]
+})
+
+function goPage(p: number) {
+  if (p < 1 || p > totalPages.value) return
+  page.value = p
+  fetchList()
+}
+
+function onPageSizeChange() {
+  page.value = 1
+  fetchList()
 }
 
 // ========== AG Grid 列定义 ==========
@@ -177,7 +249,7 @@ const columnDefs: ColDef[] = [
   { field: 'end_date', headerName: '结束日期', width: 120, editable: true },
   {
     headerName: '', width: 55, pinned: 'right', filter: false, sortable: false, resizable: false,
-    cellRenderer: () => `<button class="more-btn" title="更多操作">⋮</button>`,
+    cellRenderer: () => `<button class="more-btn" title="更多操作"></button>`,
     onCellClicked: (params: any) => {
       if (params.event.target.classList.contains('more-btn')) {
         handleRowMenu(params.data)
@@ -196,9 +268,13 @@ const defaultColDef = {
 async function fetchList() {
   const res: any = await request.get('/projects', { params: { page: 1, page_size: 1000 } })
   rowData.value = res.items
+  total.value = res.total
 }
 
 async function fetchOptions() {
+  // 加载项目档案列表
+  archiveList.value = (await request.get('/projects/archives/options')) as any
+
   deptList.value = (await request.get('/depts/tree')) as any
   // 扁平化部门树
   const flat: any[] = []
@@ -279,11 +355,20 @@ async function handleDelete(id: number) {
   fetchList()
 }
 
+// ========== 档案选择带出编号和名称 ==========
+function onArchiveChange(archiveId: number) {
+  const archive = archiveList.value.find((a: any) => a.id === archiveId)
+  if (archive) {
+    form.project_code = archive.project_code
+    form.project_name = archive.project_name
+  }
+}
+
 // ========== 新增项目 ==========
 function openCreateDialog() {
   formRef.value?.resetFields()
   Object.assign(form, {
-    id: 0, project_code: '', project_name: '', dept_id: 0, pm_id: 0,
+    id: 0, archive_id: null, project_code: '', project_name: '', dept_id: 0, pm_id: 0,
     status: 1, start_date: '', end_date: '', budget: null,
   })
   dialogVisible.value = true
@@ -292,10 +377,18 @@ function openCreateDialog() {
 async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
-  // 自动生成项目编号
-  const now = new Date()
-  const code = 'PMS-' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '-' + String(rowData.value.length + 1).padStart(3, '0')
-  await request.post('/projects', { ...form, project_code: code })
+  // 通过档案带出编号和名称，提交 archive_id
+  await request.post('/projects', {
+    archive_id: form.archive_id,
+    project_code: form.project_code,
+    project_name: form.project_name,
+    dept_id: form.dept_id,
+    pm_id: form.pm_id,
+    status: form.status,
+    start_date: form.start_date || null,
+    end_date: form.end_date || null,
+    budget: form.budget,
+  })
   ElMessage.success('创建成功')
   dialogVisible.value = false
   fetchList()
@@ -327,76 +420,58 @@ onMounted(() => { fetchList(); fetchOptions() })
 .toolbar-right { display: flex; align-items: center; gap: 8px; }
 .row-count { font-size: 13px; color: #909399; }
 
+/* ===== 自定义分页 ===== */
+.custom-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid #F3F4F6;
+}
+.pagination-left { display: flex; align-items: center; }
+.pagination-total { font-size: 14px; color: #374151; font-weight: 500; }
+.pagination-center { display: flex; align-items: center; gap: 4px; }
+.pagination-right { display: flex; align-items: center; }
+.page-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 32px; height: 32px; padding: 0 8px;
+  border: 1px solid #E5E7EB; border-radius: 6px;
+  background: #fff; color: #374151; font-size: 14px; font-weight: 400;
+  cursor: pointer; transition: all 0.15s; line-height: 1;
+}
+.page-btn:hover:not(:disabled):not(.active) { background: #F3F4F6; border-color: #D1D5DB; }
+.page-btn.active { background: #6366F1; color: #fff; border-color: #6366F1; font-weight: 500; }
+.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-btn.ellipsis { border: none; background: transparent; color: #9CA3AF; cursor: default; min-width: 24px; }
+.page-btn.nav-btn { font-size: 16px; font-weight: 500; min-width: 28px; }
+.page-size-select {
+  padding: 6px 28px 6px 12px; border: 1px solid #E5E7EB; border-radius: 6px;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8.825L1.175 4 2.238 2.938 6 6.7l3.763-3.763L10.825 4z'/%3E%3C/svg%3E") no-repeat right 8px center;
+  color: #374151; font-size: 14px; cursor: pointer; outline: none; appearance: none;
+}
+.page-size-select:hover { border-color: #D1D5DB; }
+
 /* ===== AG Grid 企微风格覆盖 ===== */
-/* 去掉外层边框 */
-:deep(.ag-root-wrapper) {
-  border: none;
-}
-
-/* 单元格：无边框 */
-:deep(.ag-cell) {
-  border-right: none;
-  border-bottom: none;
-  font-size: 14px;
-  color: #303133;
-}
-
-:deep(.ag-row) {
-  border-bottom: none;
-}
-
-/* 表头：浅灰底色 + 加粗 */
-:deep(.ag-header) {
-  background-color: #f5f6f7;
-  border-bottom: 1px solid #e8e8e8;
-}
-
-:deep(.ag-header-cell) {
-  background-color: #f5f6f7;
-  border-right: none;
-  padding: 0 12px;
-}
-
-:deep(.ag-header-cell-text) {
-  font-weight: 600;
-  font-size: 14px;
-  color: #303133;
-}
-
-/* 斑马纹 */
+:deep(.ag-root-wrapper) { border: none; }
+:deep(.ag-cell) { border-right: none; border-bottom: none; font-size: 14px; color: #303133; }
+:deep(.ag-row) { border-bottom: none; }
+:deep(.ag-header) { background-color: #f5f6f7; border-bottom: 1px solid #e8e8e8; }
+:deep(.ag-header-cell) { background-color: #f5f6f7; border-right: none; padding: 0 12px; }
+:deep(.ag-header-cell-text) { font-weight: 600; font-size: 14px; color: #303133; }
 :deep(.ag-row-even) { background-color: #fafbfc; }
 :deep(.ag-row-odd) { background-color: #ffffff; }
-
-/* 行悬停高亮 */
 :deep(.ag-row:hover) { background-color: #e8f4fd; }
-
-/* 去掉选中行高亮 */
 :deep(.ag-row-selected) { background-color: inherit; }
 
 /* 更多按钮 */
 :deep(.more-btn) {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 18px;
-  color: #909399;
-  padding: 4px 8px;
-  border-radius: 4px;
-  line-height: 1;
+  background: none; border: none; cursor: pointer; font-size: 18px;
+  color: #909399; padding: 4px 8px; border-radius: 4px; line-height: 1;
 }
-:deep(.more-btn:hover) {
-  background: #f0f2f5;
-  color: #303133;
-}
+:deep(.more-btn:hover) { background: #f0f2f5; color: #303133; }
 
 /* 项目名称链接 */
-:deep(.proj-link) {
-  color: #409EFF;
-  cursor: pointer;
-  text-decoration: none;
-}
-:deep(.proj-link:hover) {
-  text-decoration: underline;
-}
-
+:deep(.proj-link) { color: #409EFF; cursor: pointer; text-decoration: none; }
+:deep(.proj-link:hover) { text-decoration: underline; }
 </style>

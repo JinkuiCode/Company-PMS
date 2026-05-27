@@ -1,6 +1,7 @@
 import datetime
 
-from sqlalchemy import String, Integer, DateTime, ForeignKey, func, UniqueConstraint
+from sqlalchemy import Integer, DateTime, ForeignKey, func, UniqueConstraint
+from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -11,11 +12,11 @@ class SysRole(Base):
     __tablename__ = "sys_role"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    role_name: Mapped[str] = mapped_column(String(64), nullable=False, comment="角色名称")
-    role_code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, comment="角色编码")
+    role_name: Mapped[str] = mapped_column(NVARCHAR(64), nullable=False, comment="角色名称")
+    role_code: Mapped[str] = mapped_column(NVARCHAR(64), unique=True, nullable=False, comment="角色编码")
     data_scope: Mapped[int] = mapped_column(Integer, default=1, comment="数据权限: 1本人 2本部门 3本部门及子部门 4全部")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1启用 0禁用")
-    remark: Mapped[str | None] = mapped_column(String(256), default=None, comment="备注")
+    remark: Mapped[str | None] = mapped_column(NVARCHAR(256), default=None, comment="备注")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -26,12 +27,12 @@ class SysMenu(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parent_id: Mapped[int] = mapped_column(Integer, default=0, comment="父菜单ID，0为顶级")
-    menu_name: Mapped[str] = mapped_column(String(64), nullable=False, comment="菜单名称")
-    menu_type: Mapped[str] = mapped_column(String(1), default="M", comment="类型: M目录 C菜单 B按钮")
-    permission_code: Mapped[str | None] = mapped_column(String(128), default=None, comment="权限标识")
-    path: Mapped[str | None] = mapped_column(String(256), default=None, comment="前端路由路径")
-    component: Mapped[str | None] = mapped_column(String(256), default=None, comment="前端组件路径")
-    icon: Mapped[str | None] = mapped_column(String(64), default=None, comment="图标")
+    menu_name: Mapped[str] = mapped_column(NVARCHAR(64), nullable=False, comment="菜单名称")
+    menu_type: Mapped[str] = mapped_column(NVARCHAR(1), default="M", comment="类型: M目录 C菜单 B按钮")
+    permission_code: Mapped[str | None] = mapped_column(NVARCHAR(128), default=None, comment="权限标识")
+    path: Mapped[str | None] = mapped_column(NVARCHAR(256), default=None, comment="前端路由路径")
+    component: Mapped[str | None] = mapped_column(NVARCHAR(256), default=None, comment="前端组件路径")
+    icon: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="图标")
     sort: Mapped[int] = mapped_column(Integer, default=0, comment="排序")
     visible: Mapped[int] = mapped_column(Integer, default=1, comment="是否可见: 1是 0否")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1启用 0禁用")
@@ -45,7 +46,7 @@ class SysDept(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parent_id: Mapped[int] = mapped_column(Integer, default=0, comment="父部门ID，0为顶级")
-    dept_name: Mapped[str] = mapped_column(String(64), nullable=False, comment="部门名称")
+    dept_name: Mapped[str] = mapped_column(NVARCHAR(64), nullable=False, comment="部门名称")
     leader_id: Mapped[int | None] = mapped_column(Integer, default=None, comment="负责人ID")
     sort: Mapped[int] = mapped_column(Integer, default=0, comment="排序")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1启用 0禁用")

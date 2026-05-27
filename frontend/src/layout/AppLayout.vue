@@ -63,11 +63,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Fold, Expand, Setting, User, Avatar, Menu, OfficeBuilding, Folder, List, DataAnalysis } from '@element-plus/icons-vue'
+import { Fold, Expand, Setting, User, Avatar, Menu, OfficeBuilding, Folder, List, DataAnalysis, FolderOpened } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'
 
-const Icons: Record<string, any> = { Setting, User, Avatar, Menu, OfficeBuilding, Folder, List, DataAnalysis }
+const Icons: Record<string, any> = { Setting, User, Avatar, Menu, OfficeBuilding, Folder, List, DataAnalysis, FolderOpened }
 
 const router = useRouter()
 const route = useRoute()
@@ -141,7 +141,7 @@ onMounted(() => {
 .user-name { color: #606266; }
 
 .app-main {
-  background: #f0f2f5;
+  background: #F3F4F6;
   overflow-y: auto;
 }
 

@@ -5,19 +5,20 @@ class Settings(BaseSettings):
     APP_NAME: str = "PMS 项目管理系统"
     DEBUG: bool = True
 
-    # 数据库
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 3306
-    DB_USER: str = "root"
-    DB_PASSWORD: str = "root123456"
-    DB_NAME: str = "pms"
+    # 数据库（MSSQL 2017）
+    DB_HOST: str = "10.10.1.149"
+    DB_PORT: int = 1433
+    DB_USER: str = "sa-jinky"
+    DB_PASSWORD: str = "Qwerty1234."
+    DB_NAME: str = "PMS"
 
     @property
     def DATABASE_URL(self) -> str:
         return (
-            f"mysql+pymysql://{self.DB_USER}:{self.DB_PASSWORD}"
+            f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-            f"?charset=utf8mb4"
+            f"?driver=ODBC+Driver+17+for+SQL+Server"
+            f"&charset=utf8"
         )
 
     # JWT
