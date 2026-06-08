@@ -57,28 +57,6 @@ def init_db():
                 db.add(SysRoleMenu(role_id=role.id, menu_id=menu.id))
         db.commit()
 
-        # 5.1 迁移：将旧菜单"项目列表"改名为"项目进度"，并创建"项目档案"菜单
-        old_menu = db.query(SysMenu).filter(SysMenu.id == 21).first()
-        if old_menu and old_menu.menu_name == "项目列表":
-            old_menu.menu_name = "项目进度"
-            db.commit()
-            print("菜单已迁移：项目列表 → 项目进度")
-
-        archive_menu = db.query(SysMenu).filter(SysMenu.id == 22).first()
-        if not archive_menu:
-            archive_menu = SysMenu(
-                id=22, parent_id=2, menu_name="项目档案", menu_type="C",
-                path="/project/archive", permission_code="project:archive:list",
-                icon="FolderOpened", sort=2,
-            )
-            db.add(archive_menu)
-            db.commit()
-            # 给管理员角色分配新菜单权限
-            if role:
-                db.add(SysRoleMenu(role_id=role.id, menu_id=22))
-                db.commit()
-            print("项目档案菜单已创建")
-
         # 6. 创建示例部门
         if not db.query(SysDept).first():
             depts = [

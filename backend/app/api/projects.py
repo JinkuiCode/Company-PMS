@@ -64,6 +64,9 @@ def update_archive(archive_id: int, data: ArchiveUpdate, db: Session = Depends(g
 @router.delete("/archives/{archive_id}", summary="删除项目档案", dependencies=[Depends(get_current_user_id)])
 def delete_archive(archive_id: int, db: Session = Depends(get_db)):
     return project_service.delete_archive(db, archive_id)
+
+
+# ==================== 项目任务 ====================
 @router.get("/{project_id}/tasks", summary="项目任务列表")
 def list_tasks(
     project_id: int,

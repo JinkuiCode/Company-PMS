@@ -20,8 +20,6 @@ class PmsProjectArchive(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    __table_args__ = (Index("idx_archive_code", "project_code"),)
-
 
 class PmsProject(Base):
     """项目表"""

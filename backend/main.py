@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -7,10 +8,18 @@ from app.core.database import get_db
 from app.api import auth, users, roles, menus, depts, projects, sso
 from app.api.auth import get_current_user_id, get_current_user_context
 from app.models.init_db import init_db
-from app.models.user import SysUser
 from app.models.rbac import SysRoleMenu, SysMenu, SysUserRole
 
-app = FastAPI(title=settings.APP_NAME, version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理：启动时初始化数据库"""
+    init_db()
+    print(f"   {settings.APP_NAME} 启动成功")
+    yield
+
+
+app = FastAPI(title=settings.APP_NAME, version="0.1.0", lifespan=lifespan)
 
 # CORS 中间件（开发阶段允许所有来源）
 app.add_middleware(
@@ -80,12 +89,6 @@ def dashboard_stats(
     """获取仪表盘统计数据"""
     from app.services import dashboard as dashboard_service
     return dashboard_service.get_dashboard_stats(db, scope_ctx)
-
-
-@app.on_event("startup")
-def on_startup():
-    init_db()
-    print(f"   {settings.APP_NAME} 启动成功")
 
 
 if __name__ == "__main__":

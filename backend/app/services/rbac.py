@@ -5,7 +5,6 @@ from fastapi import HTTPException
 from app.core.security import hash_password
 from app.models.user import SysUser, RememberToken
 from app.models.rbac import SysRole, SysMenu, SysDept, SysUserRole, SysRoleMenu
-from app.core.security import hash_password
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.schemas.rbac import (
     RoleCreate, RoleUpdate, RoleResponse,

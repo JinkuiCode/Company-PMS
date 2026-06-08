@@ -20,7 +20,7 @@
       </div>
 
       <ag-grid-vue
-        class="ag-theme-alpine"
+        class="ag-theme-alpine wechat-table"
         :rowData="rowData"
         :columnDefs="columnDefs"
         :defaultColDef="defaultColDef"
@@ -181,4 +181,16 @@ onMounted(() => { fetchTasks(); fetchUsers() })
 .hint { color: #909399; font-size: 13px; }
 :deep(.del-btn) { background: none; border: none; color: #F56C6C; cursor: pointer; }
 :deep(.del-btn:hover) { text-decoration: underline; }
+
+/* ===== AG Grid 企微风格覆盖 ===== */
+:deep(.ag-root-wrapper) { border: none; }
+:deep(.ag-cell) { border-right: none; border-bottom: none; font-size: 14px; color: #303133; }
+:deep(.ag-row) { border-bottom: none; }
+:deep(.ag-header) { background-color: #f5f6f7; border-bottom: 1px solid #e8e8e8; }
+:deep(.ag-header-cell) { background-color: #f5f6f7; border-right: none; padding: 0 12px; }
+:deep(.ag-header-cell-text) { font-weight: 600; font-size: 14px; color: #303133; }
+:deep(.ag-row-even) { background-color: #fafbfc; }
+:deep(.ag-row-odd) { background-color: #ffffff; }
+:deep(.ag-row:hover) { background-color: #e8f4fd; }
+:deep(.ag-row-selected) { background-color: inherit; }
 </style>

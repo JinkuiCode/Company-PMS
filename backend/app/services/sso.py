@@ -157,7 +157,6 @@ def generate_sso_url(loginid: str, username: str, dept_name: str) -> str:
     """生成本地测试用的 SSO URL（HMAC 签名方式）"""
     ts = int(time.time())
     sign = _make_sign(loginid, username, dept_name, ts)
-    from urllib.parse import urlencode
     params = urlencode({
         "loginid": loginid,
         "username": username,
