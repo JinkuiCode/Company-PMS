@@ -27,6 +27,11 @@ class ArchiveResponse(BaseModel):
     manager_id: int | None = None
     product_type: str | None = None
     manager_name: str = ""    # 关联查询
+    # ERP 同步字段
+    erp_synced: int = 0
+    erp_sync_time: datetime | None = None
+    erp_sync_status: str | None = None
+    erp_error_msg: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     model_config = {"from_attributes": True}

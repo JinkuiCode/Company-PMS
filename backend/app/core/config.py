@@ -49,5 +49,11 @@ class Settings(BaseSettings):
     OA_CHECK_USER_PWD_URL: str = "http://10.10.1.149:8081/ssologin/checkUserPassword"  # OA 密码验证 REST 端点
     OA_HRM_SERVICE_URL: str = "http://10.10.1.149:8081/services/HrmService"  # OA 人力资源 WebService（checkUser SOAP）
 
+    # 金蝶云星空 ERP 对接（Session 认证模式）
+    K3_URL: str = "http://10.10.1.248/k3cloud"  # 金蝶服务器地址（内网用 http 避免证书问题）
+    K3_ACCT_ID: str = "6a1fd19d9e068f"          # 账套 ID
+    K3_USERNAME: str = "I0001"                   # 金蝶登录账号
+    K3_PASSWORD: str = "Jsydadmin123."           # 金蝶登录密码
+
 
 settings = Settings()

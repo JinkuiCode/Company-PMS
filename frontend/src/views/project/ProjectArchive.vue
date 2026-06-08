@@ -12,6 +12,11 @@
           批量删除
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
         </el-button>
+        <el-button type="success" size="small" :disabled="selectedRows.length === 0" @click="handleBatchSync">
+          <el-icon style="margin-right:4px;"><Connection /></el-icon>
+          批量同步 ERP
+          <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
+        </el-button>
       </div>
       <div class="toolbar-right">
         <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
@@ -114,7 +119,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Delete, Search } from '@element-plus/icons-vue'
+import { Plus, Delete, Search, Connection } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
@@ -179,7 +184,7 @@ const statusColors: Record<number, string> = { 1: '#909399', 2: '#409EFF', 3: '#
 const columnDefs: ColDef[] = [
   { headerCheckboxSelection: true, checkboxSelection: true, width: 42, pinned: 'left', filter: false, sortable: false, resizable: false },
   { field: 'project_code', headerName: '项目编号', width: 150, pinned: 'left' },
-  { field: 'project_name', headerName: '项目名称', width: 240 },
+  { field: 'project_name', headerName: '项目名称', width: 200 },
   {
     field: 'status', headerName: '状态', width: 100,
     cellRenderer: (params: any) => {
@@ -193,18 +198,31 @@ const columnDefs: ColDef[] = [
   { field: 'manager_name', headerName: '负责人', width: 110 },
   { field: 'product_type', headerName: '产品类型', width: 120 },
   {
+    field: 'erp_sync_status', headerName: '同步状态', width: 110,
+    cellRenderer: (params: any) => {
+      const v = params.value
+      if (!v || v === 'pending') return `<span style="color:#E6A23C;">⏳ 待同步</span>`
+      if (v === 'success') return `<span style="color:#67C23A;">✅ 已同步</span>`
+      if (v === 'failed') return `<span style="color:#F56C6C;" title="${params.data.erp_error_msg || ''}">❌ 失败</span>`
+      return '-'
+    },
+  },
+  {
     field: 'created_at', headerName: '创建时间', width: 170,
     valueFormatter: (params: any) => params.value ? new Date(params.value).toLocaleString('zh-CN') : '-',
   },
   {
-    headerName: '操作', width: 120, pinned: 'right', filter: false, sortable: false, resizable: false,
+    headerName: '操作', width: 160, pinned: 'right', filter: false, sortable: false, resizable: false,
     cellRenderer: (params: any) => {
       return `<button class="edit-btn" data-id="${params.data.id}">编辑</button>
+              <button class="sync-btn" data-id="${params.data.id}">同步</button>
               <button class="del-btn" data-id="${params.data.id}">删除</button>`
     },
     onCellClicked: (params: any) => {
       if (params.event.target.classList.contains('edit-btn')) {
         openEditDialog(params.data)
+      } else if (params.event.target.classList.contains('sync-btn')) {
+        handleSyncSingle(params.data.id)
       } else if (params.event.target.classList.contains('del-btn')) {
         handleDeleteSingle(params.data.id)
       }
@@ -317,6 +335,43 @@ async function handleBatchDelete() {
   fetchList()
 }
 
+// ========== ERP 同步 ==========
+async function handleSyncSingle(id: number) {
+  try {
+    const res: any = await request.post('/erp/sync', { archive_id: id })
+    if (res.success) {
+      ElMessage.success(res.message)
+    } else {
+      ElMessage.error(res.message)
+    }
+    fetchList()
+  } catch (e: any) {
+    ElMessage.error('同步失败: ' + (e?.response?.data?.message || e?.message))
+  }
+}
+
+async function handleBatchSync() {
+  if (selectedRows.value.length === 0) return
+  try {
+    await ElMessageBox.confirm(`确定同步选中的 ${selectedRows.value.length} 条档案到金蝶 ERP 吗？`, '同步确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  const ids = selectedRows.value.map((r: any) => r.id)
+  try {
+    const res: any = await request.post('/erp/sync/batch', { archive_ids: ids })
+    if (res.success) {
+      ElMessage.success(res.message)
+    } else {
+      ElMessage.error(res.message)
+    }
+    selectedRows.value = []
+    fetchList()
+  } catch (e: any) {
+    ElMessage.error('批量同步失败: ' + (e?.response?.data?.message || e?.message))
+  }
+}
+
 onMounted(() => { fetchList(); fetchUsers() })
 </script>
 
@@ -366,6 +421,11 @@ onMounted(() => { fetchList(); fetchUsers() })
   font-size: 13px; padding: 2px 6px; margin-right: 4px;
 }
 :deep(.edit-btn:hover) { text-decoration: underline; }
+:deep(.sync-btn) {
+  background: none; border: none; cursor: pointer; color: #67C23A;
+  font-size: 13px; padding: 2px 6px; margin-right: 4px;
+}
+:deep(.sync-btn:hover) { text-decoration: underline; }
 :deep(.del-btn) {
   background: none; border: none; cursor: pointer; color: #F56C6C;
   font-size: 13px; padding: 2px 6px;

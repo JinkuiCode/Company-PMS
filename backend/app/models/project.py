@@ -17,8 +17,25 @@ class PmsProjectArchive(Base):
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1未启动 2进行中 3已完结 4暂停")
     manager_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="负责人ID")
     product_type: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="产品类型")
+    # ERP 同步字段
+    erp_synced: Mapped[int] = mapped_column(Integer, default=0, comment="是否已同步到金蝶: 0否 1是")
+    erp_sync_time: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="最后同步时间")
+    erp_sync_status: Mapped[str | None] = mapped_column(NVARCHAR(32), default=None, comment="同步状态: success/failed/pending")
+    erp_error_msg: Mapped[str | None] = mapped_column(NVARCHAR(512), default=None, comment="同步失败错误信息")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ErpSyncLog(Base):
+    """ERP 同步日志表"""
+    __tablename__ = "erp_sync_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_id: Mapped[int] = mapped_column(Integer, nullable=False, comment="PMS 项目档案 ID")
+    action: Mapped[str] = mapped_column(NVARCHAR(16), nullable=False, comment="操作: create/update")
+    status: Mapped[str] = mapped_column(NVARCHAR(16), nullable=False, comment="success/failed")
+    error_msg: Mapped[str | None] = mapped_column(NVARCHAR(1024), default=None, comment="错误信息")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class PmsProject(Base):

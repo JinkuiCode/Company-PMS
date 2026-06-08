@@ -1,10 +1,11 @@
 """初始化数据库表，创建默认管理员、角色、菜单"""
+from sqlalchemy import text
 from app.core.database import engine, SessionLocal, Base
 from app.core.security import hash_password
 
 from app.models.user import SysUser, RememberToken  # noqa: F401
 from app.models.rbac import SysRole, SysMenu, SysDept, SysUserRole, SysRoleMenu  # noqa: F401
-from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive  # noqa: F401
+from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive, ErpSyncLog  # noqa: F401
 
 
 def init_db():
@@ -56,6 +57,17 @@ def init_db():
             if not db.query(SysRoleMenu).filter_by(role_id=role.id, menu_id=menu.id).first():
                 db.add(SysRoleMenu(role_id=role.id, menu_id=menu.id))
         db.commit()
+
+        # 5.5 迁移：pms_project_archive 表添加 ERP 同步字段
+        try:
+            db.execute(text("SELECT erp_synced FROM pms_project_archive"))
+        except Exception:
+            db.execute(text("ALTER TABLE pms_project_archive ADD erp_synced INT NOT NULL DEFAULT 0"))
+            db.execute(text("ALTER TABLE pms_project_archive ADD erp_sync_time DATETIME NULL"))
+            db.execute(text("ALTER TABLE pms_project_archive ADD erp_sync_status NVARCHAR(32) NULL"))
+            db.execute(text("ALTER TABLE pms_project_archive ADD erp_error_msg NVARCHAR(512) NULL"))
+            db.commit()
+            print("迁移完成：pms_project_archive 已添加 ERP 同步字段")
 
         # 6. 创建示例部门
         if not db.query(SysDept).first():

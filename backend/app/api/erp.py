@@ -1,0 +1,50 @@
+"""
+金蝶 ERP 对接 API 路由
+"""
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+
+from app.core.database import get_db
+from app.services import kingdee
+
+router = APIRouter(prefix="/api/erp", tags=["金蝶 ERP 对接"])
+
+
+class SyncRequest(BaseModel):
+    """同步请求"""
+    archive_id: int
+
+
+class BatchSyncRequest(BaseModel):
+    """批量同步请求"""
+    archive_ids: list[int]
+
+
+@router.post("/test", summary="测试金蝶连接")
+def test_connection():
+    """测试金蝶 ERP 连接是否正常"""
+    return kingdee.test_erp_connection()
+
+
+@router.post("/sync", summary="同步单个项目档案")
+def sync_project_archive(request: SyncRequest, db: Session = Depends(get_db)):
+    """
+    同步单个项目档案到金蝶 ERP
+    - 如果金蝶中不存在则创建
+    - 如果已存在则更新
+    """
+    return kingdee.sync_project_archive_to_erp(db, request.archive_id)
+
+
+@router.post("/sync/batch", summary="批量同步项目档案")
+def batch_sync_project_archives(request: BatchSyncRequest, db: Session = Depends(get_db)):
+    """批量同步多个项目档案到金蝶 ERP"""
+    return kingdee.batch_sync_project_archives(db, request.archive_ids)
+
+
+@router.get("/logs/{archive_id}", summary="查询同步日志")
+def get_sync_logs(archive_id: int, limit: int = 10, db: Session = Depends(get_db)):
+    """查询指定项目档案的同步日志"""
+    logs = kingdee.get_sync_logs(db, archive_id, limit)
+    return {"success": True, "data": logs}

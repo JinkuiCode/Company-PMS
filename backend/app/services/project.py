@@ -214,6 +214,8 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
             id=a.id, project_code=a.project_code, project_name=a.project_name,
             status=a.status, manager_id=a.manager_id, product_type=a.product_type,
             manager_name=manager.real_name if manager else "",
+            erp_synced=a.erp_synced, erp_sync_time=a.erp_sync_time,
+            erp_sync_status=a.erp_sync_status, erp_error_msg=a.erp_error_msg,
             created_at=a.created_at, updated_at=a.updated_at,
         ))
     return {"total": total, "items": items}
