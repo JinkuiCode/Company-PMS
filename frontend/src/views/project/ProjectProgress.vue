@@ -24,6 +24,7 @@
         :rowData="rowData"
         :columnDefs="columnDefs"
         :defaultColDef="defaultColDef"
+        :localeText="localeText"
         :domLayout="'autoHeight'"
         @cell-value-changed="onCellValueChanged"
         style="width: 100%;"
@@ -41,6 +42,7 @@ import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type CellValueChangedEvent } from 'ag-grid-community'
+import { chineseLocaleText } from '@/utils/agGridLocale'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
@@ -48,6 +50,7 @@ import request from '@/utils/request'
 const route = useRoute()
 const projectId = Number(route.params.id)
 const projectName = route.query.name as string || '项目'
+const localeText = chineseLocaleText
 
 const rowData = ref<any[]>([])
 const userOptions = ref<string[]>([])  // 负责人姓名列表

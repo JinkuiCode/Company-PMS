@@ -14,24 +14,44 @@
         </el-button>
       </div>
       <div class="toolbar-right">
-        <el-input
-          v-model="searchKeyword"
-          placeholder="搜索编号或名称"
-          size="small"
-          clearable
-          style="width: 180px;"
-          @input="onSearch"
-        />
+        <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
+          已筛选 {{ filteredRowData.length }} / {{ total }} 条
+        </span>
       </div>
+    </div>
+
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+      <el-input
+        v-model="searchKeyword"
+        placeholder="搜索编号或名称"
+        size="small"
+        clearable
+        style="width: 200px;"
+        :prefix-icon="Search"
+      />
+      <el-select
+        v-model="filterStatus"
+        placeholder="全部状态"
+        size="small"
+        clearable
+        style="width: 140px;"
+      >
+        <el-option label="未启动" :value="1" />
+        <el-option label="进行中" :value="2" />
+        <el-option label="已完结" :value="3" />
+        <el-option label="暂停" :value="4" />
+      </el-select>
     </div>
 
     <!-- AG Grid 表格 -->
     <ag-grid-vue
       ref="agGridRef"
       class="ag-theme-alpine wechat-table"
-      :rowData="rowData"
+      :rowData="filteredRowData"
       :columnDefs="columnDefs"
       :defaultColDef="defaultColDef"
+      :localeText="localeText"
       :domLayout="'autoHeight'"
       :pagination="false"
       :rowSelection="'multiple'"
@@ -50,6 +70,7 @@
       @update:model-value="fetchList"
       @update:page-size="() => { page = 1; fetchList() }"
     />
+
 
     <!-- 新增 / 编辑弹窗 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目档案' : '新增项目档案'" width="520px">
@@ -91,17 +112,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Delete } from '@element-plus/icons-vue'
+import { Plus, Delete, Search } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
+import { chineseLocaleText } from '@/utils/agGridLocale'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
+
+const localeText = chineseLocaleText
 
 // ========== 数据状态 ==========
 const rowData = ref<any[]>([])
@@ -112,6 +136,23 @@ const selectedRows = ref<any[]>([])
 const agGridRef = ref()
 const page = ref(1)
 const pageSize = ref(15)
+const filterStatus = ref<number | null>(null)
+
+// 客户端筛选
+const filteredRowData = computed(() => {
+  let result = rowData.value
+  if (searchKeyword.value) {
+    const kw = searchKeyword.value.toLowerCase()
+    result = result.filter(r =>
+      r.project_code?.toLowerCase().includes(kw) ||
+      r.project_name?.toLowerCase().includes(kw)
+    )
+  }
+  if (filterStatus.value != null) {
+    result = result.filter(r => r.status === filterStatus.value)
+  }
+  return result
+})
 
 // ========== 弹窗 ==========
 const dialogVisible = ref(false)
@@ -174,15 +215,13 @@ const columnDefs: ColDef[] = [
 const defaultColDef = {
   sortable: true,
   resizable: true,
-  filter: true,
+  filter: false,
 }
 
 // ========== 数据加载 ==========
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-
 async function fetchList() {
   const res: any = await request.get('/projects/archives/list', {
-    params: { page: 1, page_size: 1000, keyword: searchKeyword.value || undefined },
+    params: { page: 1, page_size: 1000 },
   })
   rowData.value = res.items
   total.value = res.total
@@ -191,11 +230,6 @@ async function fetchList() {
 async function fetchUsers() {
   const res: any = await request.get('/users', { params: { page: 1, page_size: 1000 } })
   userList.value = res.items
-}
-
-function onSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => { page.value = 1; fetchList() }, 300)
 }
 
 // ========== 选择事件 ==========
@@ -302,6 +336,17 @@ onMounted(() => { fetchList(); fetchUsers() })
 }
 .toolbar-left { display: flex; align-items: center; gap: 8px; }
 .toolbar-right { display: flex; align-items: center; gap: 8px; }
+.filter-count { font-size: 13px; color: #909399; }
+
+/* 筛选栏 */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #F3F4F6;
+  margin-bottom: 12px;
+}
 
 /* ===== AG Grid 企微风格覆盖 ===== */
 :deep(.ag-root-wrapper) { border: none; }

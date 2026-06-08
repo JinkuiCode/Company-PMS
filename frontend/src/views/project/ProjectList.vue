@@ -9,16 +9,52 @@
         </el-button>
       </div>
       <div class="toolbar-right">
-        <span class="row-count" v-if="rowData.length">共 {{ total }} 个项目</span>
+        <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
+          已筛选 {{ filteredRowData.length }} / {{ total }} 条
+        </span>
       </div>
+    </div>
+
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+      <el-input
+        v-model="filterKeyword"
+        placeholder="搜索编号或名称"
+        size="small"
+        clearable
+        style="width: 200px;"
+        :prefix-icon="Search"
+      />
+      <el-tree-select
+        v-model="filterDeptId"
+        :data="deptList"
+        :props="{ label: 'dept_name', value: 'id', children: 'children' }"
+        check-strictly
+        clearable
+        placeholder="全部部门"
+        size="small"
+        style="width: 160px;"
+      />
+      <el-select
+        v-model="filterStatus"
+        placeholder="全部状态"
+        size="small"
+        clearable
+        style="width: 140px;"
+      >
+        <el-option label="进行中" :value="1" />
+        <el-option label="已完结" :value="2" />
+        <el-option label="暂停" :value="3" />
+      </el-select>
     </div>
 
     <!-- AG Grid 表格 -->
     <ag-grid-vue
       class="ag-theme-alpine wechat-table"
-      :rowData="rowData"
+      :rowData="filteredRowData"
       :columnDefs="columnDefs"
       :defaultColDef="defaultColDef"
+      :localeText="localeText"
       :domLayout="'autoHeight'"
       :pagination="false"
       :enableCellTextSelection="true"
@@ -99,20 +135,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type CellValueChangedEvent } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
+import { chineseLocaleText } from '@/utils/agGridLocale'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
 
 const router = useRouter()
+const localeText = chineseLocaleText
 
 // ========== 数据状态 ==========
 const rowData = ref<any[]>([])
@@ -125,6 +163,28 @@ const userNames = ref<string[]>([])   // 用户姓名列表（下拉编辑器用
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(15)
+const filterKeyword = ref('')
+const filterStatus = ref<number | null>(null)
+const filterDeptId = ref<number | null>(null)
+
+// 客户端筛选
+const filteredRowData = computed(() => {
+  let result = rowData.value
+  if (filterKeyword.value) {
+    const kw = filterKeyword.value.toLowerCase()
+    result = result.filter(r =>
+      r.project_code?.toLowerCase().includes(kw) ||
+      r.project_name?.toLowerCase().includes(kw)
+    )
+  }
+  if (filterStatus.value != null) {
+    result = result.filter(r => r.status === filterStatus.value)
+  }
+  if (filterDeptId.value != null) {
+    result = result.filter(r => r.dept_id === filterDeptId.value)
+  }
+  return result
+})
 
 // ========== 弹窗 ==========
 const dialogVisible = ref(false)
@@ -200,10 +260,9 @@ const columnDefs: ColDef[] = [
         ${map[v] || '-'}</span>`
     },
   },
-  { field: 'task_count', headerName: '任务数', width: 90, filter: 'agNumberColumnFilter' },
+  { field: 'task_count', headerName: '任务数', width: 90 },
   {
     field: 'budget', headerName: '预算(万)', width: 110, editable: true, type: 'numericColumn',
-    filter: 'agNumberColumnFilter',
   },
   { field: 'start_date', headerName: '开始日期', width: 120, editable: true },
   { field: 'end_date', headerName: '结束日期', width: 120, editable: true },
@@ -221,7 +280,7 @@ const columnDefs: ColDef[] = [
 const defaultColDef = {
   sortable: true,
   resizable: true,
-  filter: true,
+  filter: false,
 }
 
 // ========== 数据加载 ==========
@@ -378,7 +437,17 @@ onMounted(() => { fetchList(); fetchOptions() })
 }
 .toolbar-left { display: flex; align-items: center; gap: 8px; }
 .toolbar-right { display: flex; align-items: center; gap: 8px; }
-.row-count { font-size: 13px; color: #909399; }
+.filter-count { font-size: 13px; color: #909399; }
+
+/* 筛选栏 */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #F3F4F6;
+  margin-bottom: 12px;
+}
 
 /* ===== AG Grid 企微风格覆盖 ===== */
 :deep(.ag-root-wrapper) { border: none; }
