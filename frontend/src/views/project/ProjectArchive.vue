@@ -22,6 +22,12 @@
         <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
           已筛选 {{ filteredRowData.length }} / {{ total }} 条
         </span>
+        <el-button size="small" @click="saveLayout" title="保存当前列顺序和宽度">
+          <el-icon style="margin-right:4px;"><Setting /></el-icon>保存布局
+        </el-button>
+        <el-button size="small" plain @click="resetLayout" title="恢复默认列布局">
+          <el-icon><RefreshRight /></el-icon>
+        </el-button>
       </div>
     </div>
 
@@ -73,6 +79,7 @@
       :pagination="false"
       :rowSelection="'multiple'"
       :enableCellTextSelection="true"
+      @grid-ready="onGridReady"
       @row-double-clicked="onRowDoubleClicked"
       @selection-changed="onSelectionChanged"
       style="width: 100%;"
@@ -151,7 +158,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Delete, Search, Connection } from '@element-plus/icons-vue'
+import { Plus, Delete, Search, Connection, Setting, RefreshRight } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
@@ -163,6 +170,41 @@ ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
 
 const localeText = chineseLocaleText
+
+// ========== 布局持久化 ==========
+const LAYOUT_KEY = 'pms_archive_grid_layout'
+let gridApi: any = null
+
+function onGridReady(params: any) {
+  gridApi = params.api
+  loadLayout()
+}
+
+function saveLayout() {
+  if (!gridApi) return
+  const colState = gridApi.getColumnState()
+  localStorage.setItem(LAYOUT_KEY, JSON.stringify(colState))
+  ElMessage.success('布局已保存，下次登录自动恢复')
+}
+
+function loadLayout() {
+  if (!gridApi) return
+  const saved = localStorage.getItem(LAYOUT_KEY)
+  if (saved) {
+    try {
+      const colState = JSON.parse(saved)
+      gridApi.applyColumnState({ state: colState, applyOrder: true })
+    } catch { /* 忽略解析错误 */ }
+  }
+}
+
+function resetLayout() {
+  localStorage.removeItem(LAYOUT_KEY)
+  if (gridApi) {
+    gridApi.resetColumnState()
+  }
+  ElMessage.success('已恢复默认布局')
+}
 
 // ========== 数据状态 ==========
 const rowData = ref<any[]>([])
