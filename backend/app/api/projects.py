@@ -40,10 +40,11 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
 def list_archives(
     page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000),
     keyword: str | None = Query(None), status: int | None = Query(None),
+    product_line: str | None = Query(None),
     db: Session = Depends(get_db),
     _user_id: int = Depends(get_current_user_id),
 ):
-    return project_service.get_archive_list(db, page, page_size, keyword, status)
+    return project_service.get_archive_list(db, page, page_size, keyword, status, product_line)
 
 
 @router.get("/archives/options", summary="项目档案下拉选项")
@@ -51,14 +52,14 @@ def archive_options(db: Session = Depends(get_db), _user_id: int = Depends(get_c
     return project_service.get_archive_options(db)
 
 
-@router.post("/archives", summary="创建项目档案", dependencies=[Depends(get_current_user_id)])
-def create_archive(data: ArchiveCreate, db: Session = Depends(get_db)):
-    return project_service.create_archive(db, data)
+@router.post("/archives", summary="创建项目档案")
+def create_archive(data: ArchiveCreate, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    return project_service.create_archive(db, data, user_id)
 
 
-@router.put("/archives/{archive_id}", summary="更新项目档案", dependencies=[Depends(get_current_user_id)])
-def update_archive(archive_id: int, data: ArchiveUpdate, db: Session = Depends(get_db)):
-    return project_service.update_archive(db, archive_id, data)
+@router.put("/archives/{archive_id}", summary="更新项目档案")
+def update_archive(archive_id: int, data: ArchiveUpdate, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    return project_service.update_archive(db, archive_id, data, user_id)
 
 
 @router.delete("/archives/{archive_id}", summary="删除项目档案", dependencies=[Depends(get_current_user_id)])

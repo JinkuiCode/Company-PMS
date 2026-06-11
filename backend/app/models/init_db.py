@@ -69,6 +69,18 @@ def init_db():
             db.commit()
             print("迁移完成：pms_project_archive 已添加 ERP 同步字段")
 
+        # 5.6 迁移：pms_project_archive 表添加新业务字段
+        try:
+            db.execute(text("SELECT product_line FROM pms_project_archive"))
+        except Exception:
+            db.execute(text("ALTER TABLE pms_project_archive ADD product_line NVARCHAR(32) NULL"))
+            db.execute(text("ALTER TABLE pms_project_archive ADD plan_start_date DATETIME NULL"))
+            db.execute(text("ALTER TABLE pms_project_archive ADD plan_end_date DATETIME NULL"))
+            db.execute(text("ALTER TABLE pms_project_archive ADD created_by INT NULL"))
+            db.execute(text("ALTER TABLE pms_project_archive ADD updated_by INT NULL"))
+            db.commit()
+            print("迁移完成：pms_project_archive 已添加 product_line/plan_start_date/plan_end_date/created_by/updated_by")
+
         # 6. 创建示例部门
         if not db.query(SysDept).first():
             depts = [

@@ -9,6 +9,9 @@ class ArchiveCreate(BaseModel):
     status: int = 1
     manager_id: int | None = None
     product_type: str | None = Field(None, max_length=64)
+    product_line: str | None = Field(None, max_length=32)
+    plan_start_date: date | None = None
+    plan_end_date: date | None = None
 
 
 class ArchiveUpdate(BaseModel):
@@ -17,6 +20,9 @@ class ArchiveUpdate(BaseModel):
     status: int | None = None
     manager_id: int | None = None
     product_type: str | None = None
+    product_line: str | None = None
+    plan_start_date: date | None = None
+    plan_end_date: date | None = None
 
 
 class ArchiveResponse(BaseModel):
@@ -26,7 +32,12 @@ class ArchiveResponse(BaseModel):
     status: int
     manager_id: int | None = None
     product_type: str | None = None
+    product_line: str | None = None
+    plan_start_date: date | None = None
+    plan_end_date: date | None = None
     manager_name: str = ""    # 关联查询
+    created_by_name: str = ""   # 创建人
+    updated_by_name: str = ""   # 最后编辑人
     # ERP 同步字段
     erp_synced: int = 0
     erp_sync_time: datetime | None = None

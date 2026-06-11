@@ -17,6 +17,11 @@ class PmsProjectArchive(Base):
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1未启动 2进行中 3已完结 4暂停")
     manager_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="负责人ID")
     product_type: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="产品类型")
+    product_line: Mapped[str | None] = mapped_column(NVARCHAR(32), default=None, comment="产品线: Bench/光伏/Single/HOTSPM")
+    plan_start_date: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="计划开始日期")
+    plan_end_date: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="计划结束日期")
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="创建人ID")
+    updated_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="最后编辑人ID")
     # ERP 同步字段
     erp_synced: Mapped[int] = mapped_column(Integer, default=0, comment="是否已同步到金蝶: 0否 1是")
     erp_sync_time: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="最后同步时间")

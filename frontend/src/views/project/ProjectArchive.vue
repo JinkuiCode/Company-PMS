@@ -36,11 +36,23 @@
         :prefix-icon="Search"
       />
       <el-select
+        v-model="filterProductLine"
+        placeholder="全部产品线"
+        size="small"
+        clearable
+        style="width: 140px;"
+      >
+        <el-option label="Bench" value="Bench" />
+        <el-option label="光伏" value="光伏" />
+        <el-option label="Single" value="Single" />
+        <el-option label="HOTSPM" value="HOTSPM" />
+      </el-select>
+      <el-select
         v-model="filterStatus"
         placeholder="全部状态"
         size="small"
         clearable
-        style="width: 140px;"
+        style="width: 120px;"
       >
         <el-option label="未启动" :value="1" />
         <el-option label="进行中" :value="2" />
@@ -78,13 +90,21 @@
 
 
     <!-- 新增 / 编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目档案' : '新增项目档案'" width="520px">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目档案' : '新增项目档案'" width="560px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="项目编号" prop="project_code">
           <el-input v-model="form.project_code" placeholder="请输入项目编号" :disabled="isEdit" />
         </el-form-item>
         <el-form-item label="项目名称" prop="project_name">
           <el-input v-model="form.project_name" placeholder="请输入项目名称" />
+        </el-form-item>
+        <el-form-item label="产品线" prop="product_line">
+          <el-select v-model="form.product_line" placeholder="请选择产品线" style="width: 100%;">
+            <el-option label="Bench" value="Bench" />
+            <el-option label="光伏" value="光伏" />
+            <el-option label="Single" value="Single" />
+            <el-option label="HOTSPM" value="HOTSPM" />
+          </el-select>
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-select v-model="form.status" style="width: 100%;">
@@ -107,6 +127,18 @@
         <el-form-item label="产品类型">
           <el-input v-model="form.product_type" placeholder="如：软件、硬件、服务、咨询" />
         </el-form-item>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="计划开始" prop="plan_start_date">
+              <el-date-picker v-model="form.plan_start_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="计划结束" prop="plan_end_date">
+              <el-date-picker v-model="form.plan_end_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" />
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -142,6 +174,7 @@ const agGridRef = ref()
 const page = ref(1)
 const pageSize = ref(15)
 const filterStatus = ref<number | null>(null)
+const filterProductLine = ref<string | null>(null)
 
 // 客户端筛选
 const filteredRowData = computed(() => {
@@ -155,6 +188,9 @@ const filteredRowData = computed(() => {
   }
   if (filterStatus.value != null) {
     result = result.filter(r => r.status === filterStatus.value)
+  }
+  if (filterProductLine.value) {
+    result = result.filter(r => r.product_line === filterProductLine.value)
   }
   return result
 })
@@ -170,11 +206,17 @@ const form = reactive({
   status: 1,
   manager_id: null as number | null,
   product_type: '',
+  product_line: '',
+  plan_start_date: '',
+  plan_end_date: '',
 })
 
 const rules: FormRules = {
   project_code: [{ required: true, message: '请输入项目编号' }],
   project_name: [{ required: true, message: '请输入项目名称' }],
+  product_line: [{ required: true, message: '请选择产品线' }],
+  plan_start_date: [{ required: true, message: '请选择计划开始日期' }],
+  plan_end_date: [{ required: true, message: '请选择计划结束日期' }],
 }
 
 // ========== AG Grid 列定义 ==========
@@ -183,10 +225,11 @@ const statusColors: Record<number, string> = { 1: '#909399', 2: '#409EFF', 3: '#
 
 const columnDefs: ColDef[] = [
   { headerCheckboxSelection: true, checkboxSelection: true, width: 42, pinned: 'left', filter: false, sortable: false, resizable: false },
-  { field: 'project_code', headerName: '项目编号', width: 150, pinned: 'left' },
-  { field: 'project_name', headerName: '项目名称', width: 200 },
+  { field: 'project_code', headerName: '项目编号', width: 130, pinned: 'left' },
+  { field: 'project_name', headerName: '项目名称', width: 180 },
+  { field: 'product_line', headerName: '产品线', width: 100 },
   {
-    field: 'status', headerName: '状态', width: 100,
+    field: 'status', headerName: '状态', width: 90,
     cellRenderer: (params: any) => {
       const v = params.value
       const c = statusColors[v] || '#909399'
@@ -195,24 +238,34 @@ const columnDefs: ColDef[] = [
         ${statusMap[v] || '-'}</span>`
     },
   },
-  { field: 'manager_name', headerName: '负责人', width: 110 },
-  { field: 'product_type', headerName: '产品类型', width: 120 },
+  { field: 'manager_name', headerName: '负责人', width: 90 },
+  { field: 'product_type', headerName: '产品类型', width: 100 },
   {
-    field: 'erp_sync_status', headerName: '同步状态', width: 110,
+    field: 'plan_start_date', headerName: '计划开始', width: 110,
+    valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
+  },
+  {
+    field: 'plan_end_date', headerName: '计划结束', width: 110,
+    valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
+  },
+  { field: 'created_by_name', headerName: '创建人', width: 80 },
+  { field: 'updated_by_name', headerName: '最后编辑人', width: 100 },
+  {
+    field: 'updated_at', headerName: '最后编辑时间', width: 160,
+    valueFormatter: (params: any) => params.value ? new Date(params.value).toLocaleString('zh-CN') : '-',
+  },
+  {
+    field: 'erp_sync_status', headerName: '同步', width: 80,
     cellRenderer: (params: any) => {
       const v = params.value
-      if (!v || v === 'pending') return `<span style="color:#E6A23C;">⏳ 待同步</span>`
-      if (v === 'success') return `<span style="color:#67C23A;">✅ 已同步</span>`
-      if (v === 'failed') return `<span style="color:#F56C6C;" title="${params.data.erp_error_msg || ''}">❌ 失败</span>`
+      if (!v || v === 'pending') return `<span style="color:#E6A23C;">⏳</span>`
+      if (v === 'success') return `<span style="color:#67C23A;">✅</span>`
+      if (v === 'failed') return `<span style="color:#F56C6C;" title="${params.data.erp_error_msg || ''}">❌</span>`
       return '-'
     },
   },
   {
-    field: 'created_at', headerName: '创建时间', width: 170,
-    valueFormatter: (params: any) => params.value ? new Date(params.value).toLocaleString('zh-CN') : '-',
-  },
-  {
-    headerName: '操作', width: 160, pinned: 'right', filter: false, sortable: false, resizable: false,
+    headerName: '操作', width: 140, pinned: 'right', filter: false, sortable: false, resizable: false,
     cellRenderer: (params: any) => {
       return `<button class="edit-btn" data-id="${params.data.id}">编辑</button>
               <button class="sync-btn" data-id="${params.data.id}">同步</button>
@@ -263,7 +316,7 @@ function onRowDoubleClicked(event: any) {
 // ========== 弹窗操作 ==========
 function openCreateDialog() {
   formRef.value?.resetFields()
-  Object.assign(form, { id: 0, project_code: '', project_name: '', status: 1, manager_id: null, product_type: '' })
+  Object.assign(form, { id: 0, project_code: '', project_name: '', status: 1, manager_id: null, product_type: '', product_line: '', plan_start_date: '', plan_end_date: '' })
   isEdit.value = false
   dialogVisible.value = true
 }
@@ -277,6 +330,9 @@ function openEditDialog(row: any) {
     status: row.status,
     manager_id: row.manager_id,
     product_type: row.product_type || '',
+    product_line: row.product_line || '',
+    plan_start_date: row.plan_start_date ? row.plan_start_date.substring(0, 10) : '',
+    plan_end_date: row.plan_end_date ? row.plan_end_date.substring(0, 10) : '',
   })
   isEdit.value = true
   dialogVisible.value = true
@@ -286,22 +342,21 @@ async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  const payload = {
+    project_name: form.project_name,
+    status: form.status,
+    manager_id: form.manager_id,
+    product_type: form.product_type || null,
+    product_line: form.product_line || null,
+    plan_start_date: form.plan_start_date || null,
+    plan_end_date: form.plan_end_date || null,
+  }
+
   if (isEdit.value) {
-    await request.put(`/projects/archives/${form.id}`, {
-      project_name: form.project_name,
-      status: form.status,
-      manager_id: form.manager_id,
-      product_type: form.product_type || null,
-    })
+    await request.put(`/projects/archives/${form.id}`, payload)
     ElMessage.success('更新成功')
   } else {
-    await request.post('/projects/archives', {
-      project_code: form.project_code,
-      project_name: form.project_name,
-      status: form.status,
-      manager_id: form.manager_id,
-      product_type: form.product_type || null,
-    })
+    await request.post('/projects/archives', { ...payload, project_code: form.project_code })
     ElMessage.success('创建成功')
   }
   dialogVisible.value = false

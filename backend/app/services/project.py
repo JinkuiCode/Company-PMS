@@ -192,7 +192,8 @@ def get_progress_logs(db: Session, task_id: int) -> list[dict]:
 
 # ==================== 项目档案 ====================
 def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
-                     keyword: str | None = None, status: int | None = None):
+                     keyword: str | None = None, status: int | None = None,
+                     product_line: str | None = None):
     """查询项目档案列表"""
     query = db.query(PmsProjectArchive)
 
@@ -203,6 +204,8 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
         )
     if status is not None:
         query = query.filter(PmsProjectArchive.status == status)
+    if product_line:
+        query = query.filter(PmsProjectArchive.product_line == product_line)
 
     total = query.count()
     rows = query.order_by(PmsProjectArchive.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -210,10 +213,16 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
     items = []
     for a in rows:
         manager = db.query(SysUser).filter(SysUser.id == a.manager_id).first()
+        creator = db.query(SysUser).filter(SysUser.id == a.created_by).first()
+        editor = db.query(SysUser).filter(SysUser.id == a.updated_by).first()
         items.append(ArchiveResponse(
             id=a.id, project_code=a.project_code, project_name=a.project_name,
             status=a.status, manager_id=a.manager_id, product_type=a.product_type,
+            product_line=a.product_line,
+            plan_start_date=a.plan_start_date, plan_end_date=a.plan_end_date,
             manager_name=manager.real_name if manager else "",
+            created_by_name=creator.real_name if creator else "",
+            updated_by_name=editor.real_name if editor else "",
             erp_synced=a.erp_synced, erp_sync_time=a.erp_sync_time,
             erp_sync_status=a.erp_sync_status, erp_error_msg=a.erp_error_msg,
             created_at=a.created_at, updated_at=a.updated_at,
@@ -227,18 +236,18 @@ def get_archive_options(db: Session):
     return [ArchiveOption(id=a.id, project_code=a.project_code, project_name=a.project_name) for a in rows]
 
 
-def create_archive(db: Session, data: ArchiveCreate):
+def create_archive(db: Session, data: ArchiveCreate, user_id: int):
     """创建项目档案"""
     if db.query(PmsProjectArchive).filter(PmsProjectArchive.project_code == data.project_code).first():
         raise HTTPException(status_code=400, detail="项目编号已存在")
-    archive = PmsProjectArchive(**data.model_dump())
+    archive = PmsProjectArchive(**data.model_dump(), created_by=user_id, updated_by=user_id)
     db.add(archive)
     db.commit()
     db.refresh(archive)
     return {"msg": "创建成功", "id": archive.id}
 
 
-def update_archive(db: Session, archive_id: int, data: ArchiveUpdate):
+def update_archive(db: Session, archive_id: int, data: ArchiveUpdate, user_id: int):
     """更新项目档案"""
     archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id).first()
     if not archive:
@@ -252,6 +261,7 @@ def update_archive(db: Session, archive_id: int, data: ArchiveUpdate):
 
     for key, val in update_data.items():
         setattr(archive, key, val)
+    archive.updated_by = user_id
     db.commit()
     return {"msg": "更新成功"}
 
