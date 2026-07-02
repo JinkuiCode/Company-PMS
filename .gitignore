@@ -24,3 +24,12 @@ Thumbs.db
 # MySQL
 mysql/
 installers/
+
+# Logs
+*.log
+
+# Test results
+test-results/
+
+# Qoder
+.qoder/

@@ -10,8 +10,8 @@ class ArchiveCreate(BaseModel):
     manager_id: int | None = None
     product_type: str | None = Field(None, max_length=64)
     product_line: str | None = Field(None, max_length=32)
-    plan_start_date: date | None = None
-    plan_end_date: date | None = None
+    plan_start_date: datetime | None = None
+    plan_end_date: datetime | None = None
 
 
 class ArchiveUpdate(BaseModel):
@@ -21,8 +21,8 @@ class ArchiveUpdate(BaseModel):
     manager_id: int | None = None
     product_type: str | None = None
     product_line: str | None = None
-    plan_start_date: date | None = None
-    plan_end_date: date | None = None
+    plan_start_date: datetime | None = None
+    plan_end_date: datetime | None = None
 
 
 class ArchiveResponse(BaseModel):
@@ -33,14 +33,15 @@ class ArchiveResponse(BaseModel):
     manager_id: int | None = None
     product_type: str | None = None
     product_line: str | None = None
-    plan_start_date: date | None = None
-    plan_end_date: date | None = None
+    plan_start_date: datetime | None = None
+    plan_end_date: datetime | None = None
     manager_name: str = ""    # 关联查询
     created_by_name: str = ""   # 创建人
     updated_by_name: str = ""   # 最后编辑人
     # ERP 同步字段
     erp_synced: int = 0
     erp_sync_time: datetime | None = None
+    erp_sync_by_name: str = ""      # 最后同步人姓名
     erp_sync_status: str | None = None
     erp_error_msg: str | None = None
     created_at: datetime | None = None
@@ -94,6 +95,7 @@ class ProjectResponse(BaseModel):
     description: str | None = None
     dept_name: str = ""    # 关联查询
     pm_name: str = ""      # 关联查询
+    product_line: str | None = None  # 从档案关联
     task_count: int = 0    # 任务数
     total_progress: float = 0  # 总进度
     created_at: datetime | None = None

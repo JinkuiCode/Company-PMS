@@ -11,13 +11,16 @@ class Settings(BaseSettings):
     DB_USER: str = "sa-jinky"
     DB_PASSWORD: str = "Qwerty1234."
     DB_NAME: str = "PMS"
+    DB_DRIVER: str = "ODBC Driver 17 for SQL Server"  # 服务器装18就改为 "ODBC Driver 18 for SQL Server"
 
     @property
     def DATABASE_URL(self) -> str:
+        driver = self.DB_DRIVER.replace(" ", "+")
         return (
             f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-            f"?driver=ODBC+Driver+17+for+SQL+Server"
+            f"?driver={driver}"
+            f"&TrustServerCertificate=yes"
             f"&charset=utf8"
         )
 
@@ -51,7 +54,7 @@ class Settings(BaseSettings):
 
     # 金蝶云星空 ERP 对接（Session 认证模式）
     K3_URL: str = "http://10.10.1.248/k3cloud"  # 金蝶服务器地址（内网用 http 避免证书问题）
-    K3_ACCT_ID: str = "6a1fd19d9e068f"          # 账套 ID
+    K3_ACCT_ID: str = "6938df0b584a60"          # 账套 ID
     K3_USERNAME: str = "I0001"                   # 金蝶登录账号
     K3_PASSWORD: str = "Jsydadmin123."           # 金蝶登录密码
 

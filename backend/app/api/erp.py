@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from app.api.auth import get_current_user_id
 from app.services import kingdee
 
 router = APIRouter(prefix="/api/erp", tags=["金蝶 ERP 对接"])
@@ -28,19 +29,21 @@ def test_connection():
 
 
 @router.post("/sync", summary="同步单个项目档案")
-def sync_project_archive(request: SyncRequest, db: Session = Depends(get_db)):
+def sync_project_archive(request: SyncRequest, db: Session = Depends(get_db),
+                         user_id: int = Depends(get_current_user_id)):
     """
     同步单个项目档案到金蝶 ERP
     - 如果金蝶中不存在则创建
     - 如果已存在则更新
     """
-    return kingdee.sync_project_archive_to_erp(db, request.archive_id)
+    return kingdee.sync_project_archive_to_erp(db, request.archive_id, user_id=user_id)
 
 
 @router.post("/sync/batch", summary="批量同步项目档案")
-def batch_sync_project_archives(request: BatchSyncRequest, db: Session = Depends(get_db)):
+def batch_sync_project_archives(request: BatchSyncRequest, db: Session = Depends(get_db),
+                                user_id: int = Depends(get_current_user_id)):
     """批量同步多个项目档案到金蝶 ERP"""
-    return kingdee.batch_sync_project_archives(db, request.archive_ids)
+    return kingdee.batch_sync_project_archives(db, request.archive_ids, user_id=user_id)
 
 
 @router.get("/logs/{archive_id}", summary="查询同步日志")

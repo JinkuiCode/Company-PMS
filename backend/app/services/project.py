@@ -44,6 +44,13 @@ def get_project_list(db: Session, page: int = 1, page_size: int = 15,
                 allowed_depts = get_child_dept_ids(db, scope_context["dept_id"])
                 query = query.filter(PmsProject.dept_id.in_(allowed_depts))
         # scope == 4: 不附加过滤
+
+        # ---------- 产品线权限过滤 ----------
+        allowed_lines = scope_context.get("product_lines")
+        if allowed_lines is not None:
+            query = query.join(PmsProjectArchive, PmsProject.archive_id == PmsProjectArchive.id).filter(
+                PmsProjectArchive.product_line.in_(allowed_lines)
+            )
     # ----------------------------------
 
     if dept_id:
@@ -60,6 +67,7 @@ def get_project_list(db: Session, page: int = 1, page_size: int = 15,
         pm = db.query(SysUser).filter(SysUser.id == p.pm_id).first()
         total_tasks = db.query(PmsTask).filter(PmsTask.project_id == p.id).count()
         avg_progress = db.query(func.avg(PmsTask.progress)).filter(PmsTask.project_id == p.id).scalar() or 0
+        archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == p.archive_id).first() if p.archive_id else None
 
         items.append(ProjectResponse(
             id=p.id, project_code=p.project_code, project_name=p.project_name,
@@ -68,6 +76,7 @@ def get_project_list(db: Session, page: int = 1, page_size: int = 15,
             budget=p.budget, description=p.description,
             dept_name=dept.dept_name if dept else "",
             pm_name=pm.real_name if pm else "",
+            product_line=archive.product_line if archive else None,
             task_count=total_tasks, total_progress=round(float(avg_progress), 1),
             created_at=p.created_at, updated_at=p.updated_at,
         ))
@@ -193,7 +202,8 @@ def get_progress_logs(db: Session, task_id: int) -> list[dict]:
 # ==================== 项目档案 ====================
 def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
                      keyword: str | None = None, status: int | None = None,
-                     product_line: str | None = None):
+                     product_line: str | None = None,
+                     allowed_lines: list[str] | None = None):
     """查询项目档案列表"""
     query = db.query(PmsProjectArchive)
 
@@ -206,6 +216,9 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
         query = query.filter(PmsProjectArchive.status == status)
     if product_line:
         query = query.filter(PmsProjectArchive.product_line == product_line)
+    # 产品线权限过滤
+    if allowed_lines is not None:
+        query = query.filter(PmsProjectArchive.product_line.in_(allowed_lines))
 
     total = query.count()
     rows = query.order_by(PmsProjectArchive.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -215,6 +228,7 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
         manager = db.query(SysUser).filter(SysUser.id == a.manager_id).first()
         creator = db.query(SysUser).filter(SysUser.id == a.created_by).first()
         editor = db.query(SysUser).filter(SysUser.id == a.updated_by).first()
+        syncer = db.query(SysUser).filter(SysUser.id == a.erp_sync_by).first() if a.erp_sync_by else None
         items.append(ArchiveResponse(
             id=a.id, project_code=a.project_code, project_name=a.project_name,
             status=a.status, manager_id=a.manager_id, product_type=a.product_type,
@@ -224,6 +238,7 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
             created_by_name=creator.real_name if creator else "",
             updated_by_name=editor.real_name if editor else "",
             erp_synced=a.erp_synced, erp_sync_time=a.erp_sync_time,
+            erp_sync_by_name=syncer.real_name if syncer else "",
             erp_sync_status=a.erp_sync_status, erp_error_msg=a.erp_error_msg,
             created_at=a.created_at, updated_at=a.updated_at,
         ))

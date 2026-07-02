@@ -42,9 +42,10 @@ def list_archives(
     keyword: str | None = Query(None), status: int | None = Query(None),
     product_line: str | None = Query(None),
     db: Session = Depends(get_db),
-    _user_id: int = Depends(get_current_user_id),
+    scope_ctx: dict = Depends(get_current_user_context),
 ):
-    return project_service.get_archive_list(db, page, page_size, keyword, status, product_line)
+    allowed_lines = scope_ctx.get("product_lines")
+    return project_service.get_archive_list(db, page, page_size, keyword, status, product_line, allowed_lines)
 
 
 @router.get("/archives/options", summary="项目档案下拉选项")

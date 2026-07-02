@@ -48,10 +48,7 @@
         clearable
         style="width: 140px;"
       >
-        <el-option label="Bench" value="Bench" />
-        <el-option label="光伏" value="光伏" />
-        <el-option label="Single" value="Single" />
-        <el-option label="HOTSPM" value="HOTSPM" />
+        <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
       <el-select
         v-model="filterStatus"
@@ -60,10 +57,7 @@
         clearable
         style="width: 120px;"
       >
-        <el-option label="未启动" :value="1" />
-        <el-option label="进行中" :value="2" />
-        <el-option label="已完结" :value="3" />
-        <el-option label="暂停" :value="4" />
+        <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
       </el-select>
     </div>
 
@@ -107,18 +101,12 @@
         </el-form-item>
         <el-form-item label="产品线" prop="product_line">
           <el-select v-model="form.product_line" placeholder="请选择产品线" style="width: 100%;">
-            <el-option label="Bench" value="Bench" />
-            <el-option label="光伏" value="光伏" />
-            <el-option label="Single" value="Single" />
-            <el-option label="HOTSPM" value="HOTSPM" />
+            <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-select v-model="form.status" style="width: 100%;">
-            <el-option label="未启动" :value="1" />
-            <el-option label="进行中" :value="2" />
-            <el-option label="已完结" :value="3" />
-            <el-option label="暂停" :value="4" />
+            <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
           </el-select>
         </el-form-item>
         <el-form-item label="负责人">
@@ -132,7 +120,9 @@
           </el-select>
         </el-form-item>
         <el-form-item label="产品类型">
-          <el-input v-model="form.product_type" placeholder="如：软件、硬件、服务、咨询" />
+          <el-select v-model="form.product_type" placeholder="请选择产品类型" clearable style="width: 100%;">
+            <el-option v-for="item in dictOptions.product_type" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
         </el-form-item>
         <el-row :gutter="12">
           <el-col :span="12">
@@ -149,7 +139,8 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">确定</el-button>
+        <el-button type="primary" @click="handleSubmit">保存</el-button>
+        <el-button v-if="isEdit" type="success" @click="handleSubmitAndSync">保存并同步</el-button>
       </template>
     </el-dialog>
   </div>
@@ -218,6 +209,41 @@ const pageSize = ref(15)
 const filterStatus = ref<number | null>(null)
 const filterProductLine = ref<string | null>(null)
 
+// 字典选项
+const dictOptions = reactive<Record<string, any[]>>({
+  product_line: [],
+  product_type: [],
+  archive_status: [],
+})
+
+// 用户允许的产品线
+const allowedProductLines = ref<string[] | null>(null)
+
+async function fetchAllowedProductLines() {
+  try {
+    const res: any = await request.get('/auth/product-lines')
+    if (res.unrestricted) {
+      allowedProductLines.value = null // null = 不限制
+    } else {
+      allowedProductLines.value = res.items || []
+    }
+  } catch { /* ignore */ }
+}
+
+// 筛选栏可用的产品线选项（取字典与权限的交集）
+const filteredProductLineOptions = computed(() => {
+  const all = dictOptions.product_line || []
+  if (allowedProductLines.value === null) return all
+  return all.filter(item => allowedProductLines.value!.includes(item.value))
+})
+
+async function fetchDictOptions(code: string) {
+  try {
+    const res: any = await request.get(`/dicts/code/${code}`)
+    dictOptions[code] = res.items || []
+  } catch { /* ignore */ }
+}
+
 // 客户端筛选
 const filteredRowData = computed(() => {
   let result = rowData.value
@@ -262,7 +288,11 @@ const rules: FormRules = {
 }
 
 // ========== AG Grid 列定义 ==========
-const statusMap: Record<number, string> = { 1: '未启动', 2: '进行中', 3: '已完结', 4: '暂停' }
+const statusMap = computed(() => {
+  const map: Record<number, string> = {}
+  dictOptions.archive_status.forEach(item => { map[Number(item.value)] = item.label })
+  return map
+})
 const statusColors: Record<number, string> = { 1: '#909399', 2: '#409EFF', 3: '#67C23A', 4: '#E6A23C' }
 
 const columnDefs: ColDef[] = [
@@ -277,7 +307,7 @@ const columnDefs: ColDef[] = [
       const c = statusColors[v] || '#909399'
       return `<span style="display:inline-block;padding:2px 10px;border-radius:12px;
         background:${c}1a;color:${c};font-size:13px;font-weight:500;">
-        ${statusMap[v] || '-'}</span>`
+        ${statusMap.value[v] || '-'}</span>`
     },
   },
   { field: 'manager_name', headerName: '负责人', width: 90 },
@@ -296,6 +326,16 @@ const columnDefs: ColDef[] = [
     field: 'updated_at', headerName: '最后编辑时间', width: 160,
     valueFormatter: (params: any) => params.value ? new Date(params.value).toLocaleString('zh-CN') : '-',
   },
+  {
+    field: 'erp_sync_time', headerName: '最后同步时间', width: 160,
+    valueFormatter: (params: any) => {
+      if (!params.value) return '-'
+      const d = new Date(params.value)
+      const pad = (n: number) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+    },
+  },
+  { field: 'erp_sync_by_name', headerName: '最后同步人', width: 100 },
   {
     field: 'erp_sync_status', headerName: '同步', width: 80,
     cellRenderer: (params: any) => {
@@ -405,6 +445,42 @@ async function handleSubmit() {
   fetchList()
 }
 
+async function handleSubmitAndSync() {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  const payload = {
+    project_name: form.project_name,
+    status: form.status,
+    manager_id: form.manager_id,
+    product_type: form.product_type || null,
+    product_line: form.product_line || null,
+    plan_start_date: form.plan_start_date || null,
+    plan_end_date: form.plan_end_date || null,
+  }
+
+  if (isEdit.value) {
+    await request.put(`/projects/archives/${form.id}`, payload)
+  } else {
+    const createRes: any = await request.post('/projects/archives', { ...payload, project_code: form.project_code })
+    form.id = createRes.id
+  }
+  dialogVisible.value = false
+
+  // 保存完成后同步到金蝶ERP
+  try {
+    const syncRes: any = await request.post('/erp/sync', { archive_id: form.id })
+    if (syncRes.success) {
+      ElMessage.success('保存并同步成功')
+    } else {
+      ElMessage.warning(`保存成功，但同步失败：${syncRes.message}`)
+    }
+  } catch (e: any) {
+    ElMessage.warning('保存成功，但同步异常：' + (e?.response?.data?.message || e?.message))
+  }
+  fetchList()
+}
+
 // ========== 删除 ==========
 async function handleDeleteSingle(id: number) {
   try {
@@ -469,7 +545,12 @@ async function handleBatchSync() {
   }
 }
 
-onMounted(() => { fetchList(); fetchUsers() })
+onMounted(() => {
+  fetchList(); fetchUsers(); fetchAllowedProductLines()
+  fetchDictOptions('product_line')
+  fetchDictOptions('product_type')
+  fetchDictOptions('archive_status')
+})
 </script>
 
 <style scoped>

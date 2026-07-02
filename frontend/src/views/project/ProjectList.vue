@@ -46,6 +46,15 @@
         <el-option label="已完结" :value="2" />
         <el-option label="暂停" :value="3" />
       </el-select>
+      <el-select
+        v-model="filterProductLine"
+        placeholder="全部产品线"
+        size="small"
+        clearable
+        style="width: 140px;"
+      >
+        <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
+      </el-select>
     </div>
 
     <!-- AG Grid 表格 -->
@@ -166,6 +175,17 @@ const pageSize = ref(15)
 const filterKeyword = ref('')
 const filterStatus = ref<number | null>(null)
 const filterDeptId = ref<number | null>(null)
+const filterProductLine = ref<string | null>(null)
+
+// 字典选项
+const productLineOptions = ref<any[]>([])
+const allowedProductLines = ref<string[] | null>(null)
+
+const filteredProductLineOptions = computed(() => {
+  const all = productLineOptions.value
+  if (allowedProductLines.value === null) return all
+  return all.filter((item: any) => allowedProductLines.value!.includes(item.value))
+})
 
 // 客户端筛选
 const filteredRowData = computed(() => {
@@ -182,6 +202,9 @@ const filteredRowData = computed(() => {
   }
   if (filterDeptId.value != null) {
     result = result.filter(r => r.dept_id === filterDeptId.value)
+  }
+  if (filterProductLine.value) {
+    result = result.filter(r => r.product_line === filterProductLine.value)
   }
   return result
 })
@@ -293,6 +316,18 @@ async function fetchList() {
 async function fetchOptions() {
   // 加载项目档案列表
   archiveList.value = (await request.get('/projects/archives/options')) as any
+
+  // 加载产品线字典
+  try {
+    const dictRes: any = await request.get('/dicts/code/product_line')
+    productLineOptions.value = dictRes?.items || []
+  } catch { /* ignore */ }
+
+  // 加载用户允许的产品线
+  try {
+    const plRes: any = await request.get('/auth/product-lines')
+    allowedProductLines.value = plRes.unrestricted ? null : (plRes.items || [])
+  } catch { /* ignore */ }
 
   deptList.value = (await request.get('/depts/tree')) as any
   // 扁平化部门树

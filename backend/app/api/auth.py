@@ -39,7 +39,7 @@ def get_current_user_context(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> dict:
-    """获取当前用户的完整上下文：user_id, dept_id, data_scope"""
+    """获取当前用户的完整上下文：user_id, dept_id, data_scope, product_lines"""
     user = db.query(SysUser).filter(SysUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
@@ -51,13 +51,27 @@ def get_current_user_context(
         SysUserRole.user_id == user_id).all()]
 
     if not role_ids:
-        return {"user_id": user_id, "dept_id": dept_id, "data_scope": 1}
+        return {"user_id": user_id, "dept_id": dept_id, "data_scope": 1, "product_lines": None}
 
     roles = db.query(SysRole).filter(SysRole.id.in_(role_ids)).all()
     scopes = [r.data_scope for r in roles]
     effective_scope = max(scopes)  # 取最大权限
 
-    return {"user_id": user_id, "dept_id": dept_id, "data_scope": effective_scope}
+    # 收集所有角色的产品线，取并集；任一角色为空=不限制
+    product_lines_set: set[str] = set()
+    has_unrestricted = False
+    for r in roles:
+        if not r.product_lines:  # 空/null = 不限制
+            has_unrestricted = True
+            break
+        for pl in r.product_lines.split(","):
+            pl = pl.strip()
+            if pl:
+                product_lines_set.add(pl)
+
+    effective_product_lines = None if has_unrestricted else (list(product_lines_set) if product_lines_set else None)
+
+    return {"user_id": user_id, "dept_id": dept_id, "data_scope": effective_scope, "product_lines": effective_product_lines}
 
 
 @router.post("/auto-login", response_model=TokenResponse, summary="免密自动登录")
@@ -86,3 +100,23 @@ def logout(
 @router.get("/me", response_model=UserInfo, summary="获取当前用户信息")
 def get_me(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     return auth_service.get_current_user(db, user_id)
+
+
+@router.get("/product-lines", summary="获取当前用户允许的产品线")
+def get_allowed_product_lines(
+    scope_ctx: dict = Depends(get_current_user_context),
+    db: Session = Depends(get_db),
+):
+    """返回当前用户允许的产品线列表，null 表示不限制"""
+    allowed = scope_ctx.get("product_lines")  # None = 不限制
+    # 从字典接口获取所有产品线定义
+    from app.services.dict import get_dict_by_code
+    all_lines_data = get_dict_by_code(db, "product_line")
+    all_lines = [item["value"] for item in (all_lines_data.get("items", []) if all_lines_data else [])]
+
+    if allowed is None:
+        # 不限制，返回全部
+        return {"unrestricted": True, "items": all_lines}
+    else:
+        # 只返回允许的
+        return {"unrestricted": False, "items": allowed}

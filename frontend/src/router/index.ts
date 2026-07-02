@@ -55,16 +55,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '角色管理' },
       },
       {
-        path: 'system/menu',
-        name: 'MenuList',
+        path: 'system/dict',
+        name: 'DictList',
         component: () => import('@/views/system/MenuList.vue'),
-        meta: { title: '菜单管理' },
+        meta: { title: '数据字典' },
       },
       {
-        path: 'system/dept',
-        name: 'DeptList',
-        component: () => import('@/views/system/DeptList.vue'),
-        meta: { title: '部门管理' },
+        path: 'system/field',
+        name: 'FieldList',
+        component: () => import('@/views/system/FieldList.vue'),
+        meta: { title: '字段管理' },
       },
       {
         path: 'project/list',

@@ -14,9 +14,16 @@ from app.schemas.rbac import (
 
 
 # ==================== 用户管理 ====================
-def get_user_list(db: Session, page: int = 1, page_size: int = 15):
-    """分页查询用户列表，附带角色信息"""
+def get_user_list(db: Session, page: int = 1, page_size: int = 15, dept_id: int | None = None):
+    """分页查询用户列表，附带角色信息，支持按部门过滤（含子部门）"""
     query = db.query(SysUser)
+
+    # 按部门过滤（含所有子部门）
+    if dept_id is not None:
+        dept_ids = _get_all_child_dept_ids(db, dept_id)
+        dept_ids.append(dept_id)
+        query = query.filter(SysUser.dept_id.in_(dept_ids))
+
     total = query.count()
     users = query.order_by(SysUser.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
@@ -114,13 +121,18 @@ def get_role_list(db: Session):
 
 
 def create_role(db: Session, data: RoleCreate):
-    """创建角色"""
+    """创建角色，可同时分配菜单权限"""
     if db.query(SysRole).filter(SysRole.role_code == data.role_code).first():
         raise HTTPException(status_code=400, detail="角色编码已存在")
-    role = SysRole(**data.model_dump())
+    role_data = data.model_dump(exclude={"menu_ids"})
+    role = SysRole(**role_data)
     db.add(role)
     db.commit()
     db.refresh(role)
+    # 分配菜单权限
+    for menu_id in data.menu_ids:
+        db.add(SysRoleMenu(role_id=role.id, menu_id=menu_id))
+    db.commit()
     return {"msg": "创建成功", "id": role.id}
 
 
@@ -206,6 +218,16 @@ def delete_menu(db: Session, menu_id: int):
 
 
 # ==================== 部门管理 ====================
+def _get_all_child_dept_ids(db: Session, parent_id: int) -> list[int]:
+    """递归获取所有子部门ID"""
+    children = db.query(SysDept.id).filter(SysDept.parent_id == parent_id).all()
+    ids = [c[0] for c in children]
+    result = list(ids)
+    for cid in ids:
+        result.extend(_get_all_child_dept_ids(db, cid))
+    return result
+
+
 def get_dept_tree(db: Session) -> list[DeptResponse]:
     """获取部门树"""
     depts = db.query(SysDept).order_by(SysDept.parent_id, SysDept.sort).all()

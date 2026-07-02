@@ -63,11 +63,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Fold, Expand, Setting, User, Avatar, Menu, OfficeBuilding, Folder, List, DataAnalysis, FolderOpened } from '@element-plus/icons-vue'
+import { Fold, Expand, Setting, User, Avatar, Menu, Folder, List, DataAnalysis, FolderOpened, Collection } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'
 
-const Icons: Record<string, any> = { Setting, User, Avatar, Menu, OfficeBuilding, Folder, List, DataAnalysis, FolderOpened }
+const Icons: Record<string, any> = { Setting, User, Avatar, Menu, Folder, List, DataAnalysis, FolderOpened, Collection }
 
 const router = useRouter()
 const route = useRoute()

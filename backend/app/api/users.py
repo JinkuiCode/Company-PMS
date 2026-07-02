@@ -10,8 +10,10 @@ router = APIRouter(prefix="/api/users", tags=["用户管理"])
 
 
 @router.get("", summary="用户列表", dependencies=[Depends(get_current_user_id)])
-def list_users(page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000), db: Session = Depends(get_db)):
-    return rbac_service.get_user_list(db, page, page_size)
+def list_users(page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000),
+               dept_id: int | None = Query(None, description="按部门过滤"),
+               db: Session = Depends(get_db)):
+    return rbac_service.get_user_list(db, page, page_size, dept_id=dept_id)
 
 
 @router.post("", summary="创建用户", dependencies=[Depends(get_current_user_id)])

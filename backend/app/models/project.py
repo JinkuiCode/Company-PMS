@@ -25,6 +25,7 @@ class PmsProjectArchive(Base):
     # ERP 同步字段
     erp_synced: Mapped[int] = mapped_column(Integer, default=0, comment="是否已同步到金蝶: 0否 1是")
     erp_sync_time: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="最后同步时间")
+    erp_sync_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="最后同步人ID")
     erp_sync_status: Mapped[str | None] = mapped_column(NVARCHAR(32), default=None, comment="同步状态: success/failed/pending")
     erp_error_msg: Mapped[str | None] = mapped_column(NVARCHAR(512), default=None, comment="同步失败错误信息")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())

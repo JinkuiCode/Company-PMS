@@ -58,7 +58,7 @@ class KingdeeClient:
 
     def query_assistant_data(self, form_id: str, category_code: str, project_code: str) -> Optional[dict]:
         """
-        查询辅助资料是否存在
+        查询辅助资料是否存在，返回含 FEntryID 的字典（用于更新时传内码）
         :param form_id: 表单ID，如 BOS_ASSISTANTDATA_DETAIL
         :param category_code: 类别编码，如 xsxm（销售项目）
         :param project_code: 项目编号
@@ -67,35 +67,32 @@ class KingdeeClient:
         try:
             url = f"{self.base_url}/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.ExecuteBillQuery.common.kdsvc"
 
-            # 查询条件：类别 = xsxm 且 编码 = project_code
-            filter_string = f"FId.FNumber = '{category_code}' AND FNumber = '{project_code}'"
-
-            payload = {
+            # 该金蝶实例的 ExecuteBillQuery 需要把参数包装为 data JSON 字符串字段
+            filter_string = f"FNumber = '{project_code}'"
+            data_content = json.dumps({
                 "FormId": form_id,
-                "FieldKeys": "FEntryID,FId.FNumber,FNumber,FDataValue,FDescription",
+                "FieldKeys": "FEntryID,FNumber,FDataValue",
                 "FilterString": filter_string,
-                "OrderString": "",
-                "TopRowCount": "1",
-                "StartRow": "0",
-                "Limit": "1",
-                "Data": ""
-            }
+                "TopRowCount": 1,
+                "StartRow": 0,
+                "Limit": 1,
+            }, ensure_ascii=False)
 
-            response = self.client.post(url, json=payload)
+            response = self.client.post(url, json={"data": data_content})
             response.raise_for_status()
 
             result = response.json()
+            logger.info(f"查询辅助资料返回: {json.dumps(result, ensure_ascii=False)[:300]}")
 
-            # ExecuteBillQuery 返回二维数组
-            if result and len(result) > 0 and len(result[0]) > 0:
+            # ExecuteBillQuery 返回二维数组 [[FEntryID, FNumber, FDataValue], ...]
+            if result and isinstance(result, list) and len(result) > 0:
                 row = result[0]
-                return {
-                    "FEntryID": row[0],
-                    "FId_FNumber": row[1],
-                    "FNumber": row[2],
-                    "FDataValue": row[3],
-                    "FDescription": row[4] if len(row) > 4 else ""
-                }
+                if isinstance(row, list) and len(row) >= 2:
+                    return {
+                        "FEntryID": row[0],   # 内码（用于更新）
+                        "FNumber": row[1],    # 编码
+                        "FDataValue": row[2] if len(row) > 2 else ""
+                    }
 
             return None
 
@@ -104,7 +101,8 @@ class KingdeeClient:
             return None
 
     def save_assistant_data(self, form_id: str, category_code: str, project_code: str,
-                            project_name: str, description: str = "") -> dict:
+                            project_name: str, description: str = "",
+                            entry_id: str = "") -> dict:
         """
         保存辅助资料（创建或更新）
         :param form_id: 表单ID
@@ -112,31 +110,49 @@ class KingdeeClient:
         :param project_code: 项目编号
         :param project_name: 项目名称
         :param description: 描述
+        :param entry_id: 记录内码（FEntryID），有值时为更新，空时为新建
         :return: 包含 success 和 message 的结果字典
         """
         try:
             url = f"{self.base_url}/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.Save.common.kdsvc"
 
-            # 构建 Model 数据
+            is_update = bool(entry_id)
+
+            # 构建 Model 数据，更新时必须带 FEntryID（内码）
             model = {
+                "FEntryID": entry_id,
                 "FId": {"FNumber": category_code},  # 类别：销售项目
                 "FNumber": project_code,
                 "FDataValue": project_name,
                 "FDescription": description
             }
 
-            payload = {
-                "FormId": form_id,
-                "IsVerifyBaseDataField": "true",
+            # 金蝶要求 data 必须是 JSON 字符串，不是对象
+            # 更新时通过 NeedUpDateFields 指定要修改的字段
+            data_str = json.dumps({
+                "NeedUpDateFields": ["FDataValue", "FDescription"] if is_update else [],
+                "NeedReturnFields": [],
                 "IsDeleteEntry": "true",
-                "SubSystemId": "",
+                "IsVerifyBaseDataField": "false",
+                "IsEntryBatchFill": "true",
+                "ValidateFlag": "true",
+                "NumberSearch": "true",
                 "Model": model
+            }, ensure_ascii=False)
+
+            payload = {
+                "formid": form_id,
+                "data": data_str,
             }
+
+            logger.info(f"金蝶Save请求 - formid: {form_id}")
+            logger.info(f"金蝶Save请求 - data: {data_str[:300]}")
 
             response = self.client.post(url, json=payload)
             response.raise_for_status()
 
             result = response.json()
+            logger.info(f"金蝶Save返回: {json.dumps(result, ensure_ascii=False)[:500]}")
 
             # 检查返回结果
             if "Result" in result:
@@ -174,7 +190,7 @@ class KingdeeClient:
         self.client.close()
 
 
-def sync_project_archive_to_erp(db: Session, archive_id: int) -> dict:
+def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | None = None) -> dict:
     """
     同步单个项目档案到金蝶 ERP
     :param db: 数据库会话
@@ -224,6 +240,7 @@ def sync_project_archive_to_erp(db: Session, archive_id: int) -> dict:
         )
 
         action = "update" if existing else "create"
+        entry_id = str(existing["FEntryID"]) if existing else ""
 
         # 3. 保存（创建或更新）
         save_result = client.save_assistant_data(
@@ -231,7 +248,8 @@ def sync_project_archive_to_erp(db: Session, archive_id: int) -> dict:
             category_code=category_code,
             project_code=archive.project_code,
             project_name=archive.project_name,
-            description=f"PMS 项目档案同步"
+            description=f"PMS 项目档案同步",
+            entry_id=entry_id
         )
 
         # 4. 更新同步状态
@@ -239,6 +257,7 @@ def sync_project_archive_to_erp(db: Session, archive_id: int) -> dict:
             archive.erp_synced = 1
             archive.erp_sync_status = "success"
             archive.erp_sync_time = datetime.now()
+            archive.erp_sync_by = user_id
             archive.erp_error_msg = None
 
             log = ErpSyncLog(
@@ -286,7 +305,7 @@ def sync_project_archive_to_erp(db: Session, archive_id: int) -> dict:
         client.close()
 
 
-def batch_sync_project_archives(db: Session, archive_ids: list[int]) -> dict:
+def batch_sync_project_archives(db: Session, archive_ids: list[int], user_id: int | None = None) -> dict:
     """
     批量同步项目档案到金蝶 ERP
     :param db: 数据库会话
@@ -298,7 +317,7 @@ def batch_sync_project_archives(db: Session, archive_ids: list[int]) -> dict:
     errors = []
 
     for archive_id in archive_ids:
-        result = sync_project_archive_to_erp(db, archive_id)
+        result = sync_project_archive_to_erp(db, archive_id, user_id=user_id)
         if result["success"]:
             success_count += 1
         else:
