@@ -1,7 +1,7 @@
 <template>
   <div class="custom-pagination">
     <div class="pagination-left">
-      <span class="pagination-total">{{ total }} total</span>
+      <span class="pagination-total">共 {{ total }} 条</span>
     </div>
     <div class="pagination-center">
       <button class="page-btn nav-btn" :disabled="modelValue === 1" @click="$emit('update:modelValue', modelValue - 1)">‹</button>
@@ -58,30 +58,32 @@ const visiblePages = computed(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 16px;
-  margin-top: 16px;
-  border-top: 1px solid #F3F4F6;
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--pms-border-soft);
 }
 .pagination-left { display: flex; align-items: center; }
-.pagination-total { font-size: 14px; color: #374151; font-weight: 500; }
+.pagination-total { font-size: 13px; color: var(--pms-text-secondary); font-weight: 500; }
 .pagination-center { display: flex; align-items: center; gap: 4px; }
 .pagination-right { display: flex; align-items: center; }
 .page-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 32px; height: 32px; padding: 0 8px;
-  border: 1px solid #E5E7EB; border-radius: 6px;
-  background: #fff; color: #374151; font-size: 14px; font-weight: 400;
-  cursor: pointer; transition: all 0.15s; line-height: 1;
+  min-width: 30px; height: 30px; padding: 0 8px;
+  border: 1px solid var(--pms-border); border-radius: var(--pms-radius-sm);
+  background: var(--pms-surface); color: var(--pms-text-secondary); font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+  line-height: 1;
 }
-.page-btn:hover:not(:disabled):not(.active) { background: #F3F4F6; border-color: #D1D5DB; }
-.page-btn.active { background: #6366F1; color: #fff; border-color: #6366F1; font-weight: 500; }
+.page-btn:hover:not(:disabled):not(.active) { background: var(--pms-surface-muted); border-color: #cbd5e1; color: var(--pms-text); }
+.page-btn.active { background: var(--pms-primary); color: #fff; border-color: var(--pms-primary); font-weight: 700; }
 .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.page-btn.ellipsis { border: none; background: transparent; color: #9CA3AF; cursor: default; min-width: 24px; }
+.page-btn.ellipsis { border: none; background: transparent; color: var(--pms-text-muted); cursor: default; min-width: 24px; }
 .page-btn.nav-btn { font-size: 16px; font-weight: 500; min-width: 28px; }
 .page-size-select {
-  padding: 6px 28px 6px 12px; border: 1px solid #E5E7EB; border-radius: 6px;
+  height: 30px; padding: 0 28px 0 12px; border: 1px solid var(--pms-border); border-radius: var(--pms-radius-sm);
   background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8.825L1.175 4 2.238 2.938 6 6.7l3.763-3.763L10.825 4z'/%3E%3C/svg%3E") no-repeat right 8px center;
-  color: #374151; font-size: 14px; cursor: pointer; outline: none; appearance: none;
+  color: var(--pms-text-secondary); font-size: 13px; cursor: pointer; outline: none; appearance: none;
 }
-.page-size-select:hover { border-color: #D1D5DB; }
+.page-size-select:hover { border-color: #cbd5e1; }
 </style>

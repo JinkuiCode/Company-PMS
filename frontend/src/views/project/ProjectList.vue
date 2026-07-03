@@ -1,14 +1,14 @@
 <template>
-  <div class="project-list-page">
+  <div class="project-list-page pms-page">
     <!-- 工具栏 -->
-    <div class="toolbar">
-      <div class="toolbar-left">
+    <div class="toolbar pms-toolbar">
+      <div class="toolbar-left pms-toolbar-left">
         <el-button type="primary" size="small" @click="openCreateDialog">
           <el-icon style="margin-right:4px;"><Plus /></el-icon>
           新增项目
         </el-button>
       </div>
-      <div class="toolbar-right">
+      <div class="toolbar-right pms-toolbar-right">
         <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
           已筛选 {{ filteredRowData.length }} / {{ total }} 条
         </span>
@@ -16,7 +16,7 @@
     </div>
 
     <!-- 筛选栏 -->
-    <div class="filter-bar">
+    <div class="filter-bar pms-filter-bar">
       <el-input
         v-model="filterKeyword"
         placeholder="搜索编号或名称"
@@ -58,19 +58,30 @@
     </div>
 
     <!-- AG Grid 表格 -->
-    <ag-grid-vue
-      class="ag-theme-alpine wechat-table"
-      :rowData="filteredRowData"
-      :columnDefs="columnDefs"
-      :defaultColDef="defaultColDef"
-      :localeText="localeText"
-      :domLayout="'autoHeight'"
-      :pagination="false"
-      :enableCellTextSelection="true"
-      :suppressRowClickSelection="true"
-      @cell-value-changed="onCellValueChanged"
-      style="width: 100%;"
-    />
+    <div class="project-list-grid-shell">
+      <ag-grid-vue
+        class="ag-theme-alpine wechat-table pms-ag-grid"
+        :rowData="filteredRowData"
+        :columnDefs="columnDefs"
+        :defaultColDef="defaultColDef"
+        :localeText="localeText"
+        :theme="'legacy'"
+        :domLayout="'autoHeight'"
+        :pagination="false"
+        :enableCellTextSelection="true"
+        :suppressRowClickSelection="true"
+        :alwaysShowHorizontalScroll="true"
+        @cell-value-changed="onCellValueChanged"
+        @first-data-rendered="refreshListScrollbar"
+        @grid-size-changed="refreshListScrollbar"
+        @column-resized="refreshListScrollbar"
+        @column-moved="refreshListScrollbar"
+        @column-pinned="refreshListScrollbar"
+        @displayed-columns-changed="refreshListScrollbar"
+        style="width: 100%;"
+      />
+      <GridHorizontalScrollbar ref="listScrollbarRef" label="项目进度列表横向滚动条" />
+    </div>
 
     <!-- 自定义分页 -->
     <CustomPagination
@@ -153,6 +164,7 @@ import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type CellValueChangedEvent } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
+import GridHorizontalScrollbar from '@/components/GridHorizontalScrollbar.vue'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -170,6 +182,7 @@ const deptFlatList = ref<any[]>([])   // 扁平部门（名称→ID 映射）
 const userList = ref<any[]>([])       // 用户列表
 const userNames = ref<string[]>([])   // 用户姓名列表（下拉编辑器用）
 const total = ref(0)
+const listScrollbarRef = ref<InstanceType<typeof GridHorizontalScrollbar>>()
 const page = ref(1)
 const pageSize = ref(15)
 const filterKeyword = ref('')
@@ -232,7 +245,20 @@ const rules: FormRules = {
 }
 
 // ========== AG Grid 列定义 ==========
-function progressColor(v: number) { return v < 30 ? '#F56C6C' : v < 80 ? '#E6A23C' : '#67C23A' }
+function progressToneClass(v: number) {
+  if (v < 30) return 'is-danger'
+  if (v < 80) return 'is-warning'
+  return 'is-success'
+}
+
+function escapeHtml(value: any) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
 
 const columnDefs: ColDef[] = [
   { field: 'id', headerName: 'ID', width: 70, filter: false },
@@ -240,7 +266,7 @@ const columnDefs: ColDef[] = [
   {
     field: 'project_name', headerName: '项目名称', width: 220, editable: true, pinned: 'left',
     cellRenderer: (params: any) => {
-      return `<a class="proj-link" data-id="${params.data.id}" data-name="${params.data.project_name}">${params.value}</a>`
+      return `<a class="proj-link" data-id="${params.data.id}" data-name="${escapeHtml(params.data.project_name)}">${escapeHtml(params.value || '-')}</a>`
     },
     onCellClicked: (params: any) => {
       if (params.event.target.classList.contains('proj-link')) {
@@ -262,12 +288,12 @@ const columnDefs: ColDef[] = [
     field: 'total_progress', headerName: '总进度', width: 160, filter: false,
     cellRenderer: (params: any) => {
       const v = params.value || 0
-      const c = progressColor(v)
-      return `<div style="display:flex;align-items:center;gap:8px;height:100%;">
-        <div style="flex:1;height:8px;background:#ebeef5;border-radius:4px;overflow:hidden;">
-          <div style="height:100%;width:${v}%;background:${c};border-radius:4px;transition:width 0.3s;"></div>
+      const tone = progressToneClass(v)
+      return `<div class="pms-progress-cell">
+        <div class="pms-progress-track">
+          <div class="pms-progress-bar ${tone}" style="width:${v}%;"></div>
         </div>
-        <span style="font-size:13px;color:#606266;white-space:nowrap;">${v}%</span></div>`
+        <span class="pms-progress-value">${v}%</span></div>`
     },
   },
   {
@@ -276,11 +302,10 @@ const columnDefs: ColDef[] = [
     cellEditorParams: { values: ['进行中', '已完结', '暂停'] },
     cellRenderer: (params: any) => {
       const map: Record<number, string> = { 1: '进行中', 2: '已完结', 3: '暂停' }
-      const colors: Record<number, string> = { 1: '#409EFF', 2: '#67C23A', 3: '#E6A23C' }
+      const tones: Record<number, string> = { 1: 'info', 2: 'success', 3: 'warning' }
       const v = params.value
-      return `<span style="display:inline-block;padding:2px 10px;border-radius:12px;
-        background:${colors[v]}1a;color:${colors[v]};font-size:13px;font-weight:500;">
-        ${map[v] || '-'}</span>`
+      const tone = tones[v] || 'neutral'
+      return `<span class="pms-status pms-status-${tone}"><span class="pms-status-dot"></span>${map[v] || '-'}</span>`
     },
   },
   { field: 'task_count', headerName: '任务数', width: 90 },
@@ -291,7 +316,7 @@ const columnDefs: ColDef[] = [
   { field: 'end_date', headerName: '结束日期', width: 120, editable: true },
   {
     headerName: '', width: 55, pinned: 'right', filter: false, sortable: false, resizable: false,
-    cellRenderer: () => `<button class="more-btn" title="更多操作"></button>`,
+    cellRenderer: () => `<button class="pms-more-btn more-btn" title="更多操作"></button>`,
     onCellClicked: (params: any) => {
       if (params.event.target.classList.contains('more-btn')) {
         handleRowMenu(params.data)
@@ -306,11 +331,16 @@ const defaultColDef = {
   filter: false,
 }
 
+function refreshListScrollbar() {
+  listScrollbarRef.value?.refresh()
+}
+
 // ========== 数据加载 ==========
 async function fetchList() {
   const res: any = await request.get('/projects', { params: { page: 1, page_size: 1000 } })
   rowData.value = res.items
   total.value = res.total
+  refreshListScrollbar()
 }
 
 async function fetchOptions() {
@@ -458,52 +488,28 @@ onMounted(() => { fetchList(); fetchOptions() })
 
 <style scoped>
 .project-list-page {
-  background: #fff;
-  border-radius: 4px;
-  padding: 16px;
+  min-height: 100%;
 }
 
-/* 工具栏 */
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 0 12px 0;
-}
-.toolbar-left { display: flex; align-items: center; gap: 8px; }
-.toolbar-right { display: flex; align-items: center; gap: 8px; }
-.filter-count { font-size: 13px; color: #909399; }
-
-/* 筛选栏 */
-.filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid #F3F4F6;
-  margin-bottom: 12px;
+.project-list-grid-shell {
+  width: 100%;
+  min-width: 0;
 }
 
-/* ===== AG Grid 企微风格覆盖 ===== */
-:deep(.ag-root-wrapper) { border: none; }
-:deep(.ag-cell) { border-right: none; border-bottom: none; font-size: 14px; color: #303133; }
-:deep(.ag-row) { border-bottom: none; }
-:deep(.ag-header) { background-color: #f5f6f7; border-bottom: 1px solid #e8e8e8; }
-:deep(.ag-header-cell) { background-color: #f5f6f7; border-right: none; padding: 0 12px; }
-:deep(.ag-header-cell-text) { font-weight: 600; font-size: 14px; color: #303133; }
-:deep(.ag-row-even) { background-color: #fafbfc; }
-:deep(.ag-row-odd) { background-color: #ffffff; }
-:deep(.ag-row:hover) { background-color: #e8f4fd; }
-:deep(.ag-row-selected) { background-color: inherit; }
-
-/* 更多按钮 */
-:deep(.more-btn) {
-  background: none; border: none; cursor: pointer; font-size: 18px;
-  color: #909399; padding: 4px 8px; border-radius: 4px; line-height: 1;
+.project-list-grid-shell :deep(.ag-body-horizontal-scroll) {
+  height: 0 !important;
+  min-height: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
 }
-:deep(.more-btn:hover) { background: #f0f2f5; color: #303133; }
 
 /* 项目名称链接 */
-:deep(.proj-link) { color: #409EFF; cursor: pointer; text-decoration: none; }
+:deep(.proj-link) {
+  color: var(--pms-primary);
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: none;
+}
 :deep(.proj-link:hover) { text-decoration: underline; }
 </style>

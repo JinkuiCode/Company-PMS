@@ -2,7 +2,7 @@
   <div class="sso-callback">
     <div class="callback-card">
       <div class="callback-icon">
-        <el-icon :size="48" :color="error ? '#F56C6C' : '#409EFF'">
+        <el-icon :size="40" :class="{ 'is-error': error, 'is-success': !verifying && !error }">
           <Connection />
         </el-icon>
       </div>
@@ -15,9 +15,9 @@
 
       <!-- 验证失败 -->
       <template v-else-if="error">
-        <h2 class="callback-title" style="color:#F56C6C;">认证失败</h2>
+        <h2 class="callback-title is-error">认证失败</h2>
         <p class="callback-error">{{ error }}</p>
-        <el-button type="primary" @click="retryOA" style="margin-bottom:12px;">
+        <el-button class="callback-action" type="primary" @click="retryOA">
           重新通过 OA 认证
         </el-button>
         <el-divider />
@@ -29,7 +29,7 @@
 
       <!-- 验证成功（短暂显示后自动跳转） -->
       <template v-else>
-        <h2 class="callback-title" style="color:#67C23A;">认证成功</h2>
+        <h2 class="callback-title is-success">认证成功</h2>
         <p class="callback-hint">OA 认证通过，正在跳转到系统...</p>
       </template>
     </div>
@@ -109,20 +109,66 @@ onMounted(() => { handleCallback() })
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f0f2f5;
+  padding: 24px;
+  background: var(--pms-bg);
 }
 .callback-card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 48px 40px;
+  width: min(100%, 400px);
+  background: var(--pms-surface);
+  border: 1px solid var(--pms-border-soft);
+  border-radius: var(--pms-radius);
+  padding: 38px 34px 30px;
   text-align: center;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-  min-width: 380px;
-  max-width: 420px;
+  box-shadow: var(--pms-shadow-sm);
 }
-.callback-icon { margin-bottom: 20px; }
-.callback-title { font-size: 20px; color: #303133; margin: 0 0 12px 0; }
-.callback-hint { color: #909399; margin-bottom: 20px; font-size: 14px; }
-.callback-error { color: #F56C6C; margin-bottom: 16px; font-size: 14px; }
-.callback-footnote { color: #b0b0b0; font-size: 13px; }
+.callback-icon {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+  color: var(--pms-primary);
+  background: var(--pms-primary-soft);
+  border: 1px solid rgba(79, 70, 229, 0.18);
+  border-radius: var(--pms-radius);
+}
+.callback-icon .is-error {
+  color: var(--pms-danger);
+}
+.callback-icon .is-success {
+  color: var(--pms-success);
+}
+.callback-title {
+  margin: 0 0 12px;
+  color: var(--pms-text);
+  font-size: 20px;
+  font-weight: 700;
+}
+.callback-title.is-error {
+  color: var(--pms-danger);
+}
+.callback-title.is-success {
+  color: var(--pms-success);
+}
+.callback-hint {
+  margin: 0 0 20px;
+  color: var(--pms-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.callback-error {
+  margin: 0 0 16px;
+  color: var(--pms-danger);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.callback-action {
+  margin-bottom: 12px;
+}
+.callback-footnote {
+  margin: 0;
+  color: var(--pms-text-muted);
+  font-size: 13px;
+}
 </style>

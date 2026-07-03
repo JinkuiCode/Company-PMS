@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -11,10 +13,22 @@ class Settings(BaseSettings):
     DB_USER: str = "sa-jinky"
     DB_PASSWORD: str = "Qwerty1234."
     DB_NAME: str = "PMS"
+    DB_DIALECT: str = "pyodbc"  # 本机缺少 unixODBC 时可设为 "pymssql"
     DB_DRIVER: str = "ODBC Driver 17 for SQL Server"  # 服务器装18就改为 "ODBC Driver 18 for SQL Server"
+    SQLITE_DB_PATH: str = "data/pms-dev.db"
 
     @property
     def DATABASE_URL(self) -> str:
+        if self.DB_DIALECT == "sqlite":
+            db_path = Path(self.SQLITE_DB_PATH)
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            return f"sqlite:///{db_path}"
+        if self.DB_DIALECT == "pymssql":
+            return (
+                f"mssql+pymssql://{self.DB_USER}:{self.DB_PASSWORD}"
+                f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+                f"?charset=utf8"
+            )
         driver = self.DB_DRIVER.replace(" ", "+")
         return (
             f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASSWORD}"

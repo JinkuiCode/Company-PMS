@@ -1,8 +1,9 @@
 <template>
-  <div class="login-container">
+  <div class="login-shell login-container">
     <div class="login-card">
-      <h2 class="login-title">项目管理系统</h2>
-      <p class="login-subtitle">PMS · 企业级项目管理</p>
+      <div class="login-brand">PMS</div>
+      <h1 class="login-title">项目管理系统</h1>
+      <p class="login-subtitle">项目档案与进度协同管理</p>
       <el-form ref="formRef" :model="form" :rules="rules" size="large" @keyup.enter="handleLogin">
         <el-form-item prop="username">
           <el-input v-model="form.username" placeholder="请输入用户名" :prefix-icon="User" />
@@ -18,12 +19,14 @@
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="loading" class="login-btn" @click="handleLogin">
-            登 录
+            登录
           </el-button>
         </el-form-item>
       </el-form>
-      <p class="login-hint">默认账号: admin / admin123</p>
-      <p class="login-hint sso-hint">泛微 OA 用户请从 OA 门户进入</p>
+      <div class="login-footnote">
+        <p class="login-hint">默认账号：admin / admin123</p>
+        <p class="login-hint sso-hint">泛微 OA 用户请从 OA 门户进入</p>
+      </div>
     </div>
   </div>
 </template>
@@ -68,48 +71,82 @@ async function handleLogin() {
 </script>
 
 <style scoped>
-.login-container {
+.login-shell {
   width: 100vw;
   height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 24px;
+  background: var(--pms-bg);
 }
 
 .login-card {
-  width: 420px;
-  padding: 48px 40px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  width: min(100%, 392px);
+  padding: 34px 34px 28px;
+  background: var(--pms-surface);
+  border: 1px solid var(--pms-border-soft);
+  border-radius: var(--pms-radius);
+  box-shadow: var(--pms-shadow-sm);
+}
+
+.login-brand {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+  color: var(--pms-primary);
+  background: var(--pms-primary-soft);
+  border: 1px solid rgba(79, 70, 229, 0.18);
+  border-radius: var(--pms-radius);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .login-title {
   margin: 0;
-  font-size: 26px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.25;
   text-align: center;
-  color: #303133;
+  color: var(--pms-text);
 }
 
 .login-subtitle {
-  margin: 8px 0 32px;
+  margin: 8px 0 28px;
   text-align: center;
   font-size: 14px;
-  color: #909399;
+  color: var(--pms-text-secondary);
 }
 
 .login-btn {
   width: 100%;
+  height: 42px;
+}
+
+.login-footnote {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--pms-border-soft);
 }
 
 .login-hint {
+  margin: 0;
   text-align: center;
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--pms-text-muted);
 }
 .sso-hint {
-  margin-top: 4px;
-  color: #b0b7c4;
+  margin-top: 6px;
+  color: var(--pms-text-secondary);
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 28px 22px 24px;
+  }
 }
 </style>
