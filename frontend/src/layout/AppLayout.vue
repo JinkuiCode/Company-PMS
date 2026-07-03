@@ -1,19 +1,17 @@
 <template>
-  <el-container class="app-layout">
+  <el-container class="app-layout app-shell">
     <!-- 左侧菜单 -->
     <el-aside :width="isCollapse ? '64px' : '220px'" class="app-aside">
       <div class="logo">
-        <span v-if="!isCollapse">PMS 管理系统</span>
-        <span v-else>PMS</span>
+        <span class="logo-mark">P</span>
+        <span v-if="!isCollapse" class="logo-text">PMS 管理系统</span>
       </div>
       <el-menu
         :default-active="currentRoute"
         :collapse="isCollapse"
         :collapse-transition="false"
         router
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409EFF"
+        class="app-menu"
       >
         <template v-for="menu in menuTree" :key="menu.id">
           <!-- 有子菜单 -->
@@ -47,10 +45,11 @@
           <el-icon class="collapse-btn" @click="isCollapse = !isCollapse" :size="22">
             <Fold v-if="!isCollapse" /><Expand v-else />
           </el-icon>
+          <span class="header-title">{{ route.meta.title || '项目管理' }}</span>
         </div>
         <div class="header-right">
-          <span class="user-name">{{ authStore.user?.real_name }}</span>
-          <el-button type="danger" size="small" @click="handleLogout">退出</el-button>
+          <span class="user-name">{{ authStore.user?.real_name || authStore.user?.username || '当前用户' }}</span>
+          <el-button type="danger" size="small" plain @click="handleLogout">退出</el-button>
         </div>
       </el-header>
       <el-main class="app-main">
@@ -76,9 +75,31 @@ const currentRoute = computed(() => route.path)
 const isCollapse = ref(false)
 const menuTree = ref<any[]>([])
 
+type MenuNode = {
+  path?: string
+  sort?: number
+  children?: MenuNode[]
+  [key: string]: any
+}
+
+function menuSortValue(menu: any) {
+  if (menu.path === '/project/archive') return 0
+  if (menu.path === '/project/list') return 1
+  return Number(menu.sort ?? 99)
+}
+
+function normalizeMenus(menus: MenuNode[]): MenuNode[] {
+  return [...menus]
+    .map(menu => ({
+      ...menu,
+      children: menu.children?.length ? normalizeMenus(menu.children) : [],
+    }))
+    .sort((a, b) => menuSortValue(a) - menuSortValue(b))
+}
+
 async function fetchMenus() {
   const res = await request.get('/my-menus') as any
-  menuTree.value = res || []
+  menuTree.value = normalizeMenus(res || [])
 }
 
 function handleLogout() {
@@ -98,12 +119,14 @@ onMounted(() => {
 <style scoped>
 .app-layout {
   height: 100vh;
+  background: var(--pms-bg);
 }
 
 .app-aside {
-  background-color: #304156;
+  background: var(--pms-surface);
+  border-right: 1px solid var(--pms-border-soft);
   overflow-y: auto;
-  transition: width 0.3s;
+  transition: width 180ms ease-out;
 }
 .app-aside::-webkit-scrollbar { width: 0; }
 
@@ -111,42 +134,126 @@ onMounted(() => {
   height: 56px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 18px;
-  font-weight: bold;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 14px;
+  color: var(--pms-text);
+  border-bottom: 1px solid var(--pms-border-soft);
   white-space: nowrap;
   overflow: hidden;
 }
 
+.logo-mark {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--pms-primary);
+  background: var(--pms-primary-soft);
+  border: 1px solid rgba(79, 70, 229, 0.18);
+  border-radius: var(--pms-radius-sm);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.logo-text {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+
 .app-header {
-  background: #fff;
+  background: var(--pms-surface);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #e6e6e6;
-  padding: 0 20px;
+  border-bottom: 1px solid var(--pms-border-soft);
+  padding: 0 18px;
   height: 56px;
 }
 
-.collapse-btn { cursor: pointer; }
-.collapse-btn:hover { color: #409EFF; }
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.collapse-btn {
+  color: var(--pms-text-secondary);
+  cursor: pointer;
+}
+.collapse-btn:hover { color: var(--pms-primary); }
+
+.header-title {
+  color: var(--pms-text);
+  font-size: 15px;
+  font-weight: 650;
+}
 
 .header-right {
   display: flex;
   align-items: center;
   gap: 12px;
 }
-.user-name { color: #606266; }
+.user-name {
+  color: var(--pms-text-secondary);
+  font-size: 13px;
+}
 
 .app-main {
-  background: #F3F4F6;
+  background: var(--pms-bg);
+  padding: 16px;
   overflow-y: auto;
 }
 
 .menu-icon {
-  font-size: 18px;
+  font-size: 17px;
   vertical-align: middle;
+}
+
+:deep(.app-menu) {
+  border-right: 0;
+  padding: 8px;
+  background: transparent;
+}
+
+:deep(.app-menu .el-menu-item),
+:deep(.app-menu .el-sub-menu__title) {
+  height: 40px;
+  margin: 2px 0;
+  padding-left: 12px !important;
+  border-radius: var(--pms-radius-sm);
+  color: var(--pms-text-secondary);
+  font-size: 14px;
+}
+
+:deep(.app-menu .el-menu-item:hover),
+:deep(.app-menu .el-sub-menu__title:hover) {
+  color: var(--pms-text);
+  background: var(--pms-surface-muted);
+}
+
+:deep(.app-menu .el-menu-item.is-active) {
+  color: var(--pms-primary);
+  background: var(--pms-primary-soft);
+  font-weight: 700;
+}
+
+:deep(.app-menu .el-sub-menu.is-active > .el-sub-menu__title) {
+  color: var(--pms-primary);
+}
+
+:deep(.app-menu.el-menu--collapse) {
+  width: auto;
+}
+
+:deep(.app-menu.el-menu--collapse .el-menu-item),
+:deep(.app-menu.el-menu--collapse .el-sub-menu__title) {
+  justify-content: center;
+  padding: 0 !important;
 }
 </style>

@@ -1,8 +1,8 @@
 <template>
-  <div class="project-archive-page">
+  <div class="project-archive-page pms-page">
     <!-- 工具栏 -->
-    <div class="toolbar">
-      <div class="toolbar-left">
+    <div class="toolbar pms-toolbar">
+      <div class="toolbar-left pms-toolbar-left">
         <el-button type="primary" size="small" @click="openCreateDialog">
           <el-icon style="margin-right:4px;"><Plus /></el-icon>
           新增档案
@@ -18,7 +18,7 @@
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
         </el-button>
       </div>
-      <div class="toolbar-right">
+      <div class="toolbar-right pms-toolbar-right">
         <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
           已筛选 {{ filteredRowData.length }} / {{ total }} 条
         </span>
@@ -32,7 +32,7 @@
     </div>
 
     <!-- 筛选栏 -->
-    <div class="filter-bar">
+    <div class="filter-bar pms-filter-bar">
       <el-input
         v-model="searchKeyword"
         placeholder="搜索编号或名称"
@@ -62,32 +62,44 @@
     </div>
 
     <!-- AG Grid 表格 -->
-    <ag-grid-vue
-      ref="agGridRef"
-      class="ag-theme-alpine wechat-table"
-      :rowData="filteredRowData"
-      :columnDefs="columnDefs"
-      :defaultColDef="defaultColDef"
-      :localeText="localeText"
-      :domLayout="'autoHeight'"
-      :pagination="false"
-      :rowSelection="'multiple'"
-      :enableCellTextSelection="true"
-      @grid-ready="onGridReady"
-      @row-double-clicked="onRowDoubleClicked"
-      @selection-changed="onSelectionChanged"
-      style="width: 100%;"
-    />
+    <div class="archive-grid-shell">
+      <ag-grid-vue
+        ref="agGridRef"
+        class="ag-theme-alpine wechat-table pms-ag-grid"
+        :style="archiveGridStyle"
+        :rowData="filteredRowData"
+        :columnDefs="columnDefs"
+        :defaultColDef="defaultColDef"
+        :localeText="localeText"
+        :theme="'legacy'"
+        :pagination="false"
+        :rowSelection="'multiple'"
+        :enableCellTextSelection="true"
+        :alwaysShowHorizontalScroll="true"
+        @grid-ready="onGridReady"
+        @first-data-rendered="scheduleArchiveScrollbarMetrics"
+        @grid-size-changed="scheduleArchiveScrollbarMetrics"
+        @column-resized="scheduleArchiveScrollbarMetrics"
+        @column-moved="scheduleArchiveScrollbarMetrics"
+        @column-pinned="scheduleArchiveScrollbarMetrics"
+        @displayed-columns-changed="scheduleArchiveScrollbarMetrics"
+        @row-double-clicked="onRowDoubleClicked"
+        @selection-changed="onSelectionChanged"
+      />
+      <GridHorizontalScrollbar ref="archiveScrollbarRef" label="项目档案表格横向滚动条" />
+    </div>
 
     <!-- 自定义分页 -->
-    <CustomPagination
-      v-if="total > 0"
-      v-model="page"
-      v-model:page-size="pageSize"
-      :total="total"
-      @update:model-value="fetchList"
-      @update:page-size="() => { page = 1; fetchList() }"
-    />
+    <div class="archive-pagination">
+      <CustomPagination
+        v-if="total > 0"
+        v-model="page"
+        v-model:page-size="pageSize"
+        :total="total"
+        @update:model-value="fetchList"
+        @update:page-size="() => { page = 1; fetchList() }"
+      />
+    </div>
 
 
     <!-- 新增 / 编辑弹窗 -->
@@ -155,6 +167,7 @@ import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
+import GridHorizontalScrollbar from '@/components/GridHorizontalScrollbar.vue'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -163,12 +176,13 @@ import request from '@/utils/request'
 const localeText = chineseLocaleText
 
 // ========== 布局持久化 ==========
-const LAYOUT_KEY = 'pms_archive_grid_layout'
+const LAYOUT_KEY = 'pms_archive_grid_layout_v2'
 let gridApi: any = null
 
 function onGridReady(params: any) {
   gridApi = params.api
   loadLayout()
+  scheduleArchiveScrollbarMetrics()
 }
 
 function saveLayout() {
@@ -204,6 +218,7 @@ const total = ref(0)
 const searchKeyword = ref('')
 const selectedRows = ref<any[]>([])
 const agGridRef = ref()
+const archiveScrollbarRef = ref<InstanceType<typeof GridHorizontalScrollbar>>()
 const page = ref(1)
 const pageSize = ref(15)
 const filterStatus = ref<number | null>(null)
@@ -263,6 +278,16 @@ const filteredRowData = computed(() => {
   return result
 })
 
+const archiveGridStyle = computed(() => {
+  const visibleRows = Math.max(filteredRowData.value.length, 1)
+  const height = Math.min(430, Math.max(176, 74 + visibleRows * 38))
+  return { width: '100%', height: `${height}px` }
+})
+
+function scheduleArchiveScrollbarMetrics() {
+  archiveScrollbarRef.value?.refresh()
+}
+
 // ========== 弹窗 ==========
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -293,41 +318,49 @@ const statusMap = computed(() => {
   dictOptions.archive_status.forEach(item => { map[Number(item.value)] = item.label })
   return map
 })
-const statusColors: Record<number, string> = { 1: '#909399', 2: '#409EFF', 3: '#67C23A', 4: '#E6A23C' }
+const archiveStatusTone: Record<number, string> = { 1: 'neutral', 2: 'info', 3: 'success', 4: 'warning' }
+
+function escapeHtml(value: any) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
 
 const columnDefs: ColDef[] = [
-  { headerCheckboxSelection: true, checkboxSelection: true, width: 42, pinned: 'left', filter: false, sortable: false, resizable: false },
-  { field: 'project_code', headerName: '项目编号', width: 130, pinned: 'left' },
-  { field: 'project_name', headerName: '项目名称', width: 180 },
-  { field: 'product_line', headerName: '产品线', width: 100 },
+  { headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', filter: false, sortable: false, resizable: false },
+  { field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left' },
+  { field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160 },
+  { field: 'product_line', headerName: '产品线', width: 110, minWidth: 100 },
   {
-    field: 'status', headerName: '状态', width: 90,
+    field: 'status', headerName: '状态', width: 100, minWidth: 96,
     cellRenderer: (params: any) => {
       const v = params.value
-      const c = statusColors[v] || '#909399'
-      return `<span style="display:inline-block;padding:2px 10px;border-radius:12px;
-        background:${c}1a;color:${c};font-size:13px;font-weight:500;">
-        ${statusMap.value[v] || '-'}</span>`
+      const tone = archiveStatusTone[v] || 'neutral'
+      const label = escapeHtml(statusMap.value[v] || '-')
+      return `<span class="pms-status pms-status-${tone}"><span class="pms-status-dot"></span>${label}</span>`
     },
   },
-  { field: 'manager_name', headerName: '负责人', width: 90 },
-  { field: 'product_type', headerName: '产品类型', width: 100 },
+  { field: 'manager_name', headerName: '负责人', width: 110, minWidth: 96 },
+  { field: 'product_type', headerName: '产品类型', width: 110, minWidth: 96 },
   {
-    field: 'plan_start_date', headerName: '计划开始', width: 110,
+    field: 'plan_start_date', headerName: '计划开始', width: 118, minWidth: 112,
     valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
   },
   {
-    field: 'plan_end_date', headerName: '计划结束', width: 110,
+    field: 'plan_end_date', headerName: '计划结束', width: 118, minWidth: 112,
     valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
   },
-  { field: 'created_by_name', headerName: '创建人', width: 80 },
-  { field: 'updated_by_name', headerName: '最后编辑人', width: 100 },
+  { field: 'created_by_name', headerName: '创建人', width: 110, minWidth: 96 },
+  { field: 'updated_by_name', headerName: '最后编辑人', width: 120, minWidth: 110 },
   {
-    field: 'updated_at', headerName: '最后编辑时间', width: 160,
+    field: 'updated_at', headerName: '最后编辑时间', width: 170, minWidth: 160,
     valueFormatter: (params: any) => params.value ? new Date(params.value).toLocaleString('zh-CN') : '-',
   },
   {
-    field: 'erp_sync_time', headerName: '最后同步时间', width: 160,
+    field: 'erp_sync_time', headerName: '最后同步时间', width: 170, minWidth: 160,
     valueFormatter: (params: any) => {
       if (!params.value) return '-'
       const d = new Date(params.value)
@@ -335,23 +368,26 @@ const columnDefs: ColDef[] = [
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
     },
   },
-  { field: 'erp_sync_by_name', headerName: '最后同步人', width: 100 },
+  { field: 'erp_sync_by_name', headerName: '最后同步人', width: 120, minWidth: 110 },
   {
-    field: 'erp_sync_status', headerName: '同步', width: 80,
+    field: 'erp_sync_status', headerName: '同步', width: 100, minWidth: 96,
     cellRenderer: (params: any) => {
       const v = params.value
-      if (!v || v === 'pending') return `<span style="color:#E6A23C;">⏳</span>`
-      if (v === 'success') return `<span style="color:#67C23A;">✅</span>`
-      if (v === 'failed') return `<span style="color:#F56C6C;" title="${params.data.erp_error_msg || ''}">❌</span>`
-      return '-'
+      if (!v || v === 'pending') return '<span class="pms-status pms-status-warning"><span class="pms-status-dot"></span>待同步</span>'
+      if (v === 'success') return '<span class="pms-status pms-status-success"><span class="pms-status-dot"></span>已同步</span>'
+      if (v === 'failed') {
+        const title = escapeHtml(params.data.erp_error_msg || '')
+        return `<span class="pms-status pms-status-danger" title="${title}"><span class="pms-status-dot"></span>失败</span>`
+      }
+      return '<span class="pms-status pms-status-neutral"><span class="pms-status-dot"></span>-</span>'
     },
   },
   {
-    headerName: '操作', width: 140, pinned: 'right', filter: false, sortable: false, resizable: false,
+    headerName: '操作', width: 146, minWidth: 136, pinned: 'right', filter: false, sortable: false, resizable: false,
     cellRenderer: (params: any) => {
-      return `<button class="edit-btn" data-id="${params.data.id}">编辑</button>
-              <button class="sync-btn" data-id="${params.data.id}">同步</button>
-              <button class="del-btn" data-id="${params.data.id}">删除</button>`
+      return `<button class="pms-table-action edit-btn" data-id="${params.data.id}">编辑</button>
+              <button class="pms-table-action pms-link-success sync-btn" data-id="${params.data.id}">同步</button>
+              <button class="pms-table-action pms-link-danger del-btn" data-id="${params.data.id}">删除</button>`
     },
     onCellClicked: (params: any) => {
       if (params.event.target.classList.contains('edit-btn')) {
@@ -369,6 +405,7 @@ const defaultColDef = {
   sortable: true,
   resizable: true,
   filter: false,
+  suppressSizeToFit: true,
 }
 
 // ========== 数据加载 ==========
@@ -378,6 +415,7 @@ async function fetchList() {
   })
   rowData.value = res.items
   total.value = res.total
+  scheduleArchiveScrollbarMetrics()
 }
 
 async function fetchUsers() {
@@ -550,63 +588,66 @@ onMounted(() => {
   fetchDictOptions('product_line')
   fetchDictOptions('product_type')
   fetchDictOptions('archive_status')
+  scheduleArchiveScrollbarMetrics()
 })
 </script>
 
 <style scoped>
 .project-archive-page {
-  background: #fff;
-  border-radius: 4px;
-  padding: 16px;
+  min-height: 100%;
 }
 
-/* 工具栏 */
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 0 12px 0;
-}
-.toolbar-left { display: flex; align-items: center; gap: 8px; }
-.toolbar-right { display: flex; align-items: center; gap: 8px; }
-.filter-count { font-size: 13px; color: #909399; }
-
-/* 筛选栏 */
-.filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid #F3F4F6;
-  margin-bottom: 12px;
+.archive-grid-shell {
+  width: 100%;
+  min-width: 0;
 }
 
-/* ===== AG Grid 企微风格覆盖 ===== */
-:deep(.ag-root-wrapper) { border: none; }
-:deep(.ag-cell) { border-right: none; border-bottom: none; font-size: 14px; color: #303133; }
-:deep(.ag-row) { border-bottom: none; }
-:deep(.ag-header) { background-color: #f5f6f7; border-bottom: 1px solid #e8e8e8; }
-:deep(.ag-header-cell) { background-color: #f5f6f7; border-right: none; padding: 0 12px; }
-:deep(.ag-header-cell-text) { font-weight: 600; font-size: 14px; color: #303133; }
-:deep(.ag-row-even) { background-color: #fafbfc; }
-:deep(.ag-row-odd) { background-color: #ffffff; }
-:deep(.ag-row:hover) { background-color: #e8f4fd; }
-:deep(.ag-row-selected) { background-color: inherit; }
+.archive-grid-shell :deep(.pms-ag-grid) {
+  min-height: 176px;
+}
 
-/* 操作按钮 */
-:deep(.edit-btn) {
-  background: none; border: none; cursor: pointer; color: #409EFF;
-  font-size: 13px; padding: 2px 6px; margin-right: 4px;
+.archive-grid-shell :deep(.ag-body-horizontal-scroll) {
+  height: 0 !important;
+  min-height: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
 }
-:deep(.edit-btn:hover) { text-decoration: underline; }
-:deep(.sync-btn) {
-  background: none; border: none; cursor: pointer; color: #67C23A;
-  font-size: 13px; padding: 2px 6px; margin-right: 4px;
+
+.archive-grid-shell :deep(.ag-body-horizontal-scroll-viewport) {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e2e8f0;
 }
-:deep(.sync-btn:hover) { text-decoration: underline; }
-:deep(.del-btn) {
-  background: none; border: none; cursor: pointer; color: #F56C6C;
-  font-size: 13px; padding: 2px 6px;
+
+.archive-grid-shell :deep(.ag-body-horizontal-scroll-viewport::-webkit-scrollbar) {
+  height: 12px;
 }
-:deep(.del-btn:hover) { text-decoration: underline; }
+
+.archive-grid-shell :deep(.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-track) {
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+
+.archive-grid-shell :deep(.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb) {
+  background: #94a3b8;
+  border: 2px solid #e2e8f0;
+  border-radius: 999px;
+}
+
+.archive-grid-shell :deep(.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb:hover) {
+  background: #64748b;
+}
+
+.archive-pagination {
+  margin-top: 6px;
+}
+
+.archive-pagination :deep(.custom-pagination) {
+  margin-top: 0;
+  padding-top: 8px;
+}
+
+:deep(.pms-table-action + .pms-table-action) {
+  margin-left: 2px;
+}
 </style>

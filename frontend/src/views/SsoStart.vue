@@ -2,13 +2,13 @@
   <div class="sso-page">
     <div class="sso-card">
       <div class="sso-icon">
-        <el-icon :size="48" color="#409EFF"><Connection /></el-icon>
+        <el-icon :size="40"><Connection /></el-icon>
       </div>
       <h2 class="sso-title">PMS 项目管理系统</h2>
 
       <!-- SSO 自动登录中 / 验证登录状态中 -->
       <template v-if="checking">
-        <p class="sso-hint" style="color:#E6A23C;">{{ checkingMsg }}</p>
+        <p class="sso-hint sso-checking">{{ checkingMsg }}</p>
       </template>
 
       <!-- 登录表单（SSO 失败或无 SSO 参数时显示） -->
@@ -242,20 +242,53 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f0f2f5;
+  padding: 24px;
+  background: var(--pms-bg);
 }
 .sso-card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 48px 40px;
+  width: min(100%, 400px);
+  background: var(--pms-surface);
+  border: 1px solid var(--pms-border-soft);
+  border-radius: var(--pms-radius);
+  padding: 36px 34px 30px;
   text-align: center;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-  min-width: 380px;
-  max-width: 420px;
+  box-shadow: var(--pms-shadow-sm);
 }
-.sso-icon { margin-bottom: 20px; }
-.sso-title { font-size: 20px; color: #303133; margin: 0 0 8px 0; }
-.sso-hint { color: #909399; margin-bottom: 8px; font-size: 14px; }
-.sso-error { color: #F56C6C; margin-top: 12px; font-size: 13px; }
-.sso-footnote { color: #b0b0b0; font-size: 13px; }
+.sso-icon {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+  color: var(--pms-primary);
+  background: var(--pms-primary-soft);
+  border: 1px solid rgba(79, 70, 229, 0.18);
+  border-radius: var(--pms-radius);
+}
+.sso-title {
+  margin: 0 0 10px;
+  color: var(--pms-text);
+  font-size: 20px;
+  font-weight: 700;
+}
+.sso-hint {
+  margin: 0 0 18px;
+  color: var(--pms-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.sso-checking {
+  color: var(--pms-warning);
+}
+.sso-error {
+  margin-top: 12px;
+  color: var(--pms-danger);
+  font-size: 13px;
+}
+.sso-footnote {
+  margin: 0;
+  color: var(--pms-text-muted);
+  font-size: 13px;
+}
 </style>

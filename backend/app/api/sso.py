@@ -195,24 +195,25 @@ def _build_oa_login_html(frontend_url: str, backend_url: str) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>PMS 项目管理系统</title>
 <style>
+:root {{ --pms-bg:#f6f8fb; --pms-surface:#fff; --pms-border:#edf1f6; --pms-text:#162033; --pms-text-secondary:#667085; --pms-primary:#4f46e5; --pms-primary-hover:#4338ca; --pms-warning:#d97706; --pms-danger:#dc2626; }}
 * {{ margin:0; padding:0; box-sizing:border-box; }}
-body {{ font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:#f0f2f5; display:flex; justify-content:center; align-items:center; min-height:100vh; }}
-.card {{ background:#fff; border-radius:8px; padding:40px 36px; text-align:center; box-shadow:0 2px 12px rgba(0,0,0,.08); width:380px; max-width:90vw; }}
-h2 {{ font-size:20px; color:#303133; margin-bottom:16px; }}
-.hint {{ color:#909399; font-size:14px; margin-bottom:20px; }}
-.loading {{ color:#E6A23C; font-size:14px; }}
-.spinner {{ width:32px; height:32px; border:3px solid #e0e0e0; border-top-color:#409EFF; border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }}
+body {{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--pms-bg); color:var(--pms-text); display:flex; justify-content:center; align-items:center; min-height:100vh; padding:24px; }}
+.card {{ background:var(--pms-surface); border:1px solid var(--pms-border); border-radius:8px; padding:38px 34px 30px; text-align:center; box-shadow:0 1px 2px rgba(16,24,40,.05); width:380px; max-width:100%; }}
+h2 {{ font-size:20px; line-height:1.25; color:var(--pms-text); margin-bottom:12px; font-weight:700; }}
+.hint {{ color:var(--pms-text-secondary); font-size:14px; line-height:1.6; margin-bottom:20px; }}
+.loading {{ color:var(--pms-warning); font-size:14px; }}
+.spinner {{ width:32px; height:32px; border:3px solid #e8edf5; border-top-color:var(--pms-primary); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }}
 @keyframes spin {{ to {{ transform:rotate(360deg); }} }}
 .input-group {{ margin-bottom:16px; text-align:left; }}
-.input-group label {{ display:block; font-size:13px; color:#606266; margin-bottom:4px; }}
-.input-group input {{ width:100%; height:40px; border:1px solid #dcdfe6; border-radius:4px; padding:0 12px; font-size:14px; outline:none; }}
-.input-group input:focus {{ border-color:#409EFF; }}
-.check-row {{ text-align:left; margin-bottom:20px; font-size:13px; color:#606266; display:flex; align-items:center; gap:6px; }}
-.check-row input[type=checkbox] {{ accent-color:#409EFF; }}
-.btn {{ width:100%; height:40px; background:#409EFF; color:#fff; border:none; border-radius:4px; font-size:15px; cursor:pointer; }}
-.btn:hover {{ background:#337ecc; }}
-.btn:disabled {{ background:#a0cfff; cursor:not-allowed; }}
-.error {{ color:#F56C6C; font-size:13px; margin-top:12px; display:none; }}
+.input-group label {{ display:block; font-size:13px; color:var(--pms-text-secondary); margin-bottom:6px; }}
+.input-group input {{ width:100%; height:40px; border:1px solid #dfe5ee; border-radius:6px; padding:0 12px; font-size:14px; outline:none; color:var(--pms-text); }}
+.input-group input:focus {{ border-color:var(--pms-primary); box-shadow:0 0 0 3px rgba(79,70,229,.12); }}
+.check-row {{ text-align:left; margin-bottom:20px; font-size:13px; color:var(--pms-text-secondary); display:flex; align-items:center; gap:6px; }}
+.check-row input[type=checkbox] {{ accent-color:var(--pms-primary); }}
+.btn {{ width:100%; height:40px; background:var(--pms-primary); color:#fff; border:none; border-radius:6px; font-size:15px; font-weight:600; cursor:pointer; }}
+.btn:hover {{ background:var(--pms-primary-hover); }}
+.btn:disabled {{ background:#a5b4fc; cursor:not-allowed; }}
+.error {{ color:var(--pms-danger); font-size:13px; margin-top:12px; display:none; }}
 .hidden {{ display:none; }}
 </style>
 </head>

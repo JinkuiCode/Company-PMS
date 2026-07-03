@@ -2,11 +2,11 @@
   <div class="sso-login">
     <div class="sso-card">
       <div class="sso-icon">
-        <el-icon :size="48" color="#409EFF"><Connection /></el-icon>
+        <el-icon :size="40"><Connection /></el-icon>
       </div>
       <h2 v-if="loading" class="sso-title">正在验证 OA 登录...</h2>
       <template v-else-if="error">
-        <h2 class="sso-title" style="color:#F56C6C;">登录失败</h2>
+        <h2 class="sso-title is-error">登录失败</h2>
         <p class="sso-error">{{ error }}</p>
         <el-button type="primary" @click="goLogin">返回登录页</el-button>
       </template>
@@ -78,17 +78,43 @@ onMounted(() => { doSSO() })
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f0f2f5;
+  padding: 24px;
+  background: var(--pms-bg);
 }
 .sso-card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 48px 40px;
+  width: min(100%, 380px);
+  background: var(--pms-surface);
+  border: 1px solid var(--pms-border-soft);
+  border-radius: var(--pms-radius);
+  padding: 38px 34px;
   text-align: center;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-  min-width: 360px;
+  box-shadow: var(--pms-shadow-sm);
 }
-.sso-icon { margin-bottom: 20px; }
-.sso-title { font-size: 20px; color: #303133; margin: 0 0 12px 0; }
-.sso-error { color: #909399; margin-bottom: 20px; }
+.sso-icon {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+  color: var(--pms-primary);
+  background: var(--pms-primary-soft);
+  border: 1px solid rgba(79, 70, 229, 0.18);
+  border-radius: var(--pms-radius);
+}
+.sso-title {
+  margin: 0 0 12px;
+  color: var(--pms-text);
+  font-size: 20px;
+  font-weight: 700;
+}
+.sso-title.is-error {
+  color: var(--pms-danger);
+}
+.sso-error {
+  margin: 0 0 20px;
+  color: var(--pms-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
 </style>

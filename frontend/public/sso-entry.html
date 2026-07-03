@@ -9,30 +9,47 @@
 <meta http-equiv="Expires" content="0">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --pms-bg: #f6f8fb;
+    --pms-surface: #ffffff;
+    --pms-border: #edf1f6;
+    --pms-text: #162033;
+    --pms-text-secondary: #667085;
+    --pms-text-muted: #98a2b3;
+    --pms-primary: #4f46e5;
+    --pms-primary-hover: #4338ca;
+    --pms-primary-soft: rgba(79,70,229,.1);
+    --pms-warning: #d97706;
+    --pms-danger: #dc2626;
+  }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     display: flex; align-items: center; justify-content: center;
-    min-height: 100vh; background: #f0f2f5;
+    min-height: 100vh; padding: 24px; background: var(--pms-bg); color: var(--pms-text);
   }
   .card {
-    background: #fff; border-radius: 8px; padding: 48px 40px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08); min-width: 360px; text-align: center;
+    width: min(100%, 380px); background: var(--pms-surface); border: 1px solid var(--pms-border);
+    border-radius: 8px; padding: 38px 34px; box-shadow: 0 1px 2px rgba(16,24,40,.05); text-align: center;
   }
-  .icon { margin-bottom: 16px; font-size: 48px; }
-  .title { font-size: 20px; color: #303133; margin-bottom: 12px; }
-  .hint { color: #909399; margin-bottom: 24px; font-size: 14px; }
-  .error { color: #F56C6C; margin: 12px 0; font-size: 14px; }
+  .icon {
+    width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 18px; color: var(--pms-primary); background: var(--pms-primary-soft);
+    border: 1px solid rgba(79,70,229,.18); border-radius: 8px; font-size: 28px;
+  }
+  .title { font-size: 20px; font-weight: 700; color: var(--pms-text); margin-bottom: 12px; }
+  .hint { color: var(--pms-text-secondary); margin-bottom: 24px; font-size: 14px; line-height: 1.6; }
+  .error { color: var(--pms-danger); margin: 12px 0; font-size: 14px; }
   .btn {
-    width: 100%; padding: 10px; font-size: 16px;
-    background: #409EFF; color: #fff; border: none; border-radius: 6px;
+    width: 100%; height: 40px; padding: 0 12px; font-size: 15px; font-weight: 600;
+    background: var(--pms-primary); color: #fff; border: none; border-radius: 6px;
     cursor: pointer; margin-top: 8px;
   }
-  .btn:hover { background: #337ECC; }
-  .footer { margin-top: 20px; color: #b0b0b0; font-size: 13px; }
-  .footer a { color: #409EFF; text-decoration: none; }
+  .btn:hover { background: var(--pms-primary-hover); }
+  .footer { margin-top: 20px; color: var(--pms-text-muted); font-size: 13px; }
+  .footer a { color: var(--pms-primary); text-decoration: none; }
   .spinner {
     display: inline-block; width: 20px; height: 20px;
-    border: 2px solid #e0e0e0; border-top-color: #409EFF;
+    border: 2px solid #e8edf5; border-top-color: var(--pms-primary);
     border-radius: 50%; animation: spin 0.8s linear infinite;
     vertical-align: middle; margin-right: 8px;
   }
@@ -47,7 +64,7 @@
     <p class="hint"><span class="spinner"></span>正在验证登录状态...</p>
   </div>
   <div id="redirectArea" style="display:none;">
-    <p class="hint">正在跳转到 OA 统一认证登录页...</p>
+    <p class="hint">未检测到有效登录状态，可继续通过 OA 统一认证登录。</p>
     <button class="btn" onclick="doRedirect()">手动跳转 OA 登录</button>
   </div>
   <div id="errorArea" style="display:none;">
@@ -130,14 +147,9 @@
   autoLogin().then(function(ok) {
     if (ok) return;  // 自动登录成功，已跳转
 
-    // 无有效 token → 跳转 OA CAS 登录
+    // 无有效 token → 停留在入口页，用户可手动选择 OA 或账号密码登录
     showRedirect();
     document.getElementById('title').textContent = 'OA 统一认证登录 [' + VER + ']';
-
-    // 自动跳转
-    setTimeout(function() {
-      doRedirect();
-    }, 1000);
   }).catch(function(err) {
     showError('检测登录状态时出错: ' + (err.message || '未知错误'));
   });

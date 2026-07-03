@@ -1,30 +1,33 @@
 <template>
-  <div class="page">
-    <el-card>
+  <div class="page pms-page">
+    <el-card class="progress-card" shadow="never">
       <template #header>
         <div class="page-header">
           <div class="header-left">
             <el-button @click="$router.back()" :icon="Back" size="small">返回</el-button>
             <span class="proj-name">{{ projectName }}</span>
           </div>
-          <div class="header-right">
-            <span style="color: #606266; margin-right: 8px;">总进度:</span>
-            <el-progress :percentage="totalProgress" :color="progressColor(totalProgress)" style="width: 200px;" />
+          <div class="header-right progress-summary">
+            <span class="progress-label">总进度</span>
+            <el-progress class="header-progress" :percentage="totalProgress" :color="progressColor(totalProgress)" />
           </div>
         </div>
       </template>
 
-      <div class="toolbar">
-        <el-button type="primary" size="small" @click="addTask">新增任务</el-button>
+      <div class="toolbar pms-toolbar">
+        <div class="pms-toolbar-left">
+          <el-button type="primary" size="small" @click="addTask">新增任务</el-button>
+        </div>
         <span class="hint">双击进度、负责人、日期列可直接修改，修改后自动保存</span>
       </div>
 
       <ag-grid-vue
-        class="ag-theme-alpine wechat-table"
+        class="ag-theme-alpine wechat-table pms-ag-grid"
         :rowData="rowData"
         :columnDefs="columnDefs"
         :defaultColDef="defaultColDef"
         :localeText="localeText"
+        :theme="'legacy'"
         :domLayout="'autoHeight'"
         @cell-value-changed="onCellValueChanged"
         style="width: 100%;"
@@ -62,7 +65,12 @@ const totalProgress = computed(() => {
   return Math.round(sum / rowData.value.length)
 })
 
-function progressColor(v: number) { return v < 30 ? '#F56C6C' : v < 80 ? '#E6A23C' : '#67C23A' }
+function progressColor(v: number) { return v < 30 ? '#dc2626' : v < 80 ? '#d97706' : '#0f9f7a' }
+function progressToneClass(v: number) {
+  if (v < 30) return 'is-danger'
+  if (v < 80) return 'is-warning'
+  return 'is-success'
+}
 
 const columnDefs: ColDef[] = [
   { field: 'sort', headerName: '排序', width: 70, editable: true, type: 'numericColumn' },
@@ -76,12 +84,12 @@ const columnDefs: ColDef[] = [
     field: 'progress', headerName: '进度%', width: 140, editable: true,
     cellRenderer: (params: any) => {
       const v = params.value || 0
-      const c = progressColor(v)
-      return `<div style="display:flex;align-items:center;gap:8px;">
-        <div style="flex:1;height:8px;background:#ebeef5;border-radius:4px;overflow:hidden;">
-          <div style="height:100%;width:${v}%;background:${c};border-radius:4px;"></div>
+      const tone = progressToneClass(v)
+      return `<div class="pms-progress-cell">
+        <div class="pms-progress-track">
+          <div class="pms-progress-bar ${tone}" style="width:${v}%;"></div>
         </div>
-        <span>${v}%</span></div>`
+        <span class="pms-progress-value">${v}%</span></div>`
     },
     cellEditor: 'agLargeTextCellEditor',
   },
@@ -91,8 +99,9 @@ const columnDefs: ColDef[] = [
     cellEditorParams: { values: ['未开始', '进行中', '已完成'] },
     cellRenderer: (params: any) => {
       const map: Record<number, string> = { 1: '未开始', 2: '进行中', 3: '已完成' }
-      const tags: Record<number, string> = { 1: '#909399', 2: '#409EFF', 3: '#67C23A' }
-      return `<span style="color:${tags[params.value] || '#909399'};font-weight:500;">${map[params.value] || '-'}</span>`
+      const tones: Record<number, string> = { 1: 'neutral', 2: 'info', 3: 'success' }
+      const tone = tones[params.value] || 'neutral'
+      return `<span class="pms-status pms-status-${tone}"><span class="pms-status-dot"></span>${map[params.value] || '-'}</span>`
     },
   },
   {
@@ -105,7 +114,7 @@ const columnDefs: ColDef[] = [
   },
   {
     headerName: '操作', width: 80, pinned: 'right',
-    cellRenderer: (params: any) => `<button class="del-btn" data-id="${params.data.id}">删除</button>`,
+    cellRenderer: (params: any) => `<button class="pms-table-action pms-link-danger del-btn" data-id="${params.data.id}">删除</button>`,
     onCellClicked: (params: any) => {
       if (params.event.target.classList.contains('del-btn')) {
         handleDeleteTask(params.data.id)
@@ -177,23 +186,36 @@ onMounted(() => { fetchTasks(); fetchUsers() })
 </script>
 
 <style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; }
+.page {
+  min-height: 100%;
+}
+.progress-card {
+  border: 0;
+  box-shadow: none;
+}
+.page-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .header-left { display: flex; align-items: center; gap: 12px; }
-.proj-name { font-size: 18px; font-weight: bold; color: #303133; }
-.toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
-.hint { color: #909399; font-size: 13px; }
-:deep(.del-btn) { background: none; border: none; color: #F56C6C; cursor: pointer; }
-:deep(.del-btn:hover) { text-decoration: underline; }
+.proj-name { font-size: 17px; font-weight: 700; color: var(--pms-text); }
+.progress-summary { display: flex; align-items: center; gap: 10px; min-width: 260px; }
+.progress-label { color: var(--pms-text-secondary); font-size: 13px; }
+.header-progress { width: 200px; }
+.toolbar { margin-bottom: 12px; }
+.hint { color: var(--pms-text-secondary); font-size: 13px; }
 
-/* ===== AG Grid 企微风格覆盖 ===== */
-:deep(.ag-root-wrapper) { border: none; }
-:deep(.ag-cell) { border-right: none; border-bottom: none; font-size: 14px; color: #303133; }
-:deep(.ag-row) { border-bottom: none; }
-:deep(.ag-header) { background-color: #f5f6f7; border-bottom: 1px solid #e8e8e8; }
-:deep(.ag-header-cell) { background-color: #f5f6f7; border-right: none; padding: 0 12px; }
-:deep(.ag-header-cell-text) { font-weight: 600; font-size: 14px; color: #303133; }
-:deep(.ag-row-even) { background-color: #fafbfc; }
-:deep(.ag-row-odd) { background-color: #ffffff; }
-:deep(.ag-row:hover) { background-color: #e8f4fd; }
-:deep(.ag-row-selected) { background-color: inherit; }
+@media (max-width: 900px) {
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .progress-summary {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .header-progress {
+    flex: 1;
+    width: auto;
+  }
+}
 </style>

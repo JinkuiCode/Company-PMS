@@ -1,4 +1,6 @@
 """初始化数据库表，创建默认管理员、角色、菜单"""
+import datetime
+
 from sqlalchemy import text
 from app.core.database import engine, SessionLocal, Base
 from app.core.security import hash_password
@@ -175,8 +177,8 @@ def init_db():
                 SysMenu(id=15, parent_id=1, menu_name="字段管理", menu_type="C", path="/system/field", permission_code="system:field:list", icon="List", sort=4),
                 SysMenu(id=3, parent_id=0, menu_name="仪表盘", menu_type="C", path="/dashboard", icon="DataAnalysis", sort=0),
                 SysMenu(id=2, parent_id=0, menu_name="项目管理", menu_type="M", icon="Folder", sort=2),
-                SysMenu(id=21, parent_id=2, menu_name="项目进度", menu_type="C", path="/project/list", permission_code="project:list", icon="List", sort=1),
-                SysMenu(id=22, parent_id=2, menu_name="项目档案", menu_type="C", path="/project/archive", permission_code="project:archive:list", icon="FolderOpened", sort=2),
+                SysMenu(id=22, parent_id=2, menu_name="项目档案", menu_type="C", path="/project/archive", permission_code="project:archive:list", icon="FolderOpened", sort=1),
+                SysMenu(id=21, parent_id=2, menu_name="项目进度", menu_type="C", path="/project/list", permission_code="project:list", icon="List", sort=2),
             ]
             db.add_all(menus)
             db.commit()
@@ -292,7 +294,8 @@ def init_db():
         if not db.query(PmsProject).first():
             proj = PmsProject(
                 id=1, project_code="PMS-2026-001", project_name="企业内部项目管理系统",
-                dept_id=1, pm_id=admin.id, status=1, start_date="2026-05-01", end_date="2026-08-31",
+                dept_id=1, pm_id=admin.id, status=1,
+                start_date=datetime.date(2026, 5, 1), end_date=datetime.date(2026, 8, 31),
                 budget=50, description="开发一套企业内部的 PMS 系统，具备项目管理、任务进度跟踪、RBAC权限管控等功能",
             )
             db.add(proj)
@@ -300,12 +303,12 @@ def init_db():
 
             # 8. 创建示例任务
             tasks = [
-                PmsTask(id=1, project_id=1, task_name="需求分析与原型设计", assignee_id=admin.id, progress=100, status=3, start_date="2026-05-01", due_date="2026-05-10", sort=1),
-                PmsTask(id=2, project_id=1, task_name="数据库设计与建表", assignee_id=admin.id, progress=100, status=3, start_date="2026-05-05", due_date="2026-05-12", sort=2),
-                PmsTask(id=3, project_id=1, task_name="RBAC权限模块开发", assignee_id=admin.id, progress=80, status=2, start_date="2026-05-10", due_date="2026-05-20", sort=3),
-                PmsTask(id=4, project_id=1, task_name="项目管理模块开发", assignee_id=admin.id, progress=60, status=2, start_date="2026-05-15", due_date="2026-06-01", sort=4),
-                PmsTask(id=5, project_id=1, task_name="进度填报页面开发", assignee_id=admin.id, progress=30, status=2, start_date="2026-05-18", due_date="2026-06-10", sort=5),
-                PmsTask(id=6, project_id=1, task_name="测试与部署", assignee_id=admin.id, progress=0, status=1, start_date="2026-06-10", due_date="2026-06-20", sort=6),
+                PmsTask(id=1, project_id=1, task_name="需求分析与原型设计", assignee_id=admin.id, progress=100, status=3, start_date=datetime.date(2026, 5, 1), due_date=datetime.date(2026, 5, 10), sort=1),
+                PmsTask(id=2, project_id=1, task_name="数据库设计与建表", assignee_id=admin.id, progress=100, status=3, start_date=datetime.date(2026, 5, 5), due_date=datetime.date(2026, 5, 12), sort=2),
+                PmsTask(id=3, project_id=1, task_name="RBAC权限模块开发", assignee_id=admin.id, progress=80, status=2, start_date=datetime.date(2026, 5, 10), due_date=datetime.date(2026, 5, 20), sort=3),
+                PmsTask(id=4, project_id=1, task_name="项目管理模块开发", assignee_id=admin.id, progress=60, status=2, start_date=datetime.date(2026, 5, 15), due_date=datetime.date(2026, 6, 1), sort=4),
+                PmsTask(id=5, project_id=1, task_name="进度填报页面开发", assignee_id=admin.id, progress=30, status=2, start_date=datetime.date(2026, 5, 18), due_date=datetime.date(2026, 6, 10), sort=5),
+                PmsTask(id=6, project_id=1, task_name="测试与部署", assignee_id=admin.id, progress=0, status=1, start_date=datetime.date(2026, 6, 10), due_date=datetime.date(2026, 6, 20), sort=6),
             ]
             db.add_all(tasks)
             db.commit()
