@@ -1,64 +1,67 @@
 <template>
-  <div class="project-list-page pms-page">
-    <!-- 工具栏 -->
-    <div class="toolbar pms-toolbar">
-      <div class="toolbar-left pms-toolbar-left">
+  <PmsDataList
+    ref="projectListRef"
+    class="project-list-page"
+    scrollbar-label="项目进度列表横向滚动条"
+  >
+    <template #toolbar-left>
         <el-button type="primary" size="small" @click="openCreateDialog">
           <el-icon style="margin-right:4px;"><Plus /></el-icon>
           新增项目
         </el-button>
-      </div>
-      <div class="toolbar-right pms-toolbar-right">
+    </template>
+    <template #toolbar-right>
         <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
           已筛选 {{ filteredRowData.length }} / {{ total }} 条
         </span>
-      </div>
-    </div>
+    </template>
 
-    <!-- 筛选栏 -->
-    <div class="filter-bar pms-filter-bar">
-      <el-input
-        v-model="filterKeyword"
-        placeholder="搜索编号或名称"
-        size="small"
-        clearable
-        style="width: 200px;"
-        :prefix-icon="Search"
-      />
-      <el-tree-select
-        v-model="filterDeptId"
-        :data="deptList"
-        :props="{ label: 'dept_name', value: 'id', children: 'children' }"
-        check-strictly
-        clearable
-        placeholder="全部部门"
-        size="small"
-        style="width: 160px;"
-      />
-      <el-select
-        v-model="filterStatus"
-        placeholder="全部状态"
-        size="small"
-        clearable
-        style="width: 140px;"
+    <template #filters>
+      <PmsListFilters
+        v-model:filters="customFilters"
+        :fields="projectListFilterFields"
+        :active-count="activeCustomFilterCount"
       >
-        <el-option label="进行中" :value="1" />
-        <el-option label="已完结" :value="2" />
-        <el-option label="暂停" :value="3" />
-      </el-select>
-      <el-select
-        v-model="filterProductLine"
-        placeholder="全部产品线"
-        size="small"
-        clearable
-        style="width: 140px;"
-      >
-        <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
-      </el-select>
-    </div>
+        <el-input
+          v-model="filterKeyword"
+          placeholder="搜索编号或名称"
+          size="small"
+          clearable
+          style="width: 200px;"
+          :prefix-icon="Search"
+        />
+        <el-tree-select
+          v-model="filterDeptId"
+          :data="deptList"
+          :props="{ label: 'dept_name', value: 'id', children: 'children' }"
+          check-strictly
+          clearable
+          placeholder="全部部门"
+          size="small"
+          style="width: 160px;"
+        />
+        <el-select
+          v-model="filterStatus"
+          placeholder="全部状态"
+          size="small"
+          clearable
+          style="width: 140px;"
+        >
+          <el-option v-for="item in projectStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-select
+          v-model="filterProductLine"
+          placeholder="全部产品线"
+          size="small"
+          clearable
+          style="width: 140px;"
+        >
+          <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </PmsListFilters>
+    </template>
 
-    <!-- AG Grid 表格 -->
-    <div class="project-list-grid-shell">
+    <template #grid>
       <ag-grid-vue
         class="ag-theme-alpine wechat-table pms-ag-grid"
         :rowData="filteredRowData"
@@ -80,18 +83,18 @@
         @displayed-columns-changed="refreshListScrollbar"
         style="width: 100%;"
       />
-      <GridHorizontalScrollbar ref="listScrollbarRef" label="项目进度列表横向滚动条" />
-    </div>
+    </template>
 
-    <!-- 自定义分页 -->
-    <CustomPagination
-      v-if="total > 0"
-      v-model="page"
-      v-model:page-size="pageSize"
-      :total="total"
-      @update:model-value="fetchList"
-      @update:page-size="() => { page = 1; fetchList() }"
-    />
+    <template #pagination>
+      <CustomPagination
+        v-if="total > 0"
+        v-model="page"
+        v-model:page-size="pageSize"
+        :total="total"
+        @update:model-value="fetchList"
+        @update:page-size="() => { page = 1; fetchList() }"
+      />
+    </template>
 
     <!-- 新增项目弹窗 -->
     <el-dialog v-model="dialogVisible" title="新增项目" width="520px">
@@ -151,7 +154,7 @@
         <el-button type="primary" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PmsDataList>
 </template>
 
 <script setup lang="ts">
@@ -164,7 +167,9 @@ import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type CellValueChangedEvent } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
-import GridHorizontalScrollbar from '@/components/GridHorizontalScrollbar.vue'
+import PmsDataList from '@/components/PmsDataList.vue'
+import PmsListFilters from '@/components/PmsListFilters.vue'
+import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -182,7 +187,7 @@ const deptFlatList = ref<any[]>([])   // 扁平部门（名称→ID 映射）
 const userList = ref<any[]>([])       // 用户列表
 const userNames = ref<string[]>([])   // 用户姓名列表（下拉编辑器用）
 const total = ref(0)
-const listScrollbarRef = ref<InstanceType<typeof GridHorizontalScrollbar>>()
+const projectListRef = ref<InstanceType<typeof PmsDataList>>()
 const page = ref(1)
 const pageSize = ref(15)
 const filterKeyword = ref('')
@@ -193,6 +198,11 @@ const filterProductLine = ref<string | null>(null)
 // 字典选项
 const productLineOptions = ref<any[]>([])
 const allowedProductLines = ref<string[] | null>(null)
+const projectStatusOptions: ListFilterOption[] = [
+  { label: '进行中', value: 1 },
+  { label: '已完结', value: 2 },
+  { label: '暂停', value: 3 },
+]
 
 const filteredProductLineOptions = computed(() => {
   const all = productLineOptions.value
@@ -200,14 +210,40 @@ const filteredProductLineOptions = computed(() => {
   return all.filter((item: any) => allowedProductLines.value!.includes(item.value))
 })
 
+const deptNameOptions = computed(() => deptFlatList.value.map((dept: any) => ({
+  label: dept.dept_name,
+  value: dept.dept_name,
+})))
+
+const userNameFilterOptions = computed(() => userNames.value.map(name => ({
+  label: name,
+  value: name,
+})))
+
+const projectListFilterFields = computed<ListFilterField<any>[]>(() => [
+  { field: 'project_code', label: '项目编号', type: 'text' },
+  { field: 'project_name', label: '项目名称', type: 'text' },
+  { field: 'dept_name', label: '所属部门', type: 'select', options: () => deptNameOptions.value },
+  { field: 'pm_name', label: '项目经理', type: 'select', options: () => userNameFilterOptions.value },
+  { field: 'status', label: '状态', type: 'select', options: () => projectStatusOptions },
+  { field: 'product_line', label: '产品线', type: 'select', options: () => filteredProductLineOptions.value },
+  { field: 'total_progress', label: '总进度', type: 'number' },
+  { field: 'task_count', label: '任务数', type: 'number' },
+  { field: 'budget', label: '预算', type: 'number' },
+  { field: 'start_date', label: '开始日期', type: 'date' },
+  { field: 'end_date', label: '结束日期', type: 'date' },
+])
+
+const { customFilters, activeCustomFilterCount, applyCustomFilters } = useListFilters(projectListFilterFields)
+
 // 客户端筛选
 const filteredRowData = computed(() => {
   let result = rowData.value
   if (filterKeyword.value) {
     const kw = filterKeyword.value.toLowerCase()
     result = result.filter(r =>
-      r.project_code?.toLowerCase().includes(kw) ||
-      r.project_name?.toLowerCase().includes(kw)
+      String(r.project_code ?? '').toLowerCase().includes(kw) ||
+      String(r.project_name ?? '').toLowerCase().includes(kw)
     )
   }
   if (filterStatus.value != null) {
@@ -219,7 +255,7 @@ const filteredRowData = computed(() => {
   if (filterProductLine.value) {
     result = result.filter(r => r.product_line === filterProductLine.value)
   }
-  return result
+  return applyCustomFilters(result)
 })
 
 // ========== 弹窗 ==========
@@ -332,7 +368,7 @@ const defaultColDef = {
 }
 
 function refreshListScrollbar() {
-  listScrollbarRef.value?.refresh()
+  projectListRef.value?.refreshScrollbar()
 }
 
 // ========== 数据加载 ==========
@@ -489,19 +525,6 @@ onMounted(() => { fetchList(); fetchOptions() })
 <style scoped>
 .project-list-page {
   min-height: 100%;
-}
-
-.project-list-grid-shell {
-  width: 100%;
-  min-width: 0;
-}
-
-.project-list-grid-shell :deep(.ag-body-horizontal-scroll) {
-  height: 0 !important;
-  min-height: 0 !important;
-  opacity: 0;
-  pointer-events: none;
-  overflow: hidden;
 }
 
 /* 项目名称链接 */

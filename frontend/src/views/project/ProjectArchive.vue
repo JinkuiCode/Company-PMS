@@ -1,8 +1,10 @@
 <template>
-  <div class="project-archive-page pms-page">
-    <!-- 工具栏 -->
-    <div class="toolbar pms-toolbar">
-      <div class="toolbar-left pms-toolbar-left">
+  <PmsDataList
+    ref="archiveListRef"
+    class="project-archive-page"
+    scrollbar-label="项目档案表格横向滚动条"
+  >
+    <template #toolbar-left>
         <el-button type="primary" size="small" @click="openCreateDialog">
           <el-icon style="margin-right:4px;"><Plus /></el-icon>
           新增档案
@@ -17,8 +19,8 @@
           批量同步 ERP
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
         </el-button>
-      </div>
-      <div class="toolbar-right pms-toolbar-right">
+    </template>
+    <template #toolbar-right>
         <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
           已筛选 {{ filteredRowData.length }} / {{ total }} 条
         </span>
@@ -28,41 +30,44 @@
         <el-button size="small" plain @click="resetLayout" title="恢复默认列布局">
           <el-icon><RefreshRight /></el-icon>
         </el-button>
-      </div>
-    </div>
+    </template>
 
-    <!-- 筛选栏 -->
-    <div class="filter-bar pms-filter-bar">
-      <el-input
-        v-model="searchKeyword"
-        placeholder="搜索编号或名称"
-        size="small"
-        clearable
-        style="width: 200px;"
-        :prefix-icon="Search"
-      />
-      <el-select
-        v-model="filterProductLine"
-        placeholder="全部产品线"
-        size="small"
-        clearable
-        style="width: 140px;"
+    <template #filters>
+      <PmsListFilters
+        v-model:filters="customFilters"
+        :fields="archiveFilterFields"
+        :active-count="activeCustomFilterCount"
       >
-        <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
-      </el-select>
-      <el-select
-        v-model="filterStatus"
-        placeholder="全部状态"
-        size="small"
-        clearable
-        style="width: 120px;"
-      >
-        <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
-      </el-select>
-    </div>
+        <el-input
+          v-model="searchKeyword"
+          placeholder="搜索编号或名称"
+          size="small"
+          clearable
+          style="width: 200px;"
+          :prefix-icon="Search"
+        />
+        <el-select
+          v-model="filterProductLine"
+          placeholder="全部产品线"
+          size="small"
+          clearable
+          style="width: 140px;"
+        >
+          <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-select
+          v-model="filterStatus"
+          placeholder="全部状态"
+          size="small"
+          clearable
+          style="width: 120px;"
+        >
+          <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
+        </el-select>
+      </PmsListFilters>
+    </template>
 
-    <!-- AG Grid 表格 -->
-    <div class="archive-grid-shell">
+    <template #grid>
       <ag-grid-vue
         ref="agGridRef"
         class="ag-theme-alpine wechat-table pms-ag-grid"
@@ -86,11 +91,9 @@
         @row-double-clicked="onRowDoubleClicked"
         @selection-changed="onSelectionChanged"
       />
-      <GridHorizontalScrollbar ref="archiveScrollbarRef" label="项目档案表格横向滚动条" />
-    </div>
+    </template>
 
-    <!-- 自定义分页 -->
-    <div class="archive-pagination">
+    <template #pagination>
       <CustomPagination
         v-if="total > 0"
         v-model="page"
@@ -99,8 +102,7 @@
         @update:model-value="fetchList"
         @update:page-size="() => { page = 1; fetchList() }"
       />
-    </div>
-
+    </template>
 
     <!-- 新增 / 编辑弹窗 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目档案' : '新增项目档案'" width="560px">
@@ -155,7 +157,7 @@
         <el-button v-if="isEdit" type="success" @click="handleSubmitAndSync">保存并同步</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PmsDataList>
 </template>
 
 <script setup lang="ts">
@@ -167,7 +169,9 @@ import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
-import GridHorizontalScrollbar from '@/components/GridHorizontalScrollbar.vue'
+import PmsDataList from '@/components/PmsDataList.vue'
+import PmsListFilters from '@/components/PmsListFilters.vue'
+import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -218,7 +222,7 @@ const total = ref(0)
 const searchKeyword = ref('')
 const selectedRows = ref<any[]>([])
 const agGridRef = ref()
-const archiveScrollbarRef = ref<InstanceType<typeof GridHorizontalScrollbar>>()
+const archiveListRef = ref<InstanceType<typeof PmsDataList>>()
 const page = ref(1)
 const pageSize = ref(15)
 const filterStatus = ref<number | null>(null)
@@ -252,6 +256,64 @@ const filteredProductLineOptions = computed(() => {
   return all.filter(item => allowedProductLines.value!.includes(item.value))
 })
 
+const erpSyncStatusOptions: ListFilterOption[] = [
+  { label: '待同步', value: 'pending' },
+  { label: '已同步', value: 'success' },
+  { label: '失败', value: 'failed' },
+]
+
+function dictFilterOptions(code: string, numeric = false): ListFilterOption[] {
+  return (dictOptions[code] || []).map(item => ({
+    label: String(item.label),
+    value: numeric ? Number(item.value) : item.value,
+  }))
+}
+
+function uniqueValueOptions(values: Array<string | number | null | undefined>): ListFilterOption[] {
+  const optionMap = new Map<string, ListFilterOption>()
+  values.forEach(value => {
+    if (value === null || value === undefined || value === '') return
+    const label = String(value)
+    if (!optionMap.has(label)) {
+      optionMap.set(label, { label, value })
+    }
+  })
+  return Array.from(optionMap.values())
+}
+
+const archiveUserNameOptions = computed(() => uniqueValueOptions([
+  ...userList.value.map(user => user.real_name || user.username),
+  ...rowData.value.flatMap(row => [
+    row.manager_name,
+    row.created_by_name,
+    row.updated_by_name,
+    row.erp_sync_by_name,
+  ]),
+]))
+
+const archiveFilterFields = computed<ListFilterField<any>[]>(() => [
+  { field: 'project_code', label: '项目编号', type: 'text' },
+  { field: 'project_name', label: '项目名称', type: 'text' },
+  { field: 'product_line', label: '产品线', type: 'select', options: () => filteredProductLineOptions.value },
+  { field: 'status', label: '状态', type: 'select', options: () => dictFilterOptions('archive_status', true) },
+  { field: 'manager_name', label: '负责人', type: 'select', options: () => archiveUserNameOptions.value },
+  { field: 'product_type', label: '产品类型', type: 'select', options: () => dictFilterOptions('product_type') },
+  { field: 'plan_start_date', label: '计划开始', type: 'date' },
+  { field: 'plan_end_date', label: '计划结束', type: 'date' },
+  { field: 'created_by_name', label: '创建人', type: 'select', options: () => archiveUserNameOptions.value },
+  { field: 'updated_by_name', label: '最后编辑人', type: 'select', options: () => archiveUserNameOptions.value },
+  { field: 'erp_sync_by_name', label: '最后同步人', type: 'select', options: () => archiveUserNameOptions.value },
+  {
+    field: 'erp_sync_status',
+    label: '同步状态',
+    type: 'select',
+    options: () => erpSyncStatusOptions,
+    getValue: row => row.erp_sync_status || 'pending',
+  },
+])
+
+const { customFilters, activeCustomFilterCount, applyCustomFilters } = useListFilters(archiveFilterFields)
+
 async function fetchDictOptions(code: string) {
   try {
     const res: any = await request.get(`/dicts/code/${code}`)
@@ -265,8 +327,8 @@ const filteredRowData = computed(() => {
   if (searchKeyword.value) {
     const kw = searchKeyword.value.toLowerCase()
     result = result.filter(r =>
-      r.project_code?.toLowerCase().includes(kw) ||
-      r.project_name?.toLowerCase().includes(kw)
+      String(r.project_code ?? '').toLowerCase().includes(kw) ||
+      String(r.project_name ?? '').toLowerCase().includes(kw)
     )
   }
   if (filterStatus.value != null) {
@@ -275,7 +337,7 @@ const filteredRowData = computed(() => {
   if (filterProductLine.value) {
     result = result.filter(r => r.product_line === filterProductLine.value)
   }
-  return result
+  return applyCustomFilters(result)
 })
 
 const archiveGridStyle = computed(() => {
@@ -285,7 +347,7 @@ const archiveGridStyle = computed(() => {
 })
 
 function scheduleArchiveScrollbarMetrics() {
-  archiveScrollbarRef.value?.refresh()
+  archiveListRef.value?.refreshScrollbar()
 }
 
 // ========== 弹窗 ==========
@@ -595,56 +657,6 @@ onMounted(() => {
 <style scoped>
 .project-archive-page {
   min-height: 100%;
-}
-
-.archive-grid-shell {
-  width: 100%;
-  min-width: 0;
-}
-
-.archive-grid-shell :deep(.pms-ag-grid) {
-  min-height: 176px;
-}
-
-.archive-grid-shell :deep(.ag-body-horizontal-scroll) {
-  height: 0 !important;
-  min-height: 0 !important;
-  opacity: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.archive-grid-shell :deep(.ag-body-horizontal-scroll-viewport) {
-  scrollbar-width: thin;
-  scrollbar-color: #94a3b8 #e2e8f0;
-}
-
-.archive-grid-shell :deep(.ag-body-horizontal-scroll-viewport::-webkit-scrollbar) {
-  height: 12px;
-}
-
-.archive-grid-shell :deep(.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-track) {
-  background: #e2e8f0;
-  border-radius: 999px;
-}
-
-.archive-grid-shell :deep(.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb) {
-  background: #94a3b8;
-  border: 2px solid #e2e8f0;
-  border-radius: 999px;
-}
-
-.archive-grid-shell :deep(.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb:hover) {
-  background: #64748b;
-}
-
-.archive-pagination {
-  margin-top: 6px;
-}
-
-.archive-pagination :deep(.custom-pagination) {
-  margin-top: 0;
-  padding-top: 8px;
 }
 
 :deep(.pms-table-action + .pms-table-action) {
