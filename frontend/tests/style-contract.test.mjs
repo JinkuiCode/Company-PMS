@@ -10,6 +10,9 @@ const layout = read('src/layout/AppLayout.vue')
 const archive = read('src/views/project/ProjectArchive.vue')
 const projectList = read('src/views/project/ProjectList.vue')
 const progress = read('src/views/project/ProjectProgress.vue')
+const pmsDataList = read('src/components/PmsDataList.vue')
+const pmsListFilters = read('src/components/PmsListFilters.vue')
+const useListFilters = read('src/composables/useListFilters.ts')
 const gridScrollbar = read('src/components/GridHorizontalScrollbar.vue')
 const ssoEntry = read('public/sso-entry.html')
 const startScriptUrl = new URL('../../start-pms.command', import.meta.url)
@@ -28,32 +31,44 @@ assert.doesNotMatch(
   'Static SSO entry should not automatically redirect users away from the login entry',
 )
 
+assert.match(pmsDataList, /pms-page/, 'PmsDataList should own the shared PMS page surface')
+assert.match(pmsDataList, /pms-data-list-grid-shell/, 'PmsDataList should own the standard grid shell')
+assert.match(pmsDataList, /GridHorizontalScrollbar/, 'PmsDataList should own the shared visible grid scrollbar')
+assert.match(pmsDataList, /refreshScrollbar/, 'PmsDataList should expose a standard scrollbar refresh hook')
+assert.match(pmsListFilters, /添加筛选/, 'PmsListFilters should expose the standard custom filter action')
+assert.match(pmsListFilters, /清空筛选/, 'PmsListFilters should expose the standard custom filter reset action')
+assert.match(useListFilters, /matchesListFilter/, 'useListFilters should provide reusable row filter matching')
+assert.match(useListFilters, /applyCustomFilters/, 'useListFilters should provide reusable custom filter application')
+
 for (const [name, source] of [
   ['ProjectArchive.vue', archive],
   ['ProjectList.vue', projectList],
   ['ProjectProgress.vue', progress],
 ]) {
-  assert.match(source, /pms-page/, `${name} should use the shared PMS page surface`)
+  assert.match(source, /PmsDataList/, `${name} should use the standard PMS list layout`)
+  assert.match(source, /PmsListFilters/, `${name} should use the standard PMS list filters`)
+  assert.match(source, /useListFilters/, `${name} should use reusable custom filter logic`)
   assert.match(source, /pms-ag-grid/, `${name} should use the shared AG Grid styling hook`)
   assert.match(source, /:theme="'legacy'"/, `${name} should opt into AG Grid legacy CSS theme mode`)
+  assert.match(source, /alwaysShowHorizontalScroll/, `${name} should keep horizontal scrolling available`)
 }
 
-assert.match(archive, /archive-grid-shell/, 'Project archive should wrap AG Grid in a horizontal scroll shell')
-assert.match(archive, /alwaysShowHorizontalScroll/, 'Project archive should use AG Grid native always-visible horizontal scrolling')
-assert.match(archive, /GridHorizontalScrollbar/, 'Project archive should use the shared visible grid scrollbar')
-assert.match(projectList, /project-list-grid-shell/, 'Project progress list should wrap AG Grid in the shared horizontal scroll shell')
-assert.match(projectList, /alwaysShowHorizontalScroll/, 'Project progress list should keep horizontal scrolling available')
-assert.match(projectList, /GridHorizontalScrollbar/, 'Project progress list should use the shared visible grid scrollbar')
 assert.match(gridScrollbar, /ag-body-horizontal-scroll-viewport/, 'Shared scrollbar should drive AG Grid native horizontal viewport')
 assert.match(gridScrollbar, /scrollWidth\s*-\s*viewport\.clientWidth/, 'Shared scrollbar should use AG Grid native scroll range')
 assert.match(gridScrollbar, /grid-horizontal-scrollbar-thumb/, 'Shared scrollbar should expose a visible thumb')
 assert.match(gridScrollbar, /@keydown="onKeydown"/, 'Shared scrollbar should support keyboard operation')
 assert.match(gridScrollbar, /tabindex="0"/, 'Shared scrollbar should be keyboard focusable')
-assert.doesNotMatch(archive, /ag-center-cols-viewport/, 'Project archive scrollbar should not drive the body viewport directly')
-assert.doesNotMatch(archive, /measureArchiveScrollRange/, 'Project archive should not measure a separate custom scrollbar range')
-assert.doesNotMatch(archive, /Number\.MAX_SAFE_INTEGER/, 'Project archive should not probe scroll range by mutating scrollLeft')
-assert.match(archive, /archive-pagination/, 'Project archive pagination should sit directly below the grid')
-assert.doesNotMatch(archive, /height:\s*calc\(100vh/, 'Project archive grid should not force pagination to the bottom of the viewport')
+
+for (const [name, source] of [
+  ['ProjectArchive.vue', archive],
+  ['ProjectList.vue', projectList],
+  ['ProjectProgress.vue', progress],
+]) {
+  assert.doesNotMatch(source, /ag-center-cols-viewport/, `${name} should not drive the body viewport directly`)
+  assert.doesNotMatch(source, /measureArchiveScrollRange/, `${name} should not measure a separate custom scrollbar range`)
+  assert.doesNotMatch(source, /Number\.MAX_SAFE_INTEGER/, `${name} should not probe scroll range by mutating scrollLeft`)
+  assert.doesNotMatch(source, /height:\s*calc\(100vh/, `${name} should not force pagination to the bottom of the viewport`)
+}
 
 assert.ok(startScript, 'Repository should include a macOS one-click start-pms.command script')
 assert.match(startScript, /DB_DIALECT=sqlite/, 'Start script should force local SQLite for development')
