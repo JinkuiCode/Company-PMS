@@ -108,6 +108,7 @@ def test_project_sheet_list_contract_files_and_route_order():
     fields_service = read("app/services/project_sheet_fields.py")
 
     assert '@router.get("/sheet-fields"' in api
+    assert api.index('@router.get("/sheet-fields"') < api.index('@router.put("/{project_id}"')
     assert api.index('@router.get("/sheet-fields"') < api.index('@router.get("/{project_id}/sheet-detail"')
     assert "sheet_field_keys" in api
     assert "sheet_fields" in schema
@@ -171,6 +172,27 @@ def test_project_sheet_fields_metadata_endpoint_returns_groups_without_values():
     assert all("value" not in field for field in payload["fields"])
 
 
+def test_project_sheet_ratio_fields_compute_from_immediate_dependencies():
+    from app.services.project_sheet_fields import compute_sheet_field_value
+
+    values = {
+        "design_start_date": "2026-01-01",
+        "actual_bom_release_date": "2026-01-11",
+        "actual_drawing_done_date": "2026-01-16",
+        "actual_purchase_request_done_date": "2026-01-21",
+        "actual_order_done_date": "2026-01-25",
+        "actual_frame_arrive_date": "2026-02-04",
+        "actual_power_on_date": "2026-02-09",
+        "actual_test_done_date": "2026-02-14",
+        "delivery_cycle": 40,
+    }
+
+    assert compute_sheet_field_value("rd_duration_ratio", values) == 25.0
+    assert compute_sheet_field_value("purchase_duration_ratio", values) == 12.5
+    assert compute_sheet_field_value("assembly_duration_ratio", values) == 12.5
+    assert compute_sheet_field_value("test_duration_ratio", values) == 12.5
+
+
 def test_project_list_sheet_fields_projection_and_backwards_compatibility():
     project_id = seed_project_sheet_list_runtime_data()
 
@@ -215,5 +237,6 @@ if __name__ == "__main__":
     test_project_sheet_metadata_flags_and_no_values()
     test_normalize_sheet_field_keys_deduplicates_and_ignores_unknown_or_hidden()
     test_project_sheet_fields_metadata_endpoint_returns_groups_without_values()
+    test_project_sheet_ratio_fields_compute_from_immediate_dependencies()
     test_project_list_sheet_fields_projection_and_backwards_compatibility()
     print("project sheet list contract passed")

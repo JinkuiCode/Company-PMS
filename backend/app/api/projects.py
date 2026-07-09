@@ -29,6 +29,13 @@ def list_projects(
     )
 
 
+@router.get("/sheet-fields", summary="项目进度动态列表字段元数据")
+def get_project_sheet_fields(
+    _scope_ctx: dict = Depends(get_current_user_context),
+):
+    return project_service.get_project_sheet_field_metadata()
+
+
 @router.post("", summary="创建项目")
 def create_project(
     data: ProjectCreate,
@@ -58,13 +65,6 @@ def delete_project(
     user_id: int = Depends(get_current_user_id),
 ):
     return project_service.delete_project(db, project_id, operator_id=user_id, request=request)
-
-
-@router.get("/sheet-fields", summary="项目进度动态列表字段元数据")
-def get_project_sheet_fields(
-    _scope_ctx: dict = Depends(get_current_user_context),
-):
-    return project_service.get_project_sheet_field_metadata()
 
 
 @router.get("/{project_id}/sheet-detail", summary="项目总表详情")

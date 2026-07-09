@@ -363,10 +363,22 @@ def compute_sheet_field_value(key: str, values: dict[str, Any]) -> Any:
         "project_start_month": lambda: _month(values.get("project_start_date")),
         "process_duration_days": lambda: _date_diff_days(values.get("process_start_date"), values.get("process_end_date")),
         "difference_days": lambda: _date_diff_days(values.get("plan_ship_date") or values.get("original_planned_ship_date"), values.get("actual_ship_date")),
-        "rd_duration_ratio": lambda: _ratio(values.get("rd_stage_duration"), values.get("delivery_cycle")),
-        "purchase_duration_ratio": lambda: _ratio(values.get("actual_purchase_request_days"), values.get("delivery_cycle")),
-        "assembly_duration_ratio": lambda: _ratio(values.get("actual_assembly_days"), values.get("delivery_cycle")),
-        "test_duration_ratio": lambda: _ratio(values.get("actual_test_days"), values.get("delivery_cycle")),
+        "rd_duration_ratio": lambda: _ratio(
+            _date_diff_days(values.get("design_start_date"), values.get("actual_bom_release_date")),
+            values.get("delivery_cycle"),
+        ),
+        "purchase_duration_ratio": lambda: _ratio(
+            _date_diff_days(values.get("actual_drawing_done_date"), values.get("actual_purchase_request_done_date")),
+            values.get("delivery_cycle"),
+        ),
+        "assembly_duration_ratio": lambda: _ratio(
+            _date_diff_days(values.get("actual_frame_arrive_date"), values.get("actual_power_on_date")),
+            values.get("delivery_cycle"),
+        ),
+        "test_duration_ratio": lambda: _ratio(
+            _date_diff_days(values.get("actual_power_on_date"), values.get("actual_test_done_date")),
+            values.get("delivery_cycle"),
+        ),
     }
     if key in {"duplicate_check", "issue_days", "teardown_days", "design_plus_queue_days", "solution_days", "rd_queue_days", "normal_project_start"}:
         return None
