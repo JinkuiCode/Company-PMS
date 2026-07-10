@@ -52,6 +52,11 @@ assert.match(
 )
 assert.match(
   projectList,
+  /const defaultSelectedSheetFieldKeys = computed<string\[\]>\(\(\) => \[\]\)/,
+  'Fixed core columns should stay the default while optional sheet columns start unselected',
+)
+assert.match(
+  projectList,
   /sheet_field_keys/,
   'Project progress list requests should include dynamic sheet field keys when needed',
 )
@@ -169,6 +174,53 @@ assert.doesNotMatch(
   projectList,
   /summary-strip|summary-card|metric-card/,
   'Project progress workbench should not reserve first-screen space for statistic cards',
+)
+
+const savedTextFunction = projectList.match(/function setSavedText\([\s\S]*?\n}\n\nasync function openProjectDrawer/)
+assert.ok(savedTextFunction, 'Project progress workbench should keep auto-save feedback in a dedicated helper')
+assert.doesNotMatch(
+  savedTextFunction[0],
+  /selectedProject\.value/,
+  'Auto-saving a grid cell must not open or replace the explicit detail drawer selection',
+)
+
+const pmSaveBranch = projectList.match(/if \(field === 'pm_name'\) \{[\s\S]*?\n  }\n\n  await request\.put/)
+assert.ok(pmSaveBranch, 'Project manager edits should keep their dedicated save branch')
+assert.equal(
+  (pmSaveBranch[0].match(/await request\.put/g) || []).length,
+  2,
+  'Project manager edits should issue exactly one request in their branch before the generic save path',
+)
+
+assert.match(
+  projectList,
+  /const columnPreferencesReady = ref\(false\)/,
+  'Project list should expose an explicit readiness gate before restoring column preferences',
+)
+assert.match(
+  projectList,
+  /columnPreferencesReady\.value \? requestedSheetFieldKeys\.value\.join\(','\) : '__pending__'/,
+  'Initial list loading should wait for restored selected-field preferences',
+)
+assert.match(
+  projectList,
+  /if \(!columnPreferenceWritesEnabled\.value\) return\n    persistColumnPreferences\(\)/,
+  'Selected-field persistence should wait until selected fields and AG Grid state have been restored',
+)
+assert.match(
+  projectList,
+  /if \(!columnPreferenceWritesEnabled\.value \|\| restoringColumnState\.value\) return/,
+  'Initial AG Grid structure events should not overwrite restored preferences',
+)
+assert.match(
+  projectList,
+  /const listRequestSerial = ref\(0\)/,
+  'Project list should version concurrent list requests',
+)
+assert.match(
+  projectList,
+  /const requestSerial = \+\+listRequestSerial\.value[\s\S]*?if \(requestSerial !== listRequestSerial\.value\) return/,
+  'An older list response must not overwrite a later selected-field request',
 )
 
 console.log('project progress workbench contract passed')

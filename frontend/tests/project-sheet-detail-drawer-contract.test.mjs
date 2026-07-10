@@ -38,8 +38,25 @@ assert.match(
 )
 assert.match(
   projectList,
-  /progress-summary|maxSummaryLength|24/,
-  'Project detail drawer should truncate progress-note summaries to the agreed max length',
+  /drawerGroupSummary\(group\)/,
+  'Project detail drawer should show a dedicated summary in the progress-group heading',
+)
+assert.match(
+  projectList,
+  /function drawerGroupSummary\([\s\S]*?group\.key !== 'progress'[\s\S]*?summarizeProgressText/,
+  'Only the progress-group heading should use the short progress-note summary',
+)
+assert.match(
+  projectList,
+  /function summarizeProgressText\([\s\S]*?split\(\/\\r\?\\n\/, 1\)\[0\]/,
+  'Progress-group summaries should use only the first line of a multi-line record',
+)
+const sheetValueFormatter = projectList.match(/function formatSheetFieldValue\([\s\S]*?\n}\n\nfunction startSheetFieldEdit/)
+assert.ok(sheetValueFormatter, 'Project detail drawer should keep field-value formatting in a dedicated helper')
+assert.doesNotMatch(
+  sheetValueFormatter[0],
+  /summarizeProgressText/,
+  'Drawer value rows, including long text progress notes, should render their full values',
 )
 assert.match(
   projectList,
@@ -55,6 +72,23 @@ assert.match(
   projectList,
   /aria-label/,
   'Drawer edit and quick-add actions should include accessible labels',
+)
+const readonlyReasonControl = projectList.match(/<button[\s\S]*?class="drawer-field-reason"[\s\S]*?<\/button>/)
+assert.ok(readonlyReasonControl, 'Readonly source reasons should use native keyboard-focusable buttons')
+assert.match(
+  readonlyReasonControl[0],
+  /:aria-label="`\$\{field\.label}：\$\{drawerFieldReason\(field\)!\.tooltip\}`"/,
+  'Readonly source buttons should include an explicit screen-reader label',
+)
+assert.match(
+  readonlyReasonControl[0],
+  /<el-icon aria-hidden="true">/,
+  'Readonly source button icons should be decorative for assistive technology',
+)
+assert.match(
+  projectList,
+  /\.drawer-field-reason \{[\s\S]*?position: absolute;/,
+  'Readonly source controls should not consume drawer field layout space',
 )
 assert.match(
   projectList,

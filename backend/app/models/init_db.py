@@ -7,8 +7,9 @@ from app.core.security import hash_password
 
 from app.models.user import SysUser, RememberToken  # noqa: F401
 from app.models.rbac import SysRole, SysMenu, SysDept, SysUserRole, SysRoleMenu  # noqa: F401
-from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive, ErpSyncLog  # noqa: F401
+from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive, ErpSyncLog, PmsProjectSheetDetail  # noqa: F401
 from app.models.dict import SysDict, SysDictItem  # noqa: F401
+from app.models.operation_log import SysOperationLog  # noqa: F401
 
 
 def _init_dict_data(db):
@@ -175,6 +176,7 @@ def init_db():
                 SysMenu(id=12, parent_id=1, menu_name="角色管理", menu_type="C", path="/system/role", permission_code="system:role:list", icon="Avatar", sort=2),
                 SysMenu(id=13, parent_id=1, menu_name="数据字典", menu_type="C", path="/system/dict", permission_code="system:dict:list", icon="Collection", sort=3),
                 SysMenu(id=15, parent_id=1, menu_name="字段管理", menu_type="C", path="/system/field", permission_code="system:field:list", icon="List", sort=4),
+                SysMenu(id=16, parent_id=1, menu_name="操作日志", menu_type="C", path="/system/operation-log", permission_code="system:operation-log:list", icon="Document", sort=5),
                 SysMenu(id=3, parent_id=0, menu_name="仪表盘", menu_type="C", path="/dashboard", icon="DataAnalysis", sort=0),
                 SysMenu(id=2, parent_id=0, menu_name="项目管理", menu_type="M", icon="Folder", sort=2),
                 SysMenu(id=22, parent_id=2, menu_name="项目档案", menu_type="C", path="/project/archive", permission_code="project:archive:list", icon="FolderOpened", sort=1),
@@ -202,7 +204,36 @@ def init_db():
             db.commit()
             print("迁移完成：菜单管理 -> 数据字典")
 
-        # 4.2 迁移：插入按钮级权限菜单（项目进度 / 项目档案 / 系统管理）
+        # 4.3 迁移：补齐「操作日志」菜单
+        operation_log_menu = db.query(SysMenu).filter(SysMenu.id == 16).first()
+        if not operation_log_menu:
+            db.add(SysMenu(
+                id=16, parent_id=1, menu_name="操作日志", menu_type="C",
+                path="/system/operation-log", permission_code="system:operation-log:list",
+                icon="Document", sort=5,
+            ))
+            db.commit()
+            print("迁移完成：已添加操作日志菜单")
+        else:
+            changed = False
+            desired = {
+                "parent_id": 1,
+                "menu_name": "操作日志",
+                "menu_type": "C",
+                "path": "/system/operation-log",
+                "permission_code": "system:operation-log:list",
+                "icon": "Document",
+                "sort": 5,
+            }
+            for key, value in desired.items():
+                if getattr(operation_log_menu, key) != value:
+                    setattr(operation_log_menu, key, value)
+                    changed = True
+            if changed:
+                db.commit()
+                print("迁移完成：已更新操作日志菜单")
+
+        # 4.4 迁移：插入按钮级权限菜单（项目进度 / 项目档案 / 系统管理）
         button_menus = [
             # 项目进度 按钮权限 (parent_id=21)
             {"id": 211, "parent_id": 21, "menu_name": "查看", "menu_type": "B", "permission_code": "project:list:view", "sort": 1},
@@ -233,6 +264,8 @@ def init_db():
             {"id": 152, "parent_id": 15, "menu_name": "新增", "menu_type": "B", "permission_code": "system:field:add", "sort": 2},
             {"id": 153, "parent_id": 15, "menu_name": "编辑", "menu_type": "B", "permission_code": "system:field:edit", "sort": 3},
             {"id": 154, "parent_id": 15, "menu_name": "删除", "menu_type": "B", "permission_code": "system:field:delete", "sort": 4},
+            # 操作日志 按钮权限 (parent_id=16)
+            {"id": 161, "parent_id": 16, "menu_name": "查看", "menu_type": "B", "permission_code": "system:operation-log:view", "sort": 1},
         ]
         for bm in button_menus:
             existing = db.query(SysMenu).filter(SysMenu.id == bm["id"]).first()
@@ -281,6 +314,30 @@ def init_db():
             db.commit()
             print("迁移完成：pms_project_archive 已添加 erp_sync_by 字段")
 
+        # 5.8 迁移：pms_project 表添加产品线兜底字段
+        try:
+            db.execute(text("SELECT product_line FROM pms_project"))
+        except Exception:
+            db.rollback()
+            db.execute(text("ALTER TABLE pms_project ADD product_line NVARCHAR(32) NULL"))
+            db.commit()
+            print("迁移完成：pms_project 已添加 product_line 字段")
+
+        # 5.9 迁移：pms_project 表添加阶段进度字段
+        try:
+            db.execute(text("SELECT design_progress FROM pms_project"))
+        except Exception:
+            db.rollback()
+            db.execute(text("ALTER TABLE pms_project ADD design_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD order_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD kit_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD frame_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD dryer_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD assembly_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD test_progress INT NULL"))
+            db.commit()
+            print("迁移完成：pms_project 已添加阶段进度字段")
+
         # 6. 创建示例部门
         if not db.query(SysDept).first():
             depts = [
@@ -295,7 +352,10 @@ def init_db():
             proj = PmsProject(
                 id=1, project_code="PMS-2026-001", project_name="企业内部项目管理系统",
                 dept_id=1, pm_id=admin.id, status=1,
+                product_line="Bench",
                 start_date=datetime.date(2026, 5, 1), end_date=datetime.date(2026, 8, 31),
+                design_progress=100, order_progress=100, kit_progress=80, frame_progress=60,
+                dryer_progress=45, assembly_progress=30, test_progress=0,
                 budget=50, description="开发一套企业内部的 PMS 系统，具备项目管理、任务进度跟踪、RBAC权限管控等功能",
             )
             db.add(proj)

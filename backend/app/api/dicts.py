@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -15,19 +15,35 @@ def list_dicts(db: Session = Depends(get_db)):
     return dict_service.get_dict_list(db)
 
 
-@router.post("", summary="新增字典分类", dependencies=[Depends(get_current_user_id)])
-def create_dict(data: DictCreate, db: Session = Depends(get_db)):
-    return dict_service.create_dict(db, data)
+@router.post("", summary="新增字典分类")
+def create_dict(
+    data: DictCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    return dict_service.create_dict(db, data, operator_id=user_id, request=request)
 
 
-@router.put("/{dict_id}", summary="编辑字典分类", dependencies=[Depends(get_current_user_id)])
-def update_dict(dict_id: int, data: DictUpdate, db: Session = Depends(get_db)):
-    return dict_service.update_dict(db, dict_id, data)
+@router.put("/{dict_id}", summary="编辑字典分类")
+def update_dict(
+    dict_id: int,
+    data: DictUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    return dict_service.update_dict(db, dict_id, data, operator_id=user_id, request=request)
 
 
-@router.delete("/{dict_id}", summary="删除字典分类", dependencies=[Depends(get_current_user_id)])
-def delete_dict(dict_id: int, db: Session = Depends(get_db)):
-    return dict_service.delete_dict(db, dict_id)
+@router.delete("/{dict_id}", summary="删除字典分类")
+def delete_dict(
+    dict_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    return dict_service.delete_dict(db, dict_id, operator_id=user_id, request=request)
 
 
 # ==================== 字典项 ====================
@@ -36,19 +52,36 @@ def list_dict_items(dict_id: int, db: Session = Depends(get_db)):
     return dict_service.get_dict_items(db, dict_id)
 
 
-@router.post("/{dict_id}/items", summary="新增枚举项", dependencies=[Depends(get_current_user_id)])
-def create_dict_item(dict_id: int, data: DictItemCreate, db: Session = Depends(get_db)):
-    return dict_service.create_dict_item(db, dict_id, data)
+@router.post("/{dict_id}/items", summary="新增枚举项")
+def create_dict_item(
+    dict_id: int,
+    data: DictItemCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    return dict_service.create_dict_item(db, dict_id, data, operator_id=user_id, request=request)
 
 
-@router.put("/items/{item_id}", summary="编辑枚举项", dependencies=[Depends(get_current_user_id)])
-def update_dict_item(item_id: int, data: DictItemUpdate, db: Session = Depends(get_db)):
-    return dict_service.update_dict_item(db, item_id, data)
+@router.put("/items/{item_id}", summary="编辑枚举项")
+def update_dict_item(
+    item_id: int,
+    data: DictItemUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    return dict_service.update_dict_item(db, item_id, data, operator_id=user_id, request=request)
 
 
-@router.delete("/items/{item_id}", summary="删除枚举项", dependencies=[Depends(get_current_user_id)])
-def delete_dict_item(item_id: int, db: Session = Depends(get_db)):
-    return dict_service.delete_dict_item(db, item_id)
+@router.delete("/items/{item_id}", summary="删除枚举项")
+def delete_dict_item(
+    item_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    return dict_service.delete_dict_item(db, item_id, operator_id=user_id, request=request)
 
 
 # ==================== 按编码查询（供前端表单下拉使用） ====================

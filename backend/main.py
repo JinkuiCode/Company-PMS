@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.api import auth, users, roles, menus, depts, projects, sso, erp, dicts
+from app.api import auth, users, roles, menus, depts, projects, sso, erp, dicts, operation_logs
 from app.api.auth import get_current_user_id, get_current_user_context
 from app.models.init_db import init_db
 from app.models.rbac import SysRoleMenu, SysMenu, SysUserRole
@@ -40,6 +40,7 @@ app.include_router(projects.router)
 app.include_router(sso.router)
 app.include_router(erp.router)
 app.include_router(dicts.router)
+app.include_router(operation_logs.router)
 
 
 @app.get("/api/my-menus", tags=["系统"])

@@ -1,6 +1,6 @@
 """RBAC CRUD 业务逻辑：用户、角色、菜单、部门"""
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from app.core.security import hash_password
 from app.models.user import SysUser, RememberToken
@@ -11,6 +11,7 @@ from app.schemas.rbac import (
     MenuCreate, MenuUpdate, MenuResponse,
     DeptCreate, DeptUpdate, DeptResponse,
 )
+from app.services.operation_log import record_operation_log, serialize_model
 
 
 # ==================== 用户管理 ====================
@@ -42,7 +43,7 @@ def get_user_list(db: Session, page: int = 1, page_size: int = 15, dept_id: int 
     return {"total": total, "items": items}
 
 
-def create_user(db: Session, data: UserCreate):
+def create_user(db: Session, data: UserCreate, operator_id: int | None = None, request: Request | None = None):
     """创建用户，可同时分配角色"""
     if db.query(SysUser).filter(SysUser.username == data.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
@@ -62,17 +63,31 @@ def create_user(db: Session, data: UserCreate):
     # 分配角色
     for role_id in data.role_ids:
         db.add(SysUserRole(user_id=user.id, role_id=role_id))
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="create",
+        entity_type="sys_user",
+        entity_id=user.id,
+        entity_name=user.real_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"创建用户：{user.real_name}",
+        after_data=serialize_model(user, extra={"role_ids": data.role_ids}),
+    )
     db.commit()
     return {"msg": "创建成功", "id": user.id}
 
 
-def update_user(db: Session, user_id: int, data: UserUpdate):
+def update_user(db: Session, user_id: int, data: UserUpdate, operator_id: int | None = None, request: Request | None = None):
     """更新用户，可重新分配角色。密码变更或账号禁用时清除所有免密令牌"""
     user = db.query(SysUser).filter(SysUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
     should_invalidate = False
+    before_role_ids = [ur.role_id for ur in db.query(SysUserRole).filter(SysUserRole.user_id == user_id).all()]
+    before = serialize_model(user, extra={"role_ids": before_role_ids})
 
     update_data = data.model_dump(exclude_unset=True, exclude={"role_ids", "password"})
 
@@ -98,17 +113,45 @@ def update_user(db: Session, user_id: int, data: UserUpdate):
         for role_id in data.role_ids:
             db.add(SysUserRole(user_id=user_id, role_id=role_id))
 
+    after_role_ids = data.role_ids if data.role_ids is not None else before_role_ids
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="update",
+        entity_type="sys_user",
+        entity_id=user.id,
+        entity_name=user.real_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"更新用户：{user.real_name}",
+        before_data=before,
+        after_data=serialize_model(user, extra={"role_ids": after_role_ids}),
+    )
     db.commit()
     return {"msg": "更新成功"}
 
 
-def delete_user(db: Session, user_id: int):
+def delete_user(db: Session, user_id: int, operator_id: int | None = None, request: Request | None = None):
     """删除用户及角色关联"""
     user = db.query(SysUser).filter(SysUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    role_ids = [ur.role_id for ur in db.query(SysUserRole).filter(SysUserRole.user_id == user_id).all()]
+    before = serialize_model(user, extra={"role_ids": role_ids})
     db.query(SysUserRole).filter(SysUserRole.user_id == user_id).delete()
     db.delete(user)
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="delete",
+        entity_type="sys_user",
+        entity_id=user_id,
+        entity_name=user.real_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"删除用户：{user.real_name}",
+        before_data=before,
+    )
     db.commit()
     return {"msg": "删除成功"}
 
@@ -120,7 +163,7 @@ def get_role_list(db: Session):
     return [RoleResponse.model_validate(r) for r in roles]
 
 
-def create_role(db: Session, data: RoleCreate):
+def create_role(db: Session, data: RoleCreate, operator_id: int | None = None, request: Request | None = None):
     """创建角色，可同时分配菜单权限"""
     if db.query(SysRole).filter(SysRole.role_code == data.role_code).first():
         raise HTTPException(status_code=400, detail="角色编码已存在")
@@ -132,16 +175,30 @@ def create_role(db: Session, data: RoleCreate):
     # 分配菜单权限
     for menu_id in data.menu_ids:
         db.add(SysRoleMenu(role_id=role.id, menu_id=menu_id))
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="create",
+        entity_type="sys_role",
+        entity_id=role.id,
+        entity_name=role.role_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"创建角色：{role.role_name}",
+        after_data=serialize_model(role, extra={"menu_ids": data.menu_ids}),
+    )
     db.commit()
     return {"msg": "创建成功", "id": role.id}
 
 
-def update_role(db: Session, role_id: int, data: RoleUpdate):
+def update_role(db: Session, role_id: int, data: RoleUpdate, operator_id: int | None = None, request: Request | None = None):
     """更新角色，可同时分配菜单权限"""
     role = db.query(SysRole).filter(SysRole.id == role_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
 
+    before_menu_ids = get_role_menu_ids(db, role_id)
+    before = serialize_model(role, extra={"menu_ids": before_menu_ids})
     update_data = data.model_dump(exclude_unset=True, exclude={"menu_ids"})
     for key, val in update_data.items():
         setattr(role, key, val)
@@ -152,18 +209,45 @@ def update_role(db: Session, role_id: int, data: RoleUpdate):
         for menu_id in data.menu_ids:
             db.add(SysRoleMenu(role_id=role_id, menu_id=menu_id))
 
+    after_menu_ids = data.menu_ids if data.menu_ids is not None else before_menu_ids
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="update",
+        entity_type="sys_role",
+        entity_id=role.id,
+        entity_name=role.role_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"更新角色：{role.role_name}",
+        before_data=before,
+        after_data=serialize_model(role, extra={"menu_ids": after_menu_ids}),
+    )
     db.commit()
     return {"msg": "更新成功"}
 
 
-def delete_role(db: Session, role_id: int):
+def delete_role(db: Session, role_id: int, operator_id: int | None = None, request: Request | None = None):
     """删除角色及关联数据"""
     role = db.query(SysRole).filter(SysRole.id == role_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
+    before = serialize_model(role, extra={"menu_ids": get_role_menu_ids(db, role_id)})
     db.query(SysUserRole).filter(SysUserRole.role_id == role_id).delete()
     db.query(SysRoleMenu).filter(SysRoleMenu.role_id == role_id).delete()
     db.delete(role)
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="delete",
+        entity_type="sys_role",
+        entity_id=role_id,
+        entity_name=role.role_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"删除角色：{role.role_name}",
+        before_data=before,
+    )
     db.commit()
     return {"msg": "删除成功"}
 
@@ -187,32 +271,72 @@ def get_menu_tree(db: Session) -> list[MenuResponse]:
     return tree
 
 
-def create_menu(db: Session, data: MenuCreate):
+def create_menu(db: Session, data: MenuCreate, operator_id: int | None = None, request: Request | None = None):
     menu = SysMenu(**data.model_dump())
     db.add(menu)
+    db.flush()
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="create",
+        entity_type="sys_menu",
+        entity_id=menu.id,
+        entity_name=menu.menu_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"创建菜单：{menu.menu_name}",
+        after_data=serialize_model(menu),
+    )
     db.commit()
     return {"msg": "创建成功", "id": menu.id}
 
 
-def update_menu(db: Session, menu_id: int, data: MenuUpdate):
+def update_menu(db: Session, menu_id: int, data: MenuUpdate, operator_id: int | None = None, request: Request | None = None):
     menu = db.query(SysMenu).filter(SysMenu.id == menu_id).first()
     if not menu:
         raise HTTPException(status_code=404, detail="菜单不存在")
+    before = serialize_model(menu)
     update_data = data.model_dump(exclude_unset=True)
     for key, val in update_data.items():
         setattr(menu, key, val)
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="update",
+        entity_type="sys_menu",
+        entity_id=menu.id,
+        entity_name=menu.menu_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"更新菜单：{menu.menu_name}",
+        before_data=before,
+        after_data=serialize_model(menu),
+    )
     db.commit()
     return {"msg": "更新成功"}
 
 
-def delete_menu(db: Session, menu_id: int):
+def delete_menu(db: Session, menu_id: int, operator_id: int | None = None, request: Request | None = None):
     menu = db.query(SysMenu).filter(SysMenu.id == menu_id).first()
     if not menu:
         raise HTTPException(status_code=404, detail="菜单不存在")
+    before = serialize_model(menu)
     # 删除子菜单
     db.query(SysMenu).filter(SysMenu.parent_id == menu_id).update({"parent_id": 0})
     db.query(SysRoleMenu).filter(SysRoleMenu.menu_id == menu_id).delete()
     db.delete(menu)
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="delete",
+        entity_type="sys_menu",
+        entity_id=menu_id,
+        entity_name=menu.menu_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"删除菜单：{menu.menu_name}",
+        before_data=before,
+    )
     db.commit()
     return {"msg": "删除成功"}
 
@@ -241,31 +365,71 @@ def get_dept_tree(db: Session) -> list[DeptResponse]:
     return tree
 
 
-def create_dept(db: Session, data: DeptCreate):
+def create_dept(db: Session, data: DeptCreate, operator_id: int | None = None, request: Request | None = None):
     dept = SysDept(**data.model_dump())
     db.add(dept)
+    db.flush()
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="create",
+        entity_type="sys_dept",
+        entity_id=dept.id,
+        entity_name=dept.dept_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"创建部门：{dept.dept_name}",
+        after_data=serialize_model(dept),
+    )
     db.commit()
     return {"msg": "创建成功", "id": dept.id}
 
 
-def update_dept(db: Session, dept_id: int, data: DeptUpdate):
+def update_dept(db: Session, dept_id: int, data: DeptUpdate, operator_id: int | None = None, request: Request | None = None):
     dept = db.query(SysDept).filter(SysDept.id == dept_id).first()
     if not dept:
         raise HTTPException(status_code=404, detail="部门不存在")
+    before = serialize_model(dept)
     update_data = data.model_dump(exclude_unset=True)
     for key, val in update_data.items():
         setattr(dept, key, val)
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="update",
+        entity_type="sys_dept",
+        entity_id=dept.id,
+        entity_name=dept.dept_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"更新部门：{dept.dept_name}",
+        before_data=before,
+        after_data=serialize_model(dept),
+    )
     db.commit()
     return {"msg": "更新成功"}
 
 
-def delete_dept(db: Session, dept_id: int):
+def delete_dept(db: Session, dept_id: int, operator_id: int | None = None, request: Request | None = None):
     dept = db.query(SysDept).filter(SysDept.id == dept_id).first()
     if not dept:
         raise HTTPException(status_code=404, detail="部门不存在")
     if db.query(SysUser).filter(SysUser.dept_id == dept_id).first():
         raise HTTPException(status_code=400, detail="部门下仍有用户，无法删除")
+    before = serialize_model(dept)
     db.query(SysDept).filter(SysDept.parent_id == dept_id).update({"parent_id": 0})
     db.delete(dept)
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="delete",
+        entity_type="sys_dept",
+        entity_id=dept_id,
+        entity_name=dept.dept_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"删除部门：{dept.dept_name}",
+        before_data=before,
+    )
     db.commit()
     return {"msg": "删除成功"}

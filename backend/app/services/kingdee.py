@@ -7,10 +7,12 @@ import logging
 from datetime import datetime
 from typing import Optional
 import httpx
+from fastapi import Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.project import PmsProjectArchive, ErpSyncLog
+from app.services.operation_log import record_operation_log, serialize_model
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +192,7 @@ class KingdeeClient:
         self.client.close()
 
 
-def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | None = None) -> dict:
+def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | None = None, request: Request | None = None) -> dict:
     """
     同步单个项目档案到金蝶 ERP
     :param db: 数据库会话
@@ -200,9 +202,23 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
     # 查询项目档案
     archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id).first()
     if not archive:
+        record_operation_log(
+            db,
+            module="ERP同步",
+            action="sync",
+            entity_type="pms_project_archive",
+            entity_id=archive_id,
+            operator_id=user_id,
+            request=request,
+            status="failed",
+            summary=f"同步项目档案失败：档案不存在（ID {archive_id}）",
+            error_msg="项目档案不存在",
+            commit=True,
+        )
         return {"success": False, "message": "项目档案不存在"}
 
     # 更新状态为 pending
+    before = serialize_model(archive)
     archive.erp_sync_status = "pending"
     db.commit()
 
@@ -225,6 +241,21 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
                 error_msg=error_msg
             )
             db.add(log)
+            record_operation_log(
+                db,
+                module="ERP同步",
+                action="sync",
+                entity_type="pms_project_archive",
+                entity_id=archive.id,
+                entity_name=archive.project_name,
+                operator_id=user_id,
+                request=request,
+                status="failed",
+                summary=f"同步项目档案失败：{archive.project_name}",
+                before_data=before,
+                after_data=serialize_model(archive),
+                error_msg=error_msg,
+            )
             db.commit()
 
             return {"success": False, "message": error_msg}
@@ -267,6 +298,19 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
                 error_msg=None
             )
             db.add(log)
+            record_operation_log(
+                db,
+                module="ERP同步",
+                action="sync",
+                entity_type="pms_project_archive",
+                entity_id=archive.id,
+                entity_name=archive.project_name,
+                operator_id=user_id,
+                request=request,
+                summary=f"同步项目档案成功：{archive.project_name}（{action}）",
+                before_data=before,
+                after_data=serialize_model(archive),
+            )
             db.commit()
 
             return {"success": True, "message": f"同步成功（{action}）"}
@@ -281,6 +325,21 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
                 error_msg=save_result["message"]
             )
             db.add(log)
+            record_operation_log(
+                db,
+                module="ERP同步",
+                action="sync",
+                entity_type="pms_project_archive",
+                entity_id=archive.id,
+                entity_name=archive.project_name,
+                operator_id=user_id,
+                request=request,
+                status="failed",
+                summary=f"同步项目档案失败：{archive.project_name}",
+                before_data=before,
+                after_data=serialize_model(archive),
+                error_msg=save_result["message"],
+            )
             db.commit()
 
             return save_result
@@ -297,6 +356,21 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
             error_msg=error_msg
         )
         db.add(log)
+        record_operation_log(
+            db,
+            module="ERP同步",
+            action="sync",
+            entity_type="pms_project_archive",
+            entity_id=archive.id,
+            entity_name=archive.project_name,
+            operator_id=user_id,
+            request=request,
+            status="failed",
+            summary=f"同步项目档案异常：{archive.project_name}",
+            before_data=before,
+            after_data=serialize_model(archive),
+            error_msg=error_msg,
+        )
         db.commit()
 
         return {"success": False, "message": error_msg}
@@ -305,7 +379,7 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
         client.close()
 
 
-def batch_sync_project_archives(db: Session, archive_ids: list[int], user_id: int | None = None) -> dict:
+def batch_sync_project_archives(db: Session, archive_ids: list[int], user_id: int | None = None, request: Request | None = None) -> dict:
     """
     批量同步项目档案到金蝶 ERP
     :param db: 数据库会话
@@ -317,20 +391,34 @@ def batch_sync_project_archives(db: Session, archive_ids: list[int], user_id: in
     errors = []
 
     for archive_id in archive_ids:
-        result = sync_project_archive_to_erp(db, archive_id, user_id=user_id)
+        result = sync_project_archive_to_erp(db, archive_id, user_id=user_id, request=request)
         if result["success"]:
             success_count += 1
         else:
             failed_count += 1
             errors.append(f"ID {archive_id}: {result['message']}")
 
-    return {
+    result = {
         "success": True,
         "message": f"批量同步完成：成功 {success_count}，失败 {failed_count}",
         "success_count": success_count,
         "failed_count": failed_count,
         "errors": errors
     }
+    record_operation_log(
+        db,
+        module="ERP同步",
+        action="batch_sync",
+        entity_type="pms_project_archive",
+        operator_id=user_id,
+        request=request,
+        status="success" if failed_count == 0 else "failed",
+        summary=result["message"],
+        after_data={"archive_ids": archive_ids, **result},
+        error_msg="；".join(errors) if errors else None,
+        commit=True,
+    )
+    return result
 
 
 def get_sync_logs(db: Session, archive_id: int, limit: int = 10) -> list:

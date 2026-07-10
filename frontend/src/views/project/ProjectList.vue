@@ -263,7 +263,15 @@
                 class="drawer-group-title"
                 :aria-expanded="drawerOpenGroups.includes(group.key)"
               >
-                <span>{{ group.label }}</span>
+                <span class="drawer-group-heading">
+                  <span>{{ group.label }}</span>
+                  <span
+                    v-if="drawerGroupSummary(group)"
+                    class="drawer-group-summary"
+                  >
+                    {{ drawerGroupSummary(group) }}
+                  </span>
+                </span>
                 <span class="drawer-field-count">已填写 {{ filledFieldCount(group) }}/{{ group.fields.length }} 项</span>
               </div>
             </template>
@@ -286,9 +294,15 @@
                     :content="drawerFieldReason(field)!.tooltip"
                     placement="top"
                   >
-                    <el-icon class="drawer-field-icon" aria-hidden="true">
-                      <component :is="drawerFieldReason(field)!.icon" />
-                    </el-icon>
+                    <button
+                      type="button"
+                      class="drawer-field-reason"
+                      :aria-label="`${field.label}：${drawerFieldReason(field)!.tooltip}`"
+                    >
+                      <el-icon aria-hidden="true">
+                        <component :is="drawerFieldReason(field)!.icon" />
+                      </el-icon>
+                    </button>
                   </el-tooltip>
                 </div>
 
@@ -373,7 +387,7 @@
                           <span class="drawer-progress-value">{{ sheetProgressValue(field) }}%</span>
                         </span>
                       </template>
-                      <span v-else class="drawer-field-text">{{ formatSheetFieldValue(field, group.key) }}</span>
+                      <span v-else class="drawer-field-text">{{ formatSheetFieldValue(field) }}</span>
                     </button>
                     <div
                       v-else
@@ -392,7 +406,7 @@
                           <span class="drawer-progress-value">{{ sheetProgressValue(field) }}%</span>
                         </span>
                       </template>
-                      <span v-else class="drawer-field-text">{{ formatSheetFieldValue(field, group.key) }}</span>
+                      <span v-else class="drawer-field-text">{{ formatSheetFieldValue(field) }}</span>
                     </div>
 
                     <el-tooltip
@@ -455,6 +469,7 @@ import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
+import { useAuthStore } from '@/stores/auth'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import request from '@/utils/request'
 
@@ -541,6 +556,7 @@ type ColumnPreferenceState = {
 }
 
 const localeText = chineseLocaleText
+const authStore = useAuthStore()
 const currentViewName = '总进度'
 const COLUMN_STORAGE_KEY = 'pms_project_progress_list_columns_v1'
 const progressSummaryMaxLength = 24
@@ -625,7 +641,12 @@ const sheetDetailLoading = ref(false)
 const sheetFieldGroupsMeta = ref<ProjectSheetGroupMeta[]>(buildFallbackSheetGroupMetas())
 const sheetMetadataLoaded = ref(false)
 const selectedSheetFieldKeys = ref<string[]>([])
+const columnPreferencesReady = ref(false)
+const columnPreferenceWritesEnabled = ref(false)
+const columnStateRestored = ref(false)
+const columnPreferenceOwnerId = ref<number | null>(null)
 const restoringColumnState = ref(false)
+const listRequestSerial = ref(0)
 
 const productLineOptions = ref<ListFilterOption[]>([])
 const allowedProductLines = ref<string[] | null>(null)
@@ -656,16 +677,7 @@ const sheetFieldMetaMap = computed(() => {
   return new Map(sheetFieldMetas.value.map(field => [field.key, field]))
 })
 
-const defaultSelectedSheetFieldKeys = computed(() => {
-  const quickAddableKeys = sheetFieldMetas.value
-    .filter(field => field.list_available && field.quick_addable && field.value_type !== 'long_text')
-    .map(field => field.key)
-  if (quickAddableKeys.length) return quickAddableKeys
-  return sheetFieldMetas.value
-    .filter(field => field.list_available)
-    .slice(0, 6)
-    .map(field => field.key)
-})
+const defaultSelectedSheetFieldKeys = computed<string[]>(() => [])
 
 const columnPickerGroups = computed(() => {
   return sheetFieldGroupsMeta.value.map(group => ({
@@ -690,7 +702,7 @@ const projectListFilterFields = computed<ListFilterField<ProjectRow>[]>(() => {
     { field: 'end_date', label: '原计划发货', type: 'date' },
   ]
 
-  const dynamicFields = sheetFieldMetas.value.map<ListFilterField<ProjectRow>>((field) => ({
+  const dynamicFields = sheetFieldMetas.value.filter(field => field.list_available).map<ListFilterField<ProjectRow>>((field) => ({
     field: field.key,
     label: `${sheetGroupLabel(field.group)} / ${field.label}`,
     type: toListFilterType(field.value_type),
@@ -766,7 +778,7 @@ watch([filterKeyword, filterStatus, filterDeptId, filterProductLine, customFilte
 }, { deep: true })
 
 watch(
-  () => sheetMetadataLoaded.value ? requestedSheetFieldKeys.value.join(',') : '__pending__',
+  () => columnPreferencesReady.value ? requestedSheetFieldKeys.value.join(',') : '__pending__',
   (signature) => {
     if (signature === '__pending__') return
     fetchList()
@@ -776,10 +788,9 @@ watch(
 
 watch(
   () => selectedSheetFieldKeys.value.join(','),
-  async () => {
+  () => {
+    if (!columnPreferenceWritesEnabled.value) return
     persistColumnPreferences()
-    await nextTick()
-    restoreColumnState()
   },
 )
 
@@ -1057,10 +1068,17 @@ function sheetFieldValue(row: ProjectRow | null | undefined, fieldKey: string) {
 }
 
 function summarizeProgressText(value: unknown) {
-  const text = String(value ?? '').trim().replace(/\s+/g, ' ')
+  const text = String(value ?? '').split(/\r?\n/, 1)[0].trim().replace(/\s+/g, ' ')
   if (!text) return '-'
   if (text.length <= progressSummaryMaxLength) return text
   return `${text.slice(0, progressSummaryMaxLength)}...`
+}
+
+function drawerGroupSummary(group: ProjectSheetGroup) {
+  if (group.key !== 'progress') return ''
+  const summaryField = group.fields.find(field => field.value_type === 'long_text' && field.value != null && field.value !== '')
+    || group.fields.find(field => field.value != null && field.value !== '')
+  return summaryField ? summarizeProgressText(summaryField.value) : ''
 }
 
 function isFilledValue(value: unknown) {
@@ -1118,13 +1136,13 @@ function dynamicColumnDefs(): Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>
           editable: false,
           sortable: true,
           valueGetter: (params: any) => sheetFieldValue(params.data, field.key),
-          tooltipValueGetter: (params: any) => formatSheetFieldValue({ ...field, value: sheetFieldValue(params.data, field.key) }, group.key),
+          tooltipValueGetter: (params: any) => formatSheetFieldValue({ ...field, value: sheetFieldValue(params.data, field.key) }),
           cellRenderer: (params: any) => {
             const value = sheetFieldValue(params.data, field.key)
             if (field.value_type === 'progress') {
               return renderProgressBar(clampProgress(numberValue(value)))
             }
-            const text = formatSheetFieldValue({ ...field, value }, group.key)
+            const text = formatSheetFieldValue({ ...field, value })
             return `<span class="sheet-column-text">${escapeHtml(text)}</span>`
           },
         })),
@@ -1242,8 +1260,26 @@ function refreshListScrollbar() {
   nextTick(() => projectListRef.value?.refreshScrollbar())
 }
 
+function columnPreferenceStorageKey() {
+  if (columnPreferenceOwnerId.value == null) return null
+  return `${COLUMN_STORAGE_KEY}:${columnPreferenceOwnerId.value}`
+}
+
+async function resolveColumnPreferenceOwner() {
+  if (!authStore.user) {
+    try {
+      await authStore.fetchUser()
+    } catch {
+      return
+    }
+  }
+  columnPreferenceOwnerId.value = authStore.user?.id ?? null
+}
+
 function readStoredColumnPreferences(): ColumnPreferenceState | null {
-  const raw = localStorage.getItem(COLUMN_STORAGE_KEY)
+  const storageKey = columnPreferenceStorageKey()
+  if (!storageKey) return null
+  const raw = localStorage.getItem(storageKey)
   if (!raw) return null
   try {
     return JSON.parse(raw)
@@ -1253,15 +1289,19 @@ function readStoredColumnPreferences(): ColumnPreferenceState | null {
 }
 
 function persistColumnPreferences() {
+  if (!columnPreferencesReady.value || !columnPreferenceWritesEnabled.value) return
+  const storageKey = columnPreferenceStorageKey()
+  if (!storageKey) return
   const state: ColumnPreferenceState = {
     selected_sheet_field_keys: [...selectedSheetFieldKeys.value],
     columnState: gridApi.value?.getColumnState?.() || [],
   }
-  localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(state))
+  localStorage.setItem(storageKey, JSON.stringify(state))
 }
 
 function restoreColumnState() {
-  if (!gridApi.value) return
+  if (!columnPreferencesReady.value || !gridApi.value || columnStateRestored.value) return
+  columnStateRestored.value = true
   const saved = readStoredColumnPreferences()
   if (!saved?.columnState?.length) return
   restoringColumnState.value = true
@@ -1276,34 +1316,44 @@ function restoreColumnState() {
 function restoreSelectedSheetFieldKeys() {
   const saved = readStoredColumnPreferences()
   const availableKeys = new Set(sheetFieldMetas.value.filter(field => field.list_available).map(field => field.key))
-  const savedKeys = saved?.selected_sheet_field_keys?.filter(key => availableKeys.has(key)) || []
-  selectedSheetFieldKeys.value = savedKeys.length ? savedKeys : [...defaultSelectedSheetFieldKeys.value]
+  const savedKeys = Array.isArray(saved?.selected_sheet_field_keys)
+    ? saved.selected_sheet_field_keys.filter(key => availableKeys.has(key))
+    : [...defaultSelectedSheetFieldKeys.value]
+  selectedSheetFieldKeys.value = savedKeys
+}
+
+function completeColumnPreferenceRestore() {
+  if (!columnPreferencesReady.value || !gridApi.value) return
+  restoreColumnState()
+  columnPreferenceWritesEnabled.value = true
 }
 
 function onGridReady(params: GridReadyEvent<ProjectRow>) {
   gridApi.value = params.api
-  restoreColumnState()
+  completeColumnPreferenceRestore()
   refreshListScrollbar()
 }
 
 function handleGridStructureChanged() {
   refreshListScrollbar()
-  if (restoringColumnState.value) return
+  if (!columnPreferenceWritesEnabled.value || restoringColumnState.value) return
   persistColumnPreferences()
 }
 
 function handleColumnResized(event: any) {
   refreshListScrollbar()
-  if (!event?.finished || restoringColumnState.value) return
+  if (!event?.finished || !columnPreferenceWritesEnabled.value || restoringColumnState.value) return
   persistColumnPreferences()
 }
 
 async function fetchList() {
+  const requestSerial = ++listRequestSerial.value
   const params: Record<string, unknown> = { page: 1, page_size: 1000 }
   if (requestedSheetFieldKeys.value.length) {
     params.sheet_field_keys = requestedSheetFieldKeys.value.join(',')
   }
   const res: any = await request.get('/projects', { params })
+  if (requestSerial !== listRequestSerial.value) return
   rowData.value = res.items.map(materializeStageProgressDefaults)
   serverTotal.value = res.total
   if (selectedProject.value) {
@@ -1414,9 +1464,6 @@ async function saveProjectField(row: ProjectRow | null | undefined, field: Edita
 }
 
 function setSavedText(row?: ProjectRow) {
-  if (row) {
-    selectedProject.value = rowData.value.find(item => item.id === row.id) || row
-  }
   const name = row?.project_code || row?.project_name || '项目'
   lastSavedText.value = `${name} 已自动保存`
   ElMessage.success('已自动保存')
@@ -1460,13 +1507,12 @@ function sheetProgressValue(field: ProjectSheetField) {
   return clampProgress(numberValue(field.value))
 }
 
-function formatSheetFieldValue(field: ProjectSheetField, groupKey = field.group) {
+function formatSheetFieldValue(field: ProjectSheetField) {
   const value = field.value
   if (value == null || value === '') return field.computed ? '待计算' : '-'
   if (field.key === 'node_status') return statusLabel(value as any)
   if (field.value_type === 'progress') return `${sheetProgressValue(field)}%`
   if (field.value_type === 'percent') return `${numberValue(value).toFixed(2)}%`
-  if (groupKey === 'progress') return summarizeProgressText(value)
   return String(value)
 }
 
@@ -1630,9 +1676,11 @@ async function handleSubmit() {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchOptions(), fetchSheetFieldMetadata()])
+  await Promise.all([fetchOptions(), fetchSheetFieldMetadata(), resolveColumnPreferenceOwner()])
   restoreSelectedSheetFieldKeys()
-  restoreColumnState()
+  columnPreferencesReady.value = true
+  await nextTick()
+  completeColumnPreferenceRestore()
 })
 </script>
 
@@ -1838,6 +1886,23 @@ onMounted(async () => {
   font-weight: 750;
 }
 
+.drawer-group-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.drawer-group-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pms-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .drawer-field-count {
   color: var(--pms-text-muted);
   font-size: 12px;
@@ -1867,6 +1932,7 @@ onMounted(async () => {
 }
 
 .drawer-field-header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1879,13 +1945,35 @@ onMounted(async () => {
 }
 
 .drawer-field-label {
+  padding-right: 20px;
   font-size: 12px;
   line-height: 1.5;
 }
 
-.drawer-field-icon {
+.drawer-field-reason {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--pms-radius-sm);
+  background: transparent;
   color: var(--pms-text-muted);
   font-size: 13px;
+  cursor: help;
+  transform: translateY(-50%);
+}
+
+.drawer-field-reason:hover,
+.drawer-field-reason:focus-visible {
+  color: var(--pms-primary);
+  background: var(--pms-primary-soft);
+  outline: none;
 }
 
 .drawer-field-content {

@@ -1,12 +1,13 @@
 """数据字典 CRUD 业务逻辑"""
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from app.models.dict import SysDict, SysDictItem
 from app.schemas.dict import (
     DictCreate, DictUpdate, DictResponse,
     DictItemCreate, DictItemUpdate, DictItemResponse,
 )
+from app.services.operation_log import record_operation_log, serialize_model
 
 
 # ==================== 字典分类 ====================
@@ -16,22 +17,36 @@ def get_dict_list(db: Session) -> list[DictResponse]:
     return [DictResponse.model_validate(d) for d in dicts]
 
 
-def create_dict(db: Session, data: DictCreate):
+def create_dict(db: Session, data: DictCreate, operator_id: int | None = None, request: Request | None = None):
     """创建字典分类"""
     if db.query(SysDict).filter(SysDict.dict_code == data.dict_code).first():
         raise HTTPException(status_code=400, detail="字典编码已存在")
     d = SysDict(**data.model_dump())
     db.add(d)
+    db.flush()
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="create",
+        entity_type="sys_dict",
+        entity_id=d.id,
+        entity_name=d.dict_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"创建数据字典：{d.dict_name}",
+        after_data=serialize_model(d),
+    )
     db.commit()
     db.refresh(d)
     return {"msg": "创建成功", "id": d.id}
 
 
-def update_dict(db: Session, dict_id: int, data: DictUpdate):
+def update_dict(db: Session, dict_id: int, data: DictUpdate, operator_id: int | None = None, request: Request | None = None):
     """更新字典分类"""
     d = db.query(SysDict).filter(SysDict.id == dict_id).first()
     if not d:
         raise HTTPException(status_code=404, detail="字典分类不存在")
+    before = serialize_model(d)
     update_data = data.model_dump(exclude_unset=True)
     # 检查编码唯一性
     if "dict_code" in update_data:
@@ -43,11 +58,24 @@ def update_dict(db: Session, dict_id: int, data: DictUpdate):
             raise HTTPException(status_code=400, detail="字典编码已存在")
     for key, val in update_data.items():
         setattr(d, key, val)
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="update",
+        entity_type="sys_dict",
+        entity_id=d.id,
+        entity_name=d.dict_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"更新数据字典：{d.dict_name}",
+        before_data=before,
+        after_data=serialize_model(d),
+    )
     db.commit()
     return {"msg": "更新成功"}
 
 
-def delete_dict(db: Session, dict_id: int):
+def delete_dict(db: Session, dict_id: int, operator_id: int | None = None, request: Request | None = None):
     """删除字典分类（有子项时不允许）"""
     d = db.query(SysDict).filter(SysDict.id == dict_id).first()
     if not d:
@@ -55,7 +83,20 @@ def delete_dict(db: Session, dict_id: int):
     item_count = db.query(SysDictItem).filter(SysDictItem.dict_id == dict_id).count()
     if item_count > 0:
         raise HTTPException(status_code=400, detail="该分类下还有枚举项，请先删除所有枚举项")
+    before = serialize_model(d)
     db.delete(d)
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="delete",
+        entity_type="sys_dict",
+        entity_id=dict_id,
+        entity_name=d.dict_name,
+        operator_id=operator_id,
+        request=request,
+        summary=f"删除数据字典：{d.dict_name}",
+        before_data=before,
+    )
     db.commit()
     return {"msg": "删除成功"}
 
@@ -67,7 +108,7 @@ def get_dict_items(db: Session, dict_id: int) -> list[DictItemResponse]:
     return [DictItemResponse.model_validate(i) for i in items]
 
 
-def create_dict_item(db: Session, dict_id: int, data: DictItemCreate):
+def create_dict_item(db: Session, dict_id: int, data: DictItemCreate, operator_id: int | None = None, request: Request | None = None):
     """新增枚举项"""
     d = db.query(SysDict).filter(SysDict.id == dict_id).first()
     if not d:
@@ -81,16 +122,30 @@ def create_dict_item(db: Session, dict_id: int, data: DictItemCreate):
         raise HTTPException(status_code=400, detail="该分类下已存在相同的存储值")
     item = SysDictItem(dict_id=dict_id, **data.model_dump())
     db.add(item)
+    db.flush()
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="create",
+        entity_type="sys_dict_item",
+        entity_id=item.id,
+        entity_name=item.item_label,
+        operator_id=operator_id,
+        request=request,
+        summary=f"创建字典项：{item.item_label}",
+        after_data=serialize_model(item, extra={"dict_name": d.dict_name}),
+    )
     db.commit()
     db.refresh(item)
     return {"msg": "创建成功", "id": item.id}
 
 
-def update_dict_item(db: Session, item_id: int, data: DictItemUpdate):
+def update_dict_item(db: Session, item_id: int, data: DictItemUpdate, operator_id: int | None = None, request: Request | None = None):
     """更新枚举项"""
     item = db.query(SysDictItem).filter(SysDictItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="枚举项不存在")
+    before = serialize_model(item)
     update_data = data.model_dump(exclude_unset=True)
     # 检查同分类下 value 唯一性
     if "item_value" in update_data:
@@ -103,15 +158,29 @@ def update_dict_item(db: Session, item_id: int, data: DictItemUpdate):
             raise HTTPException(status_code=400, detail="该分类下已存在相同的存储值")
     for key, val in update_data.items():
         setattr(item, key, val)
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="update",
+        entity_type="sys_dict_item",
+        entity_id=item.id,
+        entity_name=item.item_label,
+        operator_id=operator_id,
+        request=request,
+        summary=f"更新字典项：{item.item_label}",
+        before_data=before,
+        after_data=serialize_model(item),
+    )
     db.commit()
     return {"msg": "更新成功"}
 
 
-def delete_dict_item(db: Session, item_id: int):
+def delete_dict_item(db: Session, item_id: int, operator_id: int | None = None, request: Request | None = None):
     """删除字典项（枚举定义且被引用时拒绝）"""
     item = db.query(SysDictItem).filter(SysDictItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="字典项不存在")
+    before = serialize_model(item)
     # 仅对枚举定义（有 field_name 的分类）做引用检查
     d = db.query(SysDict).filter(SysDict.id == item.dict_id).first()
     if d and d.field_name and d.table_name:
@@ -130,6 +199,18 @@ def delete_dict_item(db: Session, item_id: int):
         except Exception:
             pass
     db.delete(item)
+    record_operation_log(
+        db,
+        module="系统管理",
+        action="delete",
+        entity_type="sys_dict_item",
+        entity_id=item_id,
+        entity_name=item.item_label,
+        operator_id=operator_id,
+        request=request,
+        summary=f"删除字典项：{item.item_label}",
+        before_data=before,
+    )
     db.commit()
     return {"msg": "删除成功"}
 

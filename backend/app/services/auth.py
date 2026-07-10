@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 
 from app.models.user import SysUser, RememberToken
 from app.schemas.user import LoginRequest, TokenResponse, UserInfo
@@ -12,17 +12,48 @@ from app.core.security import (
     hash_remember_token,
 )
 from app.core.config import settings
+from app.services.operation_log import record_operation_log
 
 
-def login(db: Session, req: LoginRequest) -> TokenResponse:
+def login(db: Session, req: LoginRequest, request: Request | None = None) -> TokenResponse:
     """用户登录，验证密码后返回 JWT 令牌。勾选记住我时额外返回长期令牌"""
     user = db.query(SysUser).filter(SysUser.username == req.username).first()
     if not user or not verify_password(req.password, user.password_hash):
+        record_operation_log(
+            db,
+            module="认证",
+            action="login",
+            entity_type="sys_user",
+            entity_id=user.id if user else None,
+            entity_name=user.real_name if user else req.username,
+            operator_id=user.id if user else None,
+            request=request,
+            status="failed",
+            summary=f"登录失败：{req.username}",
+            after_data={"username": req.username, "remember_me": req.remember_me},
+            error_msg="用户名或密码错误",
+            commit=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
         )
     if user.status == 0:
+        record_operation_log(
+            db,
+            module="认证",
+            action="login",
+            entity_type="sys_user",
+            entity_id=user.id,
+            entity_name=user.real_name,
+            operator_id=user.id,
+            request=request,
+            status="failed",
+            summary=f"登录失败：{user.real_name}",
+            after_data={"username": req.username, "remember_me": req.remember_me},
+            error_msg="账号已被禁用",
+            commit=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账号已被禁用，请联系管理员",
@@ -44,10 +75,23 @@ def login(db: Session, req: LoginRequest) -> TokenResponse:
         db.commit()
         remember_token = raw_token
 
+    record_operation_log(
+        db,
+        module="认证",
+        action="login",
+        entity_type="sys_user",
+        entity_id=user.id,
+        entity_name=user.real_name,
+        operator_id=user.id,
+        request=request,
+        summary=f"登录成功：{user.real_name}",
+        after_data={"username": user.username, "remember_me": req.remember_me},
+        commit=True,
+    )
     return TokenResponse(access_token=access_token, remember_token=remember_token)
 
 
-def auto_login(db: Session, remember_token: str) -> TokenResponse:
+def auto_login(db: Session, remember_token: str, request: Request | None = None) -> TokenResponse:
     """使用免密令牌自动登录，验证通过后签发新的 JWT，同时滚动刷新令牌"""
     token_hash = hash_remember_token(remember_token)
     record = (
@@ -57,14 +101,41 @@ def auto_login(db: Session, remember_token: str) -> TokenResponse:
     )
 
     if not record:
+        record_operation_log(
+            db,
+            module="认证",
+            action="auto_login",
+            entity_type="sys_user",
+            request=request,
+            status="failed",
+            summary="自动登录失败：免密令牌无效",
+            after_data={"remember_token": remember_token},
+            error_msg="免密令牌无效",
+            commit=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="免密令牌无效",
         )
 
     if record.expires_at < datetime.utcnow():
+        user_id = record.user_id
         db.delete(record)
         db.commit()
+        record_operation_log(
+            db,
+            module="认证",
+            action="auto_login",
+            entity_type="sys_user",
+            entity_id=user_id,
+            operator_id=user_id,
+            request=request,
+            status="failed",
+            summary="自动登录失败：免密令牌已过期",
+            after_data={"remember_token": remember_token},
+            error_msg="免密令牌已过期",
+            commit=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="免密令牌已过期，请重新登录",
@@ -73,9 +144,25 @@ def auto_login(db: Session, remember_token: str) -> TokenResponse:
     # 验证用户状态
     user = db.query(SysUser).filter(SysUser.id == record.user_id).first()
     if not user or user.status == 0:
+        user_id = record.user_id
         if not user:
             db.delete(record)
             db.commit()
+        record_operation_log(
+            db,
+            module="认证",
+            action="auto_login",
+            entity_type="sys_user",
+            entity_id=user_id,
+            entity_name=user.real_name if user else None,
+            operator_id=user_id if user else None,
+            request=request,
+            status="failed",
+            summary="自动登录失败：账号不存在或已禁用",
+            after_data={"remember_token": remember_token},
+            error_msg="账号不存在或已被禁用",
+            commit=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账号不存在或已被禁用",
@@ -87,6 +174,19 @@ def auto_login(db: Session, remember_token: str) -> TokenResponse:
     record.expires_at = datetime.utcnow() + timedelta(days=settings.REMEMBER_TOKEN_EXPIRE_DAYS)
     db.commit()
 
+    record_operation_log(
+        db,
+        module="认证",
+        action="auto_login",
+        entity_type="sys_user",
+        entity_id=user.id,
+        entity_name=user.real_name,
+        operator_id=user.id,
+        request=request,
+        summary=f"自动登录成功：{user.real_name}",
+        after_data={"username": user.username},
+        commit=True,
+    )
     return TokenResponse(access_token=access_token, remember_token=None)
 
 

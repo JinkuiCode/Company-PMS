@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -14,19 +14,35 @@ def list_roles(db: Session = Depends(get_db)):
     return rbac_service.get_role_list(db)
 
 
-@router.post("", summary="创建角色", dependencies=[Depends(get_current_user_id)])
-def create_role(data: RoleCreate, db: Session = Depends(get_db)):
-    return rbac_service.create_role(db, data)
+@router.post("", summary="创建角色")
+def create_role(
+    data: RoleCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    return rbac_service.create_role(db, data, operator_id=user_id, request=request)
 
 
-@router.put("/{role_id}", summary="更新角色", dependencies=[Depends(get_current_user_id)])
-def update_role(role_id: int, data: RoleUpdate, db: Session = Depends(get_db)):
-    return rbac_service.update_role(db, role_id, data)
+@router.put("/{role_id}", summary="更新角色")
+def update_role(
+    role_id: int,
+    data: RoleUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    return rbac_service.update_role(db, role_id, data, operator_id=user_id, request=request)
 
 
-@router.delete("/{role_id}", summary="删除角色", dependencies=[Depends(get_current_user_id)])
-def delete_role(role_id: int, db: Session = Depends(get_db)):
-    return rbac_service.delete_role(db, role_id)
+@router.delete("/{role_id}", summary="删除角色")
+def delete_role(
+    role_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    return rbac_service.delete_role(db, role_id, operator_id=user_id, request=request)
 
 
 @router.get("/{role_id}/menus", summary="获取角色菜单权限")
