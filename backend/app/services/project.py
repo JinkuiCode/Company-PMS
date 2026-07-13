@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from fastapi import HTTPException, Request
 
 from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive, PmsProjectSheetDetail
@@ -17,6 +17,7 @@ from app.schemas.project import (
     ArchiveCreate, ArchiveUpdate, ArchiveResponse, ArchiveOption, ProjectSheetDetailUpdate,
 )
 from app.services.operation_log import record_operation_log, serialize_model
+from app.services.enum_registry import validate_enum_value
 from app.services.project_sheet_fields import (
     build_sheet_detail_groups,
     compute_sheet_field_value,
@@ -46,20 +47,127 @@ def _apply_project_scope(query, db: Session, scope_context: dict | None = None):
     elif scope == 2:
         if scope_context["dept_id"]:
             query = query.filter(PmsProject.dept_id == scope_context["dept_id"])
+        else:
+            query = query.filter(PmsProject.id == -1)
     elif scope == 3:
         if scope_context["dept_id"]:
             allowed_depts = get_child_dept_ids(db, scope_context["dept_id"])
             query = query.filter(PmsProject.dept_id.in_(allowed_depts))
+        else:
+            query = query.filter(PmsProject.id == -1)
 
     allowed_lines = scope_context.get("product_lines")
     if allowed_lines is not None:
         query = query.outerjoin(PmsProjectArchive, PmsProject.archive_id == PmsProjectArchive.id).filter(
             or_(
                 PmsProjectArchive.product_line.in_(allowed_lines),
-                PmsProject.product_line.in_(allowed_lines),
+                and_(
+                    PmsProjectArchive.product_line.is_(None),
+                    PmsProject.product_line.in_(allowed_lines),
+                ),
             )
         )
     return query
+
+
+def _apply_archive_scope(query, db: Session, scope_context: dict | None = None):
+    if not scope_context:
+        return query
+
+    scope = scope_context["data_scope"]
+    if scope == 1:
+        query = query.filter(PmsProjectArchive.manager_id == scope_context["user_id"])
+    elif scope in (2, 3):
+        dept_id = scope_context.get("dept_id")
+        if not dept_id:
+            return query.filter(PmsProjectArchive.id == -1)
+        allowed_depts = [dept_id] if scope == 2 else get_child_dept_ids(db, dept_id)
+        manager_ids = [user_id for (user_id,) in db.query(SysUser.id).filter(
+            SysUser.dept_id.in_(allowed_depts),
+            SysUser.status == 1,
+        ).all()]
+        query = query.filter(PmsProjectArchive.manager_id.in_(manager_ids or [-1]))
+
+    allowed_lines = scope_context.get("product_lines")
+    if allowed_lines is not None:
+        query = query.filter(PmsProjectArchive.product_line.in_(allowed_lines or ["__none__"]))
+    return query
+
+
+def ensure_project_access(db: Session, project_id: int, scope_context: dict | None = None) -> PmsProject:
+    project = _apply_project_scope(
+        db.query(PmsProject).filter(PmsProject.id == project_id), db, scope_context
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在或无权访问")
+    return project
+
+
+def ensure_archive_access(
+    db: Session,
+    archive_id: int,
+    scope_context: dict | None = None,
+) -> PmsProjectArchive:
+    archive = _apply_archive_scope(
+        db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id), db, scope_context
+    ).first()
+    if not archive:
+        raise HTTPException(status_code=404, detail="档案不存在或无权访问")
+    return archive
+
+
+def _ensure_product_line_allowed(product_line: str | None, scope_context: dict | None) -> None:
+    if not scope_context:
+        return
+    allowed_lines = scope_context.get("product_lines")
+    if allowed_lines is not None and product_line not in allowed_lines:
+        raise HTTPException(status_code=404, detail="产品线超出当前数据权限")
+
+
+def _ensure_project_assignment_allowed(
+    db: Session,
+    *,
+    dept_id: int | None,
+    pm_id: int | None,
+    product_line: str | None,
+    scope_context: dict | None,
+) -> None:
+    if not scope_context:
+        return
+    scope = scope_context["data_scope"]
+    if scope == 1 and pm_id != scope_context["user_id"]:
+        raise HTTPException(status_code=404, detail="项目负责人超出当前数据权限")
+    if scope in (2, 3):
+        current_dept = scope_context.get("dept_id")
+        allowed_depts = [] if not current_dept else (
+            [current_dept] if scope == 2 else get_child_dept_ids(db, current_dept)
+        )
+        if dept_id not in allowed_depts:
+            raise HTTPException(status_code=404, detail="项目部门超出当前数据权限")
+    _ensure_product_line_allowed(product_line, scope_context)
+
+
+def _ensure_archive_assignment_allowed(
+    db: Session,
+    *,
+    manager_id: int | None,
+    product_line: str | None,
+    scope_context: dict | None,
+) -> None:
+    if not scope_context:
+        return
+    scope = scope_context["data_scope"]
+    if scope == 1 and manager_id != scope_context["user_id"]:
+        raise HTTPException(status_code=404, detail="档案负责人超出当前数据权限")
+    if scope in (2, 3):
+        manager = db.query(SysUser).filter(SysUser.id == manager_id, SysUser.status == 1).first()
+        current_dept = scope_context.get("dept_id")
+        allowed_depts = [] if not current_dept else (
+            [current_dept] if scope == 2 else get_child_dept_ids(db, current_dept)
+        )
+        if not manager or manager.dept_id not in allowed_depts:
+            raise HTTPException(status_code=404, detail="档案负责人超出当前数据权限")
+    _ensure_product_line_allowed(product_line, scope_context)
 
 
 def _jsonable(value):
@@ -260,42 +368,123 @@ def update_project_sheet_detail(
         raise HTTPException(status_code=404, detail="项目不存在或无权访问")
 
     try:
-        update_data = validate_sheet_detail_updates(data.values)
+        detail_updates = validate_sheet_detail_updates(data.values)
+        project_updates = validate_project_progress_workbench_updates(
+            data.project_values.model_dump(exclude_unset=True)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    if not detail_updates and not project_updates:
+        return get_project_sheet_detail(db, project_id, scope_context=scope_context)
+
+    if "status" in project_updates:
+        validate_enum_value(
+            db,
+            "project_status",
+            project_updates["status"],
+            current_value=project.status,
+        )
+
     detail = db.query(PmsProjectSheetDetail).filter(PmsProjectSheetDetail.project_id == project_id).first()
-    if not detail:
-        detail = PmsProjectSheetDetail(project_id=project_id, created_by=operator_id, updated_by=operator_id)
-        db.add(detail)
-        db.flush()
-
     before_data = _load_detail_data(detail)
-    after_data = {**before_data, **update_data}
-    detail.detail_data = _dump_detail_data(after_data)
-    detail.updated_by = operator_id
+    after_data = {**before_data, **detail_updates}
+    before_snapshot = {
+        **{f"project.{key}": getattr(project, key) for key in project_updates},
+        **{f"detail.{key}": before_data.get(key) for key in detail_updates},
+    }
 
-    record_operation_log(
-        db,
-        module="项目进度",
-        action="update",
-        entity_type="pms_project_sheet_detail",
-        entity_id=detail.id,
-        entity_name=project.project_name,
-        operator_id=operator_id,
-        request=request,
-        summary=f"更新项目总表详情：{project.project_name}",
-        before_data=before_data,
-        after_data=after_data,
-    )
-    db.commit()
-    return get_project_sheet_detail(db, project_id)
+    try:
+        for key, value in project_updates.items():
+            setattr(project, key, value)
+
+        if detail_updates:
+            if not detail:
+                detail = PmsProjectSheetDetail(project_id=project_id, created_by=operator_id, updated_by=operator_id)
+                db.add(detail)
+                db.flush()
+            detail.detail_data = _dump_detail_data(after_data)
+            detail.updated_by = operator_id
+
+        db.flush()
+        after_snapshot = {
+            **{f"project.{key}": getattr(project, key) for key in project_updates},
+            **{f"detail.{key}": after_data.get(key) for key in detail_updates},
+        }
+        record_operation_log(
+            db,
+            module="项目进度",
+            action="update",
+            entity_type="pms_project",
+            entity_id=project.id,
+            entity_name=project.project_name,
+            operator_id=operator_id,
+            request=request,
+            summary=f"统一保存项目进度详情：{project.project_name}",
+            before_data=before_snapshot,
+            after_data=after_snapshot,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return get_project_sheet_detail(db, project_id, scope_context=scope_context)
 
 
-def create_project(db: Session, data: ProjectCreate, operator_id: int | None = None, request: Request | None = None):
+PROJECT_PROGRESS_WORKBENCH_EDITABLE_FIELDS = {
+    "status",
+    "start_date",
+    "end_date",
+    "design_progress",
+    "order_progress",
+    "kit_progress",
+    "frame_progress",
+    "dryer_progress",
+    "assembly_progress",
+    "test_progress",
+}
+
+
+def validate_project_progress_workbench_updates(values: dict[str, Any]) -> dict[str, Any]:
+    """阻止项目进度页绕过字段来源修改项目档案或主数据。"""
+    accepted: dict[str, Any] = {}
+    for key, value in values.items():
+        if key not in PROJECT_PROGRESS_WORKBENCH_EDITABLE_FIELDS:
+            if key in {"project_code", "project_name", "product_line", "archive_id", "dept_id", "pm_id", "budget"}:
+                raise ValueError(f"字段不可编辑：{key}")
+            raise ValueError(f"未知字段：{key}")
+        accepted[key] = value
+    return accepted
+
+
+def create_project(
+    db: Session,
+    data: ProjectCreate,
+    operator_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+):
     if db.query(PmsProject).filter(PmsProject.project_code == data.project_code).first():
         raise HTTPException(status_code=400, detail="项目编号已存在")
-    proj = PmsProject(**data.model_dump())
+    values = data.model_dump()
+    archive = None
+    if values.get("archive_id"):
+        archive = ensure_archive_access(db, values["archive_id"], scope_context)
+    effective_product_line = archive.product_line if archive and archive.product_line else values.get("product_line")
+    validate_enum_value(db, "project_status", values.get("status"))
+    if archive and archive.product_line:
+        values["product_line"] = archive.product_line
+    else:
+        validate_enum_value(db, "product_line", values.get("product_line"))
+    _ensure_project_assignment_allowed(
+        db,
+        dept_id=values.get("dept_id"),
+        pm_id=values.get("pm_id"),
+        product_line=effective_product_line,
+        scope_context=scope_context,
+    )
+    proj = PmsProject(**values)
     db.add(proj)
     db.flush()
     record_operation_log(
@@ -315,41 +504,38 @@ def create_project(db: Session, data: ProjectCreate, operator_id: int | None = N
     return {"msg": "创建成功", "id": proj.id}
 
 
-def update_project(db: Session, project_id: int, data: ProjectUpdate, user_id: int | None = None, request: Request | None = None):
-    proj = db.query(PmsProject).filter(PmsProject.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="项目不存在")
+def update_project(
+    db: Session,
+    project_id: int,
+    data: ProjectUpdate,
+    user_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+):
+    proj = ensure_project_access(db, project_id, scope_context)
     before = serialize_model(proj)
     update_data = data.model_dump(exclude_unset=True)
+    if "product_line" in update_data:
+        raise HTTPException(status_code=400, detail="产品线来自项目档案，请在项目档案中维护")
+    if "status" in update_data:
+        validate_enum_value(db, "project_status", update_data["status"], current_value=proj.status)
 
-    product_line_is_set = "product_line" in update_data
-    product_line_value = update_data.pop("product_line", None)
+    archive = (
+        db.query(PmsProjectArchive).filter(PmsProjectArchive.id == proj.archive_id).first()
+        if proj.archive_id else None
+    )
+    effective_product_line = archive.product_line if archive and archive.product_line else proj.product_line
+
+    _ensure_project_assignment_allowed(
+        db,
+        dept_id=update_data.get("dept_id", proj.dept_id),
+        pm_id=update_data.get("pm_id", proj.pm_id),
+        product_line=effective_product_line,
+        scope_context=scope_context,
+    )
 
     for key, val in update_data.items():
         setattr(proj, key, val)
-
-    if product_line_is_set:
-        proj.product_line = product_line_value
-        if proj.archive_id:
-            archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == proj.archive_id).first()
-            if archive:
-                archive_before = serialize_model(archive)
-                archive.product_line = product_line_value
-                if user_id is not None:
-                    archive.updated_by = user_id
-                record_operation_log(
-                    db,
-                    module="项目档案",
-                    action="update",
-                    entity_type="pms_project_archive",
-                    entity_id=archive.id,
-                    entity_name=archive.project_name,
-                    operator_id=user_id,
-                    request=request,
-                    summary=f"项目进度联动更新档案产品线：{archive.project_name}",
-                    before_data=archive_before,
-                    after_data=serialize_model(archive),
-                )
 
     record_operation_log(
         db,
@@ -368,10 +554,14 @@ def update_project(db: Session, project_id: int, data: ProjectUpdate, user_id: i
     return {"msg": "更新成功"}
 
 
-def delete_project(db: Session, project_id: int, operator_id: int | None = None, request: Request | None = None):
-    proj = db.query(PmsProject).filter(PmsProject.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="项目不存在")
+def delete_project(
+    db: Session,
+    project_id: int,
+    operator_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+):
+    proj = ensure_project_access(db, project_id, scope_context)
     before = serialize_model(proj, extra={"task_count": db.query(PmsTask).filter(PmsTask.project_id == project_id).count()})
     db.query(PmsTask).filter(PmsTask.project_id == project_id).delete()
     db.delete(proj)
@@ -394,23 +584,8 @@ def delete_project(db: Session, project_id: int, operator_id: int | None = None,
 # ==================== 任务 & 进度 ====================
 def get_tasks(db: Session, project_id: int,
               scope_context: dict | None = None) -> list[TaskResponse]:
-    # JOIN 项目表以应用数据权限
-    query = db.query(PmsTask).join(PmsProject, PmsTask.project_id == PmsProject.id)
-
-    if scope_context:
-        scope = scope_context["data_scope"]
-        if scope == 1:
-            query = query.filter(PmsProject.pm_id == scope_context["user_id"])
-        elif scope == 2:
-            if scope_context["dept_id"]:
-                query = query.filter(PmsProject.dept_id == scope_context["dept_id"])
-        elif scope == 3:
-            if scope_context["dept_id"]:
-                allowed_depts = get_child_dept_ids(db, scope_context["dept_id"])
-                query = query.filter(PmsProject.dept_id.in_(allowed_depts))
-        # scope == 4: 不附加过滤
-
-    query = query.filter(PmsTask.project_id == project_id)
+    ensure_project_access(db, project_id, scope_context)
+    query = db.query(PmsTask).filter(PmsTask.project_id == project_id)
     tasks = query.order_by(PmsTask.sort, PmsTask.id).all()
     result = []
     for t in tasks:
@@ -425,7 +600,15 @@ def get_tasks(db: Session, project_id: int,
     return result
 
 
-def create_task(db: Session, data: TaskCreate, operator_id: int | None = None, request: Request | None = None):
+def create_task(
+    db: Session,
+    data: TaskCreate,
+    operator_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+):
+    ensure_project_access(db, data.project_id, scope_context)
+    validate_enum_value(db, "task_status", data.status)
     task = PmsTask(**data.model_dump())
     db.add(task)
     db.flush()
@@ -446,15 +629,28 @@ def create_task(db: Session, data: TaskCreate, operator_id: int | None = None, r
     return {"msg": "创建成功", "id": task.id}
 
 
-def update_task(db: Session, task_id: int, data: TaskUpdate, operator_id: int, request: Request | None = None):
+def update_task(
+    db: Session,
+    task_id: int,
+    data: TaskUpdate,
+    operator_id: int,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+    expected_project_id: int | None = None,
+):
     task = db.query(PmsTask).filter(PmsTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    if expected_project_id is not None and task.project_id != expected_project_id:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+    ensure_project_access(db, task.project_id, scope_context)
 
     old_progress = task.progress
     before = serialize_model(task)
 
     update_data = data.model_dump(exclude_unset=True)
+    if "status" in update_data:
+        validate_enum_value(db, "task_status", update_data["status"], current_value=task.status)
     for key, val in update_data.items():
         setattr(task, key, val)
 
@@ -483,10 +679,20 @@ def update_task(db: Session, task_id: int, data: TaskUpdate, operator_id: int, r
     return {"msg": "更新成功", "id": task.id}
 
 
-def delete_task(db: Session, task_id: int, operator_id: int | None = None, request: Request | None = None):
+def delete_task(
+    db: Session,
+    task_id: int,
+    operator_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+    expected_project_id: int | None = None,
+):
     task = db.query(PmsTask).filter(PmsTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    if expected_project_id is not None and task.project_id != expected_project_id:
+        raise HTTPException(status_code=404, detail="任务不存在或无权访问")
+    ensure_project_access(db, task.project_id, scope_context)
     before = serialize_model(task)
     db.query(PmsProgressLog).filter(PmsProgressLog.task_id == task_id).delete()
     db.delete(task)
@@ -520,9 +726,10 @@ def get_progress_logs(db: Session, task_id: int) -> list[dict]:
 def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
                      keyword: str | None = None, status: int | None = None,
                      product_line: str | None = None,
-                     allowed_lines: list[str] | None = None):
+                     allowed_lines: list[str] | None = None,
+                     scope_context: dict | None = None):
     """查询项目档案列表"""
-    query = db.query(PmsProjectArchive)
+    query = _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context)
 
     if keyword:
         query = query.filter(
@@ -562,17 +769,35 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
     return {"total": total, "items": items}
 
 
-def get_archive_options(db: Session):
+def get_archive_options(db: Session, scope_context: dict | None = None):
     """获取档案下拉选项（精简版，不分页）"""
-    rows = db.query(PmsProjectArchive).order_by(PmsProjectArchive.project_code).all()
+    rows = _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context).order_by(
+        PmsProjectArchive.project_code
+    ).all()
     return [ArchiveOption(id=a.id, project_code=a.project_code, project_name=a.project_name) for a in rows]
 
 
-def create_archive(db: Session, data: ArchiveCreate, user_id: int, request: Request | None = None):
+def create_archive(
+    db: Session,
+    data: ArchiveCreate,
+    user_id: int,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+):
     """创建项目档案"""
     if db.query(PmsProjectArchive).filter(PmsProjectArchive.project_code == data.project_code).first():
         raise HTTPException(status_code=400, detail="项目编号已存在")
-    archive = PmsProjectArchive(**data.model_dump(), created_by=user_id, updated_by=user_id)
+    values = data.model_dump()
+    validate_enum_value(db, "archive_status", values.get("status"))
+    validate_enum_value(db, "product_line", values.get("product_line"))
+    validate_enum_value(db, "product_type", values.get("product_type"))
+    _ensure_archive_assignment_allowed(
+        db,
+        manager_id=values.get("manager_id"),
+        product_line=values.get("product_line"),
+        scope_context=scope_context,
+    )
+    archive = PmsProjectArchive(**values, created_by=user_id, updated_by=user_id)
     db.add(archive)
     db.flush()
     record_operation_log(
@@ -592,14 +817,41 @@ def create_archive(db: Session, data: ArchiveCreate, user_id: int, request: Requ
     return {"msg": "创建成功", "id": archive.id}
 
 
-def update_archive(db: Session, archive_id: int, data: ArchiveUpdate, user_id: int, request: Request | None = None):
+def update_archive(
+    db: Session,
+    archive_id: int,
+    data: ArchiveUpdate,
+    user_id: int,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+):
     """更新项目档案"""
-    archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id).first()
-    if not archive:
-        raise HTTPException(status_code=404, detail="档案不存在")
+    archive = ensure_archive_access(db, archive_id, scope_context)
     before = serialize_model(archive)
 
     update_data = data.model_dump(exclude_unset=True)
+    if "status" in update_data:
+        validate_enum_value(db, "archive_status", update_data["status"], current_value=archive.status)
+    if "product_line" in update_data:
+        validate_enum_value(
+            db,
+            "product_line",
+            update_data["product_line"],
+            current_value=archive.product_line,
+        )
+    if "product_type" in update_data:
+        validate_enum_value(
+            db,
+            "product_type",
+            update_data["product_type"],
+            current_value=archive.product_type,
+        )
+    _ensure_archive_assignment_allowed(
+        db,
+        manager_id=update_data.get("manager_id", archive.manager_id),
+        product_line=update_data.get("product_line", archive.product_line),
+        scope_context=scope_context,
+    )
     # 项目编号唯一性校验
     if "project_code" in update_data and update_data["project_code"] != archive.project_code:
         if db.query(PmsProjectArchive).filter(PmsProjectArchive.project_code == update_data["project_code"]).first():
@@ -625,11 +877,15 @@ def update_archive(db: Session, archive_id: int, data: ArchiveUpdate, user_id: i
     return {"msg": "更新成功"}
 
 
-def delete_archive(db: Session, archive_id: int, operator_id: int | None = None, request: Request | None = None):
+def delete_archive(
+    db: Session,
+    archive_id: int,
+    operator_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+):
     """删除项目档案（需检查是否被项目引用）"""
-    archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id).first()
-    if not archive:
-        raise HTTPException(status_code=404, detail="档案不存在")
+    archive = ensure_archive_access(db, archive_id, scope_context)
     before = serialize_model(archive)
 
     # 检查是否被项目进度引用

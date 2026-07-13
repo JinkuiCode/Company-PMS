@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Folder, List, TrendCharts, CircleCheck } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
@@ -93,6 +93,7 @@ import { PieChart, BarChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { getDashboardStats, type DashboardStats } from '@/api/dashboard'
+import { loadEnumOptions } from '@/composables/useEnumOptions'
 
 // 按需注册 ECharts 模块
 use([PieChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer])
@@ -114,11 +115,11 @@ const completionRate = computed(() => {
   return Math.round((stats.value.status_distribution.finished / total) * 100)
 })
 
-const statusMap: Record<number, { text: string; type: string }> = {
-  1: { text: '进行中', type: 'primary' },
-  2: { text: '已完结', type: 'success' },
-  3: { text: '暂停', type: 'warning' },
-}
+const statusMap = reactive<Record<number, { text: string; type: string }>>({
+  1: { text: '-', type: 'primary' },
+  2: { text: '-', type: 'success' },
+  3: { text: '-', type: 'warning' },
+})
 
 function progressColor(percentage: number): string {
   if (percentage < 30) return '#F56C6C'
@@ -139,9 +140,9 @@ const statusPieOption = computed(() => ({
     label: { show: false },
     emphasis: { label: { show: true, fontSize: 16, fontWeight: 'bold' } },
     data: [
-      { value: stats.value.status_distribution.ongoing, name: '进行中', itemStyle: { color: '#409EFF' } },
-      { value: stats.value.status_distribution.finished, name: '已完结', itemStyle: { color: '#67C23A' } },
-      { value: stats.value.status_distribution.paused, name: '暂停', itemStyle: { color: '#E6A23C' } },
+      { value: stats.value.status_distribution.ongoing, name: statusMap[1].text, itemStyle: { color: '#409EFF' } },
+      { value: stats.value.status_distribution.finished, name: statusMap[2].text, itemStyle: { color: '#67C23A' } },
+      { value: stats.value.status_distribution.paused, name: statusMap[3].text, itemStyle: { color: '#E6A23C' } },
     ],
   }],
 }))
@@ -172,7 +173,15 @@ async function fetchStats() {
   stats.value = await getDashboardStats()
 }
 
-onMounted(() => { fetchStats() })
+async function loadProjectStatuses() {
+  const definition = await loadEnumOptions('project_status')
+  Object.entries(definition.label_map).forEach(([value, label]) => {
+    const status = Number(value)
+    if (statusMap[status]) statusMap[status].text = label
+  })
+}
+
+onMounted(() => { fetchStats(); loadProjectStatuses() })
 </script>
 
 <style scoped>

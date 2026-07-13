@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.api.auth import get_current_user_id, get_current_user_context
+from app.services.authorization import require_any_permission, require_permission
 from app.schemas.project import ProjectCreate, ProjectUpdate, TaskCreate, TaskUpdate, ProjectSheetDetailUpdate
 from app.schemas.project import ArchiveCreate, ArchiveUpdate
 from app.services import project as project_service
@@ -16,7 +16,7 @@ def list_projects(
     dept_id: int | None = Query(None), status: int | None = Query(None),
     sheet_field_keys: str | None = Query(None, description="逗号分隔的动态列表字段 key"),
     db: Session = Depends(get_db),
-    scope_ctx: dict = Depends(get_current_user_context),
+    scope_ctx: dict = Depends(require_permission("project:list:view")),
 ):
     return project_service.get_project_list(
         db,
@@ -31,7 +31,7 @@ def list_projects(
 
 @router.get("/sheet-fields", summary="项目进度动态列表字段元数据")
 def get_project_sheet_fields(
-    _scope_ctx: dict = Depends(get_current_user_context),
+    _scope_ctx: dict = Depends(require_permission("project:list:view")),
 ):
     return project_service.get_project_sheet_field_metadata()
 
@@ -41,9 +41,11 @@ def create_project(
     data: ProjectCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    scope_ctx: dict = Depends(require_permission("project:list:add")),
 ):
-    return project_service.create_project(db, data, operator_id=user_id, request=request)
+    return project_service.create_project(
+        db, data, operator_id=scope_ctx["user_id"], request=request, scope_context=scope_ctx
+    )
 
 
 @router.put("/{project_id}", summary="更新项目")
@@ -52,9 +54,11 @@ def update_project(
     data: ProjectUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    scope_ctx: dict = Depends(require_permission("project:list:edit")),
 ):
-    return project_service.update_project(db, project_id, data, user_id, request=request)
+    return project_service.update_project(
+        db, project_id, data, scope_ctx["user_id"], request=request, scope_context=scope_ctx
+    )
 
 
 @router.delete("/{project_id}", summary="删除项目")
@@ -62,16 +66,18 @@ def delete_project(
     project_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    scope_ctx: dict = Depends(require_permission("project:list:delete")),
 ):
-    return project_service.delete_project(db, project_id, operator_id=user_id, request=request)
+    return project_service.delete_project(
+        db, project_id, operator_id=scope_ctx["user_id"], request=request, scope_context=scope_ctx
+    )
 
 
 @router.get("/{project_id}/sheet-detail", summary="项目总表详情")
 def get_project_sheet_detail(
     project_id: int,
     db: Session = Depends(get_db),
-    scope_ctx: dict = Depends(get_current_user_context),
+    scope_ctx: dict = Depends(require_permission("project:list:view")),
 ):
     return project_service.get_project_sheet_detail(db, project_id, scope_context=scope_ctx)
 
@@ -82,14 +88,13 @@ def update_project_sheet_detail(
     data: ProjectSheetDetailUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
-    scope_ctx: dict = Depends(get_current_user_context),
+    scope_ctx: dict = Depends(require_permission("project:list:edit")),
 ):
     return project_service.update_project_sheet_detail(
         db,
         project_id,
         data,
-        operator_id=user_id,
+        operator_id=scope_ctx["user_id"],
         request=request,
         scope_context=scope_ctx,
     )
@@ -102,15 +107,19 @@ def list_archives(
     keyword: str | None = Query(None), status: int | None = Query(None),
     product_line: str | None = Query(None),
     db: Session = Depends(get_db),
-    scope_ctx: dict = Depends(get_current_user_context),
+    scope_ctx: dict = Depends(require_permission("project:archive:view")),
 ):
-    allowed_lines = scope_ctx.get("product_lines")
-    return project_service.get_archive_list(db, page, page_size, keyword, status, product_line, allowed_lines)
+    return project_service.get_archive_list(
+        db, page, page_size, keyword, status, product_line, scope_context=scope_ctx
+    )
 
 
 @router.get("/archives/options", summary="项目档案下拉选项")
-def archive_options(db: Session = Depends(get_db), _user_id: int = Depends(get_current_user_id)):
-    return project_service.get_archive_options(db)
+def archive_options(
+    db: Session = Depends(get_db),
+    scope_ctx: dict = Depends(require_any_permission("project:list:view", "project:list:add")),
+):
+    return project_service.get_archive_options(db, scope_context=scope_ctx)
 
 
 @router.post("/archives", summary="创建项目档案")
@@ -118,9 +127,11 @@ def create_archive(
     data: ArchiveCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    scope_ctx: dict = Depends(require_permission("project:archive:add")),
 ):
-    return project_service.create_archive(db, data, user_id, request=request)
+    return project_service.create_archive(
+        db, data, scope_ctx["user_id"], request=request, scope_context=scope_ctx
+    )
 
 
 @router.put("/archives/{archive_id}", summary="更新项目档案")
@@ -129,9 +140,11 @@ def update_archive(
     data: ArchiveUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    scope_ctx: dict = Depends(require_permission("project:archive:edit")),
 ):
-    return project_service.update_archive(db, archive_id, data, user_id, request=request)
+    return project_service.update_archive(
+        db, archive_id, data, scope_ctx["user_id"], request=request, scope_context=scope_ctx
+    )
 
 
 @router.delete("/archives/{archive_id}", summary="删除项目档案")
@@ -139,9 +152,11 @@ def delete_archive(
     archive_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    scope_ctx: dict = Depends(require_permission("project:archive:delete")),
 ):
-    return project_service.delete_archive(db, archive_id, operator_id=user_id, request=request)
+    return project_service.delete_archive(
+        db, archive_id, operator_id=scope_ctx["user_id"], request=request, scope_context=scope_ctx
+    )
 
 
 # ==================== 项目任务 ====================
@@ -149,7 +164,7 @@ def delete_archive(
 def list_tasks(
     project_id: int,
     db: Session = Depends(get_db),
-    scope_ctx: dict = Depends(get_current_user_context),
+    scope_ctx: dict = Depends(require_permission("project:list:view")),
 ):
     return project_service.get_tasks(db, project_id, scope_context=scope_ctx)
 
@@ -160,19 +175,24 @@ def create_task(
     data: TaskCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    scope_ctx: dict = Depends(require_permission("project:list:add")),
 ):
     data.project_id = project_id
-    return project_service.create_task(db, data, operator_id=user_id, request=request)
+    return project_service.create_task(
+        db, data, operator_id=scope_ctx["user_id"], request=request, scope_context=scope_ctx
+    )
 
 
 @router.put("/{project_id}/tasks/{task_id}", summary="更新任务（含进度自动记录）")
 def update_task(
     project_id: int, task_id: int, data: TaskUpdate,
     request: Request,
-    user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db),
+    scope_ctx: dict = Depends(require_permission("project:list:edit")), db: Session = Depends(get_db),
 ):
-    return project_service.update_task(db, task_id, data, user_id, request=request)
+    return project_service.update_task(
+        db, task_id, data, scope_ctx["user_id"], request=request,
+        scope_context=scope_ctx, expected_project_id=project_id,
+    )
 
 
 @router.delete("/{project_id}/tasks/{task_id}", summary="删除任务")
@@ -181,6 +201,9 @@ def delete_task(
     task_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
+    scope_ctx: dict = Depends(require_permission("project:list:delete")),
 ):
-    return project_service.delete_task(db, task_id, operator_id=user_id, request=request)
+    return project_service.delete_task(
+        db, task_id, operator_id=scope_ctx["user_id"], request=request,
+        scope_context=scope_ctx, expected_project_id=project_id,
+    )

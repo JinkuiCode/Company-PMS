@@ -196,9 +196,20 @@ def invalidate_user_tokens(db: Session, user_id: int) -> None:
     db.commit()
 
 
-def get_current_user(db: Session, user_id: int) -> UserInfo:
+def get_current_user(db: Session, user_id: int, authorization_context: dict | None = None) -> UserInfo:
     """通过用户 ID 获取当前用户信息"""
     user = db.query(SysUser).filter(SysUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    return UserInfo.model_validate(user)
+    return UserInfo(
+        id=user.id,
+        username=user.username,
+        real_name=user.real_name,
+        dept_id=user.dept_id,
+        mobile=user.mobile,
+        status=user.status,
+        role_codes=(authorization_context or {}).get("role_codes", []),
+        permissions=(authorization_context or {}).get("permissions", []),
+        data_scope=(authorization_context or {}).get("data_scope", 1),
+        product_lines=(authorization_context or {}).get("product_lines"),
+    )

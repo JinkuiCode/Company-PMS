@@ -38,6 +38,14 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = await getUserInfo()
   }
 
+  function hasPermission(permission: string) {
+    return Boolean(user.value?.permissions?.includes(permission))
+  }
+
+  function hasAnyPermission(...permissions: string[]) {
+    return permissions.some(hasPermission)
+  }
+
   function logout() {
     token.value = ''
     user.value = null
@@ -45,5 +53,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('pms_remember_token')
   }
 
-  return { token, user, login, tryAutoLogin, fetchUser, logout }
+  return { token, user, login, tryAutoLogin, fetchUser, hasPermission, hasAnyPermission, logout }
 })

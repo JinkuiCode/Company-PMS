@@ -9,15 +9,8 @@
         class="project-list-page"
         scrollbar-label="项目进度工作台横向滚动条"
       >
-        <template #header>
-          <div class="progress-view-context" aria-label="当前项目进度视图">
-            <span class="progress-view-label">{{ currentViewName }}</span>
-            <span class="pms-muted">当前只开放总进度视图，多视图会在字段模型稳定后接入</span>
-          </div>
-        </template>
-
         <template #toolbar-left>
-          <el-button type="primary" size="small" @click="openCreateDialog">
+          <el-button v-if="hasPermission('project:list:add')" type="primary" size="small" @click="openCreateDialog">
             <el-icon style="margin-right:4px;"><Plus /></el-icon>
             新增项目
           </el-button>
@@ -26,11 +19,6 @@
             :groups="columnPickerGroups"
             :default-keys="defaultSelectedSheetFieldKeys"
           />
-        </template>
-
-        <template #toolbar-right>
-          <span v-if="lastSavedText" class="progress-save-tip">{{ lastSavedText }}</span>
-          <span v-else class="pms-muted">单击选中；双击进度/计划字段自动保存；点右侧详情展开抽屉</span>
         </template>
 
         <template #filters>
@@ -95,6 +83,7 @@
             :rowData="displayedRowData"
             :columnDefs="columnDefs"
             :defaultColDef="defaultColDef"
+            :defaultColGroupDef="defaultColGroupDef"
             :localeText="localeText"
             :theme="'legacy'"
             :domLayout="'autoHeight'"
@@ -167,7 +156,7 @@
                 <el-option
                   v-for="u in userList"
                   :key="u.id"
-                  :label="`${u.real_name} (${u.username})`"
+                  :label="u.real_name"
                   :value="u.id"
                 />
               </el-select>
@@ -221,24 +210,25 @@
     >
       <div class="drawer-head">
         <div class="drawer-title-row">
-          <div class="drawer-title">{{ selectedProject.project_name || '-' }}</div>
-          <el-button
-            class="drawer-close"
-            :icon="Close"
-            size="small"
-            text
-            aria-label="收起项目详情"
-            @click="closeProjectDrawer"
-          >
-            收起
-          </el-button>
-        </div>
-        <div class="drawer-meta">
-          {{ selectedProject.project_code || '-' }}
-          <span>·</span>
-          {{ selectedProject.product_line || '未设置产品类' }}
-          <span>·</span>
-          原计划发货 {{ selectedProject.end_date || '-' }}
+          <div class="drawer-identity">
+            <div class="drawer-title">{{ selectedProject.project_name || '-' }}</div>
+            <div class="drawer-meta">
+              {{ selectedProject.project_code || '-' }}
+              <span>·</span>
+              {{ productLineLabel(selectedProject.product_line) }}
+            </div>
+          </div>
+          <el-tooltip content="收起项目详情" placement="left">
+            <el-button
+              class="drawer-close"
+              :icon="Close"
+              size="small"
+              text
+              circle
+              aria-label="收起项目详情"
+              @click="closeProjectDrawer"
+            />
+          </el-tooltip>
         </div>
       </div>
 
@@ -272,7 +262,9 @@
                     {{ drawerGroupSummary(group) }}
                   </span>
                 </span>
-                <span class="drawer-field-count">已填写 {{ filledFieldCount(group) }}/{{ group.fields.length }} 项</span>
+                <span class="drawer-field-count" :aria-label="`${group.label}已填写 ${filledFieldCount(group)} / ${group.fields.length} 项`">
+                  {{ filledFieldCount(group) }} / {{ group.fields.length }}
+                </span>
               </div>
             </template>
 
@@ -306,11 +298,11 @@
                   </el-tooltip>
                 </div>
 
-                <div class="drawer-field-content">
+                <div class="drawer-field-content" :class="{ 'has-quick-toggle': canQuickToggleField(field) }">
                   <template v-if="drawerEditingField === field.key">
                     <div
                       class="drawer-field-editor"
-                      @keydown.enter.exact.prevent="commitDrawerEdit"
+                      @keydown.enter.exact="handleDrawerEditorEnter(field, $event)"
                       @keydown.esc.stop="cancelDrawerEdit"
                     >
                       <el-select
@@ -352,7 +344,6 @@
                         size="small"
                         :rows="4"
                         :placeholder="`输入${field.label}`"
-                        @keydown.enter.exact.prevent="commitDrawerEdit"
                       />
                       <el-input
                         v-else
@@ -360,53 +351,49 @@
                         size="small"
                         :placeholder="`输入${field.label}`"
                       />
-                      <div class="drawer-editor-actions">
-                        <el-button size="small" type="primary" link @click="commitDrawerEdit">保存</el-button>
-                        <el-button size="small" link @click="cancelDrawerEdit">取消</el-button>
-                      </div>
                     </div>
                   </template>
 
                   <template v-else>
                     <button
-                      v-if="field.editable"
+                      v-if="field.editable && hasPermission('project:list:edit')"
                       type="button"
                       class="drawer-field-value-button"
                       :aria-label="`编辑${field.label}`"
                       @click="startSheetFieldEdit(field)"
                     >
-                      <template v-if="field.value_type === 'progress'">
+                      <template v-if="field.value_type === 'progress' && sheetProgressValue(field) !== null">
                         <span class="drawer-progress-row">
                           <span class="pms-progress-track">
                             <span
                               class="pms-progress-bar"
-                              :class="progressToneClass(sheetProgressValue(field))"
+                              :class="progressToneClass(sheetProgressValue(field) ?? 0)"
                               :style="{ width: `${sheetProgressValue(field)}%` }"
                             ></span>
                           </span>
                           <span class="drawer-progress-value">{{ sheetProgressValue(field) }}%</span>
                         </span>
                       </template>
-                      <span v-else class="drawer-field-text">{{ formatSheetFieldValue(field) }}</span>
+                      <span v-else :class="field.value_type === 'progress' ? 'drawer-field-empty' : 'drawer-field-text'">{{ formatSheetFieldValue(field) }}</span>
                     </button>
                     <div
                       v-else
                       class="drawer-field-value-static"
                       :aria-label="`${field.label}当前不可改`"
                     >
-                      <template v-if="field.value_type === 'progress'">
+                      <template v-if="field.value_type === 'progress' && sheetProgressValue(field) !== null">
                         <span class="drawer-progress-row">
                           <span class="pms-progress-track">
                             <span
                               class="pms-progress-bar"
-                              :class="progressToneClass(sheetProgressValue(field))"
+                              :class="progressToneClass(sheetProgressValue(field) ?? 0)"
                               :style="{ width: `${sheetProgressValue(field)}%` }"
                             ></span>
                           </span>
                           <span class="drawer-progress-value">{{ sheetProgressValue(field) }}%</span>
                         </span>
                       </template>
-                      <span v-else class="drawer-field-text">{{ formatSheetFieldValue(field) }}</span>
+                      <span v-else :class="field.value_type === 'progress' ? 'drawer-field-empty' : 'drawer-field-text'">{{ formatSheetFieldValue(field) }}</span>
                     </div>
 
                     <el-tooltip
@@ -432,6 +419,20 @@
             </div>
           </el-collapse-item>
         </el-collapse>
+      </div>
+
+      <div class="drawer-savebar">
+        <el-button
+          class="drawer-save"
+          type="primary"
+          size="small"
+          :disabled="!drawerHasPendingChanges || !hasPermission('project:list:edit')"
+          :loading="drawerSaving"
+          :aria-label="drawerHasPendingChanges ? `保存 ${drawerPendingChangeCount || 1} 项修改` : '没有待保存的修改'"
+          @click="saveDrawerChanges"
+        >
+          保存修改{{ drawerPendingChangeCount ? ` (${drawerPendingChangeCount})` : '' }}
+        </el-button>
       </div>
     </aside>
   </section>
@@ -469,6 +470,7 @@ import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
+import { loadEnumOptions, type EnumDefinition } from '@/composables/useEnumOptions'
 import { useAuthStore } from '@/stores/auth'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import request from '@/utils/request'
@@ -530,6 +532,7 @@ type ProjectSheetFieldMeta = {
   computed: boolean
   list_available: boolean
   quick_addable: boolean
+  enum_code?: string | null
 }
 
 type ProjectSheetField = ProjectSheetFieldMeta & {
@@ -550,6 +553,12 @@ type ProjectSheetGroup = {
   fields: ProjectSheetField[]
 }
 
+type DrawerPendingChange = {
+  field: ProjectSheetField
+  value: unknown
+  originalValue: unknown
+}
+
 type ColumnPreferenceState = {
   selected_sheet_field_keys: string[]
   columnState: ColumnState[]
@@ -557,7 +566,7 @@ type ColumnPreferenceState = {
 
 const localeText = chineseLocaleText
 const authStore = useAuthStore()
-const currentViewName = '总进度'
+const hasPermission = authStore.hasPermission
 const COLUMN_STORAGE_KEY = 'pms_project_progress_list_columns_v1'
 const progressSummaryMaxLength = 24
 const drawerDefaultExpandedGroupKeys = ['basic', 'stage', 'plan']
@@ -588,16 +597,6 @@ const progressFieldKeys: StageProgressFieldKey[] = [
   'assembly_progress',
   'test_progress',
 ]
-
-const stageProgressOffsets: Record<StageProgressFieldKey, number> = {
-  design_progress: 24,
-  order_progress: 12,
-  kit_progress: 0,
-  frame_progress: -8,
-  dryer_progress: -14,
-  assembly_progress: -22,
-  test_progress: -34,
-}
 
 const sheetProjectFieldMap: Record<string, EditableProjectFieldKey> = {
   node_status: 'status',
@@ -631,11 +630,12 @@ const filterStatus = ref<number | null>(null)
 const filterDeptId = ref<number | null>(null)
 const filterProductLine = ref<string | null>(null)
 const selectedProject = ref<ProjectRow | null>(null)
-const lastSavedText = ref('')
 const drawerOpenGroups = ref<string[]>([...drawerDefaultExpandedGroupKeys])
 const drawerEditingField = ref<string | null>(null)
 const drawerEditingFieldData = ref<ProjectSheetField | null>(null)
 const drawerDraftValue = ref<unknown>(null)
+const drawerPendingChanges = ref<Record<string, DrawerPendingChange>>({})
+const drawerSaving = ref(false)
 const sheetDetailGroups = ref<ProjectSheetGroup[]>([])
 const sheetDetailLoading = ref(false)
 const sheetFieldGroupsMeta = ref<ProjectSheetGroupMeta[]>(buildFallbackSheetGroupMetas())
@@ -649,13 +649,12 @@ const restoringColumnState = ref(false)
 const listRequestSerial = ref(0)
 
 const productLineOptions = ref<ListFilterOption[]>([])
+const productLineLabelMap = reactive<Record<string, string>>({})
 const allowedProductLines = ref<string[] | null>(null)
-const projectStatusOptions: ListFilterOption[] = [
-  { label: '进行中', value: 1 },
-  { label: '已完结', value: 2 },
-  { label: '暂停', value: 3 },
-]
-const projectStatusEditorValues = projectStatusOptions.map(item => item.label)
+const projectStatusOptions = reactive<ListFilterOption[]>([])
+const projectStatusLabelMap = reactive<Record<string, string>>({})
+const sheetEnumDefinitions = reactive<Record<string, EnumDefinition>>({})
+const projectStatusEditorValues = computed(() => projectStatusOptions.map(item => item.value))
 
 const filteredProductLineOptions = computed(() => {
   if (allowedProductLines.value === null) return productLineOptions.value
@@ -678,6 +677,8 @@ const sheetFieldMetaMap = computed(() => {
 })
 
 const defaultSelectedSheetFieldKeys = computed<string[]>(() => [])
+const drawerPendingChangeCount = computed(() => Object.keys(drawerPendingChanges.value).length)
+const drawerHasPendingChanges = computed(() => drawerPendingChangeCount.value > 0 || Boolean(drawerEditingField.value))
 
 const columnPickerGroups = computed(() => {
   return sheetFieldGroupsMeta.value.map(group => ({
@@ -692,11 +693,10 @@ const projectListFilterFields = computed<ListFilterField<ProjectRow>[]>(() => {
     { field: 'project_code', label: '项目编号', type: 'text' },
     { field: 'project_name', label: '项目名称', type: 'text' },
     { field: 'product_line', label: '产品类', type: 'select', options: () => filteredProductLineOptions.value },
-    { field: 'status', label: '节点', type: 'select', options: () => projectStatusOptions, getValue: row => statusLabel(row.status) },
+    { field: 'status', label: '节点', type: 'select', options: () => projectStatusOptions },
     { field: 'dept_name', label: '所属部门', type: 'select', options: () => deptNameOptions.value },
     { field: 'pm_name', label: '负责人', type: 'select', options: () => userNameFilterOptions.value },
     { field: 'total_progress', label: '总进度', type: 'number' },
-    { field: 'task_count', label: '任务数', type: 'number' },
     { field: 'budget', label: '预算', type: 'number' },
     { field: 'start_date', label: '立项日期', type: 'date' },
     { field: 'end_date', label: '原计划发货', type: 'date' },
@@ -708,7 +708,7 @@ const projectListFilterFields = computed<ListFilterField<ProjectRow>[]>(() => {
     type: toListFilterType(field.value_type),
     getValue: row => row.sheet_fields?.[field.key],
     options: field.value_type === 'select'
-      ? () => uniqueSheetFieldOptions(field.key)
+      ? () => sheetFieldFilterOptions(field)
       : undefined,
   }))
 
@@ -865,6 +865,7 @@ function normalizeFieldMeta(rawField: any, index: number): ProjectSheetFieldMeta
     computed: Boolean(rawField.computed),
     list_available: Boolean(rawField.list_available),
     quick_addable: Boolean(rawField.quick_addable),
+    enum_code: rawField.enum_code ? String(rawField.enum_code) : null,
   }
 }
 
@@ -984,25 +985,15 @@ function normalizeProgressInput(value: unknown) {
   return clampProgress(numberValue(value))
 }
 
-function stageProgress(row: ProjectRow, field: StageProgressFieldKey) {
-  if (row[field] != null) return clampProgress(numberValue(row[field]))
-  return clampProgress(numberValue(row.total_progress) + stageProgressOffsets[field])
-}
-
-function materializeStageProgressDefaults(row: ProjectRow) {
-  const next = {
+function normalizeProjectRow(row: ProjectRow) {
+  return {
     ...row,
     sheet_fields: row.sheet_fields && typeof row.sheet_fields === 'object' ? { ...row.sheet_fields } : {},
   }
-  for (const field of progressFieldKeys) {
-    if (next[field] == null) {
-      next[field] = stageProgress(next, field)
-    }
-  }
-  return next
 }
 
-function renderProgressBar(value: number) {
+function renderProgressBar(value: number | null | undefined) {
+  if (value == null) return '<span class="pms-progress-empty">-</span>'
   const v = clampProgress(value)
   const tone = progressToneClass(v)
   return `<div class="pms-progress-cell">
@@ -1014,7 +1005,7 @@ function renderProgressBar(value: number) {
 }
 
 function renderStageProgress(field: StageProgressFieldKey) {
-  return (params: any) => renderProgressBar(stageProgress(params.data, field))
+  return (params: any) => renderProgressBar(params.data?.[field] ?? null)
 }
 
 function parseProgressEditValue(params: any) {
@@ -1023,15 +1014,14 @@ function parseProgressEditValue(params: any) {
 
 function normalizeStatus(value: number | string | null | undefined) {
   if (typeof value === 'number') return value
-  const map: Record<string, number> = { '进行中': 1, '已完结': 2, '暂停': 3 }
-  if (value && map[value]) return map[value]
+  const option = projectStatusOptions.find(item => item.label === value)
+  if (option) return Number(option.value)
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 1
 }
 
 function statusLabel(value: number | string | null | undefined) {
-  const map: Record<number, string> = { 1: '进行中', 2: '已完结', 3: '暂停' }
-  return map[normalizeStatus(value)] || '-'
+  return projectStatusLabelMap[String(normalizeStatus(value))] || '-'
 }
 
 function statusTone(value: number | string | null | undefined) {
@@ -1140,7 +1130,7 @@ function dynamicColumnDefs(): Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>
           cellRenderer: (params: any) => {
             const value = sheetFieldValue(params.data, field.key)
             if (field.value_type === 'progress') {
-              return renderProgressBar(clampProgress(numberValue(value)))
+              return renderProgressBar(value == null || value === '' ? null : clampProgress(numberValue(value)))
             }
             const text = formatSheetFieldValue({ ...field, value })
             return `<span class="sheet-column-text">${escapeHtml(text)}</span>`
@@ -1161,37 +1151,42 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
     pinned: 'left',
     cellRenderer: (params: any) => `<span class="proj-name-cell">${escapeHtml(params.value || '-')}</span>`,
   },
-  { field: 'product_line', headerName: '产品类', width: 100 },
+  {
+    field: 'product_line', headerName: '产品类', width: 100,
+    valueFormatter: (params: any) => productLineLabel(params.value),
+  },
   {
     field: 'status',
     headerName: '节点',
     width: 102,
-    editable: true,
+    editable: () => hasPermission('project:list:edit'),
     cellEditor: 'agSelectCellEditor',
-    cellEditorParams: { values: projectStatusEditorValues },
+    valueFormatter: (params: any) => statusLabel(params.value),
+    cellEditorParams: () => ({ values: projectStatusEditorValues.value }),
     cellRenderer: (params: any) => {
       const tone = statusTone(params.value)
-      return `<span class="pms-status pms-status-${tone}"><span class="pms-status-dot"></span>${statusLabel(params.value)}</span>`
+      const label = escapeHtml(statusLabel(params.value))
+      return `<span class="pms-status pms-status-${tone}"><span class="pms-status-dot"></span>${label}</span>`
     },
   },
   {
     field: 'end_date',
     headerName: '原计划发货',
     width: 122,
-    editable: true,
+    editable: () => hasPermission('project:list:edit'),
     cellEditor: 'agTextCellEditor',
   },
   {
     headerName: '项目进度',
     marryChildren: true,
     children: [
-      { field: 'design_progress', headerName: '设计进度', width: 112, editable: true, cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('design_progress') },
-      { field: 'order_progress', headerName: '下单进度', width: 112, editable: true, cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('order_progress') },
-      { field: 'kit_progress', headerName: '齐套进度', width: 112, editable: true, cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('kit_progress') },
-      { field: 'frame_progress', headerName: '框架进度', width: 112, editable: true, cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('frame_progress') },
-      { field: 'dryer_progress', headerName: 'dryer进度', width: 112, editable: true, cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('dryer_progress') },
-      { field: 'assembly_progress', headerName: '组装进度', width: 112, editable: true, cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('assembly_progress') },
-      { field: 'test_progress', headerName: '测试进度', width: 112, editable: true, cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('test_progress') },
+      { field: 'design_progress', headerName: '设计进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('design_progress') },
+      { field: 'order_progress', headerName: '下单进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('order_progress') },
+      { field: 'kit_progress', headerName: '齐套进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('kit_progress') },
+      { field: 'frame_progress', headerName: '框架进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('frame_progress') },
+      { field: 'dryer_progress', headerName: 'dryer进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('dryer_progress') },
+      { field: 'assembly_progress', headerName: '组装进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('assembly_progress') },
+      { field: 'test_progress', headerName: '测试进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('test_progress') },
     ],
   },
   {
@@ -1202,7 +1197,7 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
         field: 'pm_name',
         headerName: '负责人',
         width: 112,
-        editable: true,
+        editable: () => hasPermission('project:list:edit'),
         cellEditor: 'agSelectCellEditor',
         cellEditorParams: () => ({ values: userNames.value }),
       },
@@ -1210,15 +1205,14 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
         field: 'dept_name',
         headerName: '所属部门',
         width: 124,
-        editable: true,
+        editable: () => hasPermission('project:list:edit'),
         cellEditor: 'agSelectCellEditor',
         cellEditorParams: () => ({ values: deptNames.value }),
       },
-      { field: 'budget', headerName: '预算(万)', width: 110, editable: true, type: 'numericColumn' },
+      { field: 'budget', headerName: '预算(万)', width: 110, editable: () => hasPermission('project:list:edit'), type: 'numericColumn' },
     ],
   },
   ...dynamicColumnDefs(),
-  { field: 'task_count', headerName: '关联任务', width: 94 },
   {
     headerName: '操作',
     width: 118,
@@ -1229,7 +1223,7 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
     cellRenderer: () => `
       <span class="progress-row-actions">
         <button class="progress-detail-btn detail-btn" type="button" title="打开详情" aria-label="打开详情">详情</button>
-        <button class="pms-more-btn more-btn" type="button" title="更多操作" aria-label="更多操作"></button>
+        ${hasPermission('project:list:delete') ? '<button class="pms-more-btn more-btn" type="button" title="更多操作" aria-label="更多操作"></button>' : ''}
       </span>
     `,
     onCellClicked: (params: any) => {
@@ -1248,12 +1242,17 @@ const defaultColDef: ColDef = {
   sortable: true,
   resizable: true,
   filter: false,
+  headerClass: 'progress-list-header-center',
   cellClassRules: {
     'progress-editable-cell': params => {
       const editable = params.colDef.editable
       return typeof editable === 'function' ? Boolean(editable(params as any)) : editable === true
     },
   },
+}
+
+const defaultColGroupDef: Partial<ColGroupDef<ProjectRow>> = {
+  headerClass: 'progress-list-header-center',
 }
 
 function refreshListScrollbar() {
@@ -1354,7 +1353,7 @@ async function fetchList() {
   }
   const res: any = await request.get('/projects', { params })
   if (requestSerial !== listRequestSerial.value) return
-  rowData.value = res.items.map(materializeStageProgressDefaults)
+  rowData.value = res.items.map(normalizeProjectRow)
   serverTotal.value = res.total
   if (selectedProject.value) {
     selectedProject.value = rowData.value.find(row => row.id === selectedProject.value?.id) || null
@@ -1366,10 +1365,23 @@ async function fetchOptions() {
   archiveList.value = (await request.get('/projects/archives/options')) as any
 
   try {
-    const dictRes: any = await request.get('/dicts/code/product_line')
-    productLineOptions.value = dictRes?.items || []
+    const [productLineDefinition, projectStatusDefinition] = await Promise.all([
+      loadEnumOptions('product_line'),
+      loadEnumOptions('project_status'),
+    ])
+    productLineOptions.value = productLineDefinition.items
+    Object.keys(productLineLabelMap).forEach(key => delete productLineLabelMap[key])
+    Object.assign(productLineLabelMap, productLineDefinition.label_map)
+    projectStatusOptions.splice(
+      0,
+      projectStatusOptions.length,
+      ...projectStatusDefinition.items.map(item => ({ label: item.label, value: Number(item.value) })),
+    )
+    Object.keys(projectStatusLabelMap).forEach(key => delete projectStatusLabelMap[key])
+    Object.assign(projectStatusLabelMap, projectStatusDefinition.label_map)
   } catch {
     productLineOptions.value = []
+    projectStatusOptions.splice(0)
   }
 
   try {
@@ -1379,32 +1391,44 @@ async function fetchOptions() {
     allowedProductLines.value = null
   }
 
-  deptList.value = (await request.get('/depts/tree')) as any
-  const flat: any[] = []
-  function walk(nodes: any[]) {
-    for (const node of nodes) {
-      flat.push(node)
-      if (node.children?.length) walk(node.children)
-    }
-  }
-  walk(deptList.value)
+  const deptOptions = (await request.get('/depts/options')) as any[]
+  const deptMap = new Map(deptOptions.map(item => [item.id, { ...item, children: [] as any[] }]))
+  const roots: any[] = []
+  deptMap.forEach((item) => {
+    const parent = deptMap.get(item.parent_id)
+    if (parent) parent.children.push(item)
+    else roots.push(item)
+  })
+  deptList.value = roots
+  const flat = deptOptions
   deptFlatList.value = flat
   deptNames.value = flat.map((d: any) => d.dept_name)
 
-  const res: any = await request.get('/users', { params: { page: 1, page_size: 1000 } })
-  userList.value = res.items
-  userNames.value = res.items.map((u: any) => u.real_name)
+  const users: any = await request.get('/users/options')
+  userList.value = users
+  userNames.value = users.map((u: any) => u.real_name)
 }
 
 async function fetchSheetFieldMetadata() {
   try {
     const res: any = await request.get('/projects/sheet-fields')
     sheetFieldGroupsMeta.value = normalizeSheetMetadata(res)
+    await loadSheetFieldEnums()
   } catch {
     sheetFieldGroupsMeta.value = buildFallbackSheetGroupMetas()
   } finally {
     sheetMetadataLoaded.value = true
   }
+}
+
+async function loadSheetFieldEnums() {
+  const enumCodes = Array.from(new Set(
+    sheetFieldMetas.value.map(field => field.enum_code).filter((code): code is string => Boolean(code)),
+  ))
+  const definitions = await Promise.all(enumCodes.map(code => loadEnumOptions(code)))
+  definitions.forEach(definition => {
+    sheetEnumDefinitions[definition.dict_code] = definition
+  })
 }
 
 async function onCellValueChanged(event: CellValueChangedEvent<ProjectRow>) {
@@ -1464,8 +1488,7 @@ async function saveProjectField(row: ProjectRow | null | undefined, field: Edita
 }
 
 function setSavedText(row?: ProjectRow) {
-  const name = row?.project_code || row?.project_name || '项目'
-  lastSavedText.value = `${name} 已自动保存`
+  void row
   ElMessage.success('已自动保存')
   refreshListScrollbar()
 }
@@ -1476,6 +1499,7 @@ async function openProjectDrawer(row: ProjectRow) {
   drawerEditingField.value = null
   drawerEditingFieldData.value = null
   drawerDraftValue.value = null
+  drawerPendingChanges.value = {}
   sheetDetailGroups.value = buildDrawerGroupsFromRow(selectedProject.value)
   await fetchProjectSheetDetail(row.id)
   await nextTick()
@@ -1499,28 +1523,52 @@ async function fetchProjectSheetDetail(projectId: number) {
 }
 
 function sheetFieldOptions(field: ProjectSheetField): ListFilterOption[] {
-  if (field.key === 'node_status') return projectStatusOptions
+  if (field.enum_code && sheetEnumDefinitions[field.enum_code]) {
+    const numeric = typeof field.value === 'number'
+    return sheetEnumDefinitions[field.enum_code].items.map(item => ({
+      label: item.label,
+      value: numeric ? Number(item.value) : item.value,
+    }))
+  }
+  return uniqueSheetFieldOptions(field.key)
+}
+
+function sheetFieldFilterOptions(field: ProjectSheetFieldMeta): ListFilterOption[] {
+  if (field.enum_code && sheetEnumDefinitions[field.enum_code]) {
+    return sheetEnumDefinitions[field.enum_code].items
+  }
   return uniqueSheetFieldOptions(field.key)
 }
 
 function sheetProgressValue(field: ProjectSheetField) {
+  if (field.value == null || field.value === '') return null
   return clampProgress(numberValue(field.value))
 }
 
 function formatSheetFieldValue(field: ProjectSheetField) {
   const value = field.value
   if (value == null || value === '') return field.computed ? '待计算' : '-'
-  if (field.key === 'node_status') return statusLabel(value as any)
+  if (field.enum_code) {
+    return sheetEnumDefinitions[field.enum_code]?.label_map?.[String(value)] || String(value)
+  }
   if (field.value_type === 'progress') return `${sheetProgressValue(field)}%`
   if (field.value_type === 'percent') return `${numberValue(value).toFixed(2)}%`
   return String(value)
 }
 
+function productLineLabel(value: unknown) {
+  if (value === null || value === undefined || value === '') return '未设置产品类'
+  return productLineLabelMap[String(value)] || String(value)
+}
+
 function startSheetFieldEdit(field: ProjectSheetField) {
-  if (!selectedProject.value || !field.editable) return
+  if (!selectedProject.value || !field.editable || !hasPermission('project:list:edit')) return
+  if (drawerEditingField.value && drawerEditingField.value !== field.key) {
+    commitDrawerEdit()
+  }
   drawerEditingField.value = field.key
   drawerEditingFieldData.value = field
-  drawerDraftValue.value = field.value ?? null
+  drawerDraftValue.value = drawerPendingChanges.value[field.key]?.value ?? field.value ?? null
 }
 
 function cancelDrawerEdit() {
@@ -1529,10 +1577,43 @@ function cancelDrawerEdit() {
   drawerDraftValue.value = null
 }
 
-async function commitDrawerEdit() {
+function normalizeDrawerFieldValue(field: ProjectSheetField, value: unknown) {
+  if (field.value_type === 'progress') return normalizeProgressInput(value)
+  if (field.value_type === 'number' || field.value_type === 'percent') {
+    return value === '' || value == null ? null : Number(value)
+  }
+  return value ?? ''
+}
+
+function isSameDrawerValue(left: unknown, right: unknown) {
+  return String(left ?? '') === String(right ?? '')
+}
+
+function commitDrawerEdit() {
   if (!selectedProject.value || !drawerEditingField.value || !drawerEditingFieldData.value) return
-  await saveSheetDetailField(drawerEditingFieldData.value, drawerDraftValue.value)
+  const field = drawerEditingFieldData.value
+  const existingChange = drawerPendingChanges.value[field.key]
+  const originalValue = existingChange?.originalValue ?? field.value
+  const value = normalizeDrawerFieldValue(field, drawerDraftValue.value)
+
+  if (isSameDrawerValue(value, originalValue)) {
+    const nextChanges = { ...drawerPendingChanges.value }
+    delete nextChanges[field.key]
+    drawerPendingChanges.value = nextChanges
+  } else {
+    drawerPendingChanges.value = {
+      ...drawerPendingChanges.value,
+      [field.key]: { field, value, originalValue },
+    }
+  }
+  patchSheetFieldValue(field.key, value)
   cancelDrawerEdit()
+}
+
+function handleDrawerEditorEnter(field: ProjectSheetField, event: KeyboardEvent) {
+  if (field.value_type === 'long_text') return
+  event.preventDefault()
+  commitDrawerEdit()
 }
 
 function patchSheetFieldValue(fieldKey: string, value: unknown) {
@@ -1549,30 +1630,45 @@ function patchSheetFieldValue(fieldKey: string, value: unknown) {
   }
 }
 
-async function saveSheetDetailField(field: ProjectSheetField, value: any) {
-  if (!selectedProject.value) return
-  const projectId = selectedProject.value.id
-  const projectField = sheetProjectFieldMap[field.key]
-  if (field.source_type === 'project' && projectField) {
-    await saveProjectField(selectedProject.value, projectField, value)
-    patchSheetFieldValue(field.key, value)
-    return
-  }
+function drawerProjectPayloadValue(projectField: EditableProjectFieldKey, value: unknown) {
+  if (isProgressField(projectField)) return normalizeProgressInput(value)
+  if (projectField === 'status') return normalizeStatus(value as number | string | null | undefined)
+  return value
+}
 
-  if (field.source_type !== 'detail') return
-  const payloadValue = field.value_type === 'progress' ? normalizeProgressInput(value) : value
-  const res: any = await request.put(`/projects/${projectId}/sheet-detail`, {
-    values: { [field.key]: payloadValue },
+async function saveDrawerChanges() {
+  if (!selectedProject.value || drawerSaving.value || !hasPermission('project:list:edit')) return
+  if (drawerEditingField.value) commitDrawerEdit()
+  if (!drawerPendingChangeCount.value) return
+
+  const projectValues: Partial<Record<EditableProjectFieldKey, unknown>> = {}
+  const detailValues: Record<string, unknown> = {}
+  Object.values(drawerPendingChanges.value).forEach(({ field, value }) => {
+    const projectField = sheetProjectFieldMap[field.key]
+    if (field.source_type === 'project' && projectField) {
+      projectValues[projectField] = drawerProjectPayloadValue(projectField, value)
+    } else if (field.source_type === 'detail') {
+      detailValues[field.key] = value
+    }
   })
-  if (Array.isArray(res?.groups) && res.groups.length) {
-    sheetDetailGroups.value = normalizeSheetDetailGroups(res.groups, selectedProject.value)
-  } else {
-    patchSheetFieldValue(field.key, payloadValue)
+
+  const savedCount = drawerPendingChangeCount.value
+  drawerSaving.value = true
+  try {
+    await request.put(`/projects/${selectedProject.value.id}/sheet-detail`, { values: detailValues, project_values: projectValues })
+    drawerPendingChanges.value = {}
+    await fetchList()
+    if (selectedProject.value) await fetchProjectSheetDetail(selectedProject.value.id)
+    ElMessage.success(`已保存 ${savedCount} 项修改`)
+  } catch {
+    ElMessage.error('保存失败，草稿已保留')
+  } finally {
+    drawerSaving.value = false
   }
-  setSavedText(selectedProject.value)
 }
 
 function onProjectCellDoubleClicked(event: CellDoubleClickedEvent<ProjectRow>) {
+  if (!hasPermission('project:list:edit')) return
   const target = event.event?.target as HTMLElement | null
   if (target?.closest('button')) return
   if (!event.data || !event.colDef.field) return
@@ -1591,6 +1687,24 @@ function onProjectCellDoubleClicked(event: CellDoubleClickedEvent<ProjectRow>) {
 }
 
 async function closeProjectDrawer() {
+  if (drawerEditingField.value) commitDrawerEdit()
+  if (drawerPendingChangeCount.value) {
+    try {
+      await ElMessageBox.confirm('当前抽屉有未保存的修改。', '未保存修改', {
+        confirmButtonText: '保存并收起',
+        cancelButtonText: '放弃修改',
+        distinguishCancelAndClose: true,
+        type: 'warning',
+      })
+      await saveDrawerChanges()
+      if (drawerPendingChangeCount.value) return
+    } catch (action: any) {
+      if (action !== 'cancel') return
+      drawerPendingChanges.value = {}
+      await fetchList()
+      if (selectedProject.value) await fetchProjectSheetDetail(selectedProject.value.id)
+    }
+  }
   selectedProject.value = null
   drawerOpenGroups.value = [...drawerDefaultExpandedGroupKeys]
   sheetDetailGroups.value = []
@@ -1604,6 +1718,10 @@ function getRowClass(params: RowClassParams<ProjectRow>) {
 }
 
 async function handleRowMenu(row: ProjectRow) {
+  if (!hasPermission('project:list:delete')) {
+    openProjectDrawer(row)
+    return
+  }
   try {
     await ElMessageBox.confirm(
       `对项目「${row.project_name}」的操作`,
@@ -1624,6 +1742,7 @@ async function handleRowMenu(row: ProjectRow) {
 }
 
 async function handleDelete(id: number) {
+  if (!hasPermission('project:list:delete')) return
   await ElMessageBox.confirm('确定删除该项目吗？任务数据也将被删除', '提示', { type: 'warning' })
   await request.delete(`/projects/${id}`)
   ElMessage.success('删除成功')
@@ -1640,6 +1759,7 @@ function onArchiveChange(archiveId: number) {
 }
 
 function openCreateDialog() {
+  if (!hasPermission('project:list:add')) return
   formRef.value?.resetFields()
   Object.assign(form, {
     id: 0,
@@ -1657,6 +1777,7 @@ function openCreateDialog() {
 }
 
 async function handleSubmit() {
+  if (!hasPermission('project:list:add')) return
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
   await request.post('/projects', {
@@ -1689,7 +1810,8 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .project-progress-workbench.is-drawer-open {
@@ -1699,47 +1821,7 @@ onMounted(async () => {
 .progress-list-shell,
 .project-list-page {
   min-width: 0;
-  min-height: 100%;
-}
-
-.progress-view-context {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--pms-border-soft);
-}
-
-.progress-view-label {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgba(79, 70, 229, 0.16);
-  border-radius: var(--pms-radius-sm);
-  color: var(--pms-primary);
-  background: var(--pms-primary-soft);
-  font-size: 12px;
-  font-weight: 650;
-  white-space: nowrap;
-}
-
-.progress-save-tip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--pms-success);
-  font-size: 12px;
-  font-weight: 650;
-  white-space: nowrap;
-}
-
-.progress-save-tip::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
+  min-height: 0;
 }
 
 :deep(.proj-name-cell) {
@@ -1761,6 +1843,33 @@ onMounted(async () => {
 
 :deep(.progress-workbench-grid .progress-row-active .ag-cell) {
   background: #f8faff;
+}
+
+:deep(.progress-workbench-grid .ag-cell-inline-editing) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.42);
+  background: #f8fbff;
+}
+
+:deep(.progress-workbench-grid .ag-cell-inline-editing .ag-cell-edit-wrapper),
+:deep(.progress-workbench-grid .ag-cell-inline-editing .ag-cell-editor),
+:deep(.progress-workbench-grid .ag-cell-inline-editing .ag-cell-editor .ag-wrapper),
+:deep(.progress-workbench-grid .ag-cell-inline-editing .ag-cell-editor input),
+:deep(.progress-workbench-grid .ag-cell-inline-editing .ag-picker-field-wrapper) {
+  width: 100%;
+  min-height: 100%;
+  height: 100%;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+:deep(.progress-list-header-center .ag-header-cell-label),
+:deep(.progress-list-header-center .ag-header-group-cell-label) {
+  justify-content: center;
 }
 
 :deep(.progress-row-actions) {
@@ -1798,7 +1907,18 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
+:deep(.pms-progress-empty) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: var(--pms-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .progress-detail-drawer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -1820,16 +1940,27 @@ onMounted(async () => {
   gap: 10px;
 }
 
+.drawer-identity {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .drawer-title {
   min-width: 0;
   color: var(--pms-text);
   font-size: 14px;
   font-weight: 750;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .drawer-close {
   flex: 0 0 auto;
+  margin-top: -2px;
+}
+
+.drawer-save {
+  width: 100%;
 }
 
 .drawer-meta {
@@ -1843,10 +1974,18 @@ onMounted(async () => {
 }
 
 .drawer-body {
-  height: calc(100% - 70px);
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 8px 12px 14px;
+  padding: 8px 12px;
+  padding-bottom: 16px;
+}
+
+.drawer-savebar {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border-top: 1px solid var(--pms-border-soft);
+  background: var(--pms-surface);
 }
 
 .drawer-section {
@@ -1907,6 +2046,7 @@ onMounted(async () => {
   color: var(--pms-text-muted);
   font-size: 12px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .drawer-field-list {
@@ -1981,6 +2121,11 @@ onMounted(async () => {
   min-width: 0;
 }
 
+.drawer-field-content.has-quick-toggle .drawer-field-value-button,
+.drawer-field-content.has-quick-toggle .drawer-field-value-static {
+  padding-right: 28px;
+}
+
 .drawer-field-value-button,
 .drawer-field-value-static {
   display: block;
@@ -2011,19 +2156,21 @@ onMounted(async () => {
   word-break: break-word;
 }
 
+.drawer-field-empty {
+  display: block;
+  min-height: 28px;
+  padding: 4px 0;
+  color: var(--pms-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .drawer-field-row:not(.is-long-text) .drawer-field-text {
   white-space: normal;
 }
 
 .drawer-field-editor {
   padding: 2px 0;
-}
-
-.drawer-editor-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 6px;
 }
 
 .drawer-progress-row {
@@ -2042,7 +2189,7 @@ onMounted(async () => {
 .drawer-quick-toggle {
   position: absolute;
   top: 2px;
-  right: -2px;
+  right: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2068,11 +2215,5 @@ onMounted(async () => {
 .drawer-quick-toggle:focus-visible {
   background: var(--pms-primary-soft);
   outline: none;
-}
-
-@media (hover: none) {
-  .drawer-quick-toggle {
-    opacity: 1;
-  }
 }
 </style>

@@ -4,7 +4,7 @@
     <div class="field-list-panel">
       <div class="panel-header">
         <span>字段管理</span>
-        <el-button type="primary" size="small" @click="openDictDialog()">新增分类</el-button>
+        <el-button v-if="hasPermission('system:dict:add')" type="primary" size="small" @click="openDictDialog()">新增分类</el-button>
       </div>
       <el-input v-model="searchText" placeholder="搜索字段..." clearable size="small" style="padding: 8px 12px;" />
       <div class="field-list-wrap">
@@ -34,7 +34,7 @@
               <span style="font-weight:600">{{ selectedDict.dict_name }}</span>
               <el-tag size="small" style="margin-left:8px">{{ selectedDict.field_name }}</el-tag>
             </div>
-            <el-button type="primary" size="small" @click="openItemDialog()">新增枚举值</el-button>
+            <el-button v-if="hasPermission('system:field:add')" type="primary" size="small" @click="openItemDialog()">新增枚举值</el-button>
           </div>
         </template>
 
@@ -51,13 +51,13 @@
           </el-table-column>
           <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openItemDialog(row)">编辑</el-button>
+              <el-button v-if="hasPermission('system:field:edit')" link type="primary" size="small" @click="openItemDialog(row)">编辑</el-button>
               <el-tooltip :content="row.status === 1 ? '禁用' : '启用'" placement="top">
-                <el-button link :type="row.status === 1 ? 'warning' : 'success'" size="small" @click="handleToggleStatus(row)">
+                <el-button v-if="hasPermission('system:field:edit')" link :type="row.status === 1 ? 'warning' : 'success'" size="small" @click="handleToggleStatus(row)">
                   {{ row.status === 1 ? '禁用' : '启用' }}
                 </el-button>
               </el-tooltip>
-              <el-button link type="danger" size="small" @click="handleDeleteItem(row.id)">删除</el-button>
+              <el-button v-if="hasPermission('system:field:delete')" link type="danger" size="small" @click="handleDeleteItem(row.id)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -97,7 +97,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dictDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleDictSubmit">保存</el-button>
+        <el-button v-if="isDictEdit ? hasPermission('system:dict:edit') : hasPermission('system:dict:add')" type="primary" @click="handleDictSubmit">保存</el-button>
       </template>
     </el-dialog>
 
@@ -119,7 +119,7 @@
       </el-form>
       <template #footer>
         <el-button @click="itemDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleItemSubmit">保存</el-button>
+        <el-button v-if="isItemEdit ? hasPermission('system:field:edit') : hasPermission('system:field:add')" type="primary" @click="handleItemSubmit">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -129,6 +129,10 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+const hasPermission = authStore.hasPermission
 
 // ==================== 字典分类（按页面分组） ====================
 const dictList = ref<any[]>([])
@@ -175,6 +179,7 @@ const dictRules: FormRules = {
 }
 
 function openDictDialog(row?: any) {
+  if (row ? !hasPermission('system:dict:edit') : !hasPermission('system:dict:add')) return
   isDictEdit.value = !!(row && row.id)
   dictFormRef.value?.resetFields()
   if (row && row.id) {
@@ -186,6 +191,7 @@ function openDictDialog(row?: any) {
 }
 
 async function handleDictSubmit() {
+  if (isDictEdit.value ? !hasPermission('system:dict:edit') : !hasPermission('system:dict:add')) return
   const valid = await dictFormRef.value?.validate().catch(() => false)
   if (!valid) return
   if (isDictEdit.value) {
@@ -218,6 +224,7 @@ const itemRules: FormRules = {
 }
 
 function openItemDialog(row?: any) {
+  if (row ? !hasPermission('system:field:edit') : !hasPermission('system:field:add')) return
   isItemEdit.value = !!(row && row.id)
   itemFormRef.value?.resetFields()
   if (row && row.id) {
@@ -229,6 +236,7 @@ function openItemDialog(row?: any) {
 }
 
 async function handleItemSubmit() {
+  if (isItemEdit.value ? !hasPermission('system:field:edit') : !hasPermission('system:field:add')) return
   const valid = await itemFormRef.value?.validate().catch(() => false)
   if (!valid) return
   if (isItemEdit.value) {
@@ -244,6 +252,7 @@ async function handleItemSubmit() {
 
 // 切换启用/禁用状态
 async function handleToggleStatus(row: any) {
+  if (!hasPermission('system:field:edit')) return
   const newStatus = row.status === 1 ? 0 : 1
   await request.put(`/dicts/items/${row.id}`, { status: newStatus })
   ElMessage.success(newStatus === 1 ? '已启用' : '已禁用')
@@ -251,6 +260,7 @@ async function handleToggleStatus(row: any) {
 }
 
 async function handleDeleteItem(id: number) {
+  if (!hasPermission('system:field:delete')) return
   await ElMessageBox.confirm('确定删除该枚举值吗？被数据引用的值无法删除。', '提示', { type: 'warning' })
   try {
     await request.delete(`/dicts/items/${id}`)

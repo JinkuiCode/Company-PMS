@@ -17,7 +17,7 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_project_update_can_save_archive_product_line() -> None:
+def test_project_update_keeps_archive_product_line_read_only() -> None:
     schema = read("app/schemas/project.py")
     model = read("app/models/project.py")
     service = read("app/services/project.py")
@@ -27,14 +27,15 @@ def test_project_update_can_save_archive_product_line() -> None:
     assert "product_line: str | None = None" in schema
     assert 'product_line: Mapped[str | None] = mapped_column(NVARCHAR(32)' in model
     assert "product_line: str | None = Field(None, max_length=32)" in schema
-    assert "proj.product_line = product_line_value" in service
+    assert 'if "product_line" in update_data' in service
+    assert "产品线来自项目档案，请在项目档案中维护" in service
     assert "PmsProjectArchive" in service
-    assert "updated_by" in service
     assert "archive.product_line if archive and archive.product_line else p.product_line" in service
     assert "项目未关联档案，无法更新产品类" not in service
     assert "ALTER TABLE pms_project ADD product_line NVARCHAR(32) NULL" in init_db
-    assert "user_id: int = Depends(get_current_user_id)" in api
-    assert "project_service.update_project(db, project_id, data, user_id, request=request)" in api
+    assert 'require_permission("project:list:edit")' in api
+    assert 'scope_ctx["user_id"]' in api
+    assert "scope_context=scope_ctx" in api
 
 
 def test_project_update_can_save_stage_progress_fields() -> None:
@@ -51,6 +52,6 @@ def test_project_update_can_save_stage_progress_fields() -> None:
 
 
 if __name__ == "__main__":
-    test_project_update_can_save_archive_product_line()
+    test_project_update_keeps_archive_product_line_read_only()
     test_project_update_can_save_stage_progress_fields()
     print("project update contract passed")

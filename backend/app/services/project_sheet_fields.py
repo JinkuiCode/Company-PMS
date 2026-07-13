@@ -37,6 +37,7 @@ def _field(
     source_type: str = "detail",
     editable: bool = True,
     computed: bool = False,
+    enum_code: str | None = None,
 ) -> dict[str, Any]:
     is_system_field = source_type == "system"
     return {
@@ -48,6 +49,7 @@ def _field(
         "source_type": source_type,
         "editable": editable,
         "computed": computed,
+        "enum_code": enum_code,
         "list_available": not is_system_field,
         "quick_addable": (not is_system_field) and value_type != "long_text",
     }
@@ -61,7 +63,16 @@ PROJECT_SHEET_FIELDS = [
     _field(5, "progress_notes", "推进记录", "progress_notes", "long_text"),
     _field(6, "duplicate_check", "查重", "system", source_type="computed", editable=False, computed=True),
     _field(7, "order_year", "订单年份", "duration", "number", source_type="computed", editable=False, computed=True),
-    _field(8, "node_status", "节点", "basic", "select", source_type="project", editable=True),
+    _field(
+        8,
+        "node_status",
+        "节点",
+        "basic",
+        "select",
+        source_type="project",
+        editable=True,
+        enum_code="project_status",
+    ),
     _field(9, "category", "类别", "basic"),
     _field(10, "product_line", "产品类", "basic", source_type="archive", editable=False),
     _field(11, "project_name", "项目名称", "basic", source_type="archive", editable=False),

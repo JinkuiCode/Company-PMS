@@ -10,10 +10,10 @@ assert.match(
   /project-progress-workbench/,
   'Project progress entry should use the confirmed workbench layout shell',
 )
-assert.match(
+assert.doesNotMatch(
   projectList,
-  /currentViewName/,
-  'Project progress workbench should show the one active view as static context',
+  /currentViewName|当前只开放总进度视图|单击选中；双击进度\/计划字段自动保存；点右侧详情展开抽屉/,
+  'Project progress workbench should not reserve business space for inactive-view or operation-guide copy',
 )
 assert.doesNotMatch(
   projectList,
@@ -75,15 +75,15 @@ assert.doesNotMatch(
   /field === 'product_line'/,
   'Progress page should not save archive-derived product line edits',
 )
-assert.match(
+assert.doesNotMatch(
   projectList,
-  /materializeStageProgressDefaults/,
-  'Stage progress rows should materialize display defaults before editing',
+  /stageProgressOffsets|materializeStageProgressDefaults|total_progress\) \+ stageProgressOffsets/,
+  'Stage columns should not fabricate values from the legacy task-based total progress',
 )
 assert.match(
   projectList,
-  /rowData\.value = res\.items\.map\(materializeStageProgressDefaults\)/,
-  'Fetched rows should expose the visible stage progress value to AG Grid editors',
+  /function renderProgressBar\(value: number \| null \| undefined\)[\s\S]*?if \(value == null\) return/,
+  'An unmaintained stage should render as an explicit empty value instead of a synthetic 0%',
 )
 assert.match(
   projectList,
@@ -122,13 +122,53 @@ assert.match(
 )
 assert.match(
   projectList,
-  /field:\s*'design_progress'[\s\S]*?editable:\s*true/,
-  'Design progress should be editable from the progress table',
+  /field:\s*'design_progress'[\s\S]*?editable:\s*\(\)\s*=>\s*hasPermission\('project:list:edit'\)/,
+  'Design progress should be editable from the progress table only with edit permission',
 )
 assert.match(
   projectList,
-  /field:\s*'test_progress'[\s\S]*?editable:\s*true/,
-  'Test progress should be editable from the progress table',
+  /field:\s*'test_progress'[\s\S]*?editable:\s*\(\)\s*=>\s*hasPermission\('project:list:edit'\)/,
+  'Test progress should be editable from the progress table only with edit permission',
+)
+assert.match(
+  projectList,
+  /const projectStatusEditorValues = computed\(\(\) => projectStatusOptions\.map\(item => item\.value\)\)/,
+  'Node editor options should keep the numeric project-status values used by the row data',
+)
+assert.match(
+  projectList,
+  /field:\s*'status'[\s\S]*?valueFormatter:\s*\(params: any\) => statusLabel\(params\.value\)[\s\S]*?cellEditorParams:\s*\(\) => \(\{ values: projectStatusEditorValues\.value \}\)/,
+  'Node editor should display Chinese labels while matching and saving numeric status values',
+)
+assert.match(
+  projectList,
+  /:defaultColGroupDef="defaultColGroupDef"/,
+  'Project progress group headers should receive the same alignment rule as ordinary headers',
+)
+assert.match(
+  projectList,
+  /const defaultColDef: ColDef = \{[\s\S]*?headerClass:\s*'progress-list-header-center'/,
+  'All ordinary project-progress headers should opt into centered alignment',
+)
+assert.match(
+  projectList,
+  /const defaultColGroupDef: Partial<ColGroupDef<ProjectRow>> = \{[\s\S]*?headerClass:\s*'progress-list-header-center'/,
+  'All project-progress group headers should opt into centered alignment',
+)
+assert.match(
+  projectList,
+  /:deep\(\.progress-list-header-center \.ag-header-cell-label\),[\s\S]*?:deep\(\.progress-list-header-center \.ag-header-group-cell-label\)[\s\S]*?justify-content:\s*center;/,
+  'Centered header styling should cover both ordinary and grouped column labels',
+)
+assert.match(
+  projectList,
+  /:deep\(\.progress-workbench-grid \.ag-cell-inline-editing\) \{[\s\S]*?border:\s*0;[\s\S]*?border-radius:\s*0;[\s\S]*?box-shadow:\s*inset 0 0 0 1px rgba\(79, 70, 229, 0\.42\);/,
+  'Inline editing should keep one full-cell focus boundary instead of an additional card frame',
+)
+assert.match(
+  projectList,
+  /:deep\(\.progress-workbench-grid \.ag-cell-inline-editing \.ag-cell-edit-wrapper\),[\s\S]*?:deep\(\.progress-workbench-grid \.ag-cell-inline-editing \.ag-picker-field-wrapper\) \{[\s\S]*?border:\s*0 !important;[\s\S]*?border-radius:\s*0 !important;[\s\S]*?box-shadow:\s*none !important;/,
+  'Editors inside the project progress grid should not render a second nested input border',
 )
 assert.doesNotMatch(
   projectList,
@@ -174,6 +214,16 @@ assert.doesNotMatch(
   projectList,
   /summary-strip|summary-card|metric-card/,
   'Project progress workbench should not reserve first-screen space for statistic cards',
+)
+assert.doesNotMatch(
+  projectList,
+  /headerName:\s*'关联任务'/,
+  'The legacy related-task count should not occupy the current project progress list',
+)
+assert.doesNotMatch(
+  projectList,
+  /\{ field: 'task_count', label: '任务数'/,
+  'The legacy related-task count should not remain a custom filter in the current progress workbench',
 )
 
 const savedTextFunction = projectList.match(/function setSavedText\([\s\S]*?\n}\n\nasync function openProjectDrawer/)

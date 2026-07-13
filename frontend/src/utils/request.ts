@@ -33,6 +33,12 @@ request.interceptors.response.use(
         window.location.href = '/login'
       }
     }
+    if (error.response?.status === 403 && !requestUrl.includes('/auth/me')) {
+      window.dispatchEvent(new CustomEvent('pms:permission-denied'))
+      import('@/stores/auth').then(({ useAuthStore }) => {
+        useAuthStore().fetchUser().catch(() => undefined)
+      })
+    }
     // 非 401 或登录请求的 401：只弹消息，不跳转，让调用方自行处理
     if (isLoginRequest && error.response?.status === 401) {
       // 登录失败仅由调用方显示错误，这里不弹重复消息

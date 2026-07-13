@@ -140,6 +140,7 @@ class ProjectSheetField(BaseModel):
     computed: bool = False
     list_available: bool = False
     quick_addable: bool = False
+    enum_code: str | None = None
     value: Any = None
 
 
@@ -155,8 +156,25 @@ class ProjectSheetDetailResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class ProjectProgressDrawerUpdate(BaseModel):
+    """项目进度抽屉可维护的项目主表字段。"""
+    status: int | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    design_progress: int | None = Field(default=None, ge=0, le=100)
+    order_progress: int | None = Field(default=None, ge=0, le=100)
+    kit_progress: int | None = Field(default=None, ge=0, le=100)
+    frame_progress: int | None = Field(default=None, ge=0, le=100)
+    dryer_progress: int | None = Field(default=None, ge=0, le=100)
+    assembly_progress: int | None = Field(default=None, ge=0, le=100)
+    test_progress: int | None = Field(default=None, ge=0, le=100)
+
+    model_config = {"extra": "forbid"}
+
+
 class ProjectSheetDetailUpdate(BaseModel):
     values: dict[str, Any] = Field(default_factory=dict)
+    project_values: ProjectProgressDrawerUpdate = Field(default_factory=ProjectProgressDrawerUpdate)
 
 
 # ========== 任务 ==========

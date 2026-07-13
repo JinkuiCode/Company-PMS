@@ -48,7 +48,10 @@
 
 - 不随意改变 OA 登录流程、SSO 回调、金蝶同步接口和权限逻辑。
 - 涉及 OA、ERP、认证、菜单权限、数据权限的改动，需要先说明接口影响和回滚风险。
-- 后端业务接口要考虑 RBAC 和数据权限。
+- 后端业务接口必须通过统一 RBAC 依赖校验按钮权限，并在读写项目、任务、档案和 ERP 数据时同时校验数据范围与产品线范围。
+- 运行时权限以数据库中当前有效用户、有效角色和有效权限为准；JWT 不固化权限，撤权后下一次请求立即生效。
+- 前端的路由、按钮和表格编辑状态要消费同一权限码，但前端隐藏只用于交互体验，后端始终是最终授权防线。
+- 不得为 `admin` 或其他超级角色设置运行时全权旁路，后端启动时也不得自动补回人工撤销的权限。
 - 权限体系需预留用户、角色、菜单、部门等能力。
 
 ## 操作日志
@@ -58,6 +61,15 @@
 - 敏感字段不得明文入库，包括 password、password_hash、token、remember_token、secret、sign、key 等。
 - 日志表自身不记录日志，避免递归。
 - 前端日志查询页面为 `frontend/src/views/system/OperationLogList.vue`，应继续沿用标准列表与筛选组件。
+
+## 字段目录与业务枚举
+
+- 数据字典是由 `backend/app/services/field_catalog.py` 自动生成的只读字段目录，不作为在线数据库结构或动态表单编辑器。
+- 新增、改名或删除业务字段时，必须同步维护模型、Schema 或对应字段注册表，并通过 `backend/tests/field_catalog_contract.py`，保证字段目录及时更新。
+- 选择型业务字段必须声明稳定的 `enum_code`，后端通过 `backend/app/services/enum_registry.py` 注册与校验，前端通过 `frontend/src/composables/useEnumOptions.ts` 读取；禁止在多个页面重复硬编码同一组选项。
+- 产品线、产品类型等可配置枚举允许维护值；档案、项目和任务状态属于固定流程枚举，存储值不可在线增删改，仅允许维护显示名、排序和启停。
+- 数据权限、ERP 同步状态等系统协议值只进入字段目录并标记为系统固定，不进入枚举管理。
+- 禁用枚举值不得用于新增或变更，历史数据仍须通过完整 `label_map` 正常显示；已被业务数据引用的枚举值不得删除。
 
 ## 本地启动与辅助脚本
 
@@ -85,6 +97,18 @@ node tests/archive-filter-contract.test.mjs
 ```
 
 后端配置或初始化逻辑改动时，检查 `backend/tests/` 下对应契约测试。
+
+字段或枚举相关改动还应运行：
+
+```bash
+cd backend
+python tests/field_catalog_contract.py
+python tests/enum_management_contract.py
+
+cd ../frontend
+node tests/data-dictionary-contract.test.mjs
+node tests/enum-management-contract.test.mjs
+```
 
 ## GitHub 工作流
 

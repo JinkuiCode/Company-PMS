@@ -11,9 +11,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 os.environ["DB_DIALECT"] = "sqlite"
-os.environ["SQLITE_DB_PATH"] = "data/pms-test-project-sheet-list.db"
-
-DB_PATH = ROOT / os.environ["SQLITE_DB_PATH"]
+DB_PATH = ROOT / "data/pms-test-project-sheet-list.db"
+os.environ["SQLITE_DB_PATH"] = str(DB_PATH)
 if DB_PATH.exists():
     DB_PATH.unlink()
 
@@ -158,6 +157,8 @@ def test_project_sheet_fields_metadata_endpoint_returns_groups_without_values():
         "dept_id": None,
         "data_scope": 4,
         "product_lines": None,
+        "role_codes": ["contract-test"],
+        "permissions": ["project:list:view"],
     }
     try:
         with TestClient(app) as client:

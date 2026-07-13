@@ -12,6 +12,100 @@ from app.schemas.rbac import (
     DeptCreate, DeptUpdate, DeptResponse,
 )
 from app.services.operation_log import record_operation_log, serialize_model
+from app.services.enum_registry import validate_enum_value
+
+
+def _split_product_lines(raw_value: str | None) -> list[str]:
+    return [value.strip() for value in (raw_value or "").split(",") if value.strip()]
+
+
+RECOVERY_PERMISSIONS = {
+    "system:user:view",
+    "system:user:edit",
+    "system:role:view",
+    "system:role:edit",
+}
+
+
+def normalize_role_menu_ids(db: Session, menu_ids: list[int]) -> list[int]:
+    """校验权限节点，并自动补齐动作对应的查看权限和祖先节点。"""
+    if len(menu_ids) != len(set(menu_ids)):
+        raise HTTPException(status_code=400, detail="权限节点不能重复")
+    if not menu_ids:
+        return []
+
+    menus = db.query(SysMenu).filter(SysMenu.id.in_(menu_ids)).all()
+    if len(menus) != len(menu_ids):
+        raise HTTPException(status_code=400, detail="包含不存在的权限节点")
+    if any(menu.status != 1 for menu in menus):
+        raise HTTPException(status_code=400, detail="不能分配已禁用的权限节点")
+
+    selected = {menu.id for menu in menus}
+    for menu in list(menus):
+        if menu.menu_type != "C":
+            continue
+        view_menu = next((
+            child for child in db.query(SysMenu).filter(
+                SysMenu.parent_id == menu.id,
+                SysMenu.menu_type == "B",
+                SysMenu.status == 1,
+            ).all()
+            if child.permission_code and child.permission_code.endswith(":view")
+        ), None)
+        if view_menu:
+            selected.add(view_menu.id)
+
+    for menu in list(menus):
+        if menu.menu_type != "B" or not menu.permission_code or menu.permission_code.endswith(":view"):
+            continue
+        view_menu = db.query(SysMenu).filter(
+            SysMenu.parent_id == menu.parent_id,
+            SysMenu.menu_type == "B",
+            SysMenu.permission_code.like("%:view"),
+            SysMenu.status == 1,
+        ).first()
+        if not view_menu:
+            raise HTTPException(status_code=400, detail=f"动作权限缺少查看权限：{menu.permission_code}")
+        selected.add(view_menu.id)
+
+    menu_map = {menu.id: menu for menu in db.query(SysMenu).all()}
+    pending = list(selected)
+    while pending:
+        menu = menu_map.get(pending.pop())
+        if menu and menu.parent_id and menu.parent_id not in selected:
+            parent = menu_map.get(menu.parent_id)
+            if not parent or parent.status != 1:
+                raise HTTPException(status_code=400, detail="权限节点的上级菜单不存在或已禁用")
+            selected.add(parent.id)
+            pending.append(parent.id)
+    return sorted(selected)
+
+
+def ensure_recovery_administrator_exists(db: Session) -> None:
+    """防止通过角色配置把所有权限管理员同时锁在系统外。"""
+    active_users = db.query(SysUser).filter(SysUser.status == 1).all()
+    for user in active_users:
+        role_ids = [role_id for (role_id,) in db.query(SysUserRole.role_id).join(
+            SysRole, SysRole.id == SysUserRole.role_id
+        ).filter(
+            SysUserRole.user_id == user.id,
+            SysRole.status == 1,
+        ).all()]
+        if not role_ids:
+            continue
+        permissions = {
+            code for (code,) in db.query(SysMenu.permission_code).join(
+                SysRoleMenu, SysRoleMenu.menu_id == SysMenu.id
+            ).filter(
+                SysRoleMenu.role_id.in_(role_ids),
+                SysMenu.status == 1,
+                SysMenu.permission_code.isnot(None),
+            ).all()
+            if code
+        }
+        if RECOVERY_PERMISSIONS.issubset(permissions):
+            return
+    raise HTTPException(status_code=409, detail="至少保留一名可管理用户和角色权限的有效管理员")
 
 
 # ==================== 用户管理 ====================
@@ -41,6 +135,15 @@ def get_user_list(db: Session, page: int = 1, page_size: int = 15, dept_id: int 
             created_at=u.created_at, updated_at=u.updated_at,
         ))
     return {"total": total, "items": items}
+
+
+def get_user_options(db: Session) -> list[dict]:
+    """为业务表单提供最小化的有效用户选项。"""
+    users = db.query(SysUser).filter(SysUser.status == 1).order_by(SysUser.real_name, SysUser.id).all()
+    return [
+        {"id": user.id, "real_name": user.real_name, "dept_id": user.dept_id}
+        for user in users
+    ]
 
 
 def create_user(db: Session, data: UserCreate, operator_id: int | None = None, request: Request | None = None):
@@ -113,6 +216,9 @@ def update_user(db: Session, user_id: int, data: UserUpdate, operator_id: int | 
         for role_id in data.role_ids:
             db.add(SysUserRole(user_id=user_id, role_id=role_id))
 
+    db.flush()
+    ensure_recovery_administrator_exists(db)
+
     after_role_ids = data.role_ids if data.role_ids is not None else before_role_ids
     record_operation_log(
         db,
@@ -140,6 +246,8 @@ def delete_user(db: Session, user_id: int, operator_id: int | None = None, reque
     before = serialize_model(user, extra={"role_ids": role_ids})
     db.query(SysUserRole).filter(SysUserRole.user_id == user_id).delete()
     db.delete(user)
+    db.flush()
+    ensure_recovery_administrator_exists(db)
     record_operation_log(
         db,
         module="系统管理",
@@ -163,32 +271,44 @@ def get_role_list(db: Session):
     return [RoleResponse.model_validate(r) for r in roles]
 
 
+def get_role_options(db: Session) -> list[dict]:
+    roles = db.query(SysRole).filter(SysRole.status == 1).order_by(SysRole.id).all()
+    return [{"id": role.id, "role_name": role.role_name, "role_code": role.role_code} for role in roles]
+
+
 def create_role(db: Session, data: RoleCreate, operator_id: int | None = None, request: Request | None = None):
     """创建角色，可同时分配菜单权限"""
     if db.query(SysRole).filter(SysRole.role_code == data.role_code).first():
         raise HTTPException(status_code=400, detail="角色编码已存在")
-    role_data = data.model_dump(exclude={"menu_ids"})
-    role = SysRole(**role_data)
-    db.add(role)
-    db.commit()
-    db.refresh(role)
-    # 分配菜单权限
-    for menu_id in data.menu_ids:
-        db.add(SysRoleMenu(role_id=role.id, menu_id=menu_id))
-    record_operation_log(
-        db,
-        module="系统管理",
-        action="create",
-        entity_type="sys_role",
-        entity_id=role.id,
-        entity_name=role.role_name,
-        operator_id=operator_id,
-        request=request,
-        summary=f"创建角色：{role.role_name}",
-        after_data=serialize_model(role, extra={"menu_ids": data.menu_ids}),
-    )
-    db.commit()
-    return {"msg": "创建成功", "id": role.id}
+    normalized_menu_ids = normalize_role_menu_ids(db, data.menu_ids)
+    for product_line in _split_product_lines(data.product_lines):
+        validate_enum_value(db, "product_line", product_line)
+    try:
+        role_data = data.model_dump(exclude={"menu_ids"})
+        role = SysRole(**role_data)
+        db.add(role)
+        db.flush()
+        for menu_id in normalized_menu_ids:
+            db.add(SysRoleMenu(role_id=role.id, menu_id=menu_id))
+        db.flush()
+        ensure_recovery_administrator_exists(db)
+        record_operation_log(
+            db,
+            module="系统管理",
+            action="create",
+            entity_type="sys_role",
+            entity_id=role.id,
+            entity_name=role.role_name,
+            operator_id=operator_id,
+            request=request,
+            summary=f"创建角色：{role.role_name}",
+            after_data=serialize_model(role, extra={"menu_ids": normalized_menu_ids}),
+        )
+        db.commit()
+        return {"msg": "创建成功", "id": role.id}
+    except Exception:
+        db.rollback()
+        raise
 
 
 def update_role(db: Session, role_id: int, data: RoleUpdate, operator_id: int | None = None, request: Request | None = None):
@@ -199,32 +319,46 @@ def update_role(db: Session, role_id: int, data: RoleUpdate, operator_id: int | 
 
     before_menu_ids = get_role_menu_ids(db, role_id)
     before = serialize_model(role, extra={"menu_ids": before_menu_ids})
-    update_data = data.model_dump(exclude_unset=True, exclude={"menu_ids"})
-    for key, val in update_data.items():
-        setattr(role, key, val)
+    normalized_menu_ids = normalize_role_menu_ids(db, data.menu_ids) if data.menu_ids is not None else before_menu_ids
+    try:
+        update_data = data.model_dump(exclude_unset=True, exclude={"menu_ids"})
+        if "product_lines" in update_data:
+            current_lines = _split_product_lines(role.product_lines)
+            for product_line in _split_product_lines(update_data["product_lines"]):
+                validate_enum_value(
+                    db,
+                    "product_line",
+                    product_line,
+                    current_value=product_line if product_line in current_lines else None,
+                )
+        for key, val in update_data.items():
+            setattr(role, key, val)
 
-    # 重新分配菜单权限
-    if data.menu_ids is not None:
-        db.query(SysRoleMenu).filter(SysRoleMenu.role_id == role_id).delete()
-        for menu_id in data.menu_ids:
-            db.add(SysRoleMenu(role_id=role_id, menu_id=menu_id))
+        if data.menu_ids is not None:
+            db.query(SysRoleMenu).filter(SysRoleMenu.role_id == role_id).delete()
+            for menu_id in normalized_menu_ids:
+                db.add(SysRoleMenu(role_id=role_id, menu_id=menu_id))
 
-    after_menu_ids = data.menu_ids if data.menu_ids is not None else before_menu_ids
-    record_operation_log(
-        db,
-        module="系统管理",
-        action="update",
-        entity_type="sys_role",
-        entity_id=role.id,
-        entity_name=role.role_name,
-        operator_id=operator_id,
-        request=request,
-        summary=f"更新角色：{role.role_name}",
-        before_data=before,
-        after_data=serialize_model(role, extra={"menu_ids": after_menu_ids}),
-    )
-    db.commit()
-    return {"msg": "更新成功"}
+        db.flush()
+        ensure_recovery_administrator_exists(db)
+        record_operation_log(
+            db,
+            module="系统管理",
+            action="update",
+            entity_type="sys_role",
+            entity_id=role.id,
+            entity_name=role.role_name,
+            operator_id=operator_id,
+            request=request,
+            summary=f"更新角色：{role.role_name}",
+            before_data=before,
+            after_data=serialize_model(role, extra={"menu_ids": normalized_menu_ids}),
+        )
+        db.commit()
+        return {"msg": "更新成功"}
+    except Exception:
+        db.rollback()
+        raise
 
 
 def delete_role(db: Session, role_id: int, operator_id: int | None = None, request: Request | None = None):
@@ -232,10 +366,13 @@ def delete_role(db: Session, role_id: int, operator_id: int | None = None, reque
     role = db.query(SysRole).filter(SysRole.id == role_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
+    if db.query(SysUserRole).filter(SysUserRole.role_id == role_id).first():
+        raise HTTPException(status_code=409, detail="该角色仍关联用户，请先完成用户角色迁移")
     before = serialize_model(role, extra={"menu_ids": get_role_menu_ids(db, role_id)})
-    db.query(SysUserRole).filter(SysUserRole.role_id == role_id).delete()
     db.query(SysRoleMenu).filter(SysRoleMenu.role_id == role_id).delete()
     db.delete(role)
+    db.flush()
+    ensure_recovery_administrator_exists(db)
     record_operation_log(
         db,
         module="系统管理",
@@ -299,6 +436,8 @@ def update_menu(db: Session, menu_id: int, data: MenuUpdate, operator_id: int | 
     update_data = data.model_dump(exclude_unset=True)
     for key, val in update_data.items():
         setattr(menu, key, val)
+    db.flush()
+    ensure_recovery_administrator_exists(db)
     record_operation_log(
         db,
         module="系统管理",
@@ -325,6 +464,8 @@ def delete_menu(db: Session, menu_id: int, operator_id: int | None = None, reque
     db.query(SysMenu).filter(SysMenu.parent_id == menu_id).update({"parent_id": 0})
     db.query(SysRoleMenu).filter(SysRoleMenu.menu_id == menu_id).delete()
     db.delete(menu)
+    db.flush()
+    ensure_recovery_administrator_exists(db)
     record_operation_log(
         db,
         module="系统管理",
@@ -363,6 +504,14 @@ def get_dept_tree(db: Session) -> list[DeptResponse]:
         elif d.parent_id in dept_dict:
             dept_dict[d.parent_id].children.append(dept_dict[d.id])
     return tree
+
+
+def get_dept_options(db: Session) -> list[dict]:
+    depts = db.query(SysDept).filter(SysDept.status == 1).order_by(SysDept.sort, SysDept.id).all()
+    return [
+        {"id": dept.id, "parent_id": dept.parent_id, "dept_name": dept.dept_name}
+        for dept in depts
+    ]
 
 
 def create_dept(db: Session, data: DeptCreate, operator_id: int | None = None, request: Request | None = None):

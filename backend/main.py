@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.api import auth, users, roles, menus, depts, projects, sso, erp, dicts, operation_logs
-from app.api.auth import get_current_user_id, get_current_user_context
+from app.api import auth, users, roles, menus, depts, projects, sso, erp, dicts, operation_logs, field_catalog
+from app.services.authorization import get_current_user_context, require_permission
 from app.models.init_db import init_db
-from app.models.rbac import SysRoleMenu, SysMenu, SysUserRole
+from app.models.rbac import SysRole, SysRoleMenu, SysMenu, SysUserRole
 
 
 @asynccontextmanager
@@ -41,13 +41,19 @@ app.include_router(sso.router)
 app.include_router(erp.router)
 app.include_router(dicts.router)
 app.include_router(operation_logs.router)
+app.include_router(field_catalog.router)
 
 
 @app.get("/api/my-menus", tags=["系统"])
-def get_my_menus(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+def get_my_menus(scope_ctx: dict = Depends(get_current_user_context), db: Session = Depends(get_db)):
     """获取当前用户的菜单树（根据角色）"""
     # 获取用户的角色
-    role_ids = [ur.role_id for ur in db.query(SysUserRole).filter(SysUserRole.user_id == user_id).all()]
+    role_ids = [role_id for (role_id,) in db.query(SysUserRole.role_id).join(
+        SysRole, SysRole.id == SysUserRole.role_id
+    ).filter(
+        SysUserRole.user_id == scope_ctx["user_id"],
+        SysRole.status == 1,
+    ).all()]
     if not role_ids:
         return []
 
@@ -65,6 +71,7 @@ def get_my_menus(user_id: int = Depends(get_current_user_id), db: Session = Depe
         SysMenu.id.in_(menu_ids_set),
         SysMenu.status == 1,
         SysMenu.visible == 1,
+        SysMenu.menu_type.in_(["M", "C"]),
     ).order_by(SysMenu.parent_id, SysMenu.sort).all()
 
     menu_dict = {}
@@ -86,7 +93,7 @@ def get_my_menus(user_id: int = Depends(get_current_user_id), db: Session = Depe
 
 @app.get("/api/dashboard/stats", tags=["仪表盘"])
 def dashboard_stats(
-    scope_ctx: dict = Depends(get_current_user_context),
+    scope_ctx: dict = Depends(require_permission("dashboard:view")),
     db: Session = Depends(get_db),
 ):
     """获取仪表盘统计数据"""

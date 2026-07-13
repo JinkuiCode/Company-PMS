@@ -4,7 +4,7 @@
       <template #header>
         <div class="page-header">
           <span>角色管理</span>
-          <el-button type="primary" @click="openDialog()">新增角色</el-button>
+          <el-button v-if="hasPermission('system:role:add')" type="primary" @click="openDialog()">新增角色</el-button>
         </div>
       </template>
 
@@ -20,7 +20,7 @@
         <el-table-column label="产品线" width="200">
           <template #default="{ row }">
             <template v-if="row.product_lines">
-              <el-tag v-for="pl in row.product_lines.split(',')" :key="pl" size="small" style="margin:2px 4px 2px 0;">{{ pl }}</el-tag>
+              <el-tag v-for="pl in row.product_lines.split(',')" :key="pl" size="small" style="margin:2px 4px 2px 0;">{{ productLineLabel(pl) }}</el-tag>
             </template>
             <el-tag v-else size="small" type="info">全部</el-tag>
           </template>
@@ -35,8 +35,8 @@
         <el-table-column prop="remark" label="备注" />
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDialog(row)">编辑</el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row.id)">删除</el-button>
+            <el-button v-if="hasPermission('system:role:edit')" link type="primary" size="small" @click="openDialog(row)">编辑</el-button>
+            <el-button v-if="hasPermission('system:role:delete')" link type="danger" size="small" @click="handleDelete(row.id)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -80,7 +80,13 @@
             </el-row>
             <el-form-item label="产品线">
               <el-checkbox-group v-model="selectedProductLines">
-                <el-checkbox v-for="pl in allProductLines" :key="pl" :label="pl" :value="pl" />
+                <el-checkbox
+                  v-for="pl in visibleProductLines"
+                  :key="pl.value"
+                  :label="pl.label"
+                  :value="pl.value"
+                  :disabled="pl.status === 0"
+                />
               </el-checkbox-group>
               <div style="font-size:12px;color:#909399;">不选 = 不限制（全部产品线）</div>
             </el-form-item>
@@ -121,7 +127,7 @@
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">保存</el-button>
+        <el-button v-if="isEdit ? hasPermission('system:role:edit') : hasPermission('system:role:add')" type="primary" @click="handleSubmit">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -131,6 +137,11 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
+import { loadEnumOptions, type EnumOption } from '@/composables/useEnumOptions'
+
+const authStore = useAuthStore()
+const hasPermission = authStore.hasPermission
 
 const roleList = ref([])
 const dialogVisible = ref(false)
@@ -139,12 +150,23 @@ const formRef = ref<FormInstance>()
 const permTreeRef = ref()
 const permTree = ref<any[]>([])
 const checkedMenuIds = ref<number[]>([])
-const allProductLines = ref<string[]>([])
+const productLineOptions = ref<EnumOption[]>([])
 const selectedProductLines = ref<string[]>([])
+const visibleProductLines = computed(() => {
+  const byValue = new Map(productLineOptions.value.map(item => [item.value, item]))
+  selectedProductLines.value.forEach(value => {
+    if (!byValue.has(value)) byValue.set(value, { value, label: value, status: 0 })
+  })
+  return Array.from(byValue.values()).filter(item => item.status !== 0 || selectedProductLines.value.includes(item.value))
+})
+
+function productLineLabel(value: string) {
+  return productLineOptions.value.find(item => item.value === value)?.label || value
+}
 
 async function loadProductLines() {
-  const res: any = await request.get('/dicts/code/product_line')
-  allProductLines.value = (res?.items || []).map((i: any) => i.value)
+  const definition = await loadEnumOptions('product_line')
+  productLineOptions.value = definition.all_items
 }
 
 const form = reactive({
@@ -199,7 +221,22 @@ function handleCheckAll(val: boolean) {
   isIndeterminate.value = false
 }
 
-function handleTreeCheck() {
+function handleTreeCheck(data: any, state: { checkedKeys: number[] }) {
+  if (data.menu_type === 'B' && data.permission_code) {
+    const parent = permTreeRef.value?.getNode(data.parent_id)?.data
+    const siblings = parent?.children || []
+    const isChecked = state.checkedKeys.includes(data.id)
+    if (data.permission_code.endsWith(':view') && !isChecked) {
+      siblings
+        .filter((item: any) => item.menu_type === 'B' && item.id !== data.id)
+        .forEach((item: any) => permTreeRef.value?.setChecked(item.id, false, false))
+    } else if (!data.permission_code.endsWith(':view') && isChecked) {
+      const viewPermission = siblings.find(
+        (item: any) => item.menu_type === 'B' && item.permission_code?.endsWith(':view'),
+      )
+      if (viewPermission) permTreeRef.value?.setChecked(viewPermission.id, true, false)
+    }
+  }
   updateCheckAllState()
 }
 
@@ -209,6 +246,7 @@ async function fetchList() {
 }
 
 async function openDialog(row?: any) {
+  if (row ? !hasPermission('system:role:edit') : !hasPermission('system:role:add')) return
   isEdit.value = !!row
   formRef.value?.resetFields()
 
@@ -246,6 +284,7 @@ async function openDialog(row?: any) {
 }
 
 async function handleSubmit() {
+  if (isEdit.value ? !hasPermission('system:role:edit') : !hasPermission('system:role:add')) return
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
@@ -272,10 +311,16 @@ async function handleSubmit() {
     ElMessage.success('角色创建成功')
   }
   dialogVisible.value = false
-  fetchList()
+  await authStore.fetchUser()
+  if (!hasPermission('system:role:view')) {
+    window.location.href = '/403'
+    return
+  }
+  await fetchList()
 }
 
 async function handleDelete(id: number) {
+  if (!hasPermission('system:role:delete')) return
   await ElMessageBox.confirm('确定删除该角色吗？', '提示', { type: 'warning' })
   await request.delete(`/roles/${id}`)
   ElMessage.success('删除成功')

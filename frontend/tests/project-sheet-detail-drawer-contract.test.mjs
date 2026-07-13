@@ -65,8 +65,73 @@ assert.match(
 )
 assert.match(
   projectList,
-  /saveSheetDetailField/,
-  'Editable total-table fields should have a dedicated save path',
+  /drawerPendingChanges/,
+  'Drawer edits should remain in a local draft until the user saves them together',
+)
+assert.match(
+  projectList,
+  /saveDrawerChanges/,
+  'Editable total-table fields should save through one drawer-level batch action',
+)
+assert.match(
+  projectList,
+  /class="drawer-savebar"[\s\S]*?class="drawer-save"[\s\S]*?@click="saveDrawerChanges"/,
+  'The drawer should keep one fixed bottom save action instead of competing with the title in the header',
+)
+assert.match(
+  projectList,
+  /class="drawer-close"[\s\S]*?:icon="Close"[\s\S]*?aria-label="收起项目详情"/,
+  'The drawer header should use a compact accessible close icon',
+)
+assert.doesNotMatch(
+  projectList,
+  /原计划发货 \{\{ selectedProject\.end_date/,
+  'The drawer header should not repeat planned shipping information already shown in the field groups',
+)
+assert.match(
+  projectList,
+  /\.project-progress-workbench \{[\s\S]*?height:\s*100%;[\s\S]*?min-height:\s*0;/,
+  'The workbench should provide a bounded height so opening the drawer does not make the page scroll',
+)
+assert.match(
+  projectList,
+  /\.progress-detail-drawer \{[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*hidden;/,
+  'The drawer should contain overflow within its own bounded column',
+)
+assert.match(
+  projectList,
+  /\.drawer-body \{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?min-height:\s*0;[\s\S]*?overflow:\s*auto;/,
+  'Only the drawer body should scroll when the detail content is longer than the viewport',
+)
+assert.match(
+  projectList,
+  /\.drawer-savebar \{[\s\S]*?flex:\s*0 0 auto;/,
+  'The save bar should stay outside the scrollable drawer body',
+)
+assert.match(
+  projectList,
+  /if \(drawerEditingField\.value\) commitDrawerEdit\(\)[\s\S]*?if \(!drawerPendingChangeCount\.value\) return/,
+  'Saving should first commit the active inline editor before checking pending drafts',
+)
+assert.match(
+  projectList,
+  /request\.put\(`\/projects\/\$\{selectedProject\.value\.id\}\/sheet-detail`, \{ values: detailValues, project_values: projectValues \}\)/,
+  'The drawer should submit project and detail drafts through the existing atomic detail endpoint',
+)
+assert.doesNotMatch(
+  projectList,
+  /drawer-editor-actions/,
+  'Individual field save and cancel buttons should be removed from the drawer',
+)
+assert.match(
+  projectList,
+  /if \(action !== 'cancel'\) return[\s\S]*?drawerPendingChanges\.value = \{\}[\s\S]*?await fetchList\(\)[\s\S]*?await fetchProjectSheetDetail/,
+  'Discarding drawer drafts should reload both the list projection and drawer detail values',
+)
+assert.match(
+  projectList,
+  /function startSheetFieldEdit\([\s\S]*?drawerEditingField\.value && drawerEditingField\.value !== field\.key[\s\S]*?commitDrawerEdit\(\)/,
+  'Opening another field editor should retain the previous field value as a pending draft',
 )
 assert.match(
   projectList,

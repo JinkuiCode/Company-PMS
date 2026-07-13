@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Fold, Expand, Setting, User, Avatar, Menu, Folder, List, DataAnalysis, FolderOpened, Collection, Document } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -107,13 +107,30 @@ function handleLogout() {
   router.push('/login')
 }
 
+async function refreshAuthorization() {
+  try {
+    await authStore.fetchUser()
+    await fetchMenus()
+    const permission = route.meta.permission as string | undefined
+    if (permission && !authStore.hasPermission(permission)) {
+      await router.replace('/403')
+    }
+  } catch {
+    authStore.logout()
+    await router.replace('/login')
+  }
+}
+
 onMounted(() => {
   fetchMenus()
   // 如果用户信息为空，先获取
   if (!authStore.user) {
     authStore.fetchUser()
   }
+  window.addEventListener('pms:permission-denied', refreshAuthorization)
 })
+
+onBeforeUnmount(() => window.removeEventListener('pms:permission-denied', refreshAuthorization))
 </script>
 
 <style scoped>

@@ -4,7 +4,7 @@
     <div class="dict-list-panel">
       <div class="panel-header">
         <span>数据字典</span>
-        <el-button type="primary" size="small" @click="openDictDialog()">新增分类</el-button>
+        <el-button v-if="hasPermission('system:dict:add')" type="primary" size="small" @click="openDictDialog()">新增分类</el-button>
       </div>
       <el-input v-model="searchText" placeholder="搜索分类..." clearable size="small" style="padding: 8px 12px;" />
       <div class="dict-list-wrap">
@@ -36,9 +36,9 @@
               </span>
             </div>
             <div>
-              <el-button type="primary" size="small" @click="openItemDialog()">新增字段</el-button>
-              <el-button size="small" @click="openDictDialog(selectedDict)">编辑分类</el-button>
-              <el-button type="danger" size="small" plain @click="handleDeleteDict(selectedDict.id)">删除分类</el-button>
+              <el-button v-if="hasPermission('system:field:add')" type="primary" size="small" @click="openItemDialog()">新增字段</el-button>
+              <el-button v-if="hasPermission('system:dict:edit')" size="small" @click="openDictDialog(selectedDict)">编辑分类</el-button>
+              <el-button v-if="hasPermission('system:dict:delete')" type="danger" size="small" plain @click="handleDeleteDict(selectedDict.id)">删除分类</el-button>
             </div>
           </div>
         </template>
@@ -71,8 +71,8 @@
           </el-table-column>
           <el-table-column label="操作" width="140" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openItemDialog(row)">编辑</el-button>
-              <el-button link type="danger" size="small" @click="handleDeleteItem(row.id)">删除</el-button>
+              <el-button v-if="hasPermission('system:field:edit')" link type="primary" size="small" @click="openItemDialog(row)">编辑</el-button>
+              <el-button v-if="hasPermission('system:field:delete')" link type="danger" size="small" @click="handleDeleteItem(row.id)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -109,7 +109,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dictDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleDictSubmit">保存</el-button>
+        <el-button v-if="isDictEdit ? hasPermission('system:dict:edit') : hasPermission('system:dict:add')" type="primary" @click="handleDictSubmit">保存</el-button>
       </template>
     </el-dialog>
 
@@ -144,7 +144,7 @@
       </el-form>
       <template #footer>
         <el-button @click="itemDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleItemSubmit">保存</el-button>
+        <el-button v-if="isItemEdit ? hasPermission('system:field:edit') : hasPermission('system:field:add')" type="primary" @click="handleItemSubmit">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -154,6 +154,10 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+const hasPermission = authStore.hasPermission
 
 // ==================== 字典分类 ====================
 const dictList = ref<any[]>([])
@@ -176,7 +180,11 @@ async function fetchDicts() {
 
 function selectDict(d: any) {
   selectedDict.value = d
-  fetchItems()
+  if (hasPermission('system:field:view')) {
+    fetchItems()
+  } else {
+    dictItems.value = []
+  }
 }
 
 // 分类弹窗
@@ -193,6 +201,7 @@ const dictRules: FormRules = {
 }
 
 function openDictDialog(row?: any) {
+  if (row ? !hasPermission('system:dict:edit') : !hasPermission('system:dict:add')) return
   isDictEdit.value = !!(row && row.id)
   dictFormRef.value?.resetFields()
   if (row && row.id) {
@@ -204,6 +213,7 @@ function openDictDialog(row?: any) {
 }
 
 async function handleDictSubmit() {
+  if (isDictEdit.value ? !hasPermission('system:dict:edit') : !hasPermission('system:dict:add')) return
   const valid = await dictFormRef.value?.validate().catch(() => false)
   if (!valid) return
   if (isDictEdit.value) {
@@ -218,6 +228,7 @@ async function handleDictSubmit() {
 }
 
 async function handleDeleteDict(id: number) {
+  if (!hasPermission('system:dict:delete')) return
   await ElMessageBox.confirm('确定删除该字典分类吗？分类下的所有字段记录也将被删除。', '提示', { type: 'warning' })
   try {
     await request.delete(`/dicts/${id}`)
@@ -261,6 +272,7 @@ const itemRules: FormRules = {
 }
 
 function openItemDialog(row?: any) {
+  if (row ? !hasPermission('system:field:edit') : !hasPermission('system:field:add')) return
   isItemEdit.value = !!(row && row.id)
   itemFormRef.value?.resetFields()
   if (row && row.id) {
@@ -272,6 +284,7 @@ function openItemDialog(row?: any) {
 }
 
 async function handleItemSubmit() {
+  if (isItemEdit.value ? !hasPermission('system:field:edit') : !hasPermission('system:field:add')) return
   const valid = await itemFormRef.value?.validate().catch(() => false)
   if (!valid) return
   if (isItemEdit.value) {
@@ -286,6 +299,7 @@ async function handleItemSubmit() {
 }
 
 async function handleDeleteItem(id: number) {
+  if (!hasPermission('system:field:delete')) return
   await ElMessageBox.confirm('确定删除该字段记录吗？', '提示', { type: 'warning' })
   try {
     await request.delete(`/dicts/items/${id}`)

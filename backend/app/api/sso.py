@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.core.config import settings
 from app.core.database import get_db
 from app.services import sso as sso_service
+from app.services.authorization import require_permission
 from app.services.operation_log import record_operation_log
 
 router = APIRouter(prefix="/api/sso", tags=["SSO 单点登录"])
@@ -216,9 +217,26 @@ async def sso_oa_login(req: SsoOaLoginRequest, request: Request, db: Session = D
 
 
 @router.post("/generate-url", summary="生成 SSO 链接（管理工具）")
-def sso_generate_url(req: SsoUrlRequest):
+def sso_generate_url(
+    req: SsoUrlRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    scope_ctx: dict = Depends(require_permission("system:user:edit")),
+):
     """输入用户信息，返回带签名的 SSO URL"""
     url = sso_service.generate_sso_url(req.loginid, req.username, req.dept)
+    record_operation_log(
+        db,
+        module="认证",
+        action="sso_url_generate",
+        entity_type="sys_user",
+        entity_name=req.loginid,
+        operator_id=scope_ctx["user_id"],
+        request=request,
+        summary=f"生成 SSO 测试链接：{req.loginid}",
+        after_data={"loginid": req.loginid, "username": req.username, "dept": req.dept},
+        commit=True,
+    )
     return {"url": url}
 
 

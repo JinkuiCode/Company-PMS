@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.auth import get_current_user_id
+from app.services.authorization import require_permission
 from app.core.database import get_db
 from app.schemas.operation_log import OperationLogListResponse
 from app.services import operation_log as operation_log_service
@@ -24,7 +24,7 @@ def list_operation_logs(
     keyword: str | None = Query(None),
     start_time: datetime | None = Query(None),
     end_time: datetime | None = Query(None),
-    _user_id: int = Depends(get_current_user_id),
+    _scope_ctx: dict = Depends(require_permission("system:operation-log:view")),
     db: Session = Depends(get_db),
 ):
     return operation_log_service.get_operation_logs(

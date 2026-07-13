@@ -13,7 +13,7 @@
           :props="{ label: 'dept_name', children: 'children' }"
           highlight-current
           default-expand-all
-          draggable
+          :draggable="hasPermission('system:user:edit')"
           :expand-on-click-node="false"
           @node-click="handleDeptClick"
           @node-drop="handleDeptDrop"
@@ -37,9 +37,9 @@
         class="context-menu"
         :style="{ left: contextMenuX + 'px', top: contextMenuY + 'px' }"
       >
-        <li @click="openDeptDialog(null, contextMenuDeptId)">新增子部门</li>
-        <li v-if="contextMenuDeptId !== 0" @click="openDeptDialog(contextMenuDeptData)">编辑部门</li>
-        <li v-if="contextMenuDeptId !== 0" class="danger" @click="handleDeleteDept(contextMenuDeptId)">删除部门</li>
+        <li v-if="hasPermission('system:user:add')" @click="openDeptDialog(null, contextMenuDeptId)">新增子部门</li>
+        <li v-if="contextMenuDeptId !== 0 && hasPermission('system:user:edit')" @click="openDeptDialog(contextMenuDeptData)">编辑部门</li>
+        <li v-if="contextMenuDeptId !== 0 && hasPermission('system:user:delete')" class="danger" @click="handleDeleteDept(contextMenuDeptId)">删除部门</li>
       </ul>
     </Teleport>
 
@@ -49,7 +49,7 @@
         <template #header>
           <div class="page-header">
             <span>用户管理 <el-tag v-if="selectedDeptName" size="small" type="info" style="margin-left:8px">{{ selectedDeptName }}</el-tag></span>
-            <el-button type="primary" @click="openUserDialog()">新增用户</el-button>
+            <el-button v-if="hasPermission('system:user:add')" type="primary" @click="openUserDialog()">新增用户</el-button>
           </div>
         </template>
 
@@ -72,8 +72,8 @@
           </el-table-column>
           <el-table-column label="操作" width="130" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openUserDialog(row)">编辑</el-button>
-              <el-button link type="danger" size="small" @click="handleDeleteUser(row.id)">删除</el-button>
+              <el-button v-if="hasPermission('system:user:edit')" link type="primary" size="small" @click="openUserDialog(row)">编辑</el-button>
+              <el-button v-if="hasPermission('system:user:delete')" link type="danger" size="small" @click="handleDeleteUser(row.id)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -115,7 +115,7 @@
       </el-form>
       <template #footer>
         <el-button @click="deptDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleDeptSubmit">保存</el-button>
+        <el-button v-if="isDeptEdit ? hasPermission('system:user:edit') : hasPermission('system:user:add')" type="primary" @click="handleDeptSubmit">保存</el-button>
       </template>
     </el-dialog>
 
@@ -152,7 +152,7 @@
       </el-form>
       <template #footer>
         <el-button @click="userDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleUserSubmit">保存</el-button>
+        <el-button v-if="isUserEdit ? hasPermission('system:user:edit') : hasPermission('system:user:add')" type="primary" @click="handleUserSubmit">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -163,6 +163,10 @@ import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { OfficeBuilding } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+const hasPermission = authStore.hasPermission
 
 // ==================== 部门树 ====================
 const deptTreeRef = ref()
@@ -223,6 +227,10 @@ function handleDeptClick(data: any) {
 
 // 拖拽调整部门层级
 async function handleDeptDrop(draggingNode: any, dropNode: any, dropType: string) {
+  if (!hasPermission('system:user:edit')) {
+    await fetchDeptTree()
+    return
+  }
   const dragId = draggingNode.data.id
   if (dragId === 0) {
     ElMessage.warning('根节点不可拖拽')
@@ -267,6 +275,7 @@ onBeforeUnmount(() => {
 
 // 部门弹窗
 function openDeptDialog(row?: any, parentId?: number) {
+  if (row ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
   contextMenuVisible.value = false
   isDeptEdit.value = !!(row && row.id)
   deptFormRef.value?.resetFields()
@@ -279,6 +288,7 @@ function openDeptDialog(row?: any, parentId?: number) {
 }
 
 async function handleDeptSubmit() {
+  if (isDeptEdit.value ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
   const valid = await deptFormRef.value?.validate().catch(() => false)
   if (!valid) return
   if (isDeptEdit.value) {
@@ -293,6 +303,7 @@ async function handleDeptSubmit() {
 }
 
 async function handleDeleteDept(id: number) {
+  if (!hasPermission('system:user:delete')) return
   contextMenuVisible.value = false
   if (id === 0) return
   await ElMessageBox.confirm('确定删除该部门吗？', '提示', { type: 'warning' })
@@ -340,10 +351,11 @@ async function fetchUserList() {
 }
 
 async function fetchRoles() {
-  roleList.value = (await request.get('/roles')) as any
+  roleList.value = (await request.get('/roles/options')) as any
 }
 
 function openUserDialog(row?: any) {
+  if (row ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
   isUserEdit.value = !!row
   userFormRef.value?.resetFields()
   if (row) {
@@ -363,6 +375,7 @@ function openUserDialog(row?: any) {
 }
 
 async function handleUserSubmit() {
+  if (isUserEdit.value ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
   const valid = await userFormRef.value?.validate().catch(() => false)
   if (!valid) return
   if (isUserEdit.value) {
@@ -377,11 +390,26 @@ async function handleUserSubmit() {
     await request.post('/users', userForm)
     ElMessage.success('创建成功')
   }
+  if (isUserEdit.value && userForm.id === authStore.user?.id) {
+    try {
+      await authStore.fetchUser()
+    } catch {
+      authStore.logout()
+      window.location.href = '/login'
+      return
+    }
+    if (!hasPermission('system:user:view')) {
+      userDialogVisible.value = false
+      window.location.href = '/403'
+      return
+    }
+  }
   userDialogVisible.value = false
-  fetchUserList()
+  if (hasPermission('system:user:view')) fetchUserList()
 }
 
 async function handleDeleteUser(id: number) {
+  if (!hasPermission('system:user:delete')) return
   await ElMessageBox.confirm('确定删除该用户吗？', '提示', { type: 'warning' })
   await request.delete(`/users/${id}`)
   ElMessage.success('删除成功')
