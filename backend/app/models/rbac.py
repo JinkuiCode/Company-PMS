@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Integer, DateTime, ForeignKey, func, UniqueConstraint
+from sqlalchemy import CheckConstraint, Integer, DateTime, ForeignKey, func, UniqueConstraint
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +20,10 @@ class SysRole(Base):
     remark: Mapped[str | None] = mapped_column(NVARCHAR(256), default=None, comment="备注")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("data_scope BETWEEN 1 AND 4", name="ck_sys_role_data_scope"),
+    )
 
 
 class SysMenu(Base):

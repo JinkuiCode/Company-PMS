@@ -44,7 +44,26 @@ stop_port() {
   for pid in ${(f)pids}; do
     kill "$pid" 2>/dev/null || true
   done
-  sleep 0.8
+  local attempts=0
+  while [[ -n "$(port_pid "$port")" ]] && (( attempts < 20 )); do
+    sleep 0.1
+    (( attempts++ ))
+  done
+
+  local remaining
+  remaining="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -n "$remaining" ]]; then
+    log "$label did not stop gracefully; forcing the remaining listener(s) to exit."
+    for pid in ${(f)remaining}; do
+      kill -9 "$pid" 2>/dev/null || true
+    done
+    sleep 0.2
+  fi
+
+  if [[ -n "$(port_pid "$port")" ]]; then
+    log "Unable to stop $label on port $port."
+    return 1
+  fi
 }
 
 wait_for_url() {
@@ -122,8 +141,8 @@ if [[ "${PMS_FORCE_RESTART:-0}" == "1" ]]; then
   log "Force restart requested."
   stop_pid_file "$PID_DIR/backend.pid"
   stop_pid_file "$PID_DIR/frontend.pid"
-  stop_port "$BACKEND_PORT" "backend"
-  stop_port "$FRONTEND_PORT" "frontend"
+  stop_port "$BACKEND_PORT" "backend" || exit 1
+  stop_port "$FRONTEND_PORT" "frontend" || exit 1
 fi
 
 start_backend() {
@@ -137,12 +156,12 @@ start_backend() {
   log "Starting backend on http://127.0.0.1:$BACKEND_PORT"
   (
     cd "$BACKEND_DIR" || exit 1
-    env \
+    nohup env \
       PYTHONPATH="$BACKEND_DEPS${PYTHONPATH:+:$PYTHONPATH}" \
       DB_DIALECT=sqlite \
       SQLITE_DB_PATH="$SQLITE_DB_PATH" \
       "$PYTHON_BIN" -m uvicorn main:app --host 127.0.0.1 --port "$BACKEND_PORT" \
-      >> "$BACKEND_LOG" 2>&1 &
+      </dev/null >> "$BACKEND_LOG" 2>&1 &
     echo $! > "$PID_DIR/backend.pid"
   )
 }
@@ -158,8 +177,8 @@ start_frontend() {
   log "Starting frontend on http://127.0.0.1:$FRONTEND_PORT"
   (
     cd "$FRONTEND_DIR" || exit 1
-    npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" --strictPort \
-      >> "$FRONTEND_LOG" 2>&1 &
+    nohup npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" --strictPort \
+      </dev/null >> "$FRONTEND_LOG" 2>&1 &
     echo $! > "$PID_DIR/frontend.pid"
   )
 }

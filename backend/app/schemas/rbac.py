@@ -18,7 +18,7 @@ class RoleCreate(RoleBase):
 
 class RoleUpdate(BaseModel):
     role_name: str | None = None
-    data_scope: int | None = None
+    data_scope: int | None = Field(default=None, ge=1, le=4)
     product_lines: str | None = None
     status: int | None = None
     remark: str | None = None

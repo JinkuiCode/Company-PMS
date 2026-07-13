@@ -32,6 +32,10 @@ class UserInfo(BaseModel):
     dept_id: int | None
     mobile: str | None
     status: int
+    role_codes: list[str] = []
+    permissions: list[str] = []
+    data_scope: int = 1
+    product_lines: list[str] | None = None
     model_config = {"from_attributes": True}
 
 

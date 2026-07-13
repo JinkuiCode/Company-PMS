@@ -1,155 +1,50 @@
 """初始化数据库表，创建默认管理员、角色、菜单"""
 import datetime
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from app.core.database import engine, SessionLocal, Base
 from app.core.security import hash_password
 
 from app.models.user import SysUser, RememberToken  # noqa: F401
 from app.models.rbac import SysRole, SysMenu, SysDept, SysUserRole, SysRoleMenu  # noqa: F401
-from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive, ErpSyncLog  # noqa: F401
+from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive, ErpSyncLog, PmsProjectSheetDetail  # noqa: F401
 from app.models.dict import SysDict, SysDictItem  # noqa: F401
+from app.models.operation_log import SysOperationLog  # noqa: F401
 
 
 def _init_dict_data(db):
-    """初始化数据字典：每个表单页面的字段映射"""
-    dict_categories = [
-        {"dict_code": "user_manage", "dict_name": "用户管理", "page_name": "用户管理", "table_name": "sys_user", "sort": 1},
-        {"dict_code": "role_manage", "dict_name": "角色管理", "page_name": "角色管理", "table_name": "sys_role", "sort": 2},
-        {"dict_code": "project_list", "dict_name": "项目进度", "page_name": "项目进度", "table_name": "pms_project", "sort": 3},
-        {"dict_code": "project_archive", "dict_name": "项目档案", "page_name": "项目档案", "table_name": "pms_project_archive", "sort": 4},
-        {"dict_code": "project_task", "dict_name": "任务进度", "page_name": "项目进度", "table_name": "pms_task", "sort": 5},
-        # 枚举定义（供下拉框使用）
-        {"dict_code": "archive_status", "dict_name": "档案状态", "page_name": "枚举定义", "table_name": "pms_project_archive", "field_name": "status", "sort": 10},
-        {"dict_code": "project_status", "dict_name": "项目状态", "page_name": "枚举定义", "table_name": "pms_project", "field_name": "status", "sort": 11},
-        {"dict_code": "product_line", "dict_name": "产品线", "page_name": "枚举定义", "table_name": "pms_project_archive", "field_name": "product_line", "sort": 12},
-        {"dict_code": "product_type", "dict_name": "产品类型", "page_name": "枚举定义", "table_name": "pms_project_archive", "field_name": "product_type", "sort": 13},
-        {"dict_code": "task_status", "dict_name": "任务状态", "page_name": "枚举定义", "table_name": "pms_task", "field_name": "status", "sort": 14},
-        {"dict_code": "erp_sync_status", "dict_name": "同步状态", "page_name": "枚举定义", "table_name": "pms_project_archive", "field_name": "erp_sync_status", "sort": 15},
-        {"dict_code": "data_scope", "dict_name": "数据权限", "page_name": "枚举定义", "table_name": "sys_role", "field_name": "data_scope", "sort": 16},
-    ]
-    dict_items = {
-        # ===== 用户管理 字段 =====
-        "user_manage": [
-            {"item_value": "username", "item_label": "用户名", "field_type": "text", "sort": 1},
-            {"item_value": "real_name", "item_label": "姓名", "field_type": "text", "sort": 2},
-            {"item_value": "dept_id", "item_label": "部门", "field_type": "relation", "description": "sys_dept.id", "sort": 3},
-            {"item_value": "mobile", "item_label": "手机号", "field_type": "text", "sort": 4},
-            {"item_value": "status", "item_label": "状态", "field_type": "enum", "description": "1=启用 0=禁用", "sort": 5},
-        ],
-        # ===== 角色管理 字段 =====
-        "role_manage": [
-            {"item_value": "role_name", "item_label": "角色名称", "field_type": "text", "sort": 1},
-            {"item_value": "role_code", "item_label": "角色编码", "field_type": "text", "sort": 2},
-            {"item_value": "data_scope", "item_label": "数据权限", "field_type": "enum", "description": "1=本人 2=本部门 3=本部门及子部门 4=全部", "sort": 3},
-            {"item_value": "status", "item_label": "状态", "field_type": "enum", "description": "1=启用 0=禁用", "sort": 4},
-            {"item_value": "remark", "item_label": "备注", "field_type": "text", "sort": 5},
-        ],
-        # ===== 项目进度 字段 =====
-        "project_list": [
-            {"item_value": "project_code", "item_label": "项目编号", "field_type": "text", "sort": 1},
-            {"item_value": "project_name", "item_label": "项目名称", "field_type": "text", "sort": 2},
-            {"item_value": "dept_id", "item_label": "所属部门", "field_type": "relation", "description": "sys_dept.id", "sort": 3},
-            {"item_value": "pm_id", "item_label": "项目经理", "field_type": "relation", "description": "sys_user.id", "sort": 4},
-            {"item_value": "status", "item_label": "状态", "field_type": "enum", "description": "1=进行中 2=已完结 3=暂停", "sort": 5},
-            {"item_value": "start_date", "item_label": "开始日期", "field_type": "date", "sort": 6},
-            {"item_value": "end_date", "item_label": "结束日期", "field_type": "date", "sort": 7},
-            {"item_value": "budget", "item_label": "预算(万元)", "field_type": "number", "sort": 8},
-            {"item_value": "description", "item_label": "项目描述", "field_type": "text", "sort": 9},
-        ],
-        # ===== 项目档案 字段 =====
-        "project_archive": [
-            {"item_value": "project_code", "item_label": "项目编号", "field_type": "text", "sort": 1},
-            {"item_value": "project_name", "item_label": "项目名称", "field_type": "text", "sort": 2},
-            {"item_value": "status", "item_label": "状态", "field_type": "enum", "description": "1=未启动 2=进行中 3=已完结 4=暂停", "sort": 3},
-            {"item_value": "manager_id", "item_label": "负责人", "field_type": "relation", "description": "sys_user.id", "sort": 4},
-            {"item_value": "product_line", "item_label": "产品线", "field_type": "enum", "description": "Bench/光伏/Single/HOTSPM", "sort": 5},
-            {"item_value": "product_type", "item_label": "产品类型", "field_type": "enum", "description": "链式/槽式", "sort": 6},
-            {"item_value": "plan_start_date", "item_label": "计划开始", "field_type": "date", "sort": 7},
-            {"item_value": "plan_end_date", "item_label": "计划结束", "field_type": "date", "sort": 8},
-            {"item_value": "erp_sync_status", "item_label": "同步状态", "field_type": "enum", "description": "success/failed/pending", "sort": 9},
-            {"item_value": "erp_sync_time", "item_label": "最后同步时间", "field_type": "date", "sort": 10},
-        ],
-        # ===== 任务进度 字段 =====
-        "project_task": [
-            {"item_value": "task_name", "item_label": "任务名称", "field_type": "text", "sort": 1},
-            {"item_value": "assignee_id", "item_label": "负责人", "field_type": "relation", "description": "sys_user.id", "sort": 2},
-            {"item_value": "progress", "item_label": "进度(%)", "field_type": "number", "sort": 3},
-            {"item_value": "status", "item_label": "状态", "field_type": "enum", "description": "1=未开始 2=进行中 3=已完成", "sort": 4},
-            {"item_value": "start_date", "item_label": "开始日期", "field_type": "date", "sort": 5},
-            {"item_value": "due_date", "item_label": "截止日期", "field_type": "date", "sort": 6},
-            {"item_value": "sort", "item_label": "排序", "field_type": "number", "sort": 7},
-        ],
-        # ===== 枚举定义 =====
-        "archive_status": [
-            {"item_value": "1", "item_label": "未启动", "sort": 1},
-            {"item_value": "2", "item_label": "进行中", "sort": 2},
-            {"item_value": "3", "item_label": "已完结", "sort": 3},
-            {"item_value": "4", "item_label": "暂停", "sort": 4},
-        ],
-        "project_status": [
-            {"item_value": "1", "item_label": "进行中", "sort": 1},
-            {"item_value": "2", "item_label": "已完结", "sort": 2},
-            {"item_value": "3", "item_label": "暂停", "sort": 3},
-        ],
-        "product_line": [
-            {"item_value": "Bench", "item_label": "Bench", "sort": 1},
-            {"item_value": "光伏", "item_label": "光伏", "sort": 2},
-            {"item_value": "Single", "item_label": "Single", "sort": 3},
-            {"item_value": "HOTSPM", "item_label": "HOTSPM", "sort": 4},
-        ],
-        "product_type": [
-            {"item_value": "链式", "item_label": "链式", "sort": 1},
-            {"item_value": "槽式", "item_label": "槽式", "sort": 2},
-        ],
-        "task_status": [
-            {"item_value": "1", "item_label": "未开始", "sort": 1},
-            {"item_value": "2", "item_label": "进行中", "sort": 2},
-            {"item_value": "3", "item_label": "已完成", "sort": 3},
-        ],
-        "erp_sync_status": [
-            {"item_value": "success", "item_label": "成功", "sort": 1},
-            {"item_value": "failed", "item_label": "失败", "sort": 2},
-            {"item_value": "pending", "item_label": "待同步", "sort": 3},
-        ],
-        "data_scope": [
-            {"item_value": "1", "item_label": "本人", "sort": 1},
-            {"item_value": "2", "item_label": "本部门", "sort": 2},
-            {"item_value": "3", "item_label": "本部门及子部门", "sort": 3},
-            {"item_value": "4", "item_label": "全部", "sort": 4},
-        ],
-    }
-    for cat in dict_categories:
-        existing = db.query(SysDict).filter(SysDict.dict_code == cat["dict_code"]).first()
-        if not existing:
-            d = SysDict(**cat)
-            db.add(d)
-            db.commit()
-            db.refresh(d)
-            for item in dict_items.get(cat["dict_code"], []):
-                db.add(SysDictItem(dict_id=d.id, **item))
-            db.commit()
-            print(f"初始化字典: {cat['dict_name']}")
-        else:
-            # 已存在的分类：更新表名等元数据
-            changed = False
-            for k, v in cat.items():
-                if k != "dict_code" and getattr(existing, k, None) != v:
-                    setattr(existing, k, v)
-                    changed = True
-            if changed:
-                db.commit()
+    """迁移旧字段分类并初始化开发注册的业务枚举。"""
+    from app.services.enum_registry import initialize_enum_definitions
+
+    return initialize_enum_definitions(db)
+
+
+def _ensure_role_product_lines_column():
+    """Upgrade existing role tables before any ORM query references the new column."""
+    inspector = inspect(engine)
+    if not inspector.has_table("sys_role"):
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("sys_role")}
+    if "product_lines" in columns:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE sys_role ADD product_lines NVARCHAR(256) NULL"))
+    print("迁移完成：sys_role 已添加产品线范围字段")
 
 
 def init_db():
     """创建所有表，并插入默认数据"""
+    is_fresh_database = not inspect(engine).has_table("sys_role")
     Base.metadata.create_all(bind=engine)
+    _ensure_role_product_lines_column()
 
     db = SessionLocal()
     try:
-        # 1. 创建默认管理员
+        # 1. 仅全新数据库创建默认管理员和角色，已有数据库不补建权限主体
         admin = db.query(SysUser).filter(SysUser.username == "admin").first()
-        if not admin:
+        if is_fresh_database and not admin:
             admin = SysUser(username="admin", real_name="系统管理员", password_hash=hash_password("admin123"), status=1)
             db.add(admin)
             db.commit()
@@ -157,13 +52,13 @@ def init_db():
 
         # 2. 创建默认角色
         role = db.query(SysRole).filter(SysRole.role_code == "admin").first()
-        if not role:
+        if is_fresh_database and not role:
             role = SysRole(role_name="超级管理员", role_code="admin", data_scope=4, remark="拥有全部权限")
             db.add(role)
             db.commit()
 
         # 3. 分配管理员角色
-        if not db.query(SysUserRole).filter_by(user_id=admin.id, role_id=role.id).first():
+        if is_fresh_database and admin and role and not db.query(SysUserRole).filter_by(user_id=admin.id, role_id=role.id).first():
             db.add(SysUserRole(user_id=admin.id, role_id=role.id))
             db.commit()
 
@@ -174,7 +69,8 @@ def init_db():
                 SysMenu(id=11, parent_id=1, menu_name="用户管理", menu_type="C", path="/system/user", permission_code="system:user:list", icon="User", sort=1),
                 SysMenu(id=12, parent_id=1, menu_name="角色管理", menu_type="C", path="/system/role", permission_code="system:role:list", icon="Avatar", sort=2),
                 SysMenu(id=13, parent_id=1, menu_name="数据字典", menu_type="C", path="/system/dict", permission_code="system:dict:list", icon="Collection", sort=3),
-                SysMenu(id=15, parent_id=1, menu_name="字段管理", menu_type="C", path="/system/field", permission_code="system:field:list", icon="List", sort=4),
+                SysMenu(id=15, parent_id=1, menu_name="枚举管理", menu_type="C", path="/system/enum", permission_code="system:enum:list", icon="List", sort=4),
+                SysMenu(id=16, parent_id=1, menu_name="操作日志", menu_type="C", path="/system/operation-log", permission_code="system:operation-log:list", icon="Document", sort=5),
                 SysMenu(id=3, parent_id=0, menu_name="仪表盘", menu_type="C", path="/dashboard", icon="DataAnalysis", sort=0),
                 SysMenu(id=2, parent_id=0, menu_name="项目管理", menu_type="M", icon="Folder", sort=2),
                 SysMenu(id=22, parent_id=2, menu_name="项目档案", menu_type="C", path="/project/archive", permission_code="project:archive:list", icon="FolderOpened", sort=1),
@@ -183,6 +79,11 @@ def init_db():
             db.add_all(menus)
             db.commit()
             print("默认菜单已创建")
+
+        dashboard_menu = db.query(SysMenu).filter(SysMenu.id == 3).first()
+        if dashboard_menu and dashboard_menu.permission_code != "dashboard:view":
+            dashboard_menu.permission_code = "dashboard:view"
+            db.commit()
 
         # 4.1 迁移：删除已废弃的「部门管理」菜单（已整合到用户管理）
         old_dept_menu = db.query(SysMenu).filter(SysMenu.id == 14).first()
@@ -202,7 +103,72 @@ def init_db():
             db.commit()
             print("迁移完成：菜单管理 -> 数据字典")
 
-        # 4.2 迁移：插入按钮级权限菜单（项目进度 / 项目档案 / 系统管理）
+        # 4.2.1 迁移：字段管理改为只维护开发注册业务枚举，沿用菜单 ID 保留角色授权。
+        enum_menu = db.query(SysMenu).filter(SysMenu.id == 15).first()
+        desired = {
+            "parent_id": 1,
+            "menu_name": "枚举管理",
+            "menu_type": "C",
+            "path": "/system/enum",
+            "permission_code": "system:enum:list",
+            "icon": "List",
+            "sort": 4,
+        }
+        if not enum_menu:
+            enum_menu = SysMenu(id=15, **desired)
+            db.add(enum_menu)
+            db.commit()
+            print("迁移完成：已添加枚举管理菜单")
+        else:
+            changed = False
+            for key, value in desired.items():
+                if getattr(enum_menu, key) != value:
+                    setattr(enum_menu, key, value)
+                    changed = True
+            if changed:
+                db.commit()
+                print("迁移完成：字段管理 -> 枚举管理")
+
+        # 数据字典改为只读目录，删除原新增/编辑/删除按钮权限。
+        obsolete_dict_button_ids = [132, 133, 134]
+        db.query(SysRoleMenu).filter(SysRoleMenu.menu_id.in_(obsolete_dict_button_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(SysMenu).filter(SysMenu.id.in_(obsolete_dict_button_ids)).delete(
+            synchronize_session=False
+        )
+        db.commit()
+
+        # 4.3 迁移：补齐「操作日志」菜单
+        operation_log_menu = db.query(SysMenu).filter(SysMenu.id == 16).first()
+        if not operation_log_menu:
+            db.add(SysMenu(
+                id=16, parent_id=1, menu_name="操作日志", menu_type="C",
+                path="/system/operation-log", permission_code="system:operation-log:list",
+                icon="Document", sort=5,
+            ))
+            db.commit()
+            print("迁移完成：已添加操作日志菜单")
+        else:
+            changed = False
+            desired = {
+                "parent_id": 1,
+                "menu_name": "操作日志",
+                "menu_type": "C",
+                "path": "/system/operation-log",
+                "permission_code": "system:operation-log:list",
+                "icon": "Document",
+                "sort": 5,
+            }
+            for key, value in desired.items():
+                if getattr(operation_log_menu, key) != value:
+                    setattr(operation_log_menu, key, value)
+                    changed = True
+            if changed:
+                db.commit()
+                print("迁移完成：已更新操作日志菜单")
+
+        # 4.4 迁移：插入按钮级权限菜单（项目进度 / 项目档案 / 系统管理）
         button_menus = [
             # 项目进度 按钮权限 (parent_id=21)
             {"id": 211, "parent_id": 21, "menu_name": "查看", "menu_type": "B", "permission_code": "project:list:view", "sort": 1},
@@ -225,27 +191,29 @@ def init_db():
             {"id": 123, "parent_id": 12, "menu_name": "编辑", "menu_type": "B", "permission_code": "system:role:edit", "sort": 3},
             {"id": 124, "parent_id": 12, "menu_name": "删除", "menu_type": "B", "permission_code": "system:role:delete", "sort": 4},
             {"id": 131, "parent_id": 13, "menu_name": "查看", "menu_type": "B", "permission_code": "system:dict:view", "sort": 1},
-            {"id": 132, "parent_id": 13, "menu_name": "新增", "menu_type": "B", "permission_code": "system:dict:add", "sort": 2},
-            {"id": 133, "parent_id": 13, "menu_name": "编辑", "menu_type": "B", "permission_code": "system:dict:edit", "sort": 3},
-            {"id": 134, "parent_id": 13, "menu_name": "删除", "menu_type": "B", "permission_code": "system:dict:delete", "sort": 4},
-            # 字段管理 按钮权限 (parent_id=15)
-            {"id": 151, "parent_id": 15, "menu_name": "查看", "menu_type": "B", "permission_code": "system:field:view", "sort": 1},
-            {"id": 152, "parent_id": 15, "menu_name": "新增", "menu_type": "B", "permission_code": "system:field:add", "sort": 2},
-            {"id": 153, "parent_id": 15, "menu_name": "编辑", "menu_type": "B", "permission_code": "system:field:edit", "sort": 3},
-            {"id": 154, "parent_id": 15, "menu_name": "删除", "menu_type": "B", "permission_code": "system:field:delete", "sort": 4},
+            # 枚举管理按钮权限，沿用原字段管理菜单 ID 保留现有角色授权关系。
+            {"id": 151, "parent_id": 15, "menu_name": "查看", "menu_type": "B", "permission_code": "system:enum:view", "sort": 1},
+            {"id": 152, "parent_id": 15, "menu_name": "新增", "menu_type": "B", "permission_code": "system:enum:add", "sort": 2},
+            {"id": 153, "parent_id": 15, "menu_name": "编辑", "menu_type": "B", "permission_code": "system:enum:edit", "sort": 3},
+            {"id": 154, "parent_id": 15, "menu_name": "删除", "menu_type": "B", "permission_code": "system:enum:delete", "sort": 4},
+            # 操作日志 按钮权限 (parent_id=16)
+            {"id": 161, "parent_id": 16, "menu_name": "查看", "menu_type": "B", "permission_code": "system:operation-log:view", "sort": 1},
         ]
         for bm in button_menus:
             existing = db.query(SysMenu).filter(SysMenu.id == bm["id"]).first()
             if not existing:
                 db.add(SysMenu(**bm))
+            else:
+                for key, value in bm.items():
+                    if key != "id":
+                        setattr(existing, key, value)
         db.commit()
 
-        # 5. 给管理员角色分配所有菜单权限
-        all_menus = db.query(SysMenu).all()
-        for menu in all_menus:
-            if not db.query(SysRoleMenu).filter_by(role_id=role.id, menu_id=menu.id).first():
-                db.add(SysRoleMenu(role_id=role.id, menu_id=menu.id))
-        db.commit()
+        # 5. 仅全新数据库首次给默认管理员授权；后续启动绝不回补人工撤销的权限
+        if is_fresh_database and role:
+            all_menus = db.query(SysMenu).all()
+            db.add_all([SysRoleMenu(role_id=role.id, menu_id=menu.id) for menu in all_menus])
+            db.commit()
 
         # 5.8 初始化数据字典分类和枚举项
         _init_dict_data(db)
@@ -281,6 +249,30 @@ def init_db():
             db.commit()
             print("迁移完成：pms_project_archive 已添加 erp_sync_by 字段")
 
+        # 5.8 迁移：pms_project 表添加产品线兜底字段
+        try:
+            db.execute(text("SELECT product_line FROM pms_project"))
+        except Exception:
+            db.rollback()
+            db.execute(text("ALTER TABLE pms_project ADD product_line NVARCHAR(32) NULL"))
+            db.commit()
+            print("迁移完成：pms_project 已添加 product_line 字段")
+
+        # 5.9 迁移：pms_project 表添加阶段进度字段
+        try:
+            db.execute(text("SELECT design_progress FROM pms_project"))
+        except Exception:
+            db.rollback()
+            db.execute(text("ALTER TABLE pms_project ADD design_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD order_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD kit_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD frame_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD dryer_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD assembly_progress INT NULL"))
+            db.execute(text("ALTER TABLE pms_project ADD test_progress INT NULL"))
+            db.commit()
+            print("迁移完成：pms_project 已添加阶段进度字段")
+
         # 6. 创建示例部门
         if not db.query(SysDept).first():
             depts = [
@@ -291,11 +283,14 @@ def init_db():
             db.commit()
 
         # 7. 创建示例项目
-        if not db.query(PmsProject).first():
+        if admin and not db.query(PmsProject).first():
             proj = PmsProject(
                 id=1, project_code="PMS-2026-001", project_name="企业内部项目管理系统",
                 dept_id=1, pm_id=admin.id, status=1,
+                product_line="Bench",
                 start_date=datetime.date(2026, 5, 1), end_date=datetime.date(2026, 8, 31),
+                design_progress=100, order_progress=100, kit_progress=80, frame_progress=60,
+                dryer_progress=45, assembly_progress=30, test_progress=0,
                 budget=50, description="开发一套企业内部的 PMS 系统，具备项目管理、任务进度跟踪、RBAC权限管控等功能",
             )
             db.add(proj)

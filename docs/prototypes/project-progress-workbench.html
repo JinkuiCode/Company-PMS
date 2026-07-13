@@ -1,0 +1,1026 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PMS 项目进度工作台原型</title>
+  <style>
+    :root {
+      --pms-bg: #f6f8fb;
+      --pms-bg-soft: #f8fafc;
+      --pms-surface: #ffffff;
+      --pms-border: #dfe5ee;
+      --pms-border-soft: #edf1f6;
+      --pms-text: #162033;
+      --pms-text-secondary: #667085;
+      --pms-text-muted: #98a2b3;
+      --pms-primary: #4f46e5;
+      --pms-primary-soft: rgba(79, 70, 229, 0.1);
+      --pms-info: #2563eb;
+      --pms-info-soft: rgba(37, 99, 235, 0.1);
+      --pms-success: #0f9f7a;
+      --pms-success-soft: rgba(15, 159, 122, 0.1);
+      --pms-warning: #d97706;
+      --pms-warning-soft: rgba(217, 119, 6, 0.12);
+      --pms-danger: #dc2626;
+      --pms-danger-soft: rgba(220, 38, 38, 0.1);
+      --pms-neutral-soft: #f1f5f9;
+      --pms-radius-sm: 6px;
+      --pms-radius: 8px;
+      --pms-radius-lg: 12px;
+      --pms-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+      --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--pms-bg);
+      color: var(--pms-text);
+      font-family: var(--font);
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 196px 1fr;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      background: var(--pms-surface);
+      border-right: 1px solid var(--pms-border-soft);
+      padding: 16px 10px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      height: 34px;
+      padding: 0 6px 14px;
+      color: var(--pms-text);
+      font-weight: 700;
+      border-bottom: 1px solid var(--pms-border-soft);
+    }
+
+    .brand-mark {
+      display: inline-grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      color: var(--pms-primary);
+      background: var(--pms-primary-soft);
+      border: 1px solid rgba(79, 70, 229, 0.16);
+      border-radius: 7px;
+      font-weight: 800;
+    }
+
+    .menu {
+      display: grid;
+      gap: 4px;
+      margin-top: 18px;
+    }
+
+    .menu-item,
+    .menu-sub {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      height: 36px;
+      padding: 0 12px;
+      color: var(--pms-text-secondary);
+      border-radius: var(--pms-radius-sm);
+      white-space: nowrap;
+    }
+
+    .menu-sub {
+      margin-left: 10px;
+      height: 34px;
+      font-size: 12px;
+    }
+
+    .menu-sub.active {
+      color: var(--pms-primary);
+      background: var(--pms-primary-soft);
+      font-weight: 650;
+    }
+
+    .main {
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      min-width: 0;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      background: var(--pms-surface);
+      border-bottom: 1px solid var(--pms-border-soft);
+    }
+
+    .top-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--pms-text-secondary);
+      font-size: 12px;
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+      min-height: 0;
+      padding: 14px;
+    }
+
+    .content.drawer-open {
+      grid-template-columns: minmax(0, 1fr) 312px;
+    }
+
+    .workbench {
+      display: grid;
+      grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+      min-width: 0;
+      min-height: 0;
+      background: var(--pms-surface);
+      border: 1px solid var(--pms-border-soft);
+      border-radius: var(--pms-radius);
+      box-shadow: var(--pms-shadow-sm);
+      overflow: hidden;
+    }
+
+    .view-tabs {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid var(--pms-border-soft);
+      overflow-x: auto;
+    }
+
+    .view-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 30px;
+      padding: 0 11px;
+      color: var(--pms-text-secondary);
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--pms-radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .view-tab.active {
+      color: var(--pms-primary);
+      background: var(--pms-primary-soft);
+      border-color: rgba(79, 70, 229, 0.16);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--pms-border-soft);
+    }
+
+    .toolbar-left,
+    .toolbar-right,
+    .filters {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .filters {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--pms-border-soft);
+      overflow-x: auto;
+    }
+
+    .btn,
+    .input,
+    .select {
+      display: inline-flex;
+      align-items: center;
+      height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--pms-border);
+      border-radius: var(--pms-radius-sm);
+      background: var(--pms-surface);
+      color: var(--pms-text-secondary);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      color: #fff;
+      background: var(--pms-primary);
+      border-color: var(--pms-primary);
+    }
+
+    .btn.ghost {
+      background: var(--pms-bg-soft);
+      border-color: var(--pms-border-soft);
+    }
+
+    .input {
+      width: 210px;
+      justify-content: space-between;
+      color: var(--pms-text-muted);
+    }
+
+    .select::after,
+    .input::before {
+      color: var(--pms-text-muted);
+      font-size: 11px;
+    }
+
+    .input::before { content: "搜索项目号 / 客户 / 项目名"; }
+    .select::after { content: "⌄"; margin-left: 12px; }
+
+    .field-group {
+      display: inline-flex;
+      gap: 6px;
+      padding: 3px;
+      background: var(--pms-bg-soft);
+      border: 1px solid var(--pms-border-soft);
+      border-radius: var(--pms-radius-sm);
+    }
+
+    .field-chip {
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 5px;
+      color: var(--pms-text-secondary);
+      line-height: 24px;
+      white-space: nowrap;
+    }
+
+    .field-chip.active {
+      color: var(--pms-text);
+      background: var(--pms-surface);
+      box-shadow: var(--pms-shadow-sm);
+    }
+
+    .grid-wrap {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      background: var(--pms-surface);
+    }
+
+    table {
+      width: 1500px;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12px;
+      table-layout: fixed;
+    }
+
+    th,
+    td {
+      height: 34px;
+      padding: 0 9px;
+      border-right: 1px solid var(--pms-border-soft);
+      border-bottom: 1px solid var(--pms-border-soft);
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      background: var(--pms-surface);
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      height: 34px;
+      color: var(--pms-text-secondary);
+      background: #f9fbfe;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    th.group {
+      text-align: center;
+      color: var(--pms-text);
+      background: #fbfcff;
+    }
+
+    .pin-left {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      box-shadow: 1px 0 0 var(--pms-border-soft);
+    }
+
+    th.pin-left { z-index: 4; }
+
+    .pin-left-2 {
+      position: sticky;
+      left: 86px;
+      z-index: 2;
+      box-shadow: 1px 0 0 var(--pms-border-soft);
+    }
+
+    th.pin-left-2 { z-index: 4; }
+
+    tbody tr:hover td {
+      background: #fbfdff;
+    }
+
+    .project-row {
+      cursor: pointer;
+    }
+
+    .project-row.active-row td {
+      background: #f8faff;
+    }
+
+    .project-code {
+      color: var(--pms-text);
+      font-family: var(--mono);
+      font-weight: 650;
+    }
+
+    .selected-cell {
+      position: relative;
+      box-shadow: inset 0 0 0 2px var(--pms-primary);
+      background: #fff !important;
+    }
+
+    .selected-cell::after {
+      content: "正在编辑";
+      position: absolute;
+      right: 6px;
+      top: 5px;
+      height: 18px;
+      padding: 0 6px;
+      color: var(--pms-primary);
+      background: var(--pms-primary-soft);
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 18px;
+    }
+
+    .readonly {
+      color: var(--pms-text-muted);
+      background: #fbfcfe !important;
+    }
+
+    .formula {
+      background: #f9fafb !important;
+    }
+
+    .editable-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--pms-text);
+    }
+
+    .editable-mark::before {
+      content: "";
+      width: 4px;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--pms-primary);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1;
+    }
+
+    .status::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+
+    .status.design { color: var(--pms-danger); background: var(--pms-danger-soft); }
+    .status.order { color: var(--pms-warning); background: var(--pms-warning-soft); }
+    .status.test { color: var(--pms-info); background: var(--pms-info-soft); }
+    .status.shipped { color: var(--pms-success); background: var(--pms-success-soft); }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: var(--pms-neutral-soft);
+      color: var(--pms-text-secondary);
+      font-weight: 650;
+    }
+
+    .tag.customer-a { color: #075985; background: #e0f2fe; }
+    .tag.customer-b { color: #7c2d12; background: #ffedd5; }
+    .tag.customer-c { color: #065f46; background: #d1fae5; }
+    .tag.customer-d { color: #86198f; background: #fae8ff; }
+
+    .progress-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .track {
+      flex: 1;
+      min-width: 42px;
+      height: 7px;
+      overflow: hidden;
+      background: #edf1f6;
+      border-radius: 999px;
+    }
+
+    .bar {
+      height: 100%;
+      border-radius: inherit;
+      background: #22c55e;
+    }
+
+    .percent {
+      min-width: 34px;
+      color: var(--pms-text-secondary);
+      font-family: var(--mono);
+      font-size: 11px;
+      text-align: right;
+    }
+
+    .footer-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 40px;
+      padding: 0 14px;
+      color: var(--pms-text-secondary);
+      border-top: 1px solid var(--pms-border-soft);
+      font-size: 12px;
+    }
+
+    .save-tip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--pms-success);
+      font-weight: 600;
+    }
+
+    .save-tip::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--pms-success);
+    }
+
+    .drawer {
+      display: none;
+      grid-template-rows: auto auto 1fr;
+      min-width: 0;
+      min-height: 0;
+      background: var(--pms-surface);
+      border: 1px solid var(--pms-border-soft);
+      border-radius: var(--pms-radius);
+      box-shadow: var(--pms-shadow-sm);
+      overflow: hidden;
+    }
+
+    .content.drawer-open .drawer {
+      display: grid;
+    }
+
+    .drawer-head {
+      padding: 14px;
+      border-bottom: 1px solid var(--pms-border-soft);
+    }
+
+    .drawer-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-weight: 750;
+      line-height: 1.3;
+    }
+
+    .drawer-code {
+      margin-top: 5px;
+      color: var(--pms-text-secondary);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .drawer-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 10px 10px 0;
+      border-bottom: 1px solid var(--pms-border-soft);
+    }
+
+    .drawer-tab {
+      height: 30px;
+      padding: 0 9px;
+      border-bottom: 2px solid transparent;
+      color: var(--pms-text-secondary);
+      font-size: 12px;
+      line-height: 30px;
+    }
+
+    .drawer-tab.active {
+      color: var(--pms-primary);
+      border-bottom-color: var(--pms-primary);
+      font-weight: 700;
+    }
+
+    .drawer-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 12px 14px;
+    }
+
+    .section {
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      color: var(--pms-text);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .field {
+      min-width: 0;
+      padding: 8px;
+      background: var(--pms-bg-soft);
+      border: 1px solid var(--pms-border-soft);
+      border-radius: var(--pms-radius-sm);
+    }
+
+    .field-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--pms-text-muted);
+      font-size: 11px;
+    }
+
+    .field-value {
+      margin-top: 5px;
+      color: var(--pms-text);
+      font-weight: 650;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .drawer-close {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 8px;
+      color: var(--pms-text-secondary);
+      background: var(--pms-bg-soft);
+      border: 1px solid var(--pms-border-soft);
+      border-radius: var(--pms-radius-sm);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .lock {
+      color: var(--pms-text-muted);
+    }
+
+    .timeline {
+      display: grid;
+      gap: 8px;
+    }
+
+    .timeline-row {
+      display: grid;
+      grid-template-columns: 72px 1fr 44px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .timeline-label {
+      color: var(--pms-text-secondary);
+      font-size: 12px;
+    }
+
+    .note {
+      padding: 10px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: var(--pms-radius-sm);
+      color: #92400e;
+      line-height: 1.55;
+      font-size: 12px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 10px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 22px;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: var(--pms-bg-soft);
+      color: var(--pms-text-secondary);
+      font-size: 11px;
+    }
+
+    .legend-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--pms-primary);
+    }
+
+    .legend-item:nth-child(2) .legend-dot { background: var(--pms-text-muted); }
+    .legend-item:nth-child(3) .legend-dot { background: var(--pms-success); }
+
+    @media (max-width: 1100px) {
+      .content { grid-template-columns: minmax(0, 1fr); }
+      .content.drawer-open { grid-template-columns: minmax(0, 1fr); }
+      .drawer { display: none; }
+      .content.drawer-open .drawer { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">P</span>PMS 管理系统</div>
+      <nav class="menu">
+        <div class="menu-item">▧ 仪表盘</div>
+        <div class="menu-item">⚙ 系统管理</div>
+        <div class="menu-item">▣ 项目管理</div>
+        <div class="menu-sub">项目档案</div>
+        <div class="menu-sub active">项目进度</div>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="top-title">☰ 项目进度</div>
+        <div class="top-actions">
+          <span>系统管理员</span>
+          <span class="btn">退出</span>
+        </div>
+      </header>
+
+      <section class="content">
+        <div class="workbench">
+          <div class="view-tabs">
+            <span class="view-tab">表格视图</span>
+            <span class="view-tab active">总进度</span>
+            <span class="view-tab">阶段计划</span>
+            <span class="view-tab">未发货计划</span>
+            <span class="view-tab">销售周会</span>
+            <span class="view-tab">设备配置</span>
+            <span class="view-tab">+ 保存为视图</span>
+          </div>
+
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <span class="btn primary">新增项目</span>
+              <span class="btn ghost">批量填充</span>
+              <span class="btn ghost">导入企微表</span>
+              <span class="btn ghost">保存视图</span>
+            </div>
+            <div class="toolbar-right">
+              <span class="save-tip">A-202614 测试进度已自动保存</span>
+            </div>
+          </div>
+
+          <div class="filters">
+            <span class="input"></span>
+            <span class="select">客户</span>
+            <span class="select">产品类</span>
+            <span class="select">节点</span>
+            <span class="select">负责人</span>
+            <span class="field-group">
+              <span class="field-chip active">阶段进度</span>
+              <span class="field-chip">计划节点</span>
+              <span class="field-chip">成员配置</span>
+              <span class="field-chip">权限字段</span>
+            </span>
+          </div>
+
+          <div class="grid-wrap" aria-label="项目进度总表工作台效果稿">
+            <table>
+              <thead>
+                <tr>
+                  <th class="pin-left" rowspan="2" style="width:86px;">项目号</th>
+                  <th class="pin-left-2" rowspan="2" style="width:110px;">客户</th>
+                  <th rowspan="2" style="width:168px;">项目名称</th>
+                  <th rowspan="2" style="width:76px;">节点</th>
+                  <th rowspan="2" style="width:100px;">原计划发货</th>
+                  <th class="group" colspan="7">项目进度</th>
+                  <th class="group" colspan="3">成员 / 配置</th>
+                </tr>
+                <tr>
+                  <th style="width:104px;">设计进度</th>
+                  <th style="width:104px;">下单进度</th>
+                  <th style="width:104px;">齐套进度</th>
+                  <th style="width:104px;">框架进度</th>
+                  <th style="width:104px;">dryer进度</th>
+                  <th style="width:104px;">组装进度</th>
+                  <th style="width:104px;">测试进度</th>
+                  <th style="width:96px;">机械设计</th>
+                  <th style="width:96px;">电气设计</th>
+                  <th style="width:180px;">配置</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="project-row" data-project="A-202614">
+                  <td class="pin-left project-code">A-202614</td>
+                  <td class="pin-left-2"><span class="tag customer-b">重庆华润</span></td>
+                  <td>湿法槽式清洗设备</td>
+                  <td class="selected-cell"><span class="status test">测试中</span></td>
+                  <td>2026/7/11</td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:99%"></span></span><span class="percent">99%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:99%"></span></span><span class="percent">99%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:100%"></span></span><span class="percent">100%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:100%"></span></span><span class="percent">100%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:100%"></span></span><span class="percent">100%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:98%"></span></span><span class="percent">98%</span></div></td>
+                  <td class="selected-cell"><span class="editable-mark">40%</span></td>
+                  <td><span class="editable-mark">徐新健</span></td>
+                  <td><span class="editable-mark">储杰</span></td>
+                  <td>CC+HHA+QDR+DHF+OF+APM...</td>
+                </tr>
+                <tr class="project-row" data-project="A-202621">
+                  <td class="pin-left project-code">A-202621</td>
+                  <td class="pin-left-2"><span class="tag customer-c">重庆万国</span></td>
+                  <td>Pre Gate CLN</td>
+                  <td><span class="status order">追料中</span></td>
+                  <td>2026/8/20</td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:100%"></span></span><span class="percent">100%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:98%"></span></span><span class="percent">98%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:75%"></span></span><span class="percent">75%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:50%"></span></span><span class="percent">50%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:85%"></span></span><span class="percent">85%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><span class="editable-mark">常志俊</span></td>
+                  <td><span class="editable-mark">沈炳辉</span></td>
+                  <td>CC+HNO3/HF+OF1+CHF...</td>
+                </tr>
+                <tr class="project-row" data-project="A-202632">
+                  <td class="pin-left project-code">A-202632</td>
+                  <td class="pin-left-2"><span class="tag customer-d">芯联集成</span></td>
+                  <td>B Clean</td>
+                  <td><span class="status design">设计中</span></td>
+                  <td>2026/8/30</td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:90%"></span></span><span class="percent">90%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:15%"></span></span><span class="percent">15%</span></div></td>
+                  <td class="readonly">无 dryer</td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><span class="editable-mark">刘颢</span></td>
+                  <td><span class="editable-mark">程殷家辉</span></td>
+                  <td>CC+SPM1+SPM2+HQDR...</td>
+                </tr>
+                <tr class="project-row" data-project="A-202615">
+                  <td class="pin-left project-code">A-202615</td>
+                  <td class="pin-left-2"><span class="tag customer-b">济南歌尔</span></td>
+                  <td>1 寸 Micro LED 红光...</td>
+                  <td><span class="status order">下单中</span></td>
+                  <td>2026/9/10</td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:100%"></span></span><span class="percent">100%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:18%"></span></span><span class="percent">18%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:40%"></span></span><span class="percent">40%</span></div></td>
+                  <td class="readonly">无 dryer</td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><span class="editable-mark">王丽君</span></td>
+                  <td><span class="editable-mark">储杰</span></td>
+                  <td class="readonly">未填写</td>
+                </tr>
+                <tr class="project-row" data-project="A-202603">
+                  <td class="pin-left project-code">A-202603</td>
+                  <td class="pin-left-2"><span class="tag customer-a">重庆奕能</span></td>
+                  <td>01 Wafer Recycle...</td>
+                  <td><span class="status design">设计中</span></td>
+                  <td>2026/10/26</td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:66%"></span></span><span class="percent">66%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:70%"></span></span><span class="percent">70%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:90%"></span></span><span class="percent">90%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><span class="editable-mark">杨洋</span></td>
+                  <td><span class="editable-mark">储杰</span></td>
+                  <td>CC+SPM+HQDR+DHF+OF...</td>
+                </tr>
+                <tr class="project-row" data-project="A-202602">
+                  <td class="pin-left project-code">A-202602</td>
+                  <td class="pin-left-2"><span class="tag customer-a">重庆奕能</span></td>
+                  <td>02 Wafer Recycle...</td>
+                  <td><span class="status order">下单中</span></td>
+                  <td>2026/10/27</td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:100%"></span></span><span class="percent">100%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:70%"></span></span><span class="percent">70%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:90%"></span></span><span class="percent">90%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><span class="editable-mark">杨洋</span></td>
+                  <td><span class="editable-mark">程殷家辉</span></td>
+                  <td>CC+SPM+HQDR+DHF+OF...</td>
+                </tr>
+                <tr class="project-row" data-project="A-202608">
+                  <td class="pin-left project-code">A-202608</td>
+                  <td class="pin-left-2"><span class="tag customer-a">重庆奕能</span></td>
+                  <td>03 Pre Furnace</td>
+                  <td><span class="status order">下单中</span></td>
+                  <td>2026/10/28</td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:100%"></span></span><span class="percent">100%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:60%"></span></span><span class="percent">60%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:50%"></span></span><span class="percent">50%</span></div></td>
+                  <td class="readonly">无 dryer</td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><div class="progress-cell"><span class="track"><span class="bar" style="width:0%"></span></span><span class="percent">0%</span></div></td>
+                  <td><span class="editable-mark">杨洋</span></td>
+                  <td><span class="editable-mark">沈炳辉</span></td>
+                  <td class="readonly">未填写</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="footer-line">
+            <span>共 29 条 · 当前视图：总进度 · 已筛选：未发货 / 2026计划</span>
+            <span>可编辑字段 11 个 · 只读字段 4 个 · 计算字段 7 个</span>
+          </div>
+        </div>
+
+        <aside class="drawer">
+          <div class="drawer-head">
+            <div class="drawer-title">
+              <span>湿法槽式清洗设备</span>
+              <span style="display:inline-flex;align-items:center;gap:8px;">
+                <span class="status test">测试中</span>
+                <span class="drawer-close" role="button" tabindex="0">收起</span>
+              </span>
+            </div>
+            <div class="drawer-code">A-202614 · 重庆华润 · 原计划发货 2026/7/11</div>
+            <div class="legend">
+              <span class="legend-item"><span class="legend-dot"></span>可编辑</span>
+              <span class="legend-item"><span class="legend-dot"></span>只读</span>
+              <span class="legend-item"><span class="legend-dot"></span>已保存</span>
+            </div>
+          </div>
+          <div class="drawer-tabs">
+            <span class="drawer-tab active">概览</span>
+            <span class="drawer-tab">阶段</span>
+            <span class="drawer-tab">成员</span>
+            <span class="drawer-tab">配置</span>
+          </div>
+          <div class="drawer-body">
+            <div class="section">
+              <div class="section-title">关键字段</div>
+              <div class="field-grid">
+                <div class="field">
+                  <div class="field-label">项目负责人</div>
+                  <div class="field-value">王丽君 +1</div>
+                </div>
+                <div class="field">
+                  <div class="field-label lock">客户 <span>只读</span></div>
+                  <div class="field-value">重庆华润</div>
+                </div>
+                <div class="field">
+                  <div class="field-label">机械设计</div>
+                  <div class="field-value">徐新健</div>
+                </div>
+                <div class="field">
+                  <div class="field-label">电气设计</div>
+                  <div class="field-value">储杰</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">阶段进度 <span class="save-tip">刚刚保存</span></div>
+              <div class="timeline">
+                <div class="timeline-row">
+                  <span class="timeline-label">设计</span>
+                  <span class="track"><span class="bar" style="width:99%"></span></span>
+                  <span class="percent">99%</span>
+                </div>
+                <div class="timeline-row">
+                  <span class="timeline-label">齐套</span>
+                  <span class="track"><span class="bar" style="width:100%"></span></span>
+                  <span class="percent">100%</span>
+                </div>
+                <div class="timeline-row">
+                  <span class="timeline-label">组装</span>
+                  <span class="track"><span class="bar" style="width:98%"></span></span>
+                  <span class="percent">98%</span>
+                </div>
+                <div class="timeline-row">
+                  <span class="timeline-label">测试</span>
+                  <span class="track"><span class="bar" style="width:40%"></span></span>
+                  <span class="percent">40%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">推进记录</div>
+              <div class="note">
+                7. 物料到达 - 徐欣 12/30 已完成<br>
+                6. 物料交期确认 - 徐海慧 12/1 已完成<br>
+                5. 下单完成 - 戴尉 11/27 已完成
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">交互说明</div>
+              <div class="note" style="background:#f8fafc;border-color:#edf1f6;color:#667085;">
+                默认在表格内直接改字段；详情抽屉用于查看完整项目资料、编辑长文本和检查权限。不会再进入“任务列表”。
+              </div>
+            </div>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
+  <script>
+    const content = document.querySelector('.content');
+    const rows = document.querySelectorAll('.project-row');
+    const drawerClose = document.querySelector('.drawer-close');
+
+    rows.forEach((row) => {
+      row.addEventListener('click', () => {
+        rows.forEach((item) => item.classList.remove('active-row'));
+        row.classList.add('active-row');
+        content.classList.add('drawer-open');
+      });
+    });
+
+    drawerClose.addEventListener('click', (event) => {
+      event.stopPropagation();
+      rows.forEach((item) => item.classList.remove('active-row'));
+      content.classList.remove('drawer-open');
+    });
+  </script>
+</body>
+</html>

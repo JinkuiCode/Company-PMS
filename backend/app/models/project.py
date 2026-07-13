@@ -54,15 +54,48 @@ class PmsProject(Base):
     project_name: Mapped[str] = mapped_column(NVARCHAR(128), nullable=False, comment="项目名称")
     dept_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_dept.id"), nullable=False, comment="所属部门ID")
     pm_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, comment="项目经理ID")
+    product_line: Mapped[str | None] = mapped_column(NVARCHAR(32), default=None, comment="产品线: Bench/光伏/Single/HOTSPM")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1进行中 2已完结 3暂停")
     start_date: Mapped[datetime.date | None] = mapped_column(DateTime, default=None, comment="开始日期")
     end_date: Mapped[datetime.date | None] = mapped_column(DateTime, default=None, comment="结束日期")
     budget: Mapped[float | None] = mapped_column(DECIMAL(12, 2), default=None, comment="预算(万元)")
+    design_progress: Mapped[int | None] = mapped_column(Integer, default=None, comment="设计进度 0-100")
+    order_progress: Mapped[int | None] = mapped_column(Integer, default=None, comment="下单进度 0-100")
+    kit_progress: Mapped[int | None] = mapped_column(Integer, default=None, comment="齐套进度 0-100")
+    frame_progress: Mapped[int | None] = mapped_column(Integer, default=None, comment="框架进度 0-100")
+    dryer_progress: Mapped[int | None] = mapped_column(Integer, default=None, comment="dryer 进度 0-100")
+    assembly_progress: Mapped[int | None] = mapped_column(Integer, default=None, comment="组装进度 0-100")
+    test_progress: Mapped[int | None] = mapped_column(Integer, default=None, comment="测试进度 0-100")
     description: Mapped[str | None] = mapped_column(NVARCHAR(2048), default=None, comment="项目描述")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (Index("idx_project_dept", "dept_id"), Index("idx_project_pm", "pm_id"))
+
+
+class PmsProjectSheetDetail(Base):
+    """项目总表 1:1 明细数据。
+
+    126 个字段由项目总表字段注册表统一定义。这里仅存放人工维护字段，
+    引用字段和计算字段由服务层实时组装，避免项目主表持续膨胀。
+    """
+    __tablename__ = "pms_project_sheet_detail"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("pms_project.id"),
+        unique=True,
+        nullable=False,
+        comment="项目ID",
+    )
+    detail_data: Mapped[str | None] = mapped_column(NVARCHAR(None), default="{}", comment="人工维护字段 JSON")
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="创建人ID")
+    updated_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="最后编辑人ID")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (Index("idx_project_sheet_detail_project", "project_id"),)
 
 
 class PmsTask(Base):

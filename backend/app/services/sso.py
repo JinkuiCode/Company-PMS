@@ -79,6 +79,8 @@ def find_or_create_user(db: Session, loginid: str, username: str, dept_name: str
     """根据 OA 的 loginid 查找本地用户，不存在则自动创建"""
     user = db.query(SysUser).filter(SysUser.username == loginid).first()
     if user:
+        if user.status != 1:
+            raise HTTPException(status_code=403, detail="账号已被禁用，请联系管理员")
         # 已有用户：更新真实姓名
         if user.real_name != username:
             user.real_name = username

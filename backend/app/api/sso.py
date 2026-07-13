@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from app.core.config import settings
 from app.core.database import get_db
 from app.services import sso as sso_service
+from app.services.authorization import require_permission
+from app.services.operation_log import record_operation_log
 
 router = APIRouter(prefix="/api/sso", tags=["SSO 单点登录"])
 logger = logging.getLogger(__name__)
@@ -37,11 +39,38 @@ class SsoOaPasswordLoginRequest(BaseModel):
 
 
 @router.post("/oa-password-login", summary="PMS 账号密码登录（OA 菜单跳转入口）")
-def sso_oa_password_login(req: SsoOaPasswordLoginRequest, db: Session = Depends(get_db)):
+def sso_oa_password_login(req: SsoOaPasswordLoginRequest, request: Request, db: Session = Depends(get_db)):
     """PMS 账号密码验证，成功后签发 JWT。勾选记住我时额外生成长期免密令牌并种 Cookie。"""
-    result = sso_service.sso_login_by_password(
-        db, req.loginid, req.password, req.remember_me,
-    )
+    try:
+        result = sso_service.sso_login_by_password(
+            db, req.loginid, req.password, req.remember_me,
+        )
+        record_operation_log(
+            db,
+            module="认证",
+            action="oa_password_login",
+            entity_type="sys_user",
+            entity_name=req.loginid,
+            request=request,
+            summary=f"OA 入口账号密码登录成功：{req.loginid}",
+            after_data={"loginid": req.loginid, "remember_me": req.remember_me},
+            commit=True,
+        )
+    except HTTPException as exc:
+        record_operation_log(
+            db,
+            module="认证",
+            action="oa_password_login",
+            entity_type="sys_user",
+            entity_name=req.loginid,
+            request=request,
+            status="failed",
+            summary=f"OA 入口账号密码登录失败：{req.loginid}",
+            after_data={"loginid": req.loginid, "password": req.password, "remember_me": req.remember_me},
+            error_msg=str(exc.detail),
+            commit=True,
+        )
+        raise
     resp = JSONResponse(content=result)
     resp.set_cookie(
         key="pms_token",
@@ -67,13 +96,40 @@ def sso_oa_password_login(req: SsoOaPasswordLoginRequest, db: Session = Depends(
 
 
 @router.post("/verify", summary="验证 SSO Token（AES 加密）并返回 JWT")
-def sso_verify(req: SsoVerifyRequest, db: Session = Depends(get_db)):
+def sso_verify(req: SsoVerifyRequest, request: Request, db: Session = Depends(get_db)):
     """泛微 OA 传来的加密 token，验证后签发 PMS 的 JWT"""
-    return sso_service.sso_login(db, req.token)
+    try:
+        result = sso_service.sso_login(db, req.token)
+        record_operation_log(
+            db,
+            module="认证",
+            action="sso_verify",
+            entity_type="sys_user",
+            request=request,
+            summary="SSO Token 登录成功",
+            after_data={"token": req.token},
+            commit=True,
+        )
+        return result
+    except HTTPException as exc:
+        record_operation_log(
+            db,
+            module="认证",
+            action="sso_verify",
+            entity_type="sys_user",
+            request=request,
+            status="failed",
+            summary="SSO Token 登录失败",
+            after_data={"token": req.token},
+            error_msg=str(exc.detail),
+            commit=True,
+        )
+        raise
 
 
 @router.get("/url/verify", summary="验证 SSO URL 参数（HMAC 签名）并返回 JWT")
 def sso_url_verify(
+    request: Request,
     loginid: str = Query(...),
     username: str = Query(...),
     dept: str = Query(""),
@@ -82,15 +138,70 @@ def sso_url_verify(
     db: Session = Depends(get_db),
 ):
     """URL 参数方式 SSO 登录，适合 OA 菜单直接配置"""
-    return sso_service.sso_login_by_params(db, loginid, username, dept, ts, sign)
+    try:
+        result = sso_service.sso_login_by_params(db, loginid, username, dept, ts, sign)
+        record_operation_log(
+            db,
+            module="认证",
+            action="sso_url_login",
+            entity_type="sys_user",
+            entity_name=loginid,
+            request=request,
+            summary=f"SSO URL 登录成功：{loginid}",
+            after_data={"loginid": loginid, "username": username, "dept": dept, "ts": ts, "sign": sign},
+            commit=True,
+        )
+        return result
+    except HTTPException as exc:
+        record_operation_log(
+            db,
+            module="认证",
+            action="sso_url_login",
+            entity_type="sys_user",
+            entity_name=loginid,
+            request=request,
+            status="failed",
+            summary=f"SSO URL 登录失败：{loginid}",
+            after_data={"loginid": loginid, "username": username, "dept": dept, "ts": ts, "sign": sign},
+            error_msg=str(exc.detail),
+            commit=True,
+        )
+        raise
 
 
 @router.post("/oa-login", summary="OA 统一认证登录")
-async def sso_oa_login(req: SsoOaLoginRequest, db: Session = Depends(get_db)):
+async def sso_oa_login(req: SsoOaLoginRequest, request: Request, db: Session = Depends(get_db)):
     """通过 OA getToken API 验证用户身份，成功后签发 PMS JWT 并设置 Cookie"""
-    result = await sso_service.sso_login_by_loginid(
-        db, req.loginid, req.username or req.loginid, req.dept,
-    )
+    try:
+        result = await sso_service.sso_login_by_loginid(
+            db, req.loginid, req.username or req.loginid, req.dept,
+        )
+        record_operation_log(
+            db,
+            module="认证",
+            action="oa_login",
+            entity_type="sys_user",
+            entity_name=req.loginid,
+            request=request,
+            summary=f"OA 统一认证登录成功：{req.loginid}",
+            after_data={"loginid": req.loginid, "username": req.username, "dept": req.dept},
+            commit=True,
+        )
+    except HTTPException as exc:
+        record_operation_log(
+            db,
+            module="认证",
+            action="oa_login",
+            entity_type="sys_user",
+            entity_name=req.loginid,
+            request=request,
+            status="failed",
+            summary=f"OA 统一认证登录失败：{req.loginid}",
+            after_data={"loginid": req.loginid, "username": req.username, "dept": req.dept},
+            error_msg=str(exc.detail),
+            commit=True,
+        )
+        raise
     # 设置 Cookie，以便下次自动登录（SameSite=Lax 允许 iframe 内的请求携带）
     resp = JSONResponse(content=result)
     resp.set_cookie(
@@ -106,9 +217,26 @@ async def sso_oa_login(req: SsoOaLoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/generate-url", summary="生成 SSO 链接（管理工具）")
-def sso_generate_url(req: SsoUrlRequest):
+def sso_generate_url(
+    req: SsoUrlRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    scope_ctx: dict = Depends(require_permission("system:user:edit")),
+):
     """输入用户信息，返回带签名的 SSO URL"""
     url = sso_service.generate_sso_url(req.loginid, req.username, req.dept)
+    record_operation_log(
+        db,
+        module="认证",
+        action="sso_url_generate",
+        entity_type="sys_user",
+        entity_name=req.loginid,
+        operator_id=scope_ctx["user_id"],
+        request=request,
+        summary=f"生成 SSO 测试链接：{req.loginid}",
+        after_data={"loginid": req.loginid, "username": req.username, "dept": req.dept},
+        commit=True,
+    )
     return {"url": url}
 
 
@@ -165,7 +293,7 @@ def sso_oa_login_page(request: Request, db: Session = Depends(get_db)):
     if remember:
         from app.services import auth as auth_service
         try:
-            result = auth_service.auto_login(db, remember)
+            result = auth_service.auto_login(db, remember, request=request)
             new_token = result.access_token
             resp = RedirectResponse(url=f"{ft}/?token={new_token}", status_code=302)
             resp.set_cookie(

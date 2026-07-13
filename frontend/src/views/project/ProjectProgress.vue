@@ -18,7 +18,7 @@
     </template>
 
     <template #toolbar-left>
-      <el-button type="primary" size="small" @click="addTask">新增任务</el-button>
+      <el-button v-if="hasPermission('project:list:add')" type="primary" size="small" @click="addTask">新增任务</el-button>
     </template>
     <template #toolbar-right>
       <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
@@ -99,7 +99,9 @@ import { ModuleRegistry, AllCommunityModule, type ColDef, type CellValueChangedE
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
+import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { chineseLocaleText } from '@/utils/agGridLocale'
+import { useAuthStore } from '@/stores/auth'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
@@ -108,6 +110,8 @@ const route = useRoute()
 const projectId = Number(route.params.id)
 const projectName = route.query.name as string || '项目'
 const localeText = chineseLocaleText
+const authStore = useAuthStore()
+const hasPermission = authStore.hasPermission
 
 const rowData = ref<any[]>([])
 const userOptions = ref<string[]>([])  // 负责人姓名列表
@@ -117,11 +121,8 @@ const filterKeyword = ref('')
 const filterAssignee = ref<string | null>(null)
 const filterStatus = ref<number | null>(null)
 
-const taskStatusOptions: ListFilterOption[] = [
-  { label: '未开始', value: 1 },
-  { label: '进行中', value: 2 },
-  { label: '已完成', value: 3 },
-]
+const taskStatusOptions = ref<ListFilterOption[]>([])
+const taskStatusLabelMap = ref<Record<string, string>>({})
 
 const totalProgress = computed(() => {
   if (rowData.value.length === 0) return 0
@@ -135,6 +136,14 @@ function progressToneClass(v: number) {
   if (v < 80) return 'is-warning'
   return 'is-success'
 }
+function escapeHtml(value: unknown) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
 
 const assigneeFilterOptions = computed(() => userOptions.value.map(name => ({
   label: name,
@@ -144,7 +153,7 @@ const assigneeFilterOptions = computed(() => userOptions.value.map(name => ({
 const taskFilterFields = computed<ListFilterField<any>[]>(() => [
   { field: 'task_name', label: '任务名称', type: 'text' },
   { field: 'assignee_name', label: '负责人', type: 'select', options: () => assigneeFilterOptions.value },
-  { field: 'status', label: '状态', type: 'select', options: () => taskStatusOptions },
+  { field: 'status', label: '状态', type: 'select', options: () => taskStatusOptions.value },
   { field: 'progress', label: '进度', type: 'number' },
   { field: 'sort', label: '排序', type: 'number' },
   { field: 'start_date', label: '开始日期', type: 'date' },
@@ -168,16 +177,16 @@ const filteredRowData = computed(() => {
   return applyCustomFilters(result)
 })
 
-const columnDefs: ColDef[] = [
-  { field: 'sort', headerName: '排序', width: 70, editable: true, type: 'numericColumn' },
-  { field: 'task_name', headerName: '任务名称', width: 260, editable: true, pinned: 'left' },
+const columnDefs = computed<ColDef[]>(() => [
+  { field: 'sort', headerName: '排序', width: 70, editable: () => hasPermission('project:list:edit'), type: 'numericColumn' },
+  { field: 'task_name', headerName: '任务名称', width: 260, editable: () => hasPermission('project:list:edit'), pinned: 'left' },
   {
-    field: 'assignee_name', headerName: '负责人', width: 120, editable: true,
+    field: 'assignee_name', headerName: '负责人', width: 120, editable: () => hasPermission('project:list:edit'),
     cellEditor: 'agSelectCellEditor',
     cellEditorParams: () => ({ values: userOptions.value }),
   },
   {
-    field: 'progress', headerName: '进度%', width: 140, editable: true,
+    field: 'progress', headerName: '进度%', width: 140, editable: () => hasPermission('project:list:edit'),
     cellRenderer: (params: any) => {
       const v = params.value || 0
       const tone = progressToneClass(v)
@@ -190,34 +199,37 @@ const columnDefs: ColDef[] = [
     cellEditor: 'agLargeTextCellEditor',
   },
   {
-    field: 'status', headerName: '状态', width: 100, editable: true,
+    field: 'status', headerName: '状态', width: 100, editable: () => hasPermission('project:list:edit'),
     cellEditor: 'agSelectCellEditor',
-    cellEditorParams: { values: ['未开始', '进行中', '已完成'] },
+    cellEditorParams: () => ({ values: taskStatusOptions.value.map(item => item.value) }),
+    valueFormatter: (params: any) => taskStatusLabelMap.value[String(params.value)] || '-',
     cellRenderer: (params: any) => {
-      const map: Record<number, string> = { 1: '未开始', 2: '进行中', 3: '已完成' }
       const tones: Record<number, string> = { 1: 'neutral', 2: 'info', 3: 'success' }
       const tone = tones[params.value] || 'neutral'
-      return `<span class="pms-status pms-status-${tone}"><span class="pms-status-dot"></span>${map[params.value] || '-'}</span>`
+      const label = escapeHtml(taskStatusLabelMap.value[String(params.value)] || '-')
+      return `<span class="pms-status pms-status-${tone}"><span class="pms-status-dot"></span>${label}</span>`
     },
   },
   {
-    field: 'start_date', headerName: '开始日期', width: 130, editable: true,
+    field: 'start_date', headerName: '开始日期', width: 130, editable: () => hasPermission('project:list:edit'),
     cellEditor: 'agTextCellEditor',
   },
   {
-    field: 'due_date', headerName: '截止日期', width: 130, editable: true,
+    field: 'due_date', headerName: '截止日期', width: 130, editable: () => hasPermission('project:list:edit'),
     cellEditor: 'agTextCellEditor',
   },
   {
     headerName: '操作', width: 80, pinned: 'right',
-    cellRenderer: (params: any) => `<button class="pms-table-action pms-link-danger del-btn" data-id="${params.data.id}">删除</button>`,
+    cellRenderer: (params: any) => hasPermission('project:list:delete')
+      ? `<button class="pms-table-action pms-link-danger del-btn" data-id="${params.data.id}">删除</button>`
+      : '',
     onCellClicked: (params: any) => {
       if (params.event.target.classList.contains('del-btn')) {
         handleDeleteTask(params.data.id)
       }
     },
   },
-]
+])
 
 const defaultColDef = {
   sortable: true, resizable: true,
@@ -230,21 +242,22 @@ async function fetchTasks() {
 }
 
 async function fetchUsers() {
-  const res: any = await request.get('/users', { params: { page: 1, page_size: 999 } })
-  userOptions.value = res.items.map((u: any) => u.real_name)
+  const users: any = await request.get('/users/options')
+  userOptions.value = users.map((u: any) => u.real_name)
   userMap.value = {}
-  res.items.forEach((u: any) => { userMap.value[u.real_name] = u.id })
+  users.forEach((u: any) => { userMap.value[u.real_name] = u.id })
 }
 
 async function onCellValueChanged(event: CellValueChangedEvent) {
+  if (!hasPermission('project:list:edit')) return
   const field = event.colDef.field!
   const value = event.newValue
   const taskId = event.data.id
 
   // 状态：中文 → 数字映射
   if (field === 'status') {
-    const map: Record<string, number> = { '未开始': 1, '进行中': 2, '已完成': 3 }
-    await request.put(`/projects/${projectId}/tasks/${taskId}`, { status: map[value] || 1 })
+    const selected = taskStatusOptions.value.find(item => item.label === value || item.value === value)
+    await request.put(`/projects/${projectId}/tasks/${taskId}`, { status: Number(selected?.value ?? value) })
     ElMessage.success('已自动保存')
     fetchTasks()
     return
@@ -265,6 +278,7 @@ async function onCellValueChanged(event: CellValueChangedEvent) {
 }
 
 async function addTask() {
+  if (!hasPermission('project:list:add')) return
   const sort = rowData.value.length + 1
   await request.post(`/projects/${projectId}/tasks`, {
     project_id: projectId, task_name: '新任务', progress: 0, status: 1, sort,
@@ -274,6 +288,7 @@ async function addTask() {
 }
 
 async function handleDeleteTask(taskId: number) {
+  if (!hasPermission('project:list:delete')) return
   await request.delete(`/projects/${projectId}/tasks/${taskId}`)
   ElMessage.success('已删除')
   fetchTasks()
@@ -283,7 +298,13 @@ function refreshProgressScrollbar() {
   progressListRef.value?.refreshScrollbar()
 }
 
-onMounted(() => { fetchTasks(); fetchUsers() })
+async function loadTaskStatusOptions() {
+  const definition = await loadEnumOptions('task_status')
+  taskStatusOptions.value = definition.items.map(item => ({ label: item.label, value: Number(item.value) }))
+  taskStatusLabelMap.value = definition.label_map
+}
+
+onMounted(() => { fetchTasks(); fetchUsers(); loadTaskStatusOptions() })
 </script>
 
 <style scoped>

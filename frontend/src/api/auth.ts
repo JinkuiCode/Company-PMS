@@ -25,6 +25,10 @@ export interface UserInfo {
   dept_id: number | null
   mobile: string | null
   status: number
+  role_codes: string[]
+  permissions: string[]
+  data_scope: number
+  product_lines: string[] | null
 }
 
 export function login(params: LoginParams): Promise<TokenResult> {

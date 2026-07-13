@@ -71,6 +71,8 @@ for (const [name, source] of [
 }
 
 assert.ok(startScript, 'Repository should include a macOS one-click start-pms.command script')
+assert.match(startScript, /nohup\s+env[\s\S]*uvicorn/, 'Backend should survive after the one-click launcher exits')
+assert.match(startScript, /nohup\s+npm run dev/, 'Frontend should survive after the one-click launcher exits')
 assert.match(startScript, /DB_DIALECT=sqlite/, 'Start script should force local SQLite for development')
 assert.match(startScript, /SQLITE_DB_PATH=.*backend\/data\/pms-dev\.db/, 'Start script should use the bundled dev SQLite database')
 assert.match(startScript, /BACKEND_PORT=8000/, 'Start script should start the backend on port 8000')

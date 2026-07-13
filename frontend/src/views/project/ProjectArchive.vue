@@ -5,16 +5,16 @@
     scrollbar-label="项目档案表格横向滚动条"
   >
     <template #toolbar-left>
-        <el-button type="primary" size="small" @click="openCreateDialog">
+        <el-button v-if="hasPermission('project:archive:add')" type="primary" size="small" @click="openCreateDialog">
           <el-icon style="margin-right:4px;"><Plus /></el-icon>
           新增档案
         </el-button>
-        <el-button type="danger" size="small" plain :disabled="selectedRows.length === 0" @click="handleBatchDelete">
+        <el-button v-if="hasPermission('project:archive:delete')" type="danger" size="small" plain :disabled="selectedRows.length === 0" @click="handleBatchDelete">
           <el-icon style="margin-right:4px;"><Delete /></el-icon>
           批量删除
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
         </el-button>
-        <el-button type="success" size="small" :disabled="selectedRows.length === 0" @click="handleBatchSync">
+        <el-button v-if="hasPermission('project:archive:sync')" type="success" size="small" :disabled="selectedRows.length === 0" @click="handleBatchSync">
           <el-icon style="margin-right:4px;"><Connection /></el-icon>
           批量同步 ERP
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
@@ -128,7 +128,7 @@
             <el-option
               v-for="u in userList"
               :key="u.id"
-              :label="u.real_name + ' (' + u.username + ')'"
+              :label="u.real_name"
               :value="u.id"
             />
           </el-select>
@@ -153,8 +153,8 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">保存</el-button>
-        <el-button v-if="isEdit" type="success" @click="handleSubmitAndSync">保存并同步</el-button>
+        <el-button v-if="isEdit ? hasPermission('project:archive:edit') : hasPermission('project:archive:add')" type="primary" @click="handleSubmit">保存</el-button>
+        <el-button v-if="isEdit && hasPermission('project:archive:edit') && hasPermission('project:archive:sync')" type="success" @click="handleSubmitAndSync">保存并同步</el-button>
       </template>
     </el-dialog>
   </PmsDataList>
@@ -172,12 +172,16 @@ import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
+import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { chineseLocaleText } from '@/utils/agGridLocale'
+import { useAuthStore } from '@/stores/auth'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
 
 const localeText = chineseLocaleText
+const authStore = useAuthStore()
+const hasPermission = authStore.hasPermission
 
 // ========== 布局持久化 ==========
 const LAYOUT_KEY = 'pms_archive_grid_layout_v2'
@@ -234,6 +238,12 @@ const dictOptions = reactive<Record<string, any[]>>({
   product_type: [],
   archive_status: [],
 })
+const dictLabelMaps = reactive<Record<string, Record<string, string>>>({})
+
+function enumLabel(code: string, value: unknown) {
+  if (value === null || value === undefined || value === '') return '-'
+  return dictLabelMaps[code]?.[String(value)] || String(value)
+}
 
 // 用户允许的产品线
 const allowedProductLines = ref<string[] | null>(null)
@@ -316,8 +326,9 @@ const { customFilters, activeCustomFilterCount, applyCustomFilters } = useListFi
 
 async function fetchDictOptions(code: string) {
   try {
-    const res: any = await request.get(`/dicts/code/${code}`)
-    dictOptions[code] = res.items || []
+    const definition = await loadEnumOptions(code)
+    dictOptions[code] = definition.items
+    dictLabelMaps[code] = definition.label_map
   } catch { /* ignore */ }
 }
 
@@ -377,7 +388,9 @@ const rules: FormRules = {
 // ========== AG Grid 列定义 ==========
 const statusMap = computed(() => {
   const map: Record<number, string> = {}
-  dictOptions.archive_status.forEach(item => { map[Number(item.value)] = item.label })
+  Object.entries(dictLabelMaps.archive_status || {}).forEach(([value, label]) => {
+    map[Number(value)] = label
+  })
   return map
 })
 const archiveStatusTone: Record<number, string> = { 1: 'neutral', 2: 'info', 3: 'success', 4: 'warning' }
@@ -391,11 +404,16 @@ function escapeHtml(value: any) {
     .replace(/'/g, '&#39;')
 }
 
-const columnDefs: ColDef[] = [
-  { headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', filter: false, sortable: false, resizable: false },
+const columnDefs = computed<ColDef[]>(() => [
+  ...(hasPermission('project:archive:delete') || hasPermission('project:archive:sync')
+    ? [{ headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', filter: false, sortable: false, resizable: false } as ColDef]
+    : []),
   { field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left' },
   { field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160 },
-  { field: 'product_line', headerName: '产品线', width: 110, minWidth: 100 },
+  {
+    field: 'product_line', headerName: '产品线', width: 110, minWidth: 100,
+    valueFormatter: (params: any) => enumLabel('product_line', params.value),
+  },
   {
     field: 'status', headerName: '状态', width: 100, minWidth: 96,
     cellRenderer: (params: any) => {
@@ -406,7 +424,10 @@ const columnDefs: ColDef[] = [
     },
   },
   { field: 'manager_name', headerName: '负责人', width: 110, minWidth: 96 },
-  { field: 'product_type', headerName: '产品类型', width: 110, minWidth: 96 },
+  {
+    field: 'product_type', headerName: '产品类型', width: 110, minWidth: 96,
+    valueFormatter: (params: any) => enumLabel('product_type', params.value),
+  },
   {
     field: 'plan_start_date', headerName: '计划开始', width: 118, minWidth: 112,
     valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
@@ -447,9 +468,9 @@ const columnDefs: ColDef[] = [
   {
     headerName: '操作', width: 146, minWidth: 136, pinned: 'right', filter: false, sortable: false, resizable: false,
     cellRenderer: (params: any) => {
-      return `<button class="pms-table-action edit-btn" data-id="${params.data.id}">编辑</button>
-              <button class="pms-table-action pms-link-success sync-btn" data-id="${params.data.id}">同步</button>
-              <button class="pms-table-action pms-link-danger del-btn" data-id="${params.data.id}">删除</button>`
+      return `${hasPermission('project:archive:edit') ? `<button class="pms-table-action edit-btn" data-id="${params.data.id}">编辑</button>` : ''}
+              ${hasPermission('project:archive:sync') ? `<button class="pms-table-action pms-link-success sync-btn" data-id="${params.data.id}">同步</button>` : ''}
+              ${hasPermission('project:archive:delete') ? `<button class="pms-table-action pms-link-danger del-btn" data-id="${params.data.id}">删除</button>` : ''}`
     },
     onCellClicked: (params: any) => {
       if (params.event.target.classList.contains('edit-btn')) {
@@ -461,7 +482,7 @@ const columnDefs: ColDef[] = [
       }
     },
   },
-]
+])
 
 const defaultColDef = {
   sortable: true,
@@ -481,8 +502,7 @@ async function fetchList() {
 }
 
 async function fetchUsers() {
-  const res: any = await request.get('/users', { params: { page: 1, page_size: 1000 } })
-  userList.value = res.items
+  userList.value = (await request.get('/users/options')) as any
 }
 
 // ========== 选择事件 ==========
@@ -492,11 +512,13 @@ function onSelectionChanged() {
 
 // ========== 双击编辑 ==========
 function onRowDoubleClicked(event: any) {
+  if (!hasPermission('project:archive:edit')) return
   if (event.data) openEditDialog(event.data)
 }
 
 // ========== 弹窗操作 ==========
 function openCreateDialog() {
+  if (!hasPermission('project:archive:add')) return
   formRef.value?.resetFields()
   Object.assign(form, { id: 0, project_code: '', project_name: '', status: 1, manager_id: null, product_type: '', product_line: '', plan_start_date: '', plan_end_date: '' })
   isEdit.value = false
@@ -504,6 +526,7 @@ function openCreateDialog() {
 }
 
 function openEditDialog(row: any) {
+  if (!hasPermission('project:archive:edit')) return
   formRef.value?.resetFields()
   Object.assign(form, {
     id: row.id,
@@ -521,6 +544,7 @@ function openEditDialog(row: any) {
 }
 
 async function handleSubmit() {
+  if (isEdit.value ? !hasPermission('project:archive:edit') : !hasPermission('project:archive:add')) return
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
@@ -546,6 +570,7 @@ async function handleSubmit() {
 }
 
 async function handleSubmitAndSync() {
+  if (!hasPermission('project:archive:edit') || !hasPermission('project:archive:sync')) return
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
@@ -583,6 +608,7 @@ async function handleSubmitAndSync() {
 
 // ========== 删除 ==========
 async function handleDeleteSingle(id: number) {
+  if (!hasPermission('project:archive:delete')) return
   try {
     await ElMessageBox.confirm('确定删除该项目档案吗？', '提示', { type: 'warning' })
   } catch {
@@ -594,6 +620,7 @@ async function handleDeleteSingle(id: number) {
 }
 
 async function handleBatchDelete() {
+  if (!hasPermission('project:archive:delete')) return
   if (selectedRows.value.length === 0) return
   try {
     await ElMessageBox.confirm(`确定删除选中的 ${selectedRows.value.length} 条档案吗？`, '提示', { type: 'warning' })
@@ -610,6 +637,7 @@ async function handleBatchDelete() {
 
 // ========== ERP 同步 ==========
 async function handleSyncSingle(id: number) {
+  if (!hasPermission('project:archive:sync')) return
   try {
     const res: any = await request.post('/erp/sync', { archive_id: id })
     if (res.success) {
@@ -624,6 +652,7 @@ async function handleSyncSingle(id: number) {
 }
 
 async function handleBatchSync() {
+  if (!hasPermission('project:archive:sync')) return
   if (selectedRows.value.length === 0) return
   try {
     await ElMessageBox.confirm(`确定同步选中的 ${selectedRows.value.length} 条档案到金蝶 ERP 吗？`, '同步确认', { type: 'warning' })
