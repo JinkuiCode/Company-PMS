@@ -24,12 +24,14 @@
         <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
           已筛选 {{ filteredRowData.length }} / {{ total }} 条
         </span>
-        <el-button size="small" @click="saveLayout" title="保存当前列顺序和宽度">
-          <el-icon style="margin-right:4px;"><Setting /></el-icon>保存布局
-        </el-button>
-        <el-button size="small" plain @click="resetLayout" title="恢复默认列布局">
-          <el-icon><RefreshRight /></el-icon>
-        </el-button>
+        <PmsListColumnPicker
+          :model-value="selectedArchiveColumnKeys"
+          :groups="archiveColumnGroups"
+          :default-keys="defaultArchiveColumnKeys"
+          aria-label="项目档案列设置"
+          @update:model-value="handleArchiveColumnSelection"
+          @restore-defaults="restoreArchiveColumnDefaults"
+        />
     </template>
 
     <template #filters>
@@ -84,10 +86,10 @@
         @grid-ready="onGridReady"
         @first-data-rendered="scheduleArchiveScrollbarMetrics"
         @grid-size-changed="scheduleArchiveScrollbarMetrics"
-        @column-resized="scheduleArchiveScrollbarMetrics"
-        @column-moved="scheduleArchiveScrollbarMetrics"
-        @column-pinned="scheduleArchiveScrollbarMetrics"
-        @displayed-columns-changed="scheduleArchiveScrollbarMetrics"
+        @column-resized="handleArchiveColumnResized"
+        @column-moved="handleArchiveGridStructureChanged"
+        @column-pinned="handleArchiveGridStructureChanged"
+        @displayed-columns-changed="handleArchiveGridStructureChanged"
         @row-double-clicked="onRowDoubleClicked"
         @selection-changed="onSelectionChanged"
       />
@@ -161,16 +163,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Delete, Search, Connection, Setting, RefreshRight } from '@element-plus/icons-vue'
+import { Plus, Delete, Search, Connection } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
-import { ModuleRegistry, AllCommunityModule, type ColDef } from 'ag-grid-community'
+import { ModuleRegistry, AllCommunityModule, type ColDef, type ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
+import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { chineseLocaleText } from '@/utils/agGridLocale'
@@ -183,40 +186,196 @@ const localeText = chineseLocaleText
 const authStore = useAuthStore()
 const hasPermission = authStore.hasPermission
 
-// ========== 布局持久化 ==========
-const LAYOUT_KEY = 'pms_archive_grid_layout_v2'
+type ArchiveColumnPreferenceState = {
+  selected_column_keys: string[]
+  columnState: ColumnState[]
+}
+
+const ARCHIVE_COLUMN_STORAGE_KEY = 'pms_project_archive_list_columns_v1'
+const LEGACY_ARCHIVE_LAYOUT_KEY = 'pms_archive_grid_layout_v2'
+
+const archiveColumnGroups = [
+  {
+    key: 'business',
+    label: '业务信息',
+    fields: [
+      { key: 'product_line', label: '产品线', value_type: 'select', list_available: true, quick_addable: false },
+      { key: 'status', label: '状态', value_type: 'select', list_available: true, quick_addable: false },
+      { key: 'manager_name', label: '负责人', value_type: 'text', list_available: true, quick_addable: false },
+      { key: 'product_type', label: '产品类型', value_type: 'select', list_available: true, quick_addable: false },
+    ],
+  },
+  {
+    key: 'plan',
+    label: '计划信息',
+    fields: [
+      { key: 'plan_start_date', label: '计划开始', value_type: 'date', list_available: true, quick_addable: false },
+      { key: 'plan_end_date', label: '计划结束', value_type: 'date', list_available: true, quick_addable: false },
+    ],
+  },
+  {
+    key: 'audit',
+    label: '维护信息',
+    fields: [
+      { key: 'created_by_name', label: '创建人', value_type: 'text', list_available: true, quick_addable: false },
+      { key: 'updated_by_name', label: '最后编辑人', value_type: 'text', list_available: true, quick_addable: false },
+      { key: 'updated_at', label: '最后编辑时间', value_type: 'datetime', list_available: true, quick_addable: false },
+    ],
+  },
+  {
+    key: 'erp',
+    label: 'ERP 同步',
+    fields: [
+      { key: 'erp_sync_time', label: '最后同步时间', value_type: 'datetime', list_available: true, quick_addable: false },
+      { key: 'erp_sync_by_name', label: '最后同步人', value_type: 'text', list_available: true, quick_addable: false },
+      { key: 'erp_sync_status', label: '同步状态', value_type: 'select', list_available: true, quick_addable: false },
+    ],
+  },
+]
+
+const defaultArchiveColumnKeys = archiveColumnGroups.flatMap(group => group.fields.map(field => field.key))
+const availableArchiveColumnKeys = new Set(defaultArchiveColumnKeys)
+const fixedArchiveColumnKeys = new Set(['archive_selection', 'project_code', 'project_name', 'archive_actions'])
+const selectedArchiveColumnKeys = ref<string[]>([...defaultArchiveColumnKeys])
+const archiveColumnPreferenceOwnerId = ref<number | null>(null)
+const archiveColumnPreferencesReady = ref(false)
+const archiveColumnPreferenceWritesEnabled = ref(false)
+const archiveColumnStateRestored = ref(false)
+const restoringArchiveColumnState = ref(false)
 let gridApi: any = null
 
 function onGridReady(params: any) {
   gridApi = params.api
-  loadLayout()
+  completeArchiveColumnPreferenceRestore()
   scheduleArchiveScrollbarMetrics()
 }
 
-function saveLayout() {
-  if (!gridApi) return
-  const colState = gridApi.getColumnState()
-  localStorage.setItem(LAYOUT_KEY, JSON.stringify(colState))
-  ElMessage.success('布局已保存，下次登录自动恢复')
+function archiveColumnPreferenceStorageKey() {
+  if (archiveColumnPreferenceOwnerId.value == null) return null
+  return `${ARCHIVE_COLUMN_STORAGE_KEY}:${archiveColumnPreferenceOwnerId.value}`
 }
 
-function loadLayout() {
-  if (!gridApi) return
-  const saved = localStorage.getItem(LAYOUT_KEY)
-  if (saved) {
+async function resolveArchiveColumnPreferenceOwner() {
+  if (!authStore.user) {
     try {
-      const colState = JSON.parse(saved)
-      gridApi.applyColumnState({ state: colState, applyOrder: true })
-    } catch { /* 忽略解析错误 */ }
+      await authStore.fetchUser()
+    } catch {
+      return
+    }
+  }
+  archiveColumnPreferenceOwnerId.value = authStore.user?.id ?? null
+}
+
+function normalizeArchiveColumnKeys(keys: unknown) {
+  if (!Array.isArray(keys)) return [...defaultArchiveColumnKeys]
+  return keys.filter((key): key is string => typeof key === 'string' && availableArchiveColumnKeys.has(key))
+}
+
+function readArchiveColumnPreferences(): ArchiveColumnPreferenceState | null {
+  const storageKey = archiveColumnPreferenceStorageKey()
+  if (!storageKey) return null
+
+  const raw = localStorage.getItem(storageKey)
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw)
+      return {
+        selected_column_keys: normalizeArchiveColumnKeys(parsed?.selected_column_keys),
+        columnState: Array.isArray(parsed?.columnState) ? parsed.columnState : [],
+      }
+    } catch { /* 忽略损坏的当前版本缓存 */ }
+  }
+
+  const legacyRaw = localStorage.getItem(LEGACY_ARCHIVE_LAYOUT_KEY)
+  if (!legacyRaw) return null
+  try {
+    const legacyState = JSON.parse(legacyRaw)
+    if (!Array.isArray(legacyState)) return null
+    const visibleKeys = defaultArchiveColumnKeys.filter((key) => {
+      const state = legacyState.find((item: ColumnState) => item.colId === key)
+      return state?.hide !== true
+    })
+    return { selected_column_keys: visibleKeys, columnState: legacyState }
+  } catch {
+    return null
   }
 }
 
-function resetLayout() {
-  localStorage.removeItem(LAYOUT_KEY)
-  if (gridApi) {
-    gridApi.resetColumnState()
+function persistArchiveColumnPreferences() {
+  if (!archiveColumnPreferencesReady.value || !archiveColumnPreferenceWritesEnabled.value) return
+  const storageKey = archiveColumnPreferenceStorageKey()
+  if (!storageKey) return
+  const state: ArchiveColumnPreferenceState = {
+    selected_column_keys: [...selectedArchiveColumnKeys.value],
+    columnState: gridApi?.getColumnState?.() || [],
   }
-  ElMessage.success('已恢复默认布局')
+  localStorage.setItem(storageKey, JSON.stringify(state))
+  localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY)
+}
+
+function restoreSelectedArchiveColumnKeys() {
+  const saved = readArchiveColumnPreferences()
+  selectedArchiveColumnKeys.value = saved
+    ? normalizeArchiveColumnKeys(saved.selected_column_keys)
+    : [...defaultArchiveColumnKeys]
+}
+
+function restoreArchiveColumnState() {
+  if (!archiveColumnPreferencesReady.value || !gridApi || archiveColumnStateRestored.value) return
+  archiveColumnStateRestored.value = true
+  const saved = readArchiveColumnPreferences()
+  if (!saved?.columnState.length) return
+  restoringArchiveColumnState.value = true
+  try {
+    const selectedKeys = new Set(selectedArchiveColumnKeys.value)
+    const reconciledState = saved.columnState.map((state) => {
+      if (fixedArchiveColumnKeys.has(state.colId)) return { ...state, hide: false }
+      if (availableArchiveColumnKeys.has(state.colId)) return { ...state, hide: !selectedKeys.has(state.colId) }
+      return state
+    })
+    gridApi.applyColumnState({ state: reconciledState, applyOrder: true })
+  } finally {
+    restoringArchiveColumnState.value = false
+  }
+  scheduleArchiveScrollbarMetrics()
+}
+
+function completeArchiveColumnPreferenceRestore() {
+  if (!archiveColumnPreferencesReady.value || !gridApi) return
+  restoreArchiveColumnState()
+  archiveColumnPreferenceWritesEnabled.value = true
+}
+
+function handleArchiveColumnSelection(keys: string[]) {
+  selectedArchiveColumnKeys.value = normalizeArchiveColumnKeys(keys)
+  nextTick(() => {
+    scheduleArchiveScrollbarMetrics()
+    persistArchiveColumnPreferences()
+  })
+}
+
+function handleArchiveGridStructureChanged() {
+  scheduleArchiveScrollbarMetrics()
+  if (!archiveColumnPreferenceWritesEnabled.value || restoringArchiveColumnState.value) return
+  persistArchiveColumnPreferences()
+}
+
+function handleArchiveColumnResized(event: any) {
+  scheduleArchiveScrollbarMetrics()
+  if (!event?.finished || !archiveColumnPreferenceWritesEnabled.value || restoringArchiveColumnState.value) return
+  persistArchiveColumnPreferences()
+}
+
+function restoreArchiveColumnDefaults() {
+  const storageKey = archiveColumnPreferenceStorageKey()
+  if (storageKey) localStorage.removeItem(storageKey)
+  localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY)
+  selectedArchiveColumnKeys.value = [...defaultArchiveColumnKeys]
+  nextTick(() => {
+    gridApi?.resetColumnState?.()
+    scheduleArchiveScrollbarMetrics()
+    persistArchiveColumnPreferences()
+  })
 }
 
 // ========== 数据状态 ==========
@@ -404,18 +563,25 @@ function escapeHtml(value: any) {
     .replace(/'/g, '&#39;')
 }
 
+function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
+  return {
+    colId: key,
+    hide: !selectedArchiveColumnKeys.value.includes(key),
+  }
+}
+
 const columnDefs = computed<ColDef[]>(() => [
   ...(hasPermission('project:archive:delete') || hasPermission('project:archive:sync')
-    ? [{ headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', filter: false, sortable: false, resizable: false } as ColDef]
+    ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', filter: false, sortable: false, resizable: false } as ColDef]
     : []),
-  { field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left' },
-  { field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160 },
+  { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left' },
+  { colId: 'project_name', field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160 },
   {
-    field: 'product_line', headerName: '产品线', width: 110, minWidth: 100,
+    ...archiveColumnVisibility('product_line'), field: 'product_line', headerName: '产品线', width: 110, minWidth: 100,
     valueFormatter: (params: any) => enumLabel('product_line', params.value),
   },
   {
-    field: 'status', headerName: '状态', width: 100, minWidth: 96,
+    ...archiveColumnVisibility('status'), field: 'status', headerName: '状态', width: 100, minWidth: 96,
     cellRenderer: (params: any) => {
       const v = params.value
       const tone = archiveStatusTone[v] || 'neutral'
@@ -423,27 +589,27 @@ const columnDefs = computed<ColDef[]>(() => [
       return `<span class="pms-status pms-status-${tone}"><span class="pms-status-dot"></span>${label}</span>`
     },
   },
-  { field: 'manager_name', headerName: '负责人', width: 110, minWidth: 96 },
+  { ...archiveColumnVisibility('manager_name'), field: 'manager_name', headerName: '负责人', width: 110, minWidth: 96 },
   {
-    field: 'product_type', headerName: '产品类型', width: 110, minWidth: 96,
+    ...archiveColumnVisibility('product_type'), field: 'product_type', headerName: '产品类型', width: 110, minWidth: 96,
     valueFormatter: (params: any) => enumLabel('product_type', params.value),
   },
   {
-    field: 'plan_start_date', headerName: '计划开始', width: 118, minWidth: 112,
+    ...archiveColumnVisibility('plan_start_date'), field: 'plan_start_date', headerName: '计划开始', width: 118, minWidth: 112,
     valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
   },
   {
-    field: 'plan_end_date', headerName: '计划结束', width: 118, minWidth: 112,
+    ...archiveColumnVisibility('plan_end_date'), field: 'plan_end_date', headerName: '计划结束', width: 118, minWidth: 112,
     valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
   },
-  { field: 'created_by_name', headerName: '创建人', width: 110, minWidth: 96 },
-  { field: 'updated_by_name', headerName: '最后编辑人', width: 120, minWidth: 110 },
+  { ...archiveColumnVisibility('created_by_name'), field: 'created_by_name', headerName: '创建人', width: 110, minWidth: 96 },
+  { ...archiveColumnVisibility('updated_by_name'), field: 'updated_by_name', headerName: '最后编辑人', width: 120, minWidth: 110 },
   {
-    field: 'updated_at', headerName: '最后编辑时间', width: 170, minWidth: 160,
+    ...archiveColumnVisibility('updated_at'), field: 'updated_at', headerName: '最后编辑时间', width: 170, minWidth: 160,
     valueFormatter: (params: any) => params.value ? new Date(params.value).toLocaleString('zh-CN') : '-',
   },
   {
-    field: 'erp_sync_time', headerName: '最后同步时间', width: 170, minWidth: 160,
+    ...archiveColumnVisibility('erp_sync_time'), field: 'erp_sync_time', headerName: '最后同步时间', width: 170, minWidth: 160,
     valueFormatter: (params: any) => {
       if (!params.value) return '-'
       const d = new Date(params.value)
@@ -451,9 +617,9 @@ const columnDefs = computed<ColDef[]>(() => [
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
     },
   },
-  { field: 'erp_sync_by_name', headerName: '最后同步人', width: 120, minWidth: 110 },
+  { ...archiveColumnVisibility('erp_sync_by_name'), field: 'erp_sync_by_name', headerName: '最后同步人', width: 120, minWidth: 110 },
   {
-    field: 'erp_sync_status', headerName: '同步', width: 100, minWidth: 96,
+    ...archiveColumnVisibility('erp_sync_status'), field: 'erp_sync_status', headerName: '同步', width: 100, minWidth: 96,
     cellRenderer: (params: any) => {
       const v = params.value
       if (!v || v === 'pending') return '<span class="pms-status pms-status-warning"><span class="pms-status-dot"></span>待同步</span>'
@@ -466,7 +632,7 @@ const columnDefs = computed<ColDef[]>(() => [
     },
   },
   {
-    headerName: '操作', width: 146, minWidth: 136, pinned: 'right', filter: false, sortable: false, resizable: false,
+    colId: 'archive_actions', headerName: '操作', width: 146, minWidth: 136, pinned: 'right', filter: false, sortable: false, resizable: false,
     cellRenderer: (params: any) => {
       return `${hasPermission('project:archive:edit') ? `<button class="pms-table-action edit-btn" data-id="${params.data.id}">编辑</button>` : ''}
               ${hasPermission('project:archive:sync') ? `<button class="pms-table-action pms-link-success sync-btn" data-id="${params.data.id}">同步</button>` : ''}
@@ -489,6 +655,7 @@ const defaultColDef = {
   resizable: true,
   filter: false,
   suppressSizeToFit: true,
+  headerClass: 'archive-list-header-center',
 }
 
 // ========== 数据加载 ==========
@@ -674,11 +841,16 @@ async function handleBatchSync() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   fetchList(); fetchUsers(); fetchAllowedProductLines()
   fetchDictOptions('product_line')
   fetchDictOptions('product_type')
   fetchDictOptions('archive_status')
+  await resolveArchiveColumnPreferenceOwner()
+  restoreSelectedArchiveColumnKeys()
+  archiveColumnPreferencesReady.value = true
+  await nextTick()
+  completeArchiveColumnPreferenceRestore()
   scheduleArchiveScrollbarMetrics()
 })
 </script>
@@ -690,5 +862,9 @@ onMounted(() => {
 
 :deep(.pms-table-action + .pms-table-action) {
   margin-left: 2px;
+}
+
+:deep(.archive-list-header-center .ag-header-cell-label) {
+  justify-content: center;
 }
 </style>

@@ -18,6 +18,7 @@
             v-model="selectedSheetFieldKeys"
             :groups="columnPickerGroups"
             :default-keys="defaultSelectedSheetFieldKeys"
+            aria-label="项目进度列设置"
           />
         </template>
 
@@ -1141,6 +1142,8 @@ function dynamicColumnDefs(): Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>
     .filter(Boolean) as Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>
 }
 
+const actionColumnWidth = computed(() => hasPermission('project:list:delete') ? 88 : 60)
+
 const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>(() => [
   { field: 'project_code', headerName: '项目号', width: 112, pinned: 'left', filter: false },
   {
@@ -1215,11 +1218,14 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
   ...dynamicColumnDefs(),
   {
     headerName: '操作',
-    width: 118,
+    width: actionColumnWidth.value,
+    minWidth: actionColumnWidth.value,
+    maxWidth: actionColumnWidth.value,
     pinned: 'right',
     filter: false,
     sortable: false,
     resizable: false,
+    cellClass: 'progress-actions-cell',
     cellRenderer: () => `
       <span class="progress-row-actions">
         <button class="progress-detail-btn detail-btn" type="button" title="打开详情" aria-label="打开详情">详情</button>
@@ -1875,9 +1881,15 @@ onMounted(async () => {
 :deep(.progress-row-actions) {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
   height: 100%;
+}
+
+:deep(.progress-actions-cell) {
+  padding-right: 4px !important;
+  padding-left: 4px !important;
 }
 
 :deep(.progress-detail-btn) {

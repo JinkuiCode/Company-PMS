@@ -1,7 +1,7 @@
 <template>
   <el-container class="app-layout app-shell">
     <!-- 左侧菜单 -->
-    <el-aside :width="isCollapse ? '64px' : '220px'" class="app-aside">
+    <el-aside :width="isCollapse ? '64px' : '184px'" class="app-aside">
       <div class="logo">
         <span class="logo-mark">P</span>
         <span v-if="!isCollapse" class="logo-text">PMS 管理系统</span>
@@ -24,6 +24,7 @@
               v-for="child in menu.children"
               :key="child.id"
               :index="child.path"
+              class="submenu-guide"
             >
               <el-icon v-if="child.icon" class="menu-icon"><component :is="Icons[child.icon]" /></el-icon>
               <span>{{ child.menu_name }}</span>
@@ -262,6 +263,46 @@ onBeforeUnmount(() => window.removeEventListener('pms:permission-denied', refres
 
 :deep(.app-menu .el-sub-menu.is-active > .el-sub-menu__title) {
   color: var(--pms-primary);
+}
+
+:deep(.app-menu:not(.el-menu--collapse) .el-sub-menu .el-menu) {
+  position: relative;
+  margin: 0 0 6px 20px;
+  padding: 4px 0 4px 9px;
+  background: transparent;
+}
+
+:deep(.app-menu:not(.el-menu--collapse) .el-sub-menu .el-menu::before) {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 1px;
+  height: calc(100% - 8px);
+  background: var(--pms-border);
+  content: '';
+}
+
+:deep(.app-menu:not(.el-menu--collapse) .submenu-guide) {
+  position: relative;
+  height: 36px;
+  margin: 1px 0;
+  padding: 0 8px !important;
+  font-size: 13px;
+}
+
+:deep(.app-menu:not(.el-menu--collapse) .submenu-guide.is-active::before) {
+  position: absolute;
+  top: 50%;
+  left: -12px;
+  width: 6px;
+  height: 6px;
+  border: 2px solid var(--pms-surface);
+  border-radius: 50%;
+  background: var(--pms-primary);
+  box-sizing: content-box;
+  content: '';
+  transform: translateY(-50%);
 }
 
 :deep(.app-menu.el-menu--collapse) {
