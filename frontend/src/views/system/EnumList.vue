@@ -1,5 +1,5 @@
 <template>
-  <div class="pms-page enum-page">
+  <div class="pms-page pms-system-page enum-page">
     <aside class="enum-master">
       <div class="enum-master-head">
         <div>
@@ -53,12 +53,13 @@
           :data="dictItems"
           border
           stripe
+          size="small"
           height="calc(100vh - 214px)"
           empty-text="暂无枚举值"
-          class="enum-value-table"
+          class="pms-dense-table enum-value-table"
         >
           <el-table-column prop="item_value" label="存储值" min-width="140" fixed>
-            <template #default="{ row }"><code>{{ row.item_value }}</code></template>
+            <template #default="{ row }"><code class="pms-code">{{ row.item_value }}</code></template>
           </el-table-column>
           <el-table-column prop="item_label" label="显示名称" min-width="180" />
           <el-table-column prop="sort" label="排序" width="76" align="center" />
@@ -394,7 +395,7 @@ onMounted(fetchDicts)
 .enum-detail {
   min-width: 0;
   padding: 14px;
-  background: #fff;
+  background: var(--pms-surface);
 }
 
 .enum-detail-head {
@@ -420,8 +421,8 @@ onMounted(fetchDicts)
 
 .enum-title-line code,
 .enum-value-table code {
-  color: #475569;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--pms-text-secondary);
+  font-family: var(--pms-font-mono);
   font-size: 12px;
 }
 
@@ -441,23 +442,13 @@ onMounted(fetchDicts)
   padding: 2px 6px;
   border: 1px solid var(--pms-border);
   border-radius: 4px;
-  color: #64748b;
+  color: var(--pms-text-secondary);
   font-size: 11px;
 }
 
 .has-reference {
   color: #b45309;
   font-weight: 650;
-}
-
-:deep(.enum-value-table th.el-table__cell) {
-  height: 38px;
-  padding: 0;
-}
-
-:deep(.enum-value-table td.el-table__cell) {
-  height: 36px;
-  padding: 0;
 }
 
 @media (max-width: 900px) {

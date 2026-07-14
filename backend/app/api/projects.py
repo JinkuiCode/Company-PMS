@@ -31,9 +31,18 @@ def list_projects(
 
 @router.get("/sheet-fields", summary="项目进度动态列表字段元数据")
 def get_project_sheet_fields(
+    db: Session = Depends(get_db),
     _scope_ctx: dict = Depends(require_permission("project:list:view")),
 ):
-    return project_service.get_project_sheet_field_metadata()
+    return project_service.get_project_sheet_field_metadata(db)
+
+
+@router.get("/archives/fields", summary="项目档案生效字段元数据")
+def get_archive_fields(
+    db: Session = Depends(get_db),
+    _scope_ctx: dict = Depends(require_permission("project:archive:view")),
+):
+    return project_service.get_archive_field_metadata(db)
 
 
 @router.post("", summary="创建项目")

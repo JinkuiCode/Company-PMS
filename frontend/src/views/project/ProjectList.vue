@@ -18,6 +18,7 @@
             v-model="selectedSheetFieldKeys"
             :groups="columnPickerGroups"
             :default-keys="defaultSelectedSheetFieldKeys"
+            aria-label="项目进度列设置"
           />
         </template>
 
@@ -28,6 +29,7 @@
             :active-count="activeCustomFilterCount"
           >
             <el-input
+              v-if="isProgressPolicyVisible('project_code') || isProgressPolicyVisible('project_name')"
               v-model="filterKeyword"
               placeholder="搜索项目号 / 项目名"
               size="small"
@@ -36,6 +38,7 @@
               :prefix-icon="Search"
             />
             <el-select
+              v-if="isProgressPolicyVisible('product_line')"
               v-model="filterProductLine"
               placeholder="产品类"
               size="small"
@@ -50,6 +53,7 @@
               />
             </el-select>
             <el-select
+              v-if="isProgressPolicyVisible('node_status')"
               v-model="filterStatus"
               placeholder="节点"
               size="small"
@@ -64,6 +68,7 @@
               />
             </el-select>
             <el-tree-select
+              v-if="isProgressPolicyVisible('dept_id')"
               v-model="filterDeptId"
               :data="deptList"
               :props="{ label: 'dept_name', value: 'id', children: 'children' }"
@@ -118,9 +123,9 @@
           />
         </template>
 
-        <el-dialog v-model="dialogVisible" title="新增项目" width="520px">
+        <el-dialog v-model="dialogVisible" title="新增项目" width="620px" class="project-create-dialog">
           <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
-            <el-form-item label="项目档案" prop="archive_id">
+            <el-form-item v-if="isProgressPolicyVisible('archive_id')" label="项目档案" prop="archive_id">
               <el-select
                 v-model="form.archive_id"
                 filterable
@@ -136,23 +141,24 @@
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="项目编号">
+            <el-form-item v-if="isProgressPolicyVisible('project_code')" label="项目编号">
               <el-input v-model="form.project_code" disabled placeholder="由档案自动带出" />
             </el-form-item>
-            <el-form-item label="项目名称">
+            <el-form-item v-if="isProgressPolicyVisible('project_name')" label="项目名称">
               <el-input v-model="form.project_name" disabled placeholder="由档案自动带出" />
             </el-form-item>
-            <el-form-item label="所属部门" prop="dept_id">
+            <el-form-item v-if="isProgressPolicyVisible('dept_id')" label="所属部门" prop="dept_id">
               <el-tree-select
                 v-model="form.dept_id"
                 style="width: 100%;"
                 :data="deptList"
                 :props="{ label: 'dept_name', value: 'id', children: 'children' }"
                 check-strictly
+                :disabled="!isProgressPolicyEditable('dept_id')"
               />
             </el-form-item>
-            <el-form-item label="项目经理" prop="pm_id">
-              <el-select v-model="form.pm_id" style="width: 100%;">
+            <el-form-item v-if="isProgressPolicyVisible('pm_id')" label="项目经理" prop="pm_id">
+              <el-select v-model="form.pm_id" style="width: 100%;" :disabled="!isProgressPolicyEditable('pm_id')">
                 <el-option
                   v-for="u in userList"
                   :key="u.id"
@@ -162,38 +168,116 @@
               </el-select>
             </el-form-item>
             <el-row :gutter="12">
-              <el-col :span="12">
-                <el-form-item label="开始日期">
+              <el-col v-if="isProgressPolicyVisible('project_start_date')" :span="12">
+                <el-form-item label="开始日期" prop="start_date">
                   <el-date-picker
                     v-model="form.start_date"
                     type="date"
                     style="width: 100%;"
                     value-format="YYYY-MM-DD"
                     placeholder="选择日期"
+                    :disabled="!isProgressPolicyEditable('project_start_date')"
                   />
                 </el-form-item>
               </el-col>
-              <el-col :span="12">
-                <el-form-item label="结束日期">
+              <el-col v-if="isProgressPolicyVisible('original_planned_ship_date')" :span="12">
+                <el-form-item label="结束日期" prop="end_date">
                   <el-date-picker
                     v-model="form.end_date"
                     type="date"
                     style="width: 100%;"
                     value-format="YYYY-MM-DD"
                     placeholder="选择日期"
+                    :disabled="!isProgressPolicyEditable('original_planned_ship_date')"
                   />
                 </el-form-item>
               </el-col>
             </el-row>
-            <el-form-item label="预算(万)">
+            <el-form-item v-if="isProgressPolicyVisible('budget')" label="预算(万)" prop="budget">
               <el-input-number
                 v-model="form.budget"
                 :min="0"
                 :precision="2"
                 style="width: 100%;"
                 placeholder="请输入预算"
+                :disabled="!isProgressPolicyEditable('budget')"
               />
             </el-form-item>
+            <template v-if="dynamicRequiredFields.length || dynamicRequiredProjectFields.length">
+              <el-divider content-position="left">业务必填信息</el-divider>
+              <el-form-item
+                v-for="field in dynamicRequiredProjectFields"
+                :key="field.field_key"
+                :label="field.label"
+                :prop="`project_values.${field.field_key}`"
+                :rules="[{ required: true, message: `请填写${field.label}`, trigger: ['blur', 'change'] }]"
+              >
+                <el-input-number
+                  v-if="['number', 'percent', 'progress'].includes(field.value_type)"
+                  v-model="form.project_values[field.field_key]"
+                  :min="field.value_type === 'progress' ? 0 : undefined"
+                  :max="field.value_type === 'progress' ? 100 : undefined"
+                  style="width: 100%"
+                />
+                <el-date-picker
+                  v-else-if="field.value_type === 'date' || field.value_type === 'datetime'"
+                  v-model="form.project_values[field.field_key]"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  style="width: 100%"
+                />
+                <el-input
+                  v-else
+                  v-model="form.project_values[field.field_key]"
+                  :type="field.value_type === 'long_text' ? 'textarea' : 'text'"
+                  :rows="field.value_type === 'long_text' ? 3 : undefined"
+                  :placeholder="`请输入${field.label}`"
+                />
+              </el-form-item>
+              <el-form-item
+                v-for="field in dynamicRequiredFields"
+                :key="field.key"
+                :label="field.label"
+                :prop="`sheet_values.${field.key}`"
+                :rules="[{ required: true, message: `请填写${field.label}`, trigger: ['blur', 'change'] }]"
+              >
+                <el-select
+                  v-if="field.value_type === 'select'"
+                  v-model="form.sheet_values[field.key]"
+                  filterable
+                  style="width: 100%"
+                  :placeholder="`请选择${field.label}`"
+                >
+                  <el-option
+                    v-for="option in sheetFieldFilterOptions(field)"
+                    :key="String(option.value)"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-select>
+                <el-input-number
+                  v-else-if="['number', 'percent', 'progress'].includes(field.value_type)"
+                  v-model="form.sheet_values[field.key]"
+                  :min="field.value_type === 'progress' ? 0 : undefined"
+                  :max="field.value_type === 'progress' ? 100 : undefined"
+                  style="width: 100%"
+                />
+                <el-date-picker
+                  v-else-if="field.value_type === 'date' || field.value_type === 'datetime'"
+                  v-model="form.sheet_values[field.key]"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  style="width: 100%"
+                />
+                <el-input
+                  v-else
+                  v-model="form.sheet_values[field.key]"
+                  :type="field.value_type === 'long_text' ? 'textarea' : 'text'"
+                  :rows="field.value_type === 'long_text' ? 3 : undefined"
+                  :placeholder="`请输入${field.label}`"
+                />
+              </el-form-item>
+            </template>
           </el-form>
           <template #footer>
             <el-button @click="dialogVisible = false">取消</el-button>
@@ -529,10 +613,23 @@ type ProjectSheetFieldMeta = {
   value_type: 'text' | 'long_text' | 'date' | 'datetime' | 'number' | 'percent' | 'progress' | 'select'
   source_type: 'detail' | 'project' | 'archive' | 'computed' | 'system'
   editable: boolean
+  visible: boolean
+  required: boolean
   computed: boolean
   list_available: boolean
   quick_addable: boolean
   enum_code?: string | null
+}
+
+type EffectiveProgressFieldPolicy = {
+  field_key: string
+  label: string
+  value_type: ProjectSheetFieldMeta['value_type'] | 'user' | 'department'
+  source_type: ProjectSheetFieldMeta['source_type']
+  visible: boolean
+  editable: boolean
+  required: boolean
+  list_available: boolean
 }
 
 type ProjectSheetField = ProjectSheetFieldMeta & {
@@ -639,6 +736,7 @@ const drawerSaving = ref(false)
 const sheetDetailGroups = ref<ProjectSheetGroup[]>([])
 const sheetDetailLoading = ref(false)
 const sheetFieldGroupsMeta = ref<ProjectSheetGroupMeta[]>(buildFallbackSheetGroupMetas())
+const progressFieldPolicies = ref<Record<string, EffectiveProgressFieldPolicy>>({})
 const sheetMetadataLoaded = ref(false)
 const selectedSheetFieldKeys = ref<string[]>([])
 const columnPreferencesReady = ref(false)
@@ -676,6 +774,26 @@ const sheetFieldMetaMap = computed(() => {
   return new Map(sheetFieldMetas.value.map(field => [field.key, field]))
 })
 
+const dynamicRequiredFields = computed(() => sheetFieldMetas.value.filter(field => (
+  field.visible && field.required && field.editable && field.source_type === 'detail'
+)))
+const handledCreatePolicyFields = new Set([
+  'archive_id',
+  'dept_id',
+  'pm_id',
+  'node_status',
+  'project_start_date',
+  'original_planned_ship_date',
+  'budget',
+])
+const dynamicRequiredProjectFields = computed(() => Object.values(progressFieldPolicies.value).filter(field => (
+  field.visible
+  && field.required
+  && field.editable
+  && field.source_type === 'project'
+  && !handledCreatePolicyFields.has(field.field_key)
+)))
+
 const defaultSelectedSheetFieldKeys = computed<string[]>(() => [])
 const drawerPendingChangeCount = computed(() => Object.keys(drawerPendingChanges.value).length)
 const drawerHasPendingChanges = computed(() => drawerPendingChangeCount.value > 0 || Boolean(drawerEditingField.value))
@@ -689,18 +807,20 @@ const columnPickerGroups = computed(() => {
 })
 
 const projectListFilterFields = computed<ListFilterField<ProjectRow>[]>(() => {
-  const fixedFields: ListFilterField<ProjectRow>[] = [
-    { field: 'project_code', label: '项目编号', type: 'text' },
-    { field: 'project_name', label: '项目名称', type: 'text' },
-    { field: 'product_line', label: '产品类', type: 'select', options: () => filteredProductLineOptions.value },
-    { field: 'status', label: '节点', type: 'select', options: () => projectStatusOptions },
-    { field: 'dept_name', label: '所属部门', type: 'select', options: () => deptNameOptions.value },
-    { field: 'pm_name', label: '负责人', type: 'select', options: () => userNameFilterOptions.value },
+  const fixedFields = ([
+    { field: 'project_code', policyKey: 'project_code', label: '项目编号', type: 'text' },
+    { field: 'project_name', policyKey: 'project_name', label: '项目名称', type: 'text' },
+    { field: 'product_line', policyKey: 'product_line', label: '产品类', type: 'select', options: () => filteredProductLineOptions.value },
+    { field: 'status', policyKey: 'node_status', label: '节点', type: 'select', options: () => projectStatusOptions },
+    { field: 'dept_name', policyKey: 'dept_id', label: '所属部门', type: 'select', options: () => deptNameOptions.value },
+    { field: 'pm_name', policyKey: 'pm_id', label: '负责人', type: 'select', options: () => userNameFilterOptions.value },
     { field: 'total_progress', label: '总进度', type: 'number' },
-    { field: 'budget', label: '预算', type: 'number' },
-    { field: 'start_date', label: '立项日期', type: 'date' },
-    { field: 'end_date', label: '原计划发货', type: 'date' },
-  ]
+    { field: 'budget', policyKey: 'budget', label: '预算', type: 'number' },
+    { field: 'start_date', policyKey: 'project_start_date', label: '立项日期', type: 'date' },
+    { field: 'end_date', policyKey: 'original_planned_ship_date', label: '原计划发货', type: 'date' },
+  ] as Array<ListFilterField<ProjectRow> & { policyKey?: string }>).filter(
+    field => !field.policyKey || isProgressPolicyVisible(field.policyKey),
+  )
 
   const dynamicFields = sheetFieldMetas.value.filter(field => field.list_available).map<ListFilterField<ProjectRow>>((field) => ({
     field: field.key,
@@ -807,13 +927,28 @@ const form = reactive({
   start_date: '',
   end_date: '',
   budget: null as number | null,
+  project_values: {} as Record<string, any>,
+  sheet_values: {} as Record<string, any>,
 })
 
-const rules: FormRules = {
-  archive_id: [{ required: true, message: '请选择项目档案' }],
-  dept_id: [{ required: true, message: '请选择部门' }],
-  pm_id: [{ required: true, message: '请选择项目经理' }],
-}
+const rules = computed<FormRules>(() => {
+  const nextRules: FormRules = {
+    archive_id: [{ required: true, message: '请选择项目档案', trigger: 'change' }],
+    dept_id: [{ required: true, message: '请选择部门', trigger: 'change' }],
+    pm_id: [{ required: true, message: '请选择项目经理', trigger: 'change' }],
+  }
+  const configurableFields = [
+    { policyKey: 'project_start_date', formKey: 'start_date', label: '开始日期' },
+    { policyKey: 'original_planned_ship_date', formKey: 'end_date', label: '结束日期' },
+    { policyKey: 'budget', formKey: 'budget', label: '预算' },
+  ]
+  configurableFields.forEach(({ policyKey, formKey, label }) => {
+    if (progressPolicy(policyKey)?.required && isProgressPolicyVisible(policyKey)) {
+      nextRules[formKey] = [{ required: true, message: `请填写${label}`, trigger: ['blur', 'change'] }]
+    }
+  })
+  return nextRules
+})
 
 function sheetGroupLabel(groupKey: string) {
   return DEFAULT_GROUP_LABEL_MAP[groupKey] || groupKey
@@ -862,6 +997,8 @@ function normalizeFieldMeta(rawField: any, index: number): ProjectSheetFieldMeta
     value_type: valueType,
     source_type: sourceType,
     editable: Boolean(rawField.editable),
+    visible: rawField.visible !== false,
+    required: Boolean(rawField.required),
     computed: Boolean(rawField.computed),
     list_available: Boolean(rawField.list_available),
     quick_addable: Boolean(rawField.quick_addable),
@@ -955,6 +1092,18 @@ function progressToneClass(v: number) {
   if (v < 30) return 'is-danger'
   if (v < 80) return 'is-warning'
   return 'is-success'
+}
+
+function progressPolicy(fieldKey: string) {
+  return progressFieldPolicies.value[fieldKey]
+}
+
+function isProgressPolicyVisible(fieldKey: string) {
+  return progressPolicy(fieldKey)?.visible !== false
+}
+
+function isProgressPolicyEditable(fieldKey: string) {
+  return progressPolicy(fieldKey)?.editable !== false
 }
 
 function escapeHtml(value: unknown) {
@@ -1141,25 +1290,29 @@ function dynamicColumnDefs(): Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>
     .filter(Boolean) as Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>
 }
 
+const actionColumnWidth = computed(() => hasPermission('project:list:delete') ? 88 : 60)
+
 const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>(() => [
-  { field: 'project_code', headerName: '项目号', width: 112, pinned: 'left', filter: false },
+  { field: 'project_code', headerName: '项目号', width: 112, pinned: 'left', filter: false, hide: !isProgressPolicyVisible('project_code') },
   {
     field: 'project_name',
     headerName: '项目名称',
     width: 190,
     minWidth: 150,
     pinned: 'left',
+    hide: !isProgressPolicyVisible('project_name'),
     cellRenderer: (params: any) => `<span class="proj-name-cell">${escapeHtml(params.value || '-')}</span>`,
   },
   {
-    field: 'product_line', headerName: '产品类', width: 100,
+    field: 'product_line', headerName: '产品类', width: 100, hide: !isProgressPolicyVisible('product_line'),
     valueFormatter: (params: any) => productLineLabel(params.value),
   },
   {
     field: 'status',
     headerName: '节点',
     width: 102,
-    editable: () => hasPermission('project:list:edit'),
+    hide: !isProgressPolicyVisible('node_status'),
+    editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('node_status'),
     cellEditor: 'agSelectCellEditor',
     valueFormatter: (params: any) => statusLabel(params.value),
     cellEditorParams: () => ({ values: projectStatusEditorValues.value }),
@@ -1173,21 +1326,22 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
     field: 'end_date',
     headerName: '原计划发货',
     width: 122,
-    editable: () => hasPermission('project:list:edit'),
+    hide: !isProgressPolicyVisible('original_planned_ship_date'),
+    editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('original_planned_ship_date'),
     cellEditor: 'agTextCellEditor',
   },
   {
     headerName: '项目进度',
     marryChildren: true,
     children: [
-      { field: 'design_progress', headerName: '设计进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('design_progress') },
-      { field: 'order_progress', headerName: '下单进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('order_progress') },
-      { field: 'kit_progress', headerName: '齐套进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('kit_progress') },
-      { field: 'frame_progress', headerName: '框架进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('frame_progress') },
-      { field: 'dryer_progress', headerName: 'dryer进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('dryer_progress') },
-      { field: 'assembly_progress', headerName: '组装进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('assembly_progress') },
-      { field: 'test_progress', headerName: '测试进度', width: 112, editable: () => hasPermission('project:list:edit'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('test_progress') },
-    ],
+      { field: 'design_progress', headerName: '设计进度', width: 112, hide: !isProgressPolicyVisible('design_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('design_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('design_progress') },
+      { field: 'order_progress', headerName: '下单进度', width: 112, hide: !isProgressPolicyVisible('order_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('order_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('order_progress') },
+      { field: 'kit_progress', headerName: '齐套进度', width: 112, hide: !isProgressPolicyVisible('kit_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('kit_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('kit_progress') },
+      { field: 'frame_progress', headerName: '框架进度', width: 112, hide: !isProgressPolicyVisible('frame_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('frame_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('frame_progress') },
+      { field: 'dryer_progress', headerName: 'dryer进度', width: 112, hide: !isProgressPolicyVisible('dryer_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('dryer_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('dryer_progress') },
+      { field: 'assembly_progress', headerName: '组装进度', width: 112, hide: !isProgressPolicyVisible('assembly_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('assembly_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('assembly_progress') },
+      { field: 'test_progress', headerName: '测试进度', width: 112, hide: !isProgressPolicyVisible('test_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('test_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('test_progress') },
+    ].filter(column => column.hide !== true),
   },
   {
     headerName: '成员 / 配置',
@@ -1197,7 +1351,8 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
         field: 'pm_name',
         headerName: '负责人',
         width: 112,
-        editable: () => hasPermission('project:list:edit'),
+        hide: !isProgressPolicyVisible('pm_id'),
+        editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('pm_id'),
         cellEditor: 'agSelectCellEditor',
         cellEditorParams: () => ({ values: userNames.value }),
       },
@@ -1205,21 +1360,25 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
         field: 'dept_name',
         headerName: '所属部门',
         width: 124,
-        editable: () => hasPermission('project:list:edit'),
+        hide: !isProgressPolicyVisible('dept_id'),
+        editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('dept_id'),
         cellEditor: 'agSelectCellEditor',
         cellEditorParams: () => ({ values: deptNames.value }),
       },
-      { field: 'budget', headerName: '预算(万)', width: 110, editable: () => hasPermission('project:list:edit'), type: 'numericColumn' },
-    ],
+      { field: 'budget', headerName: '预算(万)', width: 110, hide: !isProgressPolicyVisible('budget'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('budget'), type: 'numericColumn' },
+    ].filter(column => column.hide !== true),
   },
   ...dynamicColumnDefs(),
   {
     headerName: '操作',
-    width: 118,
+    width: actionColumnWidth.value,
+    minWidth: actionColumnWidth.value,
+    maxWidth: actionColumnWidth.value,
     pinned: 'right',
     filter: false,
     sortable: false,
     resizable: false,
+    cellClass: 'progress-actions-cell',
     cellRenderer: () => `
       <span class="progress-row-actions">
         <button class="progress-detail-btn detail-btn" type="button" title="打开详情" aria-label="打开详情">详情</button>
@@ -1305,7 +1464,12 @@ function restoreColumnState() {
   if (!saved?.columnState?.length) return
   restoringColumnState.value = true
   try {
-    gridApi.value.applyColumnState({ state: saved.columnState, applyOrder: true })
+    const availableSheetIds = new Set(sheetFieldMetas.value.filter(field => field.list_available).map(field => sheetColumnId(field.key)))
+    const sanitizedState = saved.columnState.filter((state) => {
+      if (!state.colId.startsWith('sheet:')) return true
+      return availableSheetIds.has(state.colId)
+    })
+    gridApi.value.applyColumnState({ state: sanitizedState, applyOrder: true })
   } finally {
     restoringColumnState.value = false
   }
@@ -1412,9 +1576,13 @@ async function fetchOptions() {
 async function fetchSheetFieldMetadata() {
   try {
     const res: any = await request.get('/projects/sheet-fields')
+    progressFieldPolicies.value = Object.fromEntries(
+      (Array.isArray(res?.policies) ? res.policies : []).map((field: EffectiveProgressFieldPolicy) => [field.field_key, field]),
+    )
     sheetFieldGroupsMeta.value = normalizeSheetMetadata(res)
     await loadSheetFieldEnums()
   } catch {
+    progressFieldPolicies.value = {}
     sheetFieldGroupsMeta.value = buildFallbackSheetGroupMetas()
   } finally {
     sheetMetadataLoaded.value = true
@@ -1434,7 +1602,16 @@ async function loadSheetFieldEnums() {
 async function onCellValueChanged(event: CellValueChangedEvent<ProjectRow>) {
   const field = event.colDef.field
   if (!field) return
-  await saveProjectField(event.data, field as EditableProjectFieldKey, event.newValue)
+  try {
+    await saveProjectField(event.data, field as EditableProjectFieldKey, event.newValue)
+  } catch {
+    ;(event.data as any)[field] = event.oldValue
+    event.api.refreshCells({
+      rowNodes: event.node ? [event.node] : undefined,
+      columns: event.column ? [event.column] : undefined,
+      force: true,
+    })
+  }
 }
 
 async function saveProjectField(row: ProjectRow | null | undefined, field: EditableProjectFieldKey, value: any) {
@@ -1772,28 +1949,73 @@ function openCreateDialog() {
     start_date: '',
     end_date: '',
     budget: null,
+    project_values: {},
+    sheet_values: {},
   })
   dialogVisible.value = true
+}
+
+function policyValidationFieldKeys(error: any): string[] {
+  const detail = error?.response?.data?.detail
+  if (!['FIELD_POLICY_VALIDATION_FAILED', 'FIELD_POLICY_INVALID'].includes(detail?.code)) return []
+  if (!Array.isArray(detail?.fields)) return []
+  return detail.fields
+    .map((field: any) => String(field?.field_key || '').trim())
+    .filter(Boolean)
+}
+
+async function focusProjectPolicyValidation(error: any) {
+  const fieldKeys = policyValidationFieldKeys(error)
+  if (!fieldKeys.length) return
+
+  await fetchSheetFieldMetadata()
+  await nextTick()
+  const directFieldMap: Record<string, string> = {
+    archive_id: 'archive_id',
+    dept_id: 'dept_id',
+    pm_id: 'pm_id',
+    project_start_date: 'start_date',
+    original_planned_ship_date: 'end_date',
+    budget: 'budget',
+  }
+  const props = fieldKeys.map((fieldKey) => {
+    if (directFieldMap[fieldKey]) return directFieldMap[fieldKey]
+    const sheetField = sheetFieldMetaMap.value.get(fieldKey)
+    if (sheetField?.source_type === 'detail') return `sheet_values.${fieldKey}`
+    if (progressPolicy(fieldKey)?.source_type === 'project') return `project_values.${fieldKey}`
+    return ''
+  }).filter(Boolean)
+  if (!props.length) return
+
+  await formRef.value?.validateField(props).catch(() => false)
+  formRef.value?.scrollToField(props[0])
 }
 
 async function handleSubmit() {
   if (!hasPermission('project:list:add')) return
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
-  await request.post('/projects', {
+  const payload: Record<string, unknown> = {
     archive_id: form.archive_id,
     project_code: form.project_code,
     project_name: form.project_name,
     dept_id: form.dept_id,
     pm_id: form.pm_id,
-    status: form.status,
-    start_date: form.start_date || null,
-    end_date: form.end_date || null,
-    budget: form.budget,
-  })
-  ElMessage.success('创建成功')
-  dialogVisible.value = false
-  fetchList()
+    ...form.project_values,
+    sheet_values: { ...form.sheet_values },
+  }
+  if (isProgressPolicyEditable('node_status')) payload.status = form.status
+  if (isProgressPolicyEditable('project_start_date')) payload.start_date = form.start_date || null
+  if (isProgressPolicyEditable('original_planned_ship_date')) payload.end_date = form.end_date || null
+  if (isProgressPolicyEditable('budget')) payload.budget = form.budget
+  try {
+    await request.post('/projects', payload)
+    ElMessage.success('创建成功')
+    dialogVisible.value = false
+    fetchList()
+  } catch (error) {
+    await focusProjectPolicyValidation(error)
+  }
 }
 
 onMounted(async () => {
@@ -1875,9 +2097,15 @@ onMounted(async () => {
 :deep(.progress-row-actions) {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
   height: 100%;
+}
+
+:deep(.progress-actions-cell) {
+  padding-right: 4px !important;
+  padding-left: 4px !important;
 }
 
 :deep(.progress-detail-btn) {

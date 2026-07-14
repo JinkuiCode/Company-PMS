@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 .venv/
 .venv-deps312/
+.venv-deps312
 venv/
 
 # Node
@@ -37,6 +38,8 @@ backend/data/
 
 # Local assistant/runtime environments
 backend/.venv311/
+.worktrees/
+.superpowers/
 
 # Local business source material; field definitions are encoded in application code.
 /项目总表企微/

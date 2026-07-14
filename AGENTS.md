@@ -22,6 +22,10 @@
 - 表格优先清晰、密集、可扫描，避免粗糙按钮和拥挤布局。
 - 状态使用胶囊标签、小圆点、柔和背景和清晰文字。
 - 当前全局主题入口是 `frontend/src/styles/pms-theme.css`。
+- 中文界面统一使用项目内置 `Noto Sans SC`；Element Plus、AG Grid 和业务页面都必须继承 `--pms-font`，不得在页面内另写平台字体栈，避免 Windows 与 macOS 显示漂移。
+- 系统管理等非标准列表页面使用 `.pms-system-page`、`.pms-surface-section` 和 `.pms-dense-table`；颜色、字号、边框、圆角和状态样式优先复用全局 token，禁止重新引入 Element Plus 旧默认色。
+- 动态菜单使用的新图标名称必须同步注册到 `frontend/src/layout/AppLayout.vue` 的 `iconMap`，业务图标不得使用 emoji。
+- 完整前端实现规范见 `docs/PMS-UI-STANDARD.md`。
 - 旧版 UI 诉求可参考 `UI要求/UI风格.md`，但实现时以现有 `pms-theme.css` 和已落地组件为准。
 
 ## 标准列表页面
@@ -52,6 +56,8 @@
 - 运行时权限以数据库中当前有效用户、有效角色和有效权限为准；JWT 不固化权限，撤权后下一次请求立即生效。
 - 前端的路由、按钮和表格编辑状态要消费同一权限码，但前端隐藏只用于交互体验，后端始终是最终授权防线。
 - 不得为 `admin` 或其他超级角色设置运行时全权旁路，后端启动时也不得自动补回人工撤销的权限。
+- `admin`、`business_admin`、`operator` 仅是首次创建时使用的可编辑角色模板，不是代码级角色层级；新增权限节点只能做一次迁移授权，不得在后续启动中持续回补。
+- OA 自动开户只能分配启用的 `operator` 角色；角色缺失或禁用时必须失败关闭，禁止回退为任意角色。
 - 权限体系需预留用户、角色、菜单、部门等能力。
 
 ## 操作日志
@@ -61,6 +67,7 @@
 - 敏感字段不得明文入库，包括 password、password_hash、token、remember_token、secret、sign、key 等。
 - 日志表自身不记录日志，避免递归。
 - 前端日志查询页面为 `frontend/src/views/system/OperationLogList.vue`，应继续沿用标准列表与筛选组件。
+- 日志字段差异必须由后端根据字段目录和字段注册表生成中文 `diff_items`；前端不得为业务字段维护重复翻译表，原始字段编码只作为辅助技术信息。
 
 ## 字段目录与业务枚举
 
@@ -70,6 +77,15 @@
 - 产品线、产品类型等可配置枚举允许维护值；档案、项目和任务状态属于固定流程枚举，存储值不可在线增删改，仅允许维护显示名、排序和启停。
 - 数据权限、ERP 同步状态等系统协议值只进入字段目录并标记为系统固定，不进入枚举管理。
 - 禁用枚举值不得用于新增或变更，历史数据仍须通过完整 `label_map` 正常显示；已被业务数据引用的枚举值不得删除。
+
+## 字段规则与字段治理
+
+- 项目档案和项目进度的全局字段规则由 `backend/app/services/field_policy.py` 统一注册和校验，前端管理页为 `frontend/src/views/system/FieldPolicyList.vue`。
+- 代码字段注册表是配置上限；引用、计算和系统字段不得通过配置开放编辑，核心结构字段不得被配置到无法创建业务数据的状态。
+- 字段显示、编辑、必填和列表可选状态必须由同一份生效元数据驱动；列表列偏好中已经失效的字段要自动清理。
+- 新增、编辑、表格自动保存、详情保存和 ERP 同步等写路径都必须调用统一字段规则校验，前端禁用仅用于交互，后端负责最终拒绝并返回结构化 `422`。
+- 后来启用的必填规则仅约束规则生效后创建的数据；存量数据继续允许维护。任何新模块接入字段规则时都要保留这一兼容策略。
+- 字段规则变更必须写入统一操作日志，并使用更新时间进行并发覆盖检查。
 
 ## 本地启动与辅助脚本
 
@@ -86,6 +102,7 @@
 cd frontend
 node tests/style-contract.test.mjs
 node tests/list-standard-contract.test.mjs
+node tests/system-ui-consistency-contract.test.mjs
 npm run build
 ```
 

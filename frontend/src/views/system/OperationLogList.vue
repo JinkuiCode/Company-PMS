@@ -1,5 +1,5 @@
 <template>
-  <PmsDataList :show-scrollbar="false" scrollbar-label="操作日志表格横向滚动条">
+  <PmsDataList class="pms-system-page" :show-scrollbar="false" scrollbar-label="操作日志表格横向滚动条">
     <template #toolbar-left>
       <el-button size="small" @click="fetchLogs">
         刷新
@@ -71,7 +71,7 @@
     <template #grid>
       <el-table
         v-loading="loading"
-        class="operation-log-table"
+        class="pms-dense-table operation-log-table"
         :data="filteredLogs"
         border
         stripe
@@ -142,33 +142,49 @@
           <p v-if="selectedLog.error_msg" class="detail-error">{{ selectedLog.error_msg }}</p>
         </section>
 
-        <section>
-          <h4>字段差异</h4>
-          <el-table :data="diffRows" border size="small" empty-text="无字段差异">
-            <el-table-column prop="field" label="字段" width="130" />
-            <el-table-column label="变更前" min-width="160">
-              <template #default="{ row }">
-                <code>{{ formatJsonValue(row.before) }}</code>
-              </template>
-            </el-table-column>
-            <el-table-column label="变更后" min-width="160">
-              <template #default="{ row }">
-                <code>{{ formatJsonValue(row.after) }}</code>
-              </template>
-            </el-table-column>
-          </el-table>
+        <section class="diff-section">
+          <div class="detail-section-heading">
+            <h4>字段差异</h4>
+            <span v-if="diffRows.length" class="pms-section-meta">{{ diffRows.length }} 项变更</span>
+          </div>
+          <div v-if="diffRows.length" class="diff-list">
+            <article v-for="row in diffRows" :key="row.field_key" class="diff-item">
+              <header class="diff-field">
+                <div class="diff-field-name">
+                  <strong>{{ row.field_label }}</strong>
+                  <span v-if="row.field_group" class="pms-chip">{{ row.field_group }}</span>
+                </div>
+                <code class="pms-code">{{ row.field_key }}</code>
+              </header>
+              <div class="diff-values">
+                <div class="diff-value-block is-before">
+                  <span>变更前</span>
+                  <div class="diff-value">{{ row.before_display }}</div>
+                </div>
+                <span class="diff-arrow" aria-hidden="true">→</span>
+                <div class="diff-value-block is-after">
+                  <span>变更后</span>
+                  <div class="diff-value">{{ row.after_display }}</div>
+                </div>
+              </div>
+            </article>
+          </div>
+          <el-empty v-else :image-size="48" description="无字段差异" />
         </section>
 
         <section class="detail-raw">
-          <h4>原始快照</h4>
-          <el-tabs>
-            <el-tab-pane label="Before">
-              <pre>{{ formatPrettyJson(selectedLog.before_data) }}</pre>
-            </el-tab-pane>
-            <el-tab-pane label="After">
-              <pre>{{ formatPrettyJson(selectedLog.after_data) }}</pre>
-            </el-tab-pane>
-          </el-tabs>
+          <el-collapse>
+            <el-collapse-item name="raw-snapshot" title="技术信息（原始快照）">
+              <el-tabs>
+                <el-tab-pane label="Before">
+                  <pre>{{ formatPrettyJson(selectedLog.before_data) }}</pre>
+                </el-tab-pane>
+                <el-tab-pane label="After">
+                  <pre>{{ formatPrettyJson(selectedLog.after_data) }}</pre>
+                </el-tab-pane>
+              </el-tabs>
+            </el-collapse-item>
+          </el-collapse>
         </section>
       </div>
     </template>
@@ -206,7 +222,18 @@ type OperationLog = {
   before_data?: string | null
   after_data?: string | null
   diff_data?: string | null
+  diff_items?: OperationLogDiffItem[]
   created_at: string
+}
+
+type OperationLogDiffItem = {
+  field_key: string
+  field_label: string
+  field_group?: string | null
+  before?: unknown
+  after?: unknown
+  before_display: string
+  after_display: string
 }
 
 type OperationLogListResponse = {
@@ -268,11 +295,20 @@ const baseFilters = reactive({
 const filteredLogs = computed(() => applyCustomFilters(logs.value))
 
 const diffRows = computed(() => {
+  if (selectedLog.value?.diff_items?.length) return selectedLog.value.diff_items
   const diffData = parseJson(selectedLog.value?.diff_data)
   if (!diffData || typeof diffData !== 'object') return []
   return Object.entries(diffData).map(([field, value]) => {
     const item = value as { before?: unknown; after?: unknown }
-    return { field, before: item.before, after: item.after }
+    return {
+      field_key: field,
+      field_label: field,
+      field_group: null,
+      before: item.before,
+      after: item.after,
+      before_display: formatJsonValue(item.before),
+      after_display: formatJsonValue(item.after),
+    }
   })
 })
 
@@ -369,17 +405,6 @@ onMounted(fetchLogs)
   border-radius: var(--pms-radius);
 }
 
-.operation-log-table :deep(.el-table__header th) {
-  background: #f8fafc;
-  color: var(--pms-text-secondary);
-  font-weight: 700;
-}
-
-.operation-log-table :deep(.el-table__cell) {
-  padding: 7px 0;
-  font-size: 13px;
-}
-
 .operation-log-detail {
   display: flex;
   flex-direction: column;
@@ -420,6 +445,107 @@ onMounted(fetchLogs)
   font-size: 14px;
 }
 
+.detail-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.detail-section-heading h4 {
+  margin-bottom: 0 !important;
+}
+
+.diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diff-item {
+  overflow: hidden;
+  border: 1px solid var(--pms-border-soft);
+  border-radius: var(--pms-radius-sm);
+  background: var(--pms-surface);
+}
+
+.diff-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--pms-border-soft);
+  background: var(--pms-surface-muted);
+}
+
+.diff-field-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.diff-field-name strong {
+  color: var(--pms-text);
+  font-size: var(--pms-font-size-base);
+  font-weight: 650;
+}
+
+.diff-field .pms-code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-values {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr);
+  align-items: stretch;
+  padding: 10px;
+}
+
+.diff-value-block {
+  min-width: 0;
+  padding: 8px 9px;
+  border-radius: var(--pms-radius-sm);
+  background: var(--pms-neutral-soft);
+}
+
+.diff-value-block.is-after {
+  background: var(--pms-success-soft);
+}
+
+.diff-value-block > span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--pms-text-muted);
+  font-size: var(--pms-font-size-xs);
+}
+
+.diff-value {
+  color: var(--pms-text-secondary);
+  font-size: var(--pms-font-size-base);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.diff-value-block.is-after .diff-value {
+  color: #08765b;
+  font-weight: 550;
+}
+
+.diff-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pms-text-muted);
+  font-size: 15px;
+}
+
 .operation-log-detail section p {
   margin: 0;
   color: var(--pms-text-secondary);
@@ -443,6 +569,16 @@ onMounted(fetchLogs)
   color: #e2e8f0;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.detail-raw :deep(.el-collapse-item__header) {
+  color: var(--pms-text-secondary);
+  font-size: var(--pms-font-size-sm);
+  font-weight: 600;
+}
+
+.detail-raw :deep(.el-collapse-item__content) {
+  padding-bottom: 0;
 }
 
 code {

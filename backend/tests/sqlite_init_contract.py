@@ -22,6 +22,7 @@ def test_sqlite_init_db() -> None:
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         assert "pms_project_sheet_detail" in tables
+        assert "sys_business_field_policy" in tables
         columns = {
             row[1]
             for row in conn.execute("PRAGMA table_info(pms_project_sheet_detail)").fetchall()
@@ -52,6 +53,57 @@ def test_sqlite_init_db() -> None:
             "SELECT menu_name, path, permission_code FROM sys_menu WHERE id = 15"
         ).fetchone()
         assert enum_menu == ("枚举管理", "/system/enum", "system:enum:list")
+        field_policy_menu = conn.execute(
+            "SELECT menu_name, path, permission_code FROM sys_menu WHERE id = 17"
+        ).fetchone()
+        assert field_policy_menu == ("字段规则", "/system/field-policy", "system:field-policy:list")
+        role_templates = {
+            row[0]: (row[1], row[2])
+            for row in conn.execute(
+                "SELECT role_code, role_name, data_scope FROM sys_role "
+                "WHERE role_code IN ('admin', 'business_admin', 'operator')"
+            ).fetchall()
+        }
+        assert role_templates == {
+            "admin": ("系统管理员", 4),
+            "business_admin": ("业务管理员", 4),
+            "operator": ("操作员", 3),
+        }
+        template_permissions = {
+            role_code: {
+                row[0]
+                for row in conn.execute(
+                    "SELECT m.permission_code FROM sys_role_menu rm "
+                    "JOIN sys_role r ON r.id = rm.role_id "
+                    "JOIN sys_menu m ON m.id = rm.menu_id "
+                    "WHERE r.role_code = ? AND m.permission_code IS NOT NULL",
+                    (role_code,),
+                ).fetchall()
+            }
+            for role_code in ("admin", "business_admin", "operator")
+        }
+        assert "system:field-policy:edit" in template_permissions["admin"]
+        assert {
+            "project:archive:sync",
+            "system:enum:edit",
+            "system:operation-log:view",
+            "system:field-policy:edit",
+        }.issubset(template_permissions["business_admin"])
+        assert {
+            "project:list:view",
+            "project:list:add",
+            "project:list:edit",
+            "project:archive:view",
+            "project:archive:add",
+            "project:archive:edit",
+        }.issubset(template_permissions["operator"])
+        assert not {
+            "project:list:delete",
+            "project:archive:delete",
+            "project:archive:sync",
+            "system:operation-log:view",
+            "system:field-policy:edit",
+        }.intersection(template_permissions["operator"])
         enum_permissions = {
             row[0]
             for row in conn.execute(
@@ -65,6 +117,17 @@ def test_sqlite_init_db() -> None:
             "system:enum:delete",
         }
         assert conn.execute("SELECT COUNT(*) FROM sys_menu WHERE id IN (132, 133, 134)").fetchone()[0] == 0
+
+        conn.execute(
+            "DELETE FROM sys_role_menu WHERE menu_id = 172 AND role_id IN "
+            "(SELECT id FROM sys_role WHERE role_code IN ('admin', 'business_admin'))"
+        )
+        conn.commit()
+        init_db()
+        assert conn.execute(
+            "SELECT COUNT(*) FROM sys_role_menu rm JOIN sys_role r ON r.id = rm.role_id "
+            "WHERE rm.menu_id = 172 AND r.role_code IN ('admin', 'business_admin')"
+        ).fetchone()[0] == 0
     finally:
         conn.close()
 

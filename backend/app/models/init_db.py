@@ -10,6 +10,7 @@ from app.models.rbac import SysRole, SysMenu, SysDept, SysUserRole, SysRoleMenu 
 from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive, ErpSyncLog, PmsProjectSheetDetail  # noqa: F401
 from app.models.dict import SysDict, SysDictItem  # noqa: F401
 from app.models.operation_log import SysOperationLog  # noqa: F401
+from app.models.field_policy import SysBusinessFieldPolicy  # noqa: F401
 
 
 def _init_dict_data(db):
@@ -52,10 +53,17 @@ def init_db():
 
         # 2. 创建默认角色
         role = db.query(SysRole).filter(SysRole.role_code == "admin").first()
-        if is_fresh_database and not role:
-            role = SysRole(role_name="超级管理员", role_code="admin", data_scope=4, remark="拥有全部权限")
+        admin_role_created = False
+        if not role:
+            role = SysRole(
+                role_name="系统管理员",
+                role_code="admin",
+                data_scope=4,
+                remark="默认拥有全部权限，可在角色管理中调整",
+            )
             db.add(role)
             db.commit()
+            admin_role_created = True
 
         # 3. 分配管理员角色
         if is_fresh_database and admin and role and not db.query(SysUserRole).filter_by(user_id=admin.id, role_id=role.id).first():
@@ -71,6 +79,7 @@ def init_db():
                 SysMenu(id=13, parent_id=1, menu_name="数据字典", menu_type="C", path="/system/dict", permission_code="system:dict:list", icon="Collection", sort=3),
                 SysMenu(id=15, parent_id=1, menu_name="枚举管理", menu_type="C", path="/system/enum", permission_code="system:enum:list", icon="List", sort=4),
                 SysMenu(id=16, parent_id=1, menu_name="操作日志", menu_type="C", path="/system/operation-log", permission_code="system:operation-log:list", icon="Document", sort=5),
+                SysMenu(id=17, parent_id=1, menu_name="字段规则", menu_type="C", path="/system/field-policy", permission_code="system:field-policy:list", icon="SetUp", sort=6),
                 SysMenu(id=3, parent_id=0, menu_name="仪表盘", menu_type="C", path="/dashboard", icon="DataAnalysis", sort=0),
                 SysMenu(id=2, parent_id=0, menu_name="项目管理", menu_type="M", icon="Folder", sort=2),
                 SysMenu(id=22, parent_id=2, menu_name="项目档案", menu_type="C", path="/project/archive", permission_code="project:archive:list", icon="FolderOpened", sort=1),
@@ -168,6 +177,33 @@ def init_db():
                 db.commit()
                 print("迁移完成：已更新操作日志菜单")
 
+        # 4.3.1 字段规则权限仅在节点首次出现时做一次迁移授权。
+        new_field_policy_permission_ids: set[int] = set()
+        field_policy_menu = db.query(SysMenu).filter(SysMenu.id == 17).first()
+        field_policy_menu_values = {
+            "parent_id": 1,
+            "menu_name": "字段规则",
+            "menu_type": "C",
+            "path": "/system/field-policy",
+            "permission_code": "system:field-policy:list",
+            "icon": "SetUp",
+            "sort": 6,
+        }
+        if not field_policy_menu:
+            field_policy_menu = SysMenu(id=17, **field_policy_menu_values)
+            db.add(field_policy_menu)
+            db.commit()
+            new_field_policy_permission_ids.add(17)
+            print("迁移完成：已添加字段规则菜单")
+        else:
+            changed = False
+            for key, value in field_policy_menu_values.items():
+                if getattr(field_policy_menu, key) != value:
+                    setattr(field_policy_menu, key, value)
+                    changed = True
+            if changed:
+                db.commit()
+
         # 4.4 迁移：插入按钮级权限菜单（项目进度 / 项目档案 / 系统管理）
         button_menus = [
             # 项目进度 按钮权限 (parent_id=21)
@@ -198,19 +234,72 @@ def init_db():
             {"id": 154, "parent_id": 15, "menu_name": "删除", "menu_type": "B", "permission_code": "system:enum:delete", "sort": 4},
             # 操作日志 按钮权限 (parent_id=16)
             {"id": 161, "parent_id": 16, "menu_name": "查看", "menu_type": "B", "permission_code": "system:operation-log:view", "sort": 1},
+            # 字段规则按钮权限 (parent_id=17)
+            {"id": 171, "parent_id": 17, "menu_name": "查看", "menu_type": "B", "permission_code": "system:field-policy:view", "sort": 1},
+            {"id": 172, "parent_id": 17, "menu_name": "编辑", "menu_type": "B", "permission_code": "system:field-policy:edit", "sort": 2},
         ]
         for bm in button_menus:
             existing = db.query(SysMenu).filter(SysMenu.id == bm["id"]).first()
             if not existing:
                 db.add(SysMenu(**bm))
+                if bm["id"] in {171, 172}:
+                    new_field_policy_permission_ids.add(bm["id"])
             else:
                 for key, value in bm.items():
                     if key != "id":
                         setattr(existing, key, value)
         db.commit()
 
+        # 4.5 创建缺失的默认角色模板。仅角色首次创建时写入模板权限。
+        from app.services.role_templates import ROLE_TEMPLATES, permission_ids_for_template
+
+        role_map: dict[str, SysRole] = {}
+        created_role_codes: set[str] = {"admin"} if admin_role_created else set()
+        for role_code, template in ROLE_TEMPLATES.items():
+            template_role = db.query(SysRole).filter(SysRole.role_code == role_code).first()
+            if not template_role:
+                template_role = SysRole(
+                    role_code=role_code,
+                    role_name=template["role_name"],
+                    data_scope=template["data_scope"],
+                    remark=template["remark"],
+                    status=1,
+                )
+                db.add(template_role)
+                db.flush()
+                created_role_codes.add(role_code)
+            role_map[role_code] = template_role
+
+        for role_code in created_role_codes:
+            template_role = role_map[role_code]
+            menu_ids = permission_ids_for_template(db, role_code)
+            db.add_all([
+                SysRoleMenu(role_id=template_role.id, menu_id=menu_id)
+                for menu_id in sorted(menu_ids)
+            ])
+        db.commit()
+
+        # 新权限节点首次迁移时授予管理员和业务管理员；节点存在后的重启不再回补。
+        if new_field_policy_permission_ids:
+            for role_code in ("admin", "business_admin"):
+                template_role = role_map.get(role_code)
+                if not template_role:
+                    continue
+                existing_ids = {
+                    menu_id for (menu_id,) in db.query(SysRoleMenu.menu_id).filter(
+                        SysRoleMenu.role_id == template_role.id,
+                        SysRoleMenu.menu_id.in_(new_field_policy_permission_ids),
+                    ).all()
+                }
+                db.add_all([
+                    SysRoleMenu(role_id=template_role.id, menu_id=menu_id)
+                    for menu_id in sorted(new_field_policy_permission_ids - existing_ids)
+                ])
+            db.commit()
+
         # 5. 仅全新数据库首次给默认管理员授权；后续启动绝不回补人工撤销的权限
         if is_fresh_database and role:
+            db.query(SysRoleMenu).filter(SysRoleMenu.role_id == role.id).delete()
             all_menus = db.query(SysMenu).all()
             db.add_all([SysRoleMenu(role_id=role.id, menu_id=menu.id) for menu in all_menus])
             db.commit()

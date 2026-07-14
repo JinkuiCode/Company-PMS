@@ -1,6 +1,17 @@
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class OperationLogDiffItem(BaseModel):
+    field_key: str
+    field_label: str
+    field_group: str | None = None
+    before: Any = None
+    after: Any = None
+    before_display: str = "-"
+    after_display: str = "-"
 
 
 class OperationLogResponse(BaseModel):
@@ -22,6 +33,7 @@ class OperationLogResponse(BaseModel):
     before_data: str | None = None
     after_data: str | None = None
     diff_data: str | None = None
+    diff_items: list[OperationLogDiffItem] = Field(default_factory=list)
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,65 +1,62 @@
 <template>
-  <div class="dashboard">
-    <!-- 统计卡片 -->
+  <div class="dashboard pms-page pms-system-page">
     <el-row :gutter="16" class="stat-cards">
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background:#e6f7ff;"><el-icon :size="28" color="#1890ff"><Folder /></el-icon></div>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="stat-card pms-surface-section">
+          <div class="stat-icon is-primary"><el-icon :size="24"><Folder /></el-icon></div>
           <div class="stat-info">
             <div class="stat-value">{{ stats.total_projects }}</div>
             <div class="stat-label">项目总数</div>
           </div>
-        </el-card>
+        </div>
       </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background:#f6ffed;"><el-icon :size="28" color="#52c41a"><List /></el-icon></div>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="stat-card pms-surface-section">
+          <div class="stat-icon is-success"><el-icon :size="24"><List /></el-icon></div>
           <div class="stat-info">
             <div class="stat-value">{{ stats.total_tasks }}</div>
             <div class="stat-label">任务总数</div>
           </div>
-        </el-card>
+        </div>
       </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background:#fff7e6;"><el-icon :size="28" color="#faad14"><TrendCharts /></el-icon></div>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="stat-card pms-surface-section">
+          <div class="stat-icon is-warning"><el-icon :size="24"><TrendCharts /></el-icon></div>
           <div class="stat-info">
             <div class="stat-value">{{ stats.avg_progress }}%</div>
             <div class="stat-label">平均进度</div>
           </div>
-        </el-card>
+        </div>
       </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background:#fff1f0;"><el-icon :size="28" color="#ff4d4f"><CircleCheck /></el-icon></div>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="stat-card pms-surface-section">
+          <div class="stat-icon is-info"><el-icon :size="24"><CircleCheck /></el-icon></div>
           <div class="stat-info">
             <div class="stat-value">{{ completionRate }}%</div>
             <div class="stat-label">完成率</div>
           </div>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
 
-    <!-- 图表行 -->
     <el-row :gutter="16" class="chart-row">
-      <el-col :span="12">
-        <el-card shadow="hover">
-          <template #header><span class="card-title">项目状态分布</span></template>
-          <v-chart :option="statusPieOption" style="height:320px;" autoresize />
-        </el-card>
+      <el-col :xs="24" :lg="12">
+        <section class="chart-card pms-surface-section">
+          <div class="pms-section-header"><span class="pms-section-title">项目状态分布</span></div>
+          <v-chart :option="statusPieOption" class="dashboard-chart" autoresize />
+        </section>
       </el-col>
-      <el-col :span="12">
-        <el-card shadow="hover">
-          <template #header><span class="card-title">部门项目分布</span></template>
-          <v-chart :option="deptBarOption" style="height:320px;" autoresize />
-        </el-card>
+      <el-col :xs="24" :lg="12">
+        <section class="chart-card pms-surface-section">
+          <div class="pms-section-header"><span class="pms-section-title">部门项目分布</span></div>
+          <v-chart :option="deptBarOption" class="dashboard-chart" autoresize />
+        </section>
       </el-col>
     </el-row>
 
-    <!-- 最近项目表格 -->
-    <el-card shadow="hover" class="recent-table-card">
-      <template #header><span class="card-title">最近项目</span></template>
-      <el-table :data="stats.recent_projects" stripe style="width:100%;">
+    <section class="recent-table-card pms-surface-section">
+      <div class="pms-section-header"><span class="pms-section-title">最近项目</span></div>
+      <el-table class="pms-dense-table" :data="stats.recent_projects" stripe border size="small">
         <el-table-column prop="project_code" label="项目编号" width="150" />
         <el-table-column prop="project_name" label="项目名称" min-width="200">
           <template #default="{ row }">
@@ -69,17 +66,25 @@
         <el-table-column prop="dept_name" label="所属部门" width="120" />
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type ?? 'info'">{{ statusMap[row.status]?.text ?? '-' }}</el-tag>
+            <span class="pms-status" :class="statusMap[row.status]?.className ?? 'pms-status-neutral'">
+              <span class="pms-status-dot"></span>
+              {{ statusMap[row.status]?.text ?? '-' }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column prop="task_count" label="任务数" width="80" align="center" />
         <el-table-column label="总进度" width="200">
           <template #default="{ row }">
-            <el-progress :percentage="row.total_progress" :stroke-width="8" :color="progressColor" />
+            <div class="pms-progress-cell">
+              <span class="pms-progress-track">
+                <span class="pms-progress-bar" :class="progressClass(row.total_progress)" :style="{ width: `${row.total_progress}%` }"></span>
+              </span>
+              <span class="pms-progress-value">{{ row.total_progress }}%</span>
+            </div>
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+    </section>
   </div>
 </template>
 
@@ -115,52 +120,75 @@ const completionRate = computed(() => {
   return Math.round((stats.value.status_distribution.finished / total) * 100)
 })
 
-const statusMap = reactive<Record<number, { text: string; type: string }>>({
-  1: { text: '-', type: 'primary' },
-  2: { text: '-', type: 'success' },
-  3: { text: '-', type: 'warning' },
+const statusMap = reactive<Record<number, { text: string; className: string }>>({
+  1: { text: '-', className: 'pms-status-info' },
+  2: { text: '-', className: 'pms-status-success' },
+  3: { text: '-', className: 'pms-status-warning' },
 })
 
-function progressColor(percentage: number): string {
-  if (percentage < 30) return '#F56C6C'
-  if (percentage < 80) return '#E6A23C'
-  return '#67C23A'
+function progressClass(percentage: number): string {
+  if (percentage < 30) return 'is-danger'
+  if (percentage < 80) return 'is-warning'
+  return 'is-success'
+}
+
+const chartColors = {
+  primary: '#4f46e5',
+  success: '#0f9f7a',
+  warning: '#d97706',
+  border: '#ffffff',
+  text: '#667085',
+  grid: '#edf1f6',
+}
+
+const chartTextStyle = {
+  color: chartColors.text,
+  fontFamily: 'Noto Sans SC, sans-serif',
+  fontSize: 12,
 }
 
 // 饼图：状态分布
 const statusPieOption = computed(() => ({
+  textStyle: chartTextStyle,
   tooltip: { trigger: 'item' },
-  legend: { bottom: 0 },
+  legend: { bottom: 0, textStyle: chartTextStyle },
   series: [{
     type: 'pie',
     radius: ['45%', '70%'],
     center: ['50%', '45%'],
     avoidLabelOverlap: false,
-    itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+    itemStyle: { borderRadius: 4, borderColor: chartColors.border, borderWidth: 2 },
     label: { show: false },
     emphasis: { label: { show: true, fontSize: 16, fontWeight: 'bold' } },
     data: [
-      { value: stats.value.status_distribution.ongoing, name: statusMap[1].text, itemStyle: { color: '#409EFF' } },
-      { value: stats.value.status_distribution.finished, name: statusMap[2].text, itemStyle: { color: '#67C23A' } },
-      { value: stats.value.status_distribution.paused, name: statusMap[3].text, itemStyle: { color: '#E6A23C' } },
+      { value: stats.value.status_distribution.ongoing, name: statusMap[1].text, itemStyle: { color: chartColors.primary } },
+      { value: stats.value.status_distribution.finished, name: statusMap[2].text, itemStyle: { color: chartColors.success } },
+      { value: stats.value.status_distribution.paused, name: statusMap[3].text, itemStyle: { color: chartColors.warning } },
     ],
   }],
 }))
 
 // 柱状图：部门分布
 const deptBarOption = computed(() => ({
+  textStyle: chartTextStyle,
   tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
   grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
   xAxis: {
     type: 'category',
     data: stats.value.dept_distribution.map(d => d.dept_name),
-    axisLabel: { rotate: stats.value.dept_distribution.length > 5 ? 30 : 0 },
+    axisLabel: { ...chartTextStyle, rotate: stats.value.dept_distribution.length > 5 ? 30 : 0 },
+    axisLine: { lineStyle: { color: chartColors.grid } },
   },
-  yAxis: { type: 'value', minInterval: 1 },
+  yAxis: {
+    type: 'value',
+    minInterval: 1,
+    axisLabel: chartTextStyle,
+    splitLine: { lineStyle: { color: chartColors.grid } },
+  },
   series: [{
     type: 'bar',
     data: stats.value.dept_distribution.map(d => d.count),
-    itemStyle: { color: '#409EFF', borderRadius: [4, 4, 0, 0] },
+    itemStyle: { color: chartColors.primary, borderRadius: [4, 4, 0, 0] },
     barMaxWidth: 40,
   }],
 }))
@@ -186,49 +214,57 @@ onMounted(() => { fetchStats(); loadProjectStatuses() })
 
 <style scoped>
 .dashboard {
-  padding: 16px;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
 }
 
 .stat-cards { margin-bottom: 16px; }
 .chart-row { margin-bottom: 16px; }
+.stat-cards :deep(.el-col),
+.chart-row :deep(.el-col) { margin-bottom: 16px; }
 
 .stat-card {
-  cursor: default;
-}
-.stat-card :deep(.el-card__body) {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 20px 16px;
+  gap: 14px;
+  min-height: 88px;
+  padding: 16px;
 }
 .stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--pms-radius);
+}
+.stat-icon.is-primary { color: var(--pms-primary); background: var(--pms-primary-soft); }
+.stat-icon.is-success { color: var(--pms-success); background: var(--pms-success-soft); }
+.stat-icon.is-warning { color: var(--pms-warning); background: var(--pms-warning-soft); }
+.stat-icon.is-info { color: var(--pms-info); background: var(--pms-info-soft); }
+.stat-info {
+  min-width: 0;
 }
 .stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #303133;
+  color: var(--pms-text);
+  font-size: 24px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
 .stat-label {
-  font-size: 14px;
-  color: #909399;
   margin-top: 4px;
+  color: var(--pms-text-secondary);
+  font-size: var(--pms-font-size-sm);
 }
 
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #303133;
+.chart-card {
+  min-height: 366px;
 }
 
-.recent-table-card {
-  /* Element Plus 默认样式即可 */
+.dashboard-chart {
+  height: 320px;
 }
 </style>

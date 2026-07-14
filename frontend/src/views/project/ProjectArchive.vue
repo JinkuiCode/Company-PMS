@@ -24,12 +24,14 @@
         <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
           已筛选 {{ filteredRowData.length }} / {{ total }} 条
         </span>
-        <el-button size="small" @click="saveLayout" title="保存当前列顺序和宽度">
-          <el-icon style="margin-right:4px;"><Setting /></el-icon>保存布局
-        </el-button>
-        <el-button size="small" plain @click="resetLayout" title="恢复默认列布局">
-          <el-icon><RefreshRight /></el-icon>
-        </el-button>
+        <PmsListColumnPicker
+          :model-value="selectedArchiveColumnKeys"
+          :groups="archiveColumnGroups"
+          :default-keys="defaultArchiveColumnKeys"
+          aria-label="项目档案列设置"
+          @update:model-value="handleArchiveColumnSelection"
+          @restore-defaults="restoreArchiveColumnDefaults"
+        />
     </template>
 
     <template #filters>
@@ -39,6 +41,7 @@
         :active-count="activeCustomFilterCount"
       >
         <el-input
+          v-if="archiveFieldVisible('project_code') || archiveFieldVisible('project_name')"
           v-model="searchKeyword"
           placeholder="搜索编号或名称"
           size="small"
@@ -47,6 +50,7 @@
           :prefix-icon="Search"
         />
         <el-select
+          v-if="archiveFieldVisible('product_line')"
           v-model="filterProductLine"
           placeholder="全部产品线"
           size="small"
@@ -56,6 +60,7 @@
           <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
         <el-select
+          v-if="archiveFieldVisible('status')"
           v-model="filterStatus"
           placeholder="全部状态"
           size="small"
@@ -84,10 +89,10 @@
         @grid-ready="onGridReady"
         @first-data-rendered="scheduleArchiveScrollbarMetrics"
         @grid-size-changed="scheduleArchiveScrollbarMetrics"
-        @column-resized="scheduleArchiveScrollbarMetrics"
-        @column-moved="scheduleArchiveScrollbarMetrics"
-        @column-pinned="scheduleArchiveScrollbarMetrics"
-        @displayed-columns-changed="scheduleArchiveScrollbarMetrics"
+        @column-resized="handleArchiveColumnResized"
+        @column-moved="handleArchiveGridStructureChanged"
+        @column-pinned="handleArchiveGridStructureChanged"
+        @displayed-columns-changed="handleArchiveGridStructureChanged"
         @row-double-clicked="onRowDoubleClicked"
         @selection-changed="onSelectionChanged"
       />
@@ -107,24 +112,24 @@
     <!-- 新增 / 编辑弹窗 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目档案' : '新增项目档案'" width="560px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-form-item label="项目编号" prop="project_code">
-          <el-input v-model="form.project_code" placeholder="请输入项目编号" :disabled="isEdit" />
+        <el-form-item v-if="archiveFieldVisible('project_code')" label="项目编号" prop="project_code">
+          <el-input v-model="form.project_code" placeholder="请输入项目编号" :disabled="isEdit || !archiveFieldEditable('project_code')" />
         </el-form-item>
-        <el-form-item label="项目名称" prop="project_name">
-          <el-input v-model="form.project_name" placeholder="请输入项目名称" />
+        <el-form-item v-if="archiveFieldVisible('project_name')" label="项目名称" prop="project_name">
+          <el-input v-model="form.project_name" placeholder="请输入项目名称" :disabled="!archiveFieldEditable('project_name')" />
         </el-form-item>
-        <el-form-item label="产品线" prop="product_line">
-          <el-select v-model="form.product_line" placeholder="请选择产品线" style="width: 100%;">
+        <el-form-item v-if="archiveFieldVisible('product_line')" label="产品线" prop="product_line">
+          <el-select v-model="form.product_line" placeholder="请选择产品线" style="width: 100%;" :disabled="!archiveFieldEditable('product_line')">
             <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态" prop="status">
-          <el-select v-model="form.status" style="width: 100%;">
+        <el-form-item v-if="archiveFieldVisible('status')" label="状态" prop="status">
+          <el-select v-model="form.status" style="width: 100%;" :disabled="!archiveFieldEditable('status')">
             <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
           </el-select>
         </el-form-item>
-        <el-form-item label="负责人">
-          <el-select v-model="form.manager_id" placeholder="请选择负责人" clearable style="width: 100%;">
+        <el-form-item v-if="archiveFieldVisible('manager_id')" label="负责人" prop="manager_id">
+          <el-select v-model="form.manager_id" placeholder="请选择负责人" clearable style="width: 100%;" :disabled="!archiveFieldEditable('manager_id')">
             <el-option
               v-for="u in userList"
               :key="u.id"
@@ -133,20 +138,20 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="产品类型">
-          <el-select v-model="form.product_type" placeholder="请选择产品类型" clearable style="width: 100%;">
+        <el-form-item v-if="archiveFieldVisible('product_type')" label="产品类型" prop="product_type">
+          <el-select v-model="form.product_type" placeholder="请选择产品类型" clearable style="width: 100%;" :disabled="!archiveFieldEditable('product_type')">
             <el-option v-for="item in dictOptions.product_type" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
         <el-row :gutter="12">
-          <el-col :span="12">
+          <el-col v-if="archiveFieldVisible('plan_start_date')" :span="12">
             <el-form-item label="计划开始" prop="plan_start_date">
-              <el-date-picker v-model="form.plan_start_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" />
+              <el-date-picker v-model="form.plan_start_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_start_date')" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col v-if="archiveFieldVisible('plan_end_date')" :span="12">
             <el-form-item label="计划结束" prop="plan_end_date">
-              <el-date-picker v-model="form.plan_end_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" />
+              <el-date-picker v-model="form.plan_end_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_end_date')" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -161,16 +166,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Delete, Search, Connection, Setting, RefreshRight } from '@element-plus/icons-vue'
+import { Plus, Delete, Search, Connection } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
-import { ModuleRegistry, AllCommunityModule, type ColDef } from 'ag-grid-community'
+import { ModuleRegistry, AllCommunityModule, type ColDef, type ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
+import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { chineseLocaleText } from '@/utils/agGridLocale'
@@ -183,40 +189,240 @@ const localeText = chineseLocaleText
 const authStore = useAuthStore()
 const hasPermission = authStore.hasPermission
 
-// ========== 布局持久化 ==========
-const LAYOUT_KEY = 'pms_archive_grid_layout_v2'
+type ArchiveColumnPreferenceState = {
+  selected_column_keys: string[]
+  columnState: ColumnState[]
+}
+
+type EffectiveArchiveField = {
+  field_key: string
+  label: string
+  visible: boolean
+  editable: boolean
+  required: boolean
+  list_available: boolean
+}
+
+const ARCHIVE_COLUMN_STORAGE_KEY = 'pms_project_archive_list_columns_v1'
+const LEGACY_ARCHIVE_LAYOUT_KEY = 'pms_archive_grid_layout_v2'
+
+const ARCHIVE_COLUMN_GROUP_DEFINITIONS = [
+  {
+    key: 'business',
+    label: '业务信息',
+    fields: [
+      { key: 'product_line', label: '产品线', value_type: 'select', list_available: true, quick_addable: false },
+      { key: 'status', label: '状态', value_type: 'select', list_available: true, quick_addable: false },
+      { key: 'manager_name', label: '负责人', value_type: 'text', list_available: true, quick_addable: false },
+      { key: 'product_type', label: '产品类型', value_type: 'select', list_available: true, quick_addable: false },
+    ],
+  },
+  {
+    key: 'plan',
+    label: '计划信息',
+    fields: [
+      { key: 'plan_start_date', label: '计划开始', value_type: 'date', list_available: true, quick_addable: false },
+      { key: 'plan_end_date', label: '计划结束', value_type: 'date', list_available: true, quick_addable: false },
+    ],
+  },
+  {
+    key: 'audit',
+    label: '维护信息',
+    fields: [
+      { key: 'created_by_name', label: '创建人', value_type: 'text', list_available: true, quick_addable: false },
+      { key: 'updated_by_name', label: '最后编辑人', value_type: 'text', list_available: true, quick_addable: false },
+      { key: 'updated_at', label: '最后编辑时间', value_type: 'datetime', list_available: true, quick_addable: false },
+    ],
+  },
+  {
+    key: 'erp',
+    label: 'ERP 同步',
+    fields: [
+      { key: 'erp_sync_time', label: '最后同步时间', value_type: 'datetime', list_available: true, quick_addable: false },
+      { key: 'erp_sync_by_name', label: '最后同步人', value_type: 'text', list_available: true, quick_addable: false },
+      { key: 'erp_sync_status', label: '同步状态', value_type: 'select', list_available: true, quick_addable: false },
+    ],
+  },
+]
+
+const archiveColumnPolicyKey: Record<string, string> = {
+  manager_name: 'manager_id',
+}
+const baseArchiveColumnKeys = ARCHIVE_COLUMN_GROUP_DEFINITIONS.flatMap(group => group.fields.map(field => field.key))
+const effectiveArchiveFields = ref<EffectiveArchiveField[]>([])
+const effectiveArchiveFieldMap = computed(() => new Map(
+  effectiveArchiveFields.value.map(field => [field.field_key, field]),
+))
+
+function archiveFieldPolicy(fieldKey: string) {
+  return effectiveArchiveFieldMap.value.get(fieldKey)
+}
+
+function archiveFieldVisible(fieldKey: string) {
+  const field = archiveFieldPolicy(fieldKey)
+  return field?.visible !== false
+}
+
+function archiveFieldEditable(fieldKey: string) {
+  return archiveFieldPolicy(fieldKey)?.editable !== false
+}
+
+function archiveColumnListAvailable(columnKey: string) {
+  const field = archiveFieldPolicy(archiveColumnPolicyKey[columnKey] || columnKey)
+  return field ? field.visible && field.list_available : true
+}
+
+const archiveColumnGroups = computed(() => ARCHIVE_COLUMN_GROUP_DEFINITIONS.map(group => ({
+  ...group,
+  fields: group.fields.filter(field => archiveColumnListAvailable(field.key)),
+})).filter(group => group.fields.length > 0))
+const defaultArchiveColumnKeys = computed(() => baseArchiveColumnKeys.filter(archiveColumnListAvailable))
+const availableArchiveColumnKeys = computed(() => new Set(defaultArchiveColumnKeys.value))
+const fixedArchiveColumnKeys = new Set(['archive_selection', 'archive_actions'])
+const selectedArchiveColumnKeys = ref<string[]>([...baseArchiveColumnKeys])
+const archiveColumnPreferenceOwnerId = ref<number | null>(null)
+const archiveColumnPreferencesReady = ref(false)
+const archiveColumnPreferenceWritesEnabled = ref(false)
+const archiveColumnStateRestored = ref(false)
+const restoringArchiveColumnState = ref(false)
 let gridApi: any = null
 
 function onGridReady(params: any) {
   gridApi = params.api
-  loadLayout()
+  completeArchiveColumnPreferenceRestore()
   scheduleArchiveScrollbarMetrics()
 }
 
-function saveLayout() {
-  if (!gridApi) return
-  const colState = gridApi.getColumnState()
-  localStorage.setItem(LAYOUT_KEY, JSON.stringify(colState))
-  ElMessage.success('布局已保存，下次登录自动恢复')
+function archiveColumnPreferenceStorageKey() {
+  if (archiveColumnPreferenceOwnerId.value == null) return null
+  return `${ARCHIVE_COLUMN_STORAGE_KEY}:${archiveColumnPreferenceOwnerId.value}`
 }
 
-function loadLayout() {
-  if (!gridApi) return
-  const saved = localStorage.getItem(LAYOUT_KEY)
-  if (saved) {
+async function resolveArchiveColumnPreferenceOwner() {
+  if (!authStore.user) {
     try {
-      const colState = JSON.parse(saved)
-      gridApi.applyColumnState({ state: colState, applyOrder: true })
-    } catch { /* 忽略解析错误 */ }
+      await authStore.fetchUser()
+    } catch {
+      return
+    }
+  }
+  archiveColumnPreferenceOwnerId.value = authStore.user?.id ?? null
+}
+
+function normalizeArchiveColumnKeys(keys: unknown) {
+  if (!Array.isArray(keys)) return [...defaultArchiveColumnKeys.value]
+  return keys.filter((key): key is string => typeof key === 'string' && availableArchiveColumnKeys.value.has(key))
+}
+
+function readArchiveColumnPreferences(): ArchiveColumnPreferenceState | null {
+  const storageKey = archiveColumnPreferenceStorageKey()
+  if (!storageKey) return null
+
+  const raw = localStorage.getItem(storageKey)
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw)
+      return {
+        selected_column_keys: normalizeArchiveColumnKeys(parsed?.selected_column_keys),
+        columnState: Array.isArray(parsed?.columnState) ? parsed.columnState : [],
+      }
+    } catch { /* 忽略损坏的当前版本缓存 */ }
+  }
+
+  const legacyRaw = localStorage.getItem(LEGACY_ARCHIVE_LAYOUT_KEY)
+  if (!legacyRaw) return null
+  try {
+    const legacyState = JSON.parse(legacyRaw)
+    if (!Array.isArray(legacyState)) return null
+    const visibleKeys = defaultArchiveColumnKeys.value.filter((key) => {
+      const state = legacyState.find((item: ColumnState) => item.colId === key)
+      return state?.hide !== true
+    })
+    return { selected_column_keys: visibleKeys, columnState: legacyState }
+  } catch {
+    return null
   }
 }
 
-function resetLayout() {
-  localStorage.removeItem(LAYOUT_KEY)
-  if (gridApi) {
-    gridApi.resetColumnState()
+function persistArchiveColumnPreferences() {
+  if (!archiveColumnPreferencesReady.value || !archiveColumnPreferenceWritesEnabled.value) return
+  const storageKey = archiveColumnPreferenceStorageKey()
+  if (!storageKey) return
+  const state: ArchiveColumnPreferenceState = {
+    selected_column_keys: [...selectedArchiveColumnKeys.value],
+    columnState: gridApi?.getColumnState?.() || [],
   }
-  ElMessage.success('已恢复默认布局')
+  localStorage.setItem(storageKey, JSON.stringify(state))
+  localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY)
+}
+
+function restoreSelectedArchiveColumnKeys() {
+  const saved = readArchiveColumnPreferences()
+  selectedArchiveColumnKeys.value = saved
+    ? normalizeArchiveColumnKeys(saved.selected_column_keys)
+    : [...defaultArchiveColumnKeys.value]
+}
+
+function restoreArchiveColumnState() {
+  if (!archiveColumnPreferencesReady.value || !gridApi || archiveColumnStateRestored.value) return
+  archiveColumnStateRestored.value = true
+  const saved = readArchiveColumnPreferences()
+  if (!saved?.columnState.length) return
+  restoringArchiveColumnState.value = true
+  try {
+    const selectedKeys = new Set(selectedArchiveColumnKeys.value)
+    const reconciledState = saved.columnState.map((state) => {
+      if (fixedArchiveColumnKeys.has(state.colId)) return { ...state, hide: false }
+      if (state.colId === 'project_code' || state.colId === 'project_name') {
+        return { ...state, hide: !archiveColumnListAvailable(state.colId) }
+      }
+      if (availableArchiveColumnKeys.value.has(state.colId)) return { ...state, hide: !selectedKeys.has(state.colId) }
+      if (state.colId && baseArchiveColumnKeys.includes(state.colId)) return null
+      return state
+    }).filter((state): state is ColumnState => Boolean(state))
+    gridApi.applyColumnState({ state: reconciledState, applyOrder: true })
+  } finally {
+    restoringArchiveColumnState.value = false
+  }
+  scheduleArchiveScrollbarMetrics()
+}
+
+function completeArchiveColumnPreferenceRestore() {
+  if (!archiveColumnPreferencesReady.value || !gridApi) return
+  restoreArchiveColumnState()
+  archiveColumnPreferenceWritesEnabled.value = true
+}
+
+function handleArchiveColumnSelection(keys: string[]) {
+  selectedArchiveColumnKeys.value = normalizeArchiveColumnKeys(keys)
+  nextTick(() => {
+    scheduleArchiveScrollbarMetrics()
+    persistArchiveColumnPreferences()
+  })
+}
+
+function handleArchiveGridStructureChanged() {
+  scheduleArchiveScrollbarMetrics()
+  if (!archiveColumnPreferenceWritesEnabled.value || restoringArchiveColumnState.value) return
+  persistArchiveColumnPreferences()
+}
+
+function handleArchiveColumnResized(event: any) {
+  scheduleArchiveScrollbarMetrics()
+  if (!event?.finished || !archiveColumnPreferenceWritesEnabled.value || restoringArchiveColumnState.value) return
+  persistArchiveColumnPreferences()
+}
+
+function restoreArchiveColumnDefaults() {
+  const storageKey = archiveColumnPreferenceStorageKey()
+  if (storageKey) localStorage.removeItem(storageKey)
+  localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY)
+  selectedArchiveColumnKeys.value = [...defaultArchiveColumnKeys.value]
+  nextTick(() => {
+    gridApi?.resetColumnState?.()
+    scheduleArchiveScrollbarMetrics()
+    persistArchiveColumnPreferences()
+  })
 }
 
 // ========== 数据状态 ==========
@@ -257,6 +463,15 @@ async function fetchAllowedProductLines() {
       allowedProductLines.value = res.items || []
     }
   } catch { /* ignore */ }
+}
+
+async function fetchEffectiveArchiveFields() {
+  try {
+    const response: any = await request.get('/projects/archives/fields')
+    effectiveArchiveFields.value = Array.isArray(response?.items) ? response.items : []
+  } catch {
+    effectiveArchiveFields.value = []
+  }
 }
 
 // 筛选栏可用的产品线选项（取字典与权限的交集）
@@ -301,26 +516,27 @@ const archiveUserNameOptions = computed(() => uniqueValueOptions([
   ]),
 ]))
 
-const archiveFilterFields = computed<ListFilterField<any>[]>(() => [
-  { field: 'project_code', label: '项目编号', type: 'text' },
-  { field: 'project_name', label: '项目名称', type: 'text' },
-  { field: 'product_line', label: '产品线', type: 'select', options: () => filteredProductLineOptions.value },
-  { field: 'status', label: '状态', type: 'select', options: () => dictFilterOptions('archive_status', true) },
-  { field: 'manager_name', label: '负责人', type: 'select', options: () => archiveUserNameOptions.value },
-  { field: 'product_type', label: '产品类型', type: 'select', options: () => dictFilterOptions('product_type') },
-  { field: 'plan_start_date', label: '计划开始', type: 'date' },
-  { field: 'plan_end_date', label: '计划结束', type: 'date' },
-  { field: 'created_by_name', label: '创建人', type: 'select', options: () => archiveUserNameOptions.value },
-  { field: 'updated_by_name', label: '最后编辑人', type: 'select', options: () => archiveUserNameOptions.value },
-  { field: 'erp_sync_by_name', label: '最后同步人', type: 'select', options: () => archiveUserNameOptions.value },
+const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
+  { field: 'project_code', policyKey: 'project_code', label: '项目编号', type: 'text' },
+  { field: 'project_name', policyKey: 'project_name', label: '项目名称', type: 'text' },
+  { field: 'product_line', policyKey: 'product_line', label: '产品线', type: 'select', options: () => filteredProductLineOptions.value },
+  { field: 'status', policyKey: 'status', label: '状态', type: 'select', options: () => dictFilterOptions('archive_status', true) },
+  { field: 'manager_name', policyKey: 'manager_id', label: '负责人', type: 'select', options: () => archiveUserNameOptions.value },
+  { field: 'product_type', policyKey: 'product_type', label: '产品类型', type: 'select', options: () => dictFilterOptions('product_type') },
+  { field: 'plan_start_date', policyKey: 'plan_start_date', label: '计划开始', type: 'date' },
+  { field: 'plan_end_date', policyKey: 'plan_end_date', label: '计划结束', type: 'date' },
+  { field: 'created_by_name', policyKey: 'created_by_name', label: '创建人', type: 'select', options: () => archiveUserNameOptions.value },
+  { field: 'updated_by_name', policyKey: 'updated_by_name', label: '最后编辑人', type: 'select', options: () => archiveUserNameOptions.value },
+  { field: 'erp_sync_by_name', policyKey: 'erp_sync_by_name', label: '最后同步人', type: 'select', options: () => archiveUserNameOptions.value },
   {
     field: 'erp_sync_status',
+    policyKey: 'erp_sync_status',
     label: '同步状态',
     type: 'select',
     options: () => erpSyncStatusOptions,
     getValue: row => row.erp_sync_status || 'pending',
   },
-])
+] as Array<ListFilterField<any> & { policyKey: string }>).filter(field => archiveFieldPolicy(field.policyKey)?.visible !== false))
 
 const { customFilters, activeCustomFilterCount, applyCustomFilters } = useListFilters(archiveFilterFields)
 
@@ -377,13 +593,28 @@ const form = reactive({
   plan_end_date: '',
 })
 
-const rules: FormRules = {
+const legacyArchiveRules: FormRules = {
   project_code: [{ required: true, message: '请输入项目编号' }],
   project_name: [{ required: true, message: '请输入项目名称' }],
   product_line: [{ required: true, message: '请选择产品线' }],
   plan_start_date: [{ required: true, message: '请选择计划开始日期' }],
   plan_end_date: [{ required: true, message: '请选择计划结束日期' }],
 }
+
+const rules = computed<FormRules>(() => {
+  if (!effectiveArchiveFields.value.length) return legacyArchiveRules
+  const nextRules: FormRules = {}
+  effectiveArchiveFields.value
+    .filter(field => field.visible && field.required)
+    .forEach((field) => {
+      nextRules[field.field_key] = [{
+        required: true,
+        message: `${field.label.includes('日期') || field.label.includes('时间') ? '请选择' : '请填写'}${field.label}`,
+        trigger: ['blur', 'change'],
+      }]
+    })
+  return nextRules
+})
 
 // ========== AG Grid 列定义 ==========
 const statusMap = computed(() => {
@@ -404,18 +635,25 @@ function escapeHtml(value: any) {
     .replace(/'/g, '&#39;')
 }
 
+function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
+  return {
+    colId: key,
+    hide: !archiveColumnListAvailable(key) || !selectedArchiveColumnKeys.value.includes(key),
+  }
+}
+
 const columnDefs = computed<ColDef[]>(() => [
   ...(hasPermission('project:archive:delete') || hasPermission('project:archive:sync')
-    ? [{ headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', filter: false, sortable: false, resizable: false } as ColDef]
+    ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', filter: false, sortable: false, resizable: false } as ColDef]
     : []),
-  { field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left' },
-  { field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160 },
+  { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left', hide: !archiveColumnListAvailable('project_code') },
+  { colId: 'project_name', field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160, hide: !archiveColumnListAvailable('project_name') },
   {
-    field: 'product_line', headerName: '产品线', width: 110, minWidth: 100,
+    ...archiveColumnVisibility('product_line'), field: 'product_line', headerName: '产品线', width: 110, minWidth: 100,
     valueFormatter: (params: any) => enumLabel('product_line', params.value),
   },
   {
-    field: 'status', headerName: '状态', width: 100, minWidth: 96,
+    ...archiveColumnVisibility('status'), field: 'status', headerName: '状态', width: 100, minWidth: 96,
     cellRenderer: (params: any) => {
       const v = params.value
       const tone = archiveStatusTone[v] || 'neutral'
@@ -423,27 +661,27 @@ const columnDefs = computed<ColDef[]>(() => [
       return `<span class="pms-status pms-status-${tone}"><span class="pms-status-dot"></span>${label}</span>`
     },
   },
-  { field: 'manager_name', headerName: '负责人', width: 110, minWidth: 96 },
+  { ...archiveColumnVisibility('manager_name'), field: 'manager_name', headerName: '负责人', width: 110, minWidth: 96 },
   {
-    field: 'product_type', headerName: '产品类型', width: 110, minWidth: 96,
+    ...archiveColumnVisibility('product_type'), field: 'product_type', headerName: '产品类型', width: 110, minWidth: 96,
     valueFormatter: (params: any) => enumLabel('product_type', params.value),
   },
   {
-    field: 'plan_start_date', headerName: '计划开始', width: 118, minWidth: 112,
+    ...archiveColumnVisibility('plan_start_date'), field: 'plan_start_date', headerName: '计划开始', width: 118, minWidth: 112,
     valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
   },
   {
-    field: 'plan_end_date', headerName: '计划结束', width: 118, minWidth: 112,
+    ...archiveColumnVisibility('plan_end_date'), field: 'plan_end_date', headerName: '计划结束', width: 118, minWidth: 112,
     valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
   },
-  { field: 'created_by_name', headerName: '创建人', width: 110, minWidth: 96 },
-  { field: 'updated_by_name', headerName: '最后编辑人', width: 120, minWidth: 110 },
+  { ...archiveColumnVisibility('created_by_name'), field: 'created_by_name', headerName: '创建人', width: 110, minWidth: 96 },
+  { ...archiveColumnVisibility('updated_by_name'), field: 'updated_by_name', headerName: '最后编辑人', width: 120, minWidth: 110 },
   {
-    field: 'updated_at', headerName: '最后编辑时间', width: 170, minWidth: 160,
+    ...archiveColumnVisibility('updated_at'), field: 'updated_at', headerName: '最后编辑时间', width: 170, minWidth: 160,
     valueFormatter: (params: any) => params.value ? new Date(params.value).toLocaleString('zh-CN') : '-',
   },
   {
-    field: 'erp_sync_time', headerName: '最后同步时间', width: 170, minWidth: 160,
+    ...archiveColumnVisibility('erp_sync_time'), field: 'erp_sync_time', headerName: '最后同步时间', width: 170, minWidth: 160,
     valueFormatter: (params: any) => {
       if (!params.value) return '-'
       const d = new Date(params.value)
@@ -451,9 +689,9 @@ const columnDefs = computed<ColDef[]>(() => [
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
     },
   },
-  { field: 'erp_sync_by_name', headerName: '最后同步人', width: 120, minWidth: 110 },
+  { ...archiveColumnVisibility('erp_sync_by_name'), field: 'erp_sync_by_name', headerName: '最后同步人', width: 120, minWidth: 110 },
   {
-    field: 'erp_sync_status', headerName: '同步', width: 100, minWidth: 96,
+    ...archiveColumnVisibility('erp_sync_status'), field: 'erp_sync_status', headerName: '同步', width: 100, minWidth: 96,
     cellRenderer: (params: any) => {
       const v = params.value
       if (!v || v === 'pending') return '<span class="pms-status pms-status-warning"><span class="pms-status-dot"></span>待同步</span>'
@@ -466,7 +704,7 @@ const columnDefs = computed<ColDef[]>(() => [
     },
   },
   {
-    headerName: '操作', width: 146, minWidth: 136, pinned: 'right', filter: false, sortable: false, resizable: false,
+    colId: 'archive_actions', headerName: '操作', width: 146, minWidth: 136, pinned: 'right', filter: false, sortable: false, resizable: false,
     cellRenderer: (params: any) => {
       return `${hasPermission('project:archive:edit') ? `<button class="pms-table-action edit-btn" data-id="${params.data.id}">编辑</button>` : ''}
               ${hasPermission('project:archive:sync') ? `<button class="pms-table-action pms-link-success sync-btn" data-id="${params.data.id}">同步</button>` : ''}
@@ -489,6 +727,7 @@ const defaultColDef = {
   resizable: true,
   filter: false,
   suppressSizeToFit: true,
+  headerClass: 'archive-list-header-center',
 }
 
 // ========== 数据加载 ==========
@@ -543,12 +782,10 @@ function openEditDialog(row: any) {
   dialogVisible.value = true
 }
 
-async function handleSubmit() {
-  if (isEdit.value ? !hasPermission('project:archive:edit') : !hasPermission('project:archive:add')) return
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  const payload = {
+function buildArchivePayload(includeProjectCode = false) {
+  const payload: Record<string, unknown> = {}
+  const values: Record<string, unknown> = {
+    project_code: form.project_code,
     project_name: form.project_name,
     status: form.status,
     manager_id: form.manager_id,
@@ -557,16 +794,52 @@ async function handleSubmit() {
     plan_start_date: form.plan_start_date || null,
     plan_end_date: form.plan_end_date || null,
   }
+  Object.entries(values).forEach(([fieldKey, value]) => {
+    if (fieldKey === 'project_code' && !includeProjectCode) return
+    if (!archiveFieldVisible(fieldKey) || !archiveFieldEditable(fieldKey)) return
+    payload[fieldKey] = value
+  })
+  return payload
+}
 
-  if (isEdit.value) {
-    await request.put(`/projects/archives/${form.id}`, payload)
-    ElMessage.success('更新成功')
-  } else {
-    await request.post('/projects/archives', { ...payload, project_code: form.project_code })
-    ElMessage.success('创建成功')
+function archivePolicyValidationFieldKeys(error: any): string[] {
+  const detail = error?.response?.data?.detail
+  if (!['FIELD_POLICY_VALIDATION_FAILED', 'FIELD_POLICY_INVALID'].includes(detail?.code)) return []
+  if (!Array.isArray(detail?.fields)) return []
+  return detail.fields
+    .map((field: any) => String(field?.field_key || '').trim())
+    .filter(Boolean)
+}
+
+async function focusArchivePolicyValidation(error: any) {
+  const fieldKeys = archivePolicyValidationFieldKeys(error)
+  if (!fieldKeys.length) return
+  await fetchEffectiveArchiveFields()
+  await nextTick()
+  const visibleProps = fieldKeys.filter(fieldKey => archiveFieldVisible(fieldKey))
+  if (!visibleProps.length) return
+  await formRef.value?.validateField(visibleProps).catch(() => false)
+  formRef.value?.scrollToField(visibleProps[0])
+}
+
+async function handleSubmit() {
+  if (isEdit.value ? !hasPermission('project:archive:edit') : !hasPermission('project:archive:add')) return
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  try {
+    if (isEdit.value) {
+      await request.put(`/projects/archives/${form.id}`, buildArchivePayload())
+      ElMessage.success('更新成功')
+    } else {
+      await request.post('/projects/archives', buildArchivePayload(true))
+      ElMessage.success('创建成功')
+    }
+    dialogVisible.value = false
+    fetchList()
+  } catch (error) {
+    await focusArchivePolicyValidation(error)
   }
-  dialogVisible.value = false
-  fetchList()
 }
 
 async function handleSubmitAndSync() {
@@ -574,21 +847,16 @@ async function handleSubmitAndSync() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
-  const payload = {
-    project_name: form.project_name,
-    status: form.status,
-    manager_id: form.manager_id,
-    product_type: form.product_type || null,
-    product_line: form.product_line || null,
-    plan_start_date: form.plan_start_date || null,
-    plan_end_date: form.plan_end_date || null,
-  }
-
-  if (isEdit.value) {
-    await request.put(`/projects/archives/${form.id}`, payload)
-  } else {
-    const createRes: any = await request.post('/projects/archives', { ...payload, project_code: form.project_code })
-    form.id = createRes.id
+  try {
+    if (isEdit.value) {
+      await request.put(`/projects/archives/${form.id}`, buildArchivePayload())
+    } else {
+      const createRes: any = await request.post('/projects/archives', buildArchivePayload(true))
+      form.id = createRes.id
+    }
+  } catch (error) {
+    await focusArchivePolicyValidation(error)
+    return
   }
   dialogVisible.value = false
 
@@ -674,11 +942,17 @@ async function handleBatchSync() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchEffectiveArchiveFields()
   fetchList(); fetchUsers(); fetchAllowedProductLines()
   fetchDictOptions('product_line')
   fetchDictOptions('product_type')
   fetchDictOptions('archive_status')
+  await resolveArchiveColumnPreferenceOwner()
+  restoreSelectedArchiveColumnKeys()
+  archiveColumnPreferencesReady.value = true
+  await nextTick()
+  completeArchiveColumnPreferenceRestore()
   scheduleArchiveScrollbarMetrics()
 })
 </script>
@@ -690,5 +964,9 @@ onMounted(() => {
 
 :deep(.pms-table-action + .pms-table-action) {
   margin-left: 2px;
+}
+
+:deep(.archive-list-header-center .ag-header-cell-label) {
+  justify-content: center;
 }
 </style>

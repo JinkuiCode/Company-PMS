@@ -78,6 +78,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '操作日志', permission: 'system:operation-log:view' },
       },
       {
+        path: 'system/field-policy',
+        name: 'FieldPolicyList',
+        component: () => import('@/views/system/FieldPolicyList.vue'),
+        meta: { title: '字段规则', permission: 'system:field-policy:view' },
+      },
+      {
         path: 'project/list',
         name: 'ProjectList',
         component: () => import('@/views/project/ProjectList.vue'),

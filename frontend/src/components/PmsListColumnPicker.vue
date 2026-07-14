@@ -10,14 +10,14 @@
         size="small"
         plain
         class="column-picker-trigger"
-        aria-label="打开列设置"
+        :aria-label="`打开${ariaLabel}`"
       >
         <el-icon style="margin-right:4px;"><Setting /></el-icon>
         列设置
       </el-button>
     </template>
 
-    <div class="column-picker-panel" aria-label="项目进度列设置">
+    <div class="column-picker-panel" :aria-label="ariaLabel">
       <div class="column-picker-toolbar">
         <el-input
           v-model="keyword"
@@ -96,11 +96,15 @@ const props = defineProps<{
   modelValue: string[]
   groups: ColumnPickerGroup[]
   defaultKeys: string[]
+  ariaLabel?: string
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string[]]
+  'restore-defaults': []
 }>()
+
+const ariaLabel = computed(() => props.ariaLabel || '列设置')
 
 const keyword = ref('')
 
@@ -135,6 +139,7 @@ function toggleField(key: string, checked: unknown) {
 
 function restoreDefaults() {
   emit('update:modelValue', [...props.defaultKeys])
+  emit('restore-defaults')
 }
 </script>
 

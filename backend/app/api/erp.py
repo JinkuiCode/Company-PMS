@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.services.authorization import require_permission
-from app.services.project import ensure_archive_access
+from app.services.project import ensure_archive_access, validate_archive_for_business_operation
 from app.services import kingdee
 
 router = APIRouter(prefix="/api/erp", tags=["金蝶 ERP 对接"])
@@ -41,7 +41,8 @@ def sync_project_archive(
     - 如果金蝶中不存在则创建
     - 如果已存在则更新
     """
-    ensure_archive_access(db, data.archive_id, scope_ctx)
+    archive = ensure_archive_access(db, data.archive_id, scope_ctx)
+    validate_archive_for_business_operation(db, archive)
     return kingdee.sync_project_archive_to_erp(
         db, data.archive_id, user_id=scope_ctx["user_id"], request=request
     )
@@ -56,7 +57,8 @@ def batch_sync_project_archives(
 ):
     """批量同步多个项目档案到金蝶 ERP"""
     for archive_id in data.archive_ids:
-        ensure_archive_access(db, archive_id, scope_ctx)
+        archive = ensure_archive_access(db, archive_id, scope_ctx)
+        validate_archive_for_business_operation(db, archive)
     return kingdee.batch_sync_project_archives(
         db, data.archive_ids, user_id=scope_ctx["user_id"], request=request
     )
