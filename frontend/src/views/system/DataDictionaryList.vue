@@ -1,7 +1,7 @@
 <template>
   <PmsDataList
     ref="dataListRef"
-    class="field-catalog-page"
+    class="pms-system-page field-catalog-page"
     scrollbar-label="数据字典横向滚动条"
   >
     <template #toolbar-left>
@@ -280,8 +280,8 @@ onMounted(fetchCatalog)
 }
 
 :deep(.catalog-code) {
-  color: #475569;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--pms-text-secondary);
+  font-family: var(--pms-font-mono);
   font-size: 12px;
 }
 

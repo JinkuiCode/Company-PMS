@@ -56,7 +56,7 @@ assert.match(
 )
 assert.match(
   archive,
-  /availableArchiveColumnKeys\.has\(state\.colId\)[\s\S]*?hide:\s*!selectedKeys\.has\(state\.colId\)/,
+  /availableArchiveColumnKeys\.value\.has\(state\.colId\)[\s\S]*?hide:\s*!selectedKeys\.has\(state\.colId\)/,
   'Restored optional-column visibility should follow the column-picker selection',
 )
 assert.match(

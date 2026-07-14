@@ -1,35 +1,34 @@
 <template>
-  <div class="page">
-    <el-card>
-      <template #header>
-        <div class="page-header">
-          <span>角色管理</span>
-          <el-button v-if="hasPermission('system:role:add')" type="primary" @click="openDialog()">新增角色</el-button>
-        </div>
-      </template>
+  <div class="role-page pms-page pms-system-page">
+    <section class="role-list-section pms-surface-section">
+      <div class="page-header pms-section-header">
+        <span class="pms-section-title">角色管理</span>
+        <el-button v-if="hasPermission('system:role:add')" type="primary" size="small" @click="openDialog()">新增角色</el-button>
+      </div>
 
-      <el-table :data="roleList" border stripe>
+      <el-table class="pms-dense-table" :data="roleList" border stripe size="small">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="role_name" label="角色名称" width="150" />
         <el-table-column prop="role_code" label="角色编码" width="150" />
         <el-table-column prop="data_scope" label="数据权限" width="150">
           <template #default="{ row }">
-            <el-tag size="small">{{ ['', '仅本人', '本部门', '本部门及子部门', '全部'][row.data_scope] }}</el-tag>
+            <span class="pms-status pms-status-neutral">{{ ['', '仅本人', '本部门', '本部门及子部门', '全部'][row.data_scope] }}</span>
           </template>
         </el-table-column>
         <el-table-column label="产品线" width="200">
           <template #default="{ row }">
             <template v-if="row.product_lines">
-              <el-tag v-for="pl in row.product_lines.split(',')" :key="pl" size="small" style="margin:2px 4px 2px 0;">{{ productLineLabel(pl) }}</el-tag>
+              <span v-for="pl in row.product_lines.split(',')" :key="pl" class="pms-chip role-product-chip">{{ productLineLabel(pl) }}</span>
             </template>
-            <el-tag v-else size="small" type="info">全部</el-tag>
+            <span v-else class="pms-chip">全部</span>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="80">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+            <span class="pms-status" :class="row.status === 1 ? 'pms-status-success' : 'pms-status-danger'">
+              <span class="pms-status-dot"></span>
               {{ row.status === 1 ? '启用' : '禁用' }}
-            </el-tag>
+            </span>
           </template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" />
@@ -40,7 +39,7 @@
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+    </section>
 
     <!-- 新增/编辑弹窗（含权限配置） -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑角色' : '新增角色'" width="680px" top="4vh">
@@ -88,7 +87,7 @@
                   :disabled="pl.status === 0"
                 />
               </el-checkbox-group>
-              <div style="font-size:12px;color:#909399;">不选 = 不限制（全部产品线）</div>
+              <div class="form-help">不选 = 不限制（全部产品线）</div>
             </el-form-item>
             <el-form-item label="备注">
               <el-input v-model="form.remark" type="textarea" :rows="2" />
@@ -117,7 +116,10 @@
             >
               <template #default="{ node, data }">
                 <span :class="['perm-node', 'perm-type-' + data.menu_type]" :data-id="data.id">
-                  {{ data.menu_type === 'M' ? '📂 ' : data.menu_type === 'C' ? '📄 ' : '' }}{{ node.label }}
+                  <el-icon v-if="data.menu_type === 'M'" class="perm-node-icon"><FolderOpened /></el-icon>
+                  <el-icon v-else-if="data.menu_type === 'C'" class="perm-node-icon"><Document /></el-icon>
+                  <el-icon v-else class="perm-node-icon"><Key /></el-icon>
+                  {{ node.label }}
                 </span>
               </template>
             </el-tree>
@@ -139,6 +141,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import { loadEnumOptions, type EnumOption } from '@/composables/useEnumOptions'
+import { Document, FolderOpened, Key } from '@element-plus/icons-vue'
 
 const authStore = useAuthStore()
 const hasPermission = authStore.hasPermission
@@ -348,9 +351,21 @@ onMounted(() => { fetchList(); loadProductLines() })
 
 <style scoped>
 .page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex: 0 0 auto;
+}
+
+.role-page {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.role-list-section {
+  min-height: 280px;
+}
+
+.role-product-chip {
+  margin: 2px 4px 2px 0;
 }
 
 .dialog-body {
@@ -364,30 +379,35 @@ onMounted(() => { fetchList(); loadProductLines() })
 }
 
 .section-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #ebeef5;
   display: flex;
   align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--pms-border-soft);
+  color: var(--pms-text);
+  font-size: var(--pms-font-size-md);
+  font-weight: 650;
 }
 
 .perm-tree-wrap {
   max-height: 320px;
   overflow-y: auto;
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
+  border: 1px solid var(--pms-border);
+  border-radius: var(--pms-radius-sm);
   padding: 8px;
 }
 
 .perm-node {
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--pms-font-size-base);
 }
 .perm-type-M { font-weight: 600; }
 .perm-type-C { font-weight: 500; }
-.perm-type-B { font-size: 12px; color: #606266; }
+.perm-type-B { color: var(--pms-text-secondary); font-size: var(--pms-font-size-sm); }
+.perm-node-icon { color: var(--pms-text-muted); font-size: 14px; }
+.form-help { margin-top: 4px; color: var(--pms-text-muted); font-size: var(--pms-font-size-sm); }
 
 /* 按钮权限横排显示 */
 .perm-tree-wrap :deep(.inline-buttons) {

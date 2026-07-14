@@ -90,6 +90,13 @@ def find_or_create_user(db: Session, loginid: str, username: str, dept_name: str
     if not settings.SSO_AUTO_CREATE_USER:
         raise HTTPException(status_code=403, detail="用户不存在且未开启自动创建")
 
+    default_role = db.query(SysRole).filter(
+        SysRole.role_code == "operator",
+        SysRole.status == 1,
+    ).first()
+    if not default_role:
+        raise HTTPException(status_code=503, detail="默认操作员角色不存在或已禁用，请联系系统管理员")
+
     # 自动创建用户
     # 1. 查找或创建部门
     dept = db.query(SysDept).filter(SysDept.dept_name == dept_name).first()
@@ -106,12 +113,8 @@ def find_or_create_user(db: Session, loginid: str, username: str, dept_name: str
     db.add(user)
     db.flush()  # 获取 user.id
 
-    # 3. 分配默认角色（role_code="user" 或第一个可用角色）
-    default_role = db.query(SysRole).filter(SysRole.role_code == "user").first()
-    if not default_role:
-        default_role = db.query(SysRole).first()
-    if default_role:
-        db.add(SysUserRole(user_id=user.id, role_id=default_role.id))
+    # 3. OA 自动开户始终分配启用的操作员模板，缺失时上方已失败关闭。
+    db.add(SysUserRole(user_id=user.id, role_id=default_role.id))
 
     db.commit()
     db.refresh(user)

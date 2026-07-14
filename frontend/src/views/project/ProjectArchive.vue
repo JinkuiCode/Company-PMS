@@ -41,6 +41,7 @@
         :active-count="activeCustomFilterCount"
       >
         <el-input
+          v-if="archiveFieldVisible('project_code') || archiveFieldVisible('project_name')"
           v-model="searchKeyword"
           placeholder="搜索编号或名称"
           size="small"
@@ -49,6 +50,7 @@
           :prefix-icon="Search"
         />
         <el-select
+          v-if="archiveFieldVisible('product_line')"
           v-model="filterProductLine"
           placeholder="全部产品线"
           size="small"
@@ -58,6 +60,7 @@
           <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
         <el-select
+          v-if="archiveFieldVisible('status')"
           v-model="filterStatus"
           placeholder="全部状态"
           size="small"
@@ -109,24 +112,24 @@
     <!-- 新增 / 编辑弹窗 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目档案' : '新增项目档案'" width="560px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-form-item label="项目编号" prop="project_code">
-          <el-input v-model="form.project_code" placeholder="请输入项目编号" :disabled="isEdit" />
+        <el-form-item v-if="archiveFieldVisible('project_code')" label="项目编号" prop="project_code">
+          <el-input v-model="form.project_code" placeholder="请输入项目编号" :disabled="isEdit || !archiveFieldEditable('project_code')" />
         </el-form-item>
-        <el-form-item label="项目名称" prop="project_name">
-          <el-input v-model="form.project_name" placeholder="请输入项目名称" />
+        <el-form-item v-if="archiveFieldVisible('project_name')" label="项目名称" prop="project_name">
+          <el-input v-model="form.project_name" placeholder="请输入项目名称" :disabled="!archiveFieldEditable('project_name')" />
         </el-form-item>
-        <el-form-item label="产品线" prop="product_line">
-          <el-select v-model="form.product_line" placeholder="请选择产品线" style="width: 100%;">
+        <el-form-item v-if="archiveFieldVisible('product_line')" label="产品线" prop="product_line">
+          <el-select v-model="form.product_line" placeholder="请选择产品线" style="width: 100%;" :disabled="!archiveFieldEditable('product_line')">
             <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态" prop="status">
-          <el-select v-model="form.status" style="width: 100%;">
+        <el-form-item v-if="archiveFieldVisible('status')" label="状态" prop="status">
+          <el-select v-model="form.status" style="width: 100%;" :disabled="!archiveFieldEditable('status')">
             <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
           </el-select>
         </el-form-item>
-        <el-form-item label="负责人">
-          <el-select v-model="form.manager_id" placeholder="请选择负责人" clearable style="width: 100%;">
+        <el-form-item v-if="archiveFieldVisible('manager_id')" label="负责人" prop="manager_id">
+          <el-select v-model="form.manager_id" placeholder="请选择负责人" clearable style="width: 100%;" :disabled="!archiveFieldEditable('manager_id')">
             <el-option
               v-for="u in userList"
               :key="u.id"
@@ -135,20 +138,20 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="产品类型">
-          <el-select v-model="form.product_type" placeholder="请选择产品类型" clearable style="width: 100%;">
+        <el-form-item v-if="archiveFieldVisible('product_type')" label="产品类型" prop="product_type">
+          <el-select v-model="form.product_type" placeholder="请选择产品类型" clearable style="width: 100%;" :disabled="!archiveFieldEditable('product_type')">
             <el-option v-for="item in dictOptions.product_type" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
         <el-row :gutter="12">
-          <el-col :span="12">
+          <el-col v-if="archiveFieldVisible('plan_start_date')" :span="12">
             <el-form-item label="计划开始" prop="plan_start_date">
-              <el-date-picker v-model="form.plan_start_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" />
+              <el-date-picker v-model="form.plan_start_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_start_date')" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col v-if="archiveFieldVisible('plan_end_date')" :span="12">
             <el-form-item label="计划结束" prop="plan_end_date">
-              <el-date-picker v-model="form.plan_end_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" />
+              <el-date-picker v-model="form.plan_end_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_end_date')" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -191,10 +194,19 @@ type ArchiveColumnPreferenceState = {
   columnState: ColumnState[]
 }
 
+type EffectiveArchiveField = {
+  field_key: string
+  label: string
+  visible: boolean
+  editable: boolean
+  required: boolean
+  list_available: boolean
+}
+
 const ARCHIVE_COLUMN_STORAGE_KEY = 'pms_project_archive_list_columns_v1'
 const LEGACY_ARCHIVE_LAYOUT_KEY = 'pms_archive_grid_layout_v2'
 
-const archiveColumnGroups = [
+const ARCHIVE_COLUMN_GROUP_DEFINITIONS = [
   {
     key: 'business',
     label: '业务信息',
@@ -233,10 +245,41 @@ const archiveColumnGroups = [
   },
 ]
 
-const defaultArchiveColumnKeys = archiveColumnGroups.flatMap(group => group.fields.map(field => field.key))
-const availableArchiveColumnKeys = new Set(defaultArchiveColumnKeys)
-const fixedArchiveColumnKeys = new Set(['archive_selection', 'project_code', 'project_name', 'archive_actions'])
-const selectedArchiveColumnKeys = ref<string[]>([...defaultArchiveColumnKeys])
+const archiveColumnPolicyKey: Record<string, string> = {
+  manager_name: 'manager_id',
+}
+const baseArchiveColumnKeys = ARCHIVE_COLUMN_GROUP_DEFINITIONS.flatMap(group => group.fields.map(field => field.key))
+const effectiveArchiveFields = ref<EffectiveArchiveField[]>([])
+const effectiveArchiveFieldMap = computed(() => new Map(
+  effectiveArchiveFields.value.map(field => [field.field_key, field]),
+))
+
+function archiveFieldPolicy(fieldKey: string) {
+  return effectiveArchiveFieldMap.value.get(fieldKey)
+}
+
+function archiveFieldVisible(fieldKey: string) {
+  const field = archiveFieldPolicy(fieldKey)
+  return field?.visible !== false
+}
+
+function archiveFieldEditable(fieldKey: string) {
+  return archiveFieldPolicy(fieldKey)?.editable !== false
+}
+
+function archiveColumnListAvailable(columnKey: string) {
+  const field = archiveFieldPolicy(archiveColumnPolicyKey[columnKey] || columnKey)
+  return field ? field.visible && field.list_available : true
+}
+
+const archiveColumnGroups = computed(() => ARCHIVE_COLUMN_GROUP_DEFINITIONS.map(group => ({
+  ...group,
+  fields: group.fields.filter(field => archiveColumnListAvailable(field.key)),
+})).filter(group => group.fields.length > 0))
+const defaultArchiveColumnKeys = computed(() => baseArchiveColumnKeys.filter(archiveColumnListAvailable))
+const availableArchiveColumnKeys = computed(() => new Set(defaultArchiveColumnKeys.value))
+const fixedArchiveColumnKeys = new Set(['archive_selection', 'archive_actions'])
+const selectedArchiveColumnKeys = ref<string[]>([...baseArchiveColumnKeys])
 const archiveColumnPreferenceOwnerId = ref<number | null>(null)
 const archiveColumnPreferencesReady = ref(false)
 const archiveColumnPreferenceWritesEnabled = ref(false)
@@ -267,8 +310,8 @@ async function resolveArchiveColumnPreferenceOwner() {
 }
 
 function normalizeArchiveColumnKeys(keys: unknown) {
-  if (!Array.isArray(keys)) return [...defaultArchiveColumnKeys]
-  return keys.filter((key): key is string => typeof key === 'string' && availableArchiveColumnKeys.has(key))
+  if (!Array.isArray(keys)) return [...defaultArchiveColumnKeys.value]
+  return keys.filter((key): key is string => typeof key === 'string' && availableArchiveColumnKeys.value.has(key))
 }
 
 function readArchiveColumnPreferences(): ArchiveColumnPreferenceState | null {
@@ -291,7 +334,7 @@ function readArchiveColumnPreferences(): ArchiveColumnPreferenceState | null {
   try {
     const legacyState = JSON.parse(legacyRaw)
     if (!Array.isArray(legacyState)) return null
-    const visibleKeys = defaultArchiveColumnKeys.filter((key) => {
+    const visibleKeys = defaultArchiveColumnKeys.value.filter((key) => {
       const state = legacyState.find((item: ColumnState) => item.colId === key)
       return state?.hide !== true
     })
@@ -317,7 +360,7 @@ function restoreSelectedArchiveColumnKeys() {
   const saved = readArchiveColumnPreferences()
   selectedArchiveColumnKeys.value = saved
     ? normalizeArchiveColumnKeys(saved.selected_column_keys)
-    : [...defaultArchiveColumnKeys]
+    : [...defaultArchiveColumnKeys.value]
 }
 
 function restoreArchiveColumnState() {
@@ -330,9 +373,13 @@ function restoreArchiveColumnState() {
     const selectedKeys = new Set(selectedArchiveColumnKeys.value)
     const reconciledState = saved.columnState.map((state) => {
       if (fixedArchiveColumnKeys.has(state.colId)) return { ...state, hide: false }
-      if (availableArchiveColumnKeys.has(state.colId)) return { ...state, hide: !selectedKeys.has(state.colId) }
+      if (state.colId === 'project_code' || state.colId === 'project_name') {
+        return { ...state, hide: !archiveColumnListAvailable(state.colId) }
+      }
+      if (availableArchiveColumnKeys.value.has(state.colId)) return { ...state, hide: !selectedKeys.has(state.colId) }
+      if (state.colId && baseArchiveColumnKeys.includes(state.colId)) return null
       return state
-    })
+    }).filter((state): state is ColumnState => Boolean(state))
     gridApi.applyColumnState({ state: reconciledState, applyOrder: true })
   } finally {
     restoringArchiveColumnState.value = false
@@ -370,7 +417,7 @@ function restoreArchiveColumnDefaults() {
   const storageKey = archiveColumnPreferenceStorageKey()
   if (storageKey) localStorage.removeItem(storageKey)
   localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY)
-  selectedArchiveColumnKeys.value = [...defaultArchiveColumnKeys]
+  selectedArchiveColumnKeys.value = [...defaultArchiveColumnKeys.value]
   nextTick(() => {
     gridApi?.resetColumnState?.()
     scheduleArchiveScrollbarMetrics()
@@ -418,6 +465,15 @@ async function fetchAllowedProductLines() {
   } catch { /* ignore */ }
 }
 
+async function fetchEffectiveArchiveFields() {
+  try {
+    const response: any = await request.get('/projects/archives/fields')
+    effectiveArchiveFields.value = Array.isArray(response?.items) ? response.items : []
+  } catch {
+    effectiveArchiveFields.value = []
+  }
+}
+
 // 筛选栏可用的产品线选项（取字典与权限的交集）
 const filteredProductLineOptions = computed(() => {
   const all = dictOptions.product_line || []
@@ -460,26 +516,27 @@ const archiveUserNameOptions = computed(() => uniqueValueOptions([
   ]),
 ]))
 
-const archiveFilterFields = computed<ListFilterField<any>[]>(() => [
-  { field: 'project_code', label: '项目编号', type: 'text' },
-  { field: 'project_name', label: '项目名称', type: 'text' },
-  { field: 'product_line', label: '产品线', type: 'select', options: () => filteredProductLineOptions.value },
-  { field: 'status', label: '状态', type: 'select', options: () => dictFilterOptions('archive_status', true) },
-  { field: 'manager_name', label: '负责人', type: 'select', options: () => archiveUserNameOptions.value },
-  { field: 'product_type', label: '产品类型', type: 'select', options: () => dictFilterOptions('product_type') },
-  { field: 'plan_start_date', label: '计划开始', type: 'date' },
-  { field: 'plan_end_date', label: '计划结束', type: 'date' },
-  { field: 'created_by_name', label: '创建人', type: 'select', options: () => archiveUserNameOptions.value },
-  { field: 'updated_by_name', label: '最后编辑人', type: 'select', options: () => archiveUserNameOptions.value },
-  { field: 'erp_sync_by_name', label: '最后同步人', type: 'select', options: () => archiveUserNameOptions.value },
+const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
+  { field: 'project_code', policyKey: 'project_code', label: '项目编号', type: 'text' },
+  { field: 'project_name', policyKey: 'project_name', label: '项目名称', type: 'text' },
+  { field: 'product_line', policyKey: 'product_line', label: '产品线', type: 'select', options: () => filteredProductLineOptions.value },
+  { field: 'status', policyKey: 'status', label: '状态', type: 'select', options: () => dictFilterOptions('archive_status', true) },
+  { field: 'manager_name', policyKey: 'manager_id', label: '负责人', type: 'select', options: () => archiveUserNameOptions.value },
+  { field: 'product_type', policyKey: 'product_type', label: '产品类型', type: 'select', options: () => dictFilterOptions('product_type') },
+  { field: 'plan_start_date', policyKey: 'plan_start_date', label: '计划开始', type: 'date' },
+  { field: 'plan_end_date', policyKey: 'plan_end_date', label: '计划结束', type: 'date' },
+  { field: 'created_by_name', policyKey: 'created_by_name', label: '创建人', type: 'select', options: () => archiveUserNameOptions.value },
+  { field: 'updated_by_name', policyKey: 'updated_by_name', label: '最后编辑人', type: 'select', options: () => archiveUserNameOptions.value },
+  { field: 'erp_sync_by_name', policyKey: 'erp_sync_by_name', label: '最后同步人', type: 'select', options: () => archiveUserNameOptions.value },
   {
     field: 'erp_sync_status',
+    policyKey: 'erp_sync_status',
     label: '同步状态',
     type: 'select',
     options: () => erpSyncStatusOptions,
     getValue: row => row.erp_sync_status || 'pending',
   },
-])
+] as Array<ListFilterField<any> & { policyKey: string }>).filter(field => archiveFieldPolicy(field.policyKey)?.visible !== false))
 
 const { customFilters, activeCustomFilterCount, applyCustomFilters } = useListFilters(archiveFilterFields)
 
@@ -536,13 +593,28 @@ const form = reactive({
   plan_end_date: '',
 })
 
-const rules: FormRules = {
+const legacyArchiveRules: FormRules = {
   project_code: [{ required: true, message: '请输入项目编号' }],
   project_name: [{ required: true, message: '请输入项目名称' }],
   product_line: [{ required: true, message: '请选择产品线' }],
   plan_start_date: [{ required: true, message: '请选择计划开始日期' }],
   plan_end_date: [{ required: true, message: '请选择计划结束日期' }],
 }
+
+const rules = computed<FormRules>(() => {
+  if (!effectiveArchiveFields.value.length) return legacyArchiveRules
+  const nextRules: FormRules = {}
+  effectiveArchiveFields.value
+    .filter(field => field.visible && field.required)
+    .forEach((field) => {
+      nextRules[field.field_key] = [{
+        required: true,
+        message: `${field.label.includes('日期') || field.label.includes('时间') ? '请选择' : '请填写'}${field.label}`,
+        trigger: ['blur', 'change'],
+      }]
+    })
+  return nextRules
+})
 
 // ========== AG Grid 列定义 ==========
 const statusMap = computed(() => {
@@ -566,7 +638,7 @@ function escapeHtml(value: any) {
 function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
   return {
     colId: key,
-    hide: !selectedArchiveColumnKeys.value.includes(key),
+    hide: !archiveColumnListAvailable(key) || !selectedArchiveColumnKeys.value.includes(key),
   }
 }
 
@@ -574,8 +646,8 @@ const columnDefs = computed<ColDef[]>(() => [
   ...(hasPermission('project:archive:delete') || hasPermission('project:archive:sync')
     ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', filter: false, sortable: false, resizable: false } as ColDef]
     : []),
-  { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left' },
-  { colId: 'project_name', field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160 },
+  { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left', hide: !archiveColumnListAvailable('project_code') },
+  { colId: 'project_name', field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160, hide: !archiveColumnListAvailable('project_name') },
   {
     ...archiveColumnVisibility('product_line'), field: 'product_line', headerName: '产品线', width: 110, minWidth: 100,
     valueFormatter: (params: any) => enumLabel('product_line', params.value),
@@ -710,12 +782,10 @@ function openEditDialog(row: any) {
   dialogVisible.value = true
 }
 
-async function handleSubmit() {
-  if (isEdit.value ? !hasPermission('project:archive:edit') : !hasPermission('project:archive:add')) return
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  const payload = {
+function buildArchivePayload(includeProjectCode = false) {
+  const payload: Record<string, unknown> = {}
+  const values: Record<string, unknown> = {
+    project_code: form.project_code,
     project_name: form.project_name,
     status: form.status,
     manager_id: form.manager_id,
@@ -724,16 +794,52 @@ async function handleSubmit() {
     plan_start_date: form.plan_start_date || null,
     plan_end_date: form.plan_end_date || null,
   }
+  Object.entries(values).forEach(([fieldKey, value]) => {
+    if (fieldKey === 'project_code' && !includeProjectCode) return
+    if (!archiveFieldVisible(fieldKey) || !archiveFieldEditable(fieldKey)) return
+    payload[fieldKey] = value
+  })
+  return payload
+}
 
-  if (isEdit.value) {
-    await request.put(`/projects/archives/${form.id}`, payload)
-    ElMessage.success('更新成功')
-  } else {
-    await request.post('/projects/archives', { ...payload, project_code: form.project_code })
-    ElMessage.success('创建成功')
+function archivePolicyValidationFieldKeys(error: any): string[] {
+  const detail = error?.response?.data?.detail
+  if (!['FIELD_POLICY_VALIDATION_FAILED', 'FIELD_POLICY_INVALID'].includes(detail?.code)) return []
+  if (!Array.isArray(detail?.fields)) return []
+  return detail.fields
+    .map((field: any) => String(field?.field_key || '').trim())
+    .filter(Boolean)
+}
+
+async function focusArchivePolicyValidation(error: any) {
+  const fieldKeys = archivePolicyValidationFieldKeys(error)
+  if (!fieldKeys.length) return
+  await fetchEffectiveArchiveFields()
+  await nextTick()
+  const visibleProps = fieldKeys.filter(fieldKey => archiveFieldVisible(fieldKey))
+  if (!visibleProps.length) return
+  await formRef.value?.validateField(visibleProps).catch(() => false)
+  formRef.value?.scrollToField(visibleProps[0])
+}
+
+async function handleSubmit() {
+  if (isEdit.value ? !hasPermission('project:archive:edit') : !hasPermission('project:archive:add')) return
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  try {
+    if (isEdit.value) {
+      await request.put(`/projects/archives/${form.id}`, buildArchivePayload())
+      ElMessage.success('更新成功')
+    } else {
+      await request.post('/projects/archives', buildArchivePayload(true))
+      ElMessage.success('创建成功')
+    }
+    dialogVisible.value = false
+    fetchList()
+  } catch (error) {
+    await focusArchivePolicyValidation(error)
   }
-  dialogVisible.value = false
-  fetchList()
 }
 
 async function handleSubmitAndSync() {
@@ -741,21 +847,16 @@ async function handleSubmitAndSync() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
-  const payload = {
-    project_name: form.project_name,
-    status: form.status,
-    manager_id: form.manager_id,
-    product_type: form.product_type || null,
-    product_line: form.product_line || null,
-    plan_start_date: form.plan_start_date || null,
-    plan_end_date: form.plan_end_date || null,
-  }
-
-  if (isEdit.value) {
-    await request.put(`/projects/archives/${form.id}`, payload)
-  } else {
-    const createRes: any = await request.post('/projects/archives', { ...payload, project_code: form.project_code })
-    form.id = createRes.id
+  try {
+    if (isEdit.value) {
+      await request.put(`/projects/archives/${form.id}`, buildArchivePayload())
+    } else {
+      const createRes: any = await request.post('/projects/archives', buildArchivePayload(true))
+      form.id = createRes.id
+    }
+  } catch (error) {
+    await focusArchivePolicyValidation(error)
+    return
   }
   dialogVisible.value = false
 
@@ -842,6 +943,7 @@ async function handleBatchSync() {
 }
 
 onMounted(async () => {
+  await fetchEffectiveArchiveFields()
   fetchList(); fetchUsers(); fetchAllowedProductLines()
   fetchDictOptions('product_line')
   fetchDictOptions('product_type')

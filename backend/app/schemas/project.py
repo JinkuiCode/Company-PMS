@@ -60,7 +60,7 @@ class ArchiveOption(BaseModel):
 
 # ========== 项目 ==========
 class ProjectCreate(BaseModel):
-    archive_id: int | None = None
+    archive_id: int
     project_code: str = Field(..., max_length=32)
     project_name: str = Field(..., max_length=128)
     dept_id: int
@@ -78,6 +78,7 @@ class ProjectCreate(BaseModel):
     assembly_progress: int | None = Field(default=None, ge=0, le=100)
     test_progress: int | None = Field(default=None, ge=0, le=100)
     description: str | None = None
+    sheet_values: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProjectUpdate(BaseModel):
@@ -137,6 +138,8 @@ class ProjectSheetField(BaseModel):
     value_type: str
     source_type: str
     editable: bool
+    visible: bool = True
+    required: bool = False
     computed: bool = False
     list_available: bool = False
     quick_addable: bool = False

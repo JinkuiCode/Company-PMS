@@ -1,9 +1,9 @@
 <template>
-  <div class="user-manage-page">
+  <div class="user-manage-page pms-system-page pms-split-page">
     <!-- 左侧：部门树 -->
-    <div class="dept-panel">
-      <div class="dept-panel-header">
-        <span>部门架构</span>
+    <div class="dept-panel pms-surface-section">
+      <div class="dept-panel-header pms-section-header">
+        <span class="pms-section-title">部门架构</span>
       </div>
       <div class="dept-tree-wrap">
         <el-tree
@@ -44,16 +44,16 @@
     </Teleport>
 
     <!-- 右侧：用户列表 -->
-    <div class="user-panel">
-      <el-card>
-        <template #header>
-          <div class="page-header">
-            <span>用户管理 <el-tag v-if="selectedDeptName" size="small" type="info" style="margin-left:8px">{{ selectedDeptName }}</el-tag></span>
-            <el-button v-if="hasPermission('system:user:add')" type="primary" @click="openUserDialog()">新增用户</el-button>
-          </div>
-        </template>
+    <div class="user-panel pms-surface-section">
+      <div class="page-header pms-section-header">
+        <div class="user-panel-title">
+          <span class="pms-section-title">用户管理</span>
+          <span v-if="selectedDeptName" class="pms-chip">{{ selectedDeptName }}</span>
+        </div>
+        <el-button v-if="hasPermission('system:user:add')" type="primary" size="small" @click="openUserDialog()">新增用户</el-button>
+      </div>
 
-        <el-table :data="userList" v-loading="loading" border stripe>
+        <el-table class="pms-dense-table" :data="userList" v-loading="loading" border stripe size="small">
           <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="username" label="用户名" width="110" />
           <el-table-column prop="real_name" label="真实姓名" width="100" />
@@ -65,9 +65,10 @@
           </el-table-column>
           <el-table-column prop="status" label="状态" width="70">
             <template #default="{ row }">
-              <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+              <span class="pms-status" :class="row.status === 1 ? 'pms-status-success' : 'pms-status-danger'">
+                <span class="pms-status-dot"></span>
                 {{ row.status === 1 ? '启用' : '禁用' }}
-              </el-tag>
+              </span>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="130" fixed="right">
@@ -78,15 +79,15 @@
           </el-table-column>
         </el-table>
 
-        <el-pagination
-          v-model:current-page="page"
+        <div class="user-pagination">
+          <CustomPagination
+          :model-value="page"
           :total="total"
           :page-size="pageSize"
-          layout="total, prev, pager, next"
-          @current-change="fetchUserList"
-          style="margin-top: 16px; justify-content: flex-end;"
-        />
-      </el-card>
+          @update:model-value="handlePageChange"
+          @update:page-size="handlePageSizeChange"
+          />
+        </div>
     </div>
 
     <!-- 部门新增/编辑弹窗 -->
@@ -162,6 +163,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { OfficeBuilding } from '@element-plus/icons-vue'
+import CustomPagination from '@/components/CustomPagination.vue'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 
@@ -350,6 +352,17 @@ async function fetchUserList() {
   loading.value = false
 }
 
+function handlePageChange(value: number) {
+  page.value = value
+  fetchUserList()
+}
+
+function handlePageSizeChange(value: number) {
+  pageSize.value = value
+  page.value = 1
+  fetchUserList()
+}
+
 async function fetchRoles() {
   roleList.value = (await request.get('/roles/options')) as any
 }
@@ -425,57 +438,56 @@ onMounted(() => {
 
 <style scoped>
 .user-manage-page {
-  display: flex;
-  gap: 16px;
   height: 100%;
 }
 
 .dept-panel {
-  width: 260px;
-  flex-shrink: 0;
-  background: #fff;
-  border-radius: 4px;
-  border: 1px solid #ebeef5;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 .dept-panel-header {
-  padding: 14px 16px;
-  font-size: 15px;
-  font-weight: 600;
-  border-bottom: 1px solid #ebeef5;
-  color: #303133;
+  flex: 0 0 auto;
 }
 .dept-tree-wrap {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 8px;
 }
 .tree-node-label {
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--pms-font-size-base);
   user-select: none;
 }
 
 .user-panel {
-  flex: 1;
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-header {
+  flex: 0 0 auto;
+}
+
+.user-panel-title {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.user-pagination {
+  padding: 0 12px 12px;
 }
 
 /* 右键菜单 */
 .context-menu {
   position: fixed;
   z-index: 9999;
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  background: var(--pms-surface);
+  border: 1px solid var(--pms-border);
+  border-radius: var(--pms-radius-sm);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.14);
   padding: 4px 0;
   min-width: 120px;
   list-style: none;
@@ -483,17 +495,17 @@ onMounted(() => {
 }
 .context-menu li {
   padding: 7px 16px;
-  font-size: 13px;
+  font-size: var(--pms-font-size-base);
   cursor: pointer;
-  color: #303133;
-  transition: background 0.15s;
+  color: var(--pms-text);
+  transition: background-color 120ms ease-out, color 120ms ease-out;
 }
 .context-menu li:hover {
-  background: #f5f7fa;
-  color: #409EFF;
+  background: var(--pms-primary-soft);
+  color: var(--pms-primary);
 }
 .context-menu li.danger:hover {
-  color: #F56C6C;
-  background: #fef0f0;
+  color: var(--pms-danger);
+  background: var(--pms-danger-soft);
 }
 </style>

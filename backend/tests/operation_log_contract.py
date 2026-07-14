@@ -55,7 +55,11 @@ def test_operation_log_backend_contract_files_and_routes():
 
 
 def test_operation_log_sanitizes_sensitive_fields_and_diffs_values():
-    from app.services.operation_log import diff_data, sanitize_data
+    from app.services.operation_log import (
+        build_operation_log_diff_items,
+        diff_data,
+        sanitize_data,
+    )
 
     masked = sanitize_data(
         {
@@ -75,6 +79,39 @@ def test_operation_log_sanitizes_sensitive_fields_and_diffs_values():
     diff = diff_data({"name": "旧项目", "password_hash": "old"}, {"name": "新项目", "password_hash": "new"})
     assert diff["name"] == {"before": "旧项目", "after": "新项目"}
     assert diff["password_hash"] == {"before": "***", "after": "***"}
+
+    project_items = build_operation_log_diff_items(
+        {
+            "project.status": {"before": 1, "after": 2},
+            "detail.design_progress": {"before": 25, "after": 80},
+        },
+        entity_type="pms_project",
+    )
+    project_items_by_key = {item["field_key"]: item for item in project_items}
+    assert project_items_by_key["project.status"]["field_label"] == "状态"
+    assert project_items_by_key["project.status"]["before_display"] == "进行中"
+    assert project_items_by_key["project.status"]["after_display"] == "已完结"
+    assert project_items_by_key["detail.design_progress"]["field_label"] == "设计进度"
+
+    user_items = build_operation_log_diff_items(
+        {"real_name": {"before": "张三", "after": "李四"}},
+        entity_type="sys_user",
+    )
+    assert user_items[0]["field_label"] == "真实姓名"
+
+    policy_items = build_operation_log_diff_items(
+        {
+            "design_progress": {
+                "before": {"editable": True},
+                "after": {"editable": False},
+            }
+        },
+        entity_type="sys_business_field_policy",
+        entity_id="project_progress",
+    )
+    assert policy_items[0]["field_label"] == "设计进度 / 允许编辑"
+    assert policy_items[0]["before_display"] == "是"
+    assert policy_items[0]["after_display"] == "否"
 
 
 def test_operation_log_runtime_write_and_menu():

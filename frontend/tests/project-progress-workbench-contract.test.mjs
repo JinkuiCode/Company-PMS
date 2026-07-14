@@ -4,6 +4,23 @@ import { readFileSync } from 'node:fs'
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
 const projectList = read('src/views/project/ProjectList.vue')
+const theme = read('src/styles/pms-theme.css')
+
+assert.match(
+  theme,
+  /\.pms-progress-track\s*\{[^}]*display:\s*block;/,
+  'Shared progress tracks should be block-level so drawer spans retain their dimensions',
+)
+assert.match(
+  theme,
+  /\.pms-progress-bar\s*\{[^}]*display:\s*block;/,
+  'Shared progress fills should be block-level so drawer colors render like grid colors',
+)
+assert.match(
+  projectList,
+  /function progressToneClass\(v: number\) \{[\s\S]*?v < 30[\s\S]*?'is-danger'[\s\S]*?v < 80[\s\S]*?'is-warning'[\s\S]*?'is-success'/,
+  'List and drawer progress bars should share the red, amber, and green thresholds',
+)
 
 assert.match(
   projectList,

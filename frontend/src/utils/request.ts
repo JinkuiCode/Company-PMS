@@ -18,11 +18,35 @@ request.interceptors.request.use((config) => {
 // 登录 API 路径（这些请求的 401 不应触发跳转）
 const LOGIN_PATHS = ['/auth/login', '/sso/oa-password-login', '/auth/auto-login']
 
+function formatErrorDetail(detail: unknown) {
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail)) {
+    const messages = detail.map(item => item?.msg).filter(Boolean)
+    return messages.length ? messages.join('；') : '请求参数校验失败'
+  }
+  if (detail && typeof detail === 'object') {
+    const structured = detail as {
+      code?: string
+      message?: string
+      fields?: Array<{ field_key?: string; message?: string }>
+    }
+    if (structured.code === 'FIELD_POLICY_VALIDATION_FAILED' || structured.code === 'FIELD_POLICY_INVALID') {
+      const fieldMessages = structured.fields
+        ?.map(field => [field.field_key, field.message].filter(Boolean).join('：'))
+        .filter(Boolean)
+      if (fieldMessages?.length) return fieldMessages.join('；')
+    }
+    if (structured.message) return structured.message
+  }
+  return '请求失败，请稍后重试'
+}
+
 // 响应拦截器：统一错误处理
 request.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const msg = error.response?.data?.detail || '请求失败，请稍后重试'
+    const detail = error.response?.data?.detail
+    const msg = formatErrorDetail(detail)
     const requestUrl = error.config?.url || ''
     const isLoginRequest = LOGIN_PATHS.some(p => requestUrl.includes(p))
 

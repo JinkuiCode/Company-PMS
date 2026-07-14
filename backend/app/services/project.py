@@ -26,6 +26,12 @@ from app.services.project_sheet_fields import (
     normalize_sheet_field_keys,
     validate_sheet_detail_updates,
 )
+from app.services.field_policy import (
+    MODULE_PROJECT_ARCHIVE,
+    MODULE_PROJECT_PROGRESS,
+    get_effective_field_policies,
+    validate_business_field_write,
+)
 
 
 def get_child_dept_ids(db: Session, parent_id: int) -> list[int]:
@@ -194,8 +200,41 @@ def _dump_detail_data(data: dict) -> str:
     return json.dumps(data, ensure_ascii=False, default=_jsonable)
 
 
-def get_project_sheet_field_metadata() -> dict[str, list[dict[str, Any]]]:
-    return get_project_sheet_field_registry_metadata()
+def _policy_map(db: Session, module_code: str) -> dict[str, dict[str, Any]]:
+    effective = get_effective_field_policies(db, module_code)
+    return {item["field_key"]: item for item in effective["items"]}
+
+
+def get_project_sheet_field_metadata(db: Session) -> dict[str, Any]:
+    metadata = get_project_sheet_field_registry_metadata()
+    effective = get_effective_field_policies(db, MODULE_PROJECT_PROGRESS)
+    policies = {item["field_key"]: item for item in effective["items"]}
+    visible_fields: list[dict[str, Any]] = []
+    for field in metadata["fields"]:
+        policy = policies.get(field["key"])
+        if not policy or not policy["visible"]:
+            continue
+        visible_fields.append({
+            **field,
+            "visible": policy["visible"],
+            "editable": bool(field["editable"] and policy["editable"]),
+            "required": policy["required"],
+            "list_available": bool(field["list_available"] and policy["list_available"]),
+            "quick_addable": bool(field["quick_addable"] and policy["list_available"]),
+        })
+    field_map = {field["key"]: field for field in visible_fields}
+    groups = [
+        {
+            **group,
+            "fields": [field_map[field["key"]] for field in group["fields"] if field["key"] in field_map],
+        }
+        for group in metadata["groups"]
+    ]
+    return {"groups": groups, "fields": visible_fields, "policies": effective["items"]}
+
+
+def get_archive_field_metadata(db: Session) -> dict[str, Any]:
+    return get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)
 
 
 def _build_project_sheet_values(
@@ -261,7 +300,14 @@ def get_project_list(db: Session, page: int = 1, page_size: int = 15,
     if not projects:
         return {"total": total, "items": []}
 
-    requested_sheet_keys = normalize_sheet_field_keys(sheet_field_keys)
+    allowed_sheet_keys = {
+        item["field_key"]
+        for item in get_effective_field_policies(db, MODULE_PROJECT_PROGRESS)["items"]
+        if item["visible"] and item["list_available"]
+    }
+    requested_sheet_keys = [
+        key for key in normalize_sheet_field_keys(sheet_field_keys) if key in allowed_sheet_keys
+    ]
     project_ids = [project.id for project in projects]
     dept_ids = sorted({project.dept_id for project in projects})
     pm_ids = sorted({project.pm_id for project in projects})
@@ -347,9 +393,26 @@ def get_project_sheet_detail(db: Session, project_id: int, scope_context: dict |
 
     detail = db.query(PmsProjectSheetDetail).filter(PmsProjectSheetDetail.project_id == project_id).first()
     values = _project_sheet_values(db, project, detail)
+    policies = _policy_map(db, MODULE_PROJECT_PROGRESS)
+    groups = build_sheet_detail_groups(values)
+    for group in groups:
+        governed_fields = []
+        for field in group["fields"]:
+            policy = policies.get(field["key"])
+            if not policy or not policy["visible"]:
+                continue
+            governed_fields.append({
+                **field,
+                "visible": policy["visible"],
+                "editable": bool(field["editable"] and policy["editable"]),
+                "required": policy["required"],
+                "list_available": bool(field["list_available"] and policy["list_available"]),
+                "quick_addable": bool(field["quick_addable"] and policy["list_available"]),
+            })
+        group["fields"] = governed_fields
     return {
         "project_id": project_id,
-        "groups": build_sheet_detail_groups(values),
+        "groups": groups,
         "updated_at": detail.updated_at if detail else None,
     }
 
@@ -389,6 +452,15 @@ def update_project_sheet_detail(
     detail = db.query(PmsProjectSheetDetail).filter(PmsProjectSheetDetail.project_id == project_id).first()
     before_data = _load_detail_data(detail)
     after_data = {**before_data, **detail_updates}
+    current_policy_values = _project_policy_values(db, project, detail)
+    validate_business_field_write(
+        db,
+        MODULE_PROJECT_PROGRESS,
+        current_values=current_policy_values,
+        updates={**_project_updates_to_policy_values(project_updates), **detail_updates},
+        entity_created_at=project.created_at,
+        is_create=False,
+    )
     before_snapshot = {
         **{f"project.{key}": getattr(project, key) for key in project_updates},
         **{f"detail.{key}": before_data.get(key) for key in detail_updates},
@@ -458,6 +530,52 @@ def validate_project_progress_workbench_updates(values: dict[str, Any]) -> dict[
     return accepted
 
 
+PROJECT_TO_POLICY_FIELD = {
+    "status": "node_status",
+    "start_date": "project_start_date",
+    "end_date": "original_planned_ship_date",
+    "design_progress": "design_progress",
+    "order_progress": "order_progress",
+    "kit_progress": "kit_progress",
+    "frame_progress": "frame_progress",
+    "dryer_progress": "dryer_progress",
+    "assembly_progress": "assembly_progress",
+    "test_progress": "test_progress",
+    "archive_id": "archive_id",
+    "project_code": "project_code",
+    "project_name": "project_name",
+    "product_line": "product_line",
+    "dept_id": "dept_id",
+    "pm_id": "pm_id",
+    "budget": "budget",
+    "description": "description",
+}
+
+
+def _project_updates_to_policy_values(values: dict[str, Any]) -> dict[str, Any]:
+    return {
+        PROJECT_TO_POLICY_FIELD[key]: value
+        for key, value in values.items()
+        if key in PROJECT_TO_POLICY_FIELD
+    }
+
+
+def _project_policy_values(
+    db: Session,
+    project: PmsProject,
+    detail: PmsProjectSheetDetail | None = None,
+) -> dict[str, Any]:
+    values = _project_sheet_values(db, project, detail)
+    values.update({
+        "archive_id": project.archive_id,
+        "dept_id": project.dept_id,
+        "pm_id": project.pm_id,
+        "budget": _jsonable(project.budget),
+        "description": project.description,
+    })
+    return values
+
+
 def create_project(
     db: Session,
     data: ProjectCreate,
@@ -468,6 +586,16 @@ def create_project(
     if db.query(PmsProject).filter(PmsProject.project_code == data.project_code).first():
         raise HTTPException(status_code=400, detail="项目编号已存在")
     values = data.model_dump()
+    provided_values = data.model_dump(exclude_unset=True)
+    raw_sheet_values = values.pop("sheet_values", {})
+    provided_values.pop("sheet_values", None)
+    try:
+        detail_updates = validate_sheet_detail_updates(raw_sheet_values)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={
+            "code": "FIELD_POLICY_VALIDATION_FAILED",
+            "fields": [{"field_key": "sheet_values", "message": str(exc)}],
+        }) from exc
     archive = None
     if values.get("archive_id"):
         archive = ensure_archive_access(db, values["archive_id"], scope_context)
@@ -484,22 +612,58 @@ def create_project(
         product_line=effective_product_line,
         scope_context=scope_context,
     )
-    proj = PmsProject(**values)
-    db.add(proj)
-    db.flush()
-    record_operation_log(
+    policy_initial_values = {
+        **_project_updates_to_policy_values({
+            key: value
+            for key, value in values.items()
+            if key not in provided_values
+            if key not in {"archive_id", "project_code", "project_name", "product_line"}
+        }),
+    }
+    policy_user_updates = {
+        **_project_updates_to_policy_values({
+            key: value
+            for key, value in provided_values.items()
+            if key not in {"archive_id", "project_code", "project_name", "product_line"}
+        }),
+        **detail_updates,
+    }
+    validate_business_field_write(
         db,
-        module="项目进度",
-        action="create",
-        entity_type="pms_project",
-        entity_id=proj.id,
-        entity_name=proj.project_name,
-        operator_id=operator_id,
-        request=request,
-        summary=f"创建项目进度：{proj.project_name}",
-        after_data=serialize_model(proj),
+        MODULE_PROJECT_PROGRESS,
+        current_values=policy_initial_values,
+        updates=policy_user_updates,
+        entity_created_at=None,
+        is_create=True,
     )
-    db.commit()
+
+    try:
+        proj = PmsProject(**values)
+        db.add(proj)
+        db.flush()
+        if detail_updates:
+            db.add(PmsProjectSheetDetail(
+                project_id=proj.id,
+                detail_data=_dump_detail_data(detail_updates),
+                created_by=operator_id,
+                updated_by=operator_id,
+            ))
+        record_operation_log(
+            db,
+            module="项目进度",
+            action="create",
+            entity_type="pms_project",
+            entity_id=proj.id,
+            entity_name=proj.project_name,
+            operator_id=operator_id,
+            request=request,
+            summary=f"创建项目进度：{proj.project_name}",
+            after_data={**serialize_model(proj), "sheet_values": detail_updates},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(proj)
     return {"msg": "创建成功", "id": proj.id}
 
@@ -532,6 +696,16 @@ def update_project(
         pm_id=update_data.get("pm_id", proj.pm_id),
         product_line=effective_product_line,
         scope_context=scope_context,
+    )
+
+    detail = db.query(PmsProjectSheetDetail).filter(PmsProjectSheetDetail.project_id == project_id).first()
+    validate_business_field_write(
+        db,
+        MODULE_PROJECT_PROGRESS,
+        current_values=_project_policy_values(db, proj, detail),
+        updates=_project_updates_to_policy_values(update_data),
+        entity_created_at=proj.created_at,
+        is_create=False,
     )
 
     for key, val in update_data.items():
@@ -797,6 +971,14 @@ def create_archive(
         product_line=values.get("product_line"),
         scope_context=scope_context,
     )
+    validate_business_field_write(
+        db,
+        MODULE_PROJECT_ARCHIVE,
+        current_values={},
+        updates=values,
+        entity_created_at=None,
+        is_create=True,
+    )
     archive = PmsProjectArchive(**values, created_by=user_id, updated_by=user_id)
     db.add(archive)
     db.flush()
@@ -852,6 +1034,16 @@ def update_archive(
         product_line=update_data.get("product_line", archive.product_line),
         scope_context=scope_context,
     )
+    validate_business_field_write(
+        db,
+        MODULE_PROJECT_ARCHIVE,
+        current_values={key: _jsonable(getattr(archive, key, None)) for key in {
+            item["field_key"] for item in get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)["items"]
+        }},
+        updates=update_data,
+        entity_created_at=archive.created_at,
+        is_create=False,
+    )
     # 项目编号唯一性校验
     if "project_code" in update_data and update_data["project_code"] != archive.project_code:
         if db.query(PmsProjectArchive).filter(PmsProjectArchive.project_code == update_data["project_code"]).first():
@@ -875,6 +1067,23 @@ def update_archive(
     )
     db.commit()
     return {"msg": "更新成功"}
+
+
+def validate_archive_for_business_operation(db: Session, archive: PmsProjectArchive) -> None:
+    """ERP 等后续业务操作前复用档案必填规则。"""
+    policies = get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)["items"]
+    current_values = {
+        item["field_key"]: _jsonable(getattr(archive, item["field_key"], None))
+        for item in policies
+    }
+    validate_business_field_write(
+        db,
+        MODULE_PROJECT_ARCHIVE,
+        current_values=current_values,
+        updates={},
+        entity_created_at=archive.created_at,
+        is_create=False,
+    )
 
 
 def delete_archive(

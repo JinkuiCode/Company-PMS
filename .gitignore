@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 .venv/
 .venv-deps312/
+.venv-deps312
 venv/
 
 # Node

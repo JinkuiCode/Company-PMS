@@ -436,6 +436,65 @@ def test_role_data_scope_is_constrained_on_create_update_and_storage():
     assert "1 <= role.data_scope <= 4" in authorization
 
 
+def test_role_templates_and_sso_default_are_fail_closed():
+    templates = read("app/services/role_templates.py")
+    sso = read("app/services/sso.py")
+
+    assert '"business_admin"' in templates
+    assert '"operator"' in templates
+    assert '"project:archive:sync"' in templates
+    assert '"system:field-policy:edit"' in templates
+    assert '"system:operation-log:view"' in templates
+    assert 'role_code == "operator"' in sso
+    assert "SysRole.status == 1" in sso
+    assert "默认操作员角色不存在或已禁用" in sso
+    assert "db.query(SysRole).first()" not in sso
+
+
+def test_sso_new_user_gets_only_active_operator_role():
+    from fastapi import HTTPException
+
+    from app.core.database import SessionLocal
+    from app.models.rbac import SysRole, SysUserRole
+    from app.models.user import SysUser
+    from app.services.sso import find_or_create_user
+
+    db = SessionLocal()
+    try:
+        operator = db.query(SysRole).filter(SysRole.role_code == "operator").first()
+        if not operator:
+            operator = SysRole(
+                role_name="SSO 操作员",
+                role_code="operator",
+                data_scope=3,
+                status=1,
+            )
+            db.add(operator)
+        else:
+            operator.status = 1
+        db.commit()
+
+        user = find_or_create_user(db, "oa-operator-user", "OA 操作员", "")
+        role_ids = {
+            role_id for (role_id,) in db.query(SysUserRole.role_id).filter(
+                SysUserRole.user_id == user.id
+            ).all()
+        }
+        assert role_ids == {operator.id}
+
+        operator.status = 0
+        db.commit()
+        try:
+            find_or_create_user(db, "oa-role-missing-user", "OA 缺省角色", "")
+        except HTTPException as exc:
+            assert exc.status_code == 503
+        else:
+            raise AssertionError("操作员角色禁用时 SSO 自动开户必须失败关闭")
+        assert db.query(SysUser).filter(SysUser.username == "oa-role-missing-user").first() is None
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     test_authorization_context_uses_only_active_roles_and_live_permissions()
     test_disabled_user_is_rejected_on_every_context_load()
@@ -447,4 +506,6 @@ if __name__ == "__main__":
     test_same_jwt_observes_permission_revoke_and_restore_immediately()
     test_local_recovery_script_contract()
     test_role_data_scope_is_constrained_on_create_update_and_storage()
+    test_role_templates_and_sso_default_are_fail_closed()
+    test_sso_new_user_gets_only_active_operator_role()
     print("rbac permission contract passed")
