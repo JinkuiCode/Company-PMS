@@ -60,7 +60,7 @@ FIELD_LABEL_OVERRIDES = {
     "parent_id": "上级节点",
     "password_hash": "密码",
     "pm_id": "项目经理",
-    "product_lines": "产品线范围",
+    "product_category_ids": "产品类别范围",
     "role_ids": "角色",
     "sheet_values": "项目总表字段",
     "sort": "排序",

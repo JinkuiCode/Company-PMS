@@ -59,7 +59,7 @@ assert.match(
 )
 assert.match(
   projectList,
-  /pms_project_progress_list_columns_v1/,
+  /pms_project_progress_list_columns_v2/,
   'Project progress list should persist selected columns and grid state with the agreed storage key',
 )
 assert.match(
@@ -89,7 +89,7 @@ assert.match(
 )
 assert.doesNotMatch(
   projectList,
-  /field === 'product_line'/,
+  /field === 'product_category'/,
   'Progress page should not save archive-derived product line edits',
 )
 assert.doesNotMatch(

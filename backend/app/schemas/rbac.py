@@ -7,7 +7,7 @@ class RoleBase(BaseModel):
     role_name: str = Field(..., max_length=64)
     role_code: str = Field(..., max_length=64)
     data_scope: int = Field(default=1, ge=1, le=4)
-    product_lines: str | None = None
+    product_category_ids: str | None = None
     status: int = Field(default=1)
     remark: str | None = None
 
@@ -19,7 +19,7 @@ class RoleCreate(RoleBase):
 class RoleUpdate(BaseModel):
     role_name: str | None = None
     data_scope: int | None = Field(default=None, ge=1, le=4)
-    product_lines: str | None = None
+    product_category_ids: str | None = None
     status: int | None = None
     remark: str | None = None
     menu_ids: list[int] | None = None  # 分配菜单权限时使用

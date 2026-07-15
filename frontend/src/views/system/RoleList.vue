@@ -15,10 +15,10 @@
             <span class="pms-status pms-status-neutral">{{ ['', '仅本人', '本部门', '本部门及子部门', '全部'][row.data_scope] }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="产品线" width="200">
+        <el-table-column label="产品类别" width="200">
           <template #default="{ row }">
-            <template v-if="row.product_lines">
-              <span v-for="pl in row.product_lines.split(',')" :key="pl" class="pms-chip role-product-chip">{{ productLineLabel(pl) }}</span>
+            <template v-if="row.product_category_ids">
+              <span v-for="pl in row.product_category_ids.split(',')" :key="pl" class="pms-chip role-product-chip">{{ productCategoryLabel(pl) }}</span>
             </template>
             <span v-else class="pms-chip">全部</span>
           </template>
@@ -77,17 +77,17 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            <el-form-item label="产品线">
-              <el-checkbox-group v-model="selectedProductLines">
+            <el-form-item label="产品类别">
+              <el-checkbox-group v-model="selectedProductCategories">
                 <el-checkbox
-                  v-for="pl in visibleProductLines"
+                  v-for="pl in visibleProductCategories"
                   :key="pl.value"
                   :label="pl.label"
                   :value="pl.value"
                   :disabled="pl.status === 0"
                 />
               </el-checkbox-group>
-              <div class="form-help">不选 = 不限制（全部产品线）</div>
+              <div class="form-help">不选 = 不限制（全部产品类别）</div>
             </el-form-item>
             <el-form-item label="备注">
               <el-input v-model="form.remark" type="textarea" :rows="2" />
@@ -153,23 +153,23 @@ const formRef = ref<FormInstance>()
 const permTreeRef = ref()
 const permTree = ref<any[]>([])
 const checkedMenuIds = ref<number[]>([])
-const productLineOptions = ref<EnumOption[]>([])
-const selectedProductLines = ref<string[]>([])
-const visibleProductLines = computed(() => {
-  const byValue = new Map(productLineOptions.value.map(item => [item.value, item]))
-  selectedProductLines.value.forEach(value => {
+const productCategoryOptions = ref<EnumOption[]>([])
+const selectedProductCategories = ref<string[]>([])
+const visibleProductCategories = computed(() => {
+  const byValue = new Map(productCategoryOptions.value.map(item => [item.value, item]))
+  selectedProductCategories.value.forEach(value => {
     if (!byValue.has(value)) byValue.set(value, { value, label: value, status: 0 })
   })
-  return Array.from(byValue.values()).filter(item => item.status !== 0 || selectedProductLines.value.includes(item.value))
+  return Array.from(byValue.values()).filter(item => item.status !== 0 || selectedProductCategories.value.includes(item.value))
 })
 
-function productLineLabel(value: string) {
-  return productLineOptions.value.find(item => item.value === value)?.label || value
+function productCategoryLabel(value: string) {
+  return productCategoryOptions.value.find(item => item.value === value)?.label || value
 }
 
-async function loadProductLines() {
-  const definition = await loadEnumOptions('product_line')
-  productLineOptions.value = definition.all_items
+async function loadProductCategories() {
+  const definition = await loadEnumOptions('product_category')
+  productCategoryOptions.value = definition.all_items
 }
 
 const form = reactive({
@@ -261,13 +261,13 @@ async function openDialog(row?: any) {
       id: row.id, role_name: row.role_name, role_code: row.role_code,
       data_scope: row.data_scope, status: row.status, remark: row.remark,
     })
-    selectedProductLines.value = row.product_lines ? row.product_lines.split(',').filter((s: string) => s.trim()) : []
+    selectedProductCategories.value = row.product_category_ids ? row.product_category_ids.split(',').filter((s: string) => s.trim()) : []
     // 加载该角色已有的权限
     const res: any = await request.get(`/roles/${row.id}/menus`)
     checkedMenuIds.value = res.menu_ids || []
   } else {
     Object.assign(form, { id: 0, role_name: '', role_code: '', data_scope: 1, status: 1, remark: '' })
-    selectedProductLines.value = []
+    selectedProductCategories.value = []
     checkedMenuIds.value = []
   }
 
@@ -300,7 +300,7 @@ async function handleSubmit() {
     role_name: form.role_name,
     role_code: form.role_code,
     data_scope: form.data_scope,
-    product_lines: selectedProductLines.value.length > 0 ? selectedProductLines.value.join(',') : null,
+    product_category_ids: selectedProductCategories.value.length > 0 ? selectedProductCategories.value.join(',') : null,
     status: form.status,
     remark: form.remark,
     menu_ids: menuIds,
@@ -346,7 +346,7 @@ function markButtonContainers() {
   })
 }
 
-onMounted(() => { fetchList(); loadProductLines() })
+onMounted(() => { fetchList(); loadProductCategories() })
 </script>
 
 <style scoped>

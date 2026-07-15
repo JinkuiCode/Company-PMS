@@ -48,21 +48,21 @@
         <el-input
           v-if="archiveFieldVisible('project_code') || archiveFieldVisible('project_name')"
           v-model="searchKeyword"
-          placeholder="搜索编号或名称"
+          placeholder="搜索编号、名称、客户或序列号"
           size="small"
           clearable
           style="width: 200px;"
           :prefix-icon="Search"
         />
         <el-select
-          v-if="archiveFieldVisible('product_line')"
-          v-model="filterProductLine"
-          placeholder="全部产品线"
+          v-if="archiveFieldVisible('product_category')"
+          v-model="filterProductCategory"
+          placeholder="全部产品类别"
           size="small"
           clearable
           style="width: 140px;"
         >
-          <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
+          <el-option v-for="item in filteredProductCategoryOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
         </el-select>
         <el-select
           v-if="archiveFieldVisible('status')"
@@ -116,15 +116,18 @@
         <!-- 新增档案保持集中录入，编辑使用右侧字段级抽屉。 -->
         <el-dialog v-model="dialogVisible" title="新增项目档案" width="560px">
           <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-            <el-form-item v-if="archiveFieldVisible('project_code')" label="项目编号" prop="project_code">
-              <el-input v-model="form.project_code" placeholder="请输入项目编号" :disabled="!archiveFieldEditable('project_code')" />
+            <el-form-item v-if="archiveFieldVisible('project_code')" label="项目编号" prop="project_code" :error="archiveCreateServerErrors.project_code">
+              <el-input v-model="form.project_code" placeholder="请输入项目编号" :disabled="!archiveFieldEditable('project_code')" @input="clearArchiveServerError(archiveCreateServerErrors, 'project_code')" />
             </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('project_name')" label="项目名称" prop="project_name">
-              <el-input v-model="form.project_name" placeholder="请输入项目名称" :disabled="!archiveFieldEditable('project_name')" />
+            <el-form-item v-if="archiveFieldVisible('project_name')" label="项目名称" prop="project_name" :error="archiveCreateServerErrors.project_name">
+              <el-input v-model="form.project_name" placeholder="请输入项目名称" :disabled="!archiveFieldEditable('project_name')" @input="clearArchiveServerError(archiveCreateServerErrors, 'project_name')" />
             </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('product_line')" label="产品线" prop="product_line">
-              <el-select v-model="form.product_line" placeholder="请选择产品线" style="width: 100%;" :disabled="!archiveFieldEditable('product_line')">
-                <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
+            <el-form-item v-if="archiveFieldVisible('customer')" label="客户" prop="customer">
+              <el-input v-model="form.customer" placeholder="请输入客户名称" :disabled="!archiveFieldEditable('customer')" />
+            </el-form-item>
+            <el-form-item v-if="archiveFieldVisible('product_category')" label="产品类别" prop="product_category">
+              <el-select v-model="form.product_category" placeholder="请选择产品类别" style="width: 100%;" :disabled="!archiveFieldEditable('product_category')">
+                <el-option v-for="item in filteredProductCategoryOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
               </el-select>
             </el-form-item>
             <el-form-item v-if="archiveFieldVisible('status')" label="状态" prop="status">
@@ -142,10 +145,13 @@
                 />
               </el-select>
             </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('product_type')" label="产品类型" prop="product_type">
-              <el-select v-model="form.product_type" placeholder="请选择产品类型" clearable style="width: 100%;" :disabled="!archiveFieldEditable('product_type')">
-                <el-option v-for="item in dictOptions.product_type" :key="item.value" :label="item.label" :value="item.value" />
+            <el-form-item v-if="archiveFieldVisible('equipment_series')" label="设备系列" prop="equipment_series">
+              <el-select v-model="form.equipment_series" placeholder="请选择设备系列" clearable style="width: 100%;" :disabled="!archiveFieldEditable('equipment_series')">
+                <el-option v-for="item in dictOptions.equipment_series" :key="item.value" :label="item.label" :value="Number(item.value)" />
               </el-select>
+            </el-form-item>
+            <el-form-item v-if="archiveFieldVisible('serial_no')" label="序列号" prop="serial_no" :error="archiveCreateServerErrors.serial_no">
+              <el-input v-model="form.serial_no" placeholder="请输入序列号" :disabled="!archiveFieldEditable('serial_no')" @input="clearArchiveServerError(archiveCreateServerErrors, 'serial_no')" />
             </el-form-item>
             <el-row :gutter="12">
               <el-col v-if="archiveFieldVisible('plan_start_date')" :span="12">
@@ -180,7 +186,7 @@
             <div class="archive-drawer-meta">
               <span>{{ selectedArchive.project_code || '-' }}</span>
               <span>·</span>
-              <span>{{ enumLabel('product_line', selectedArchive.product_line) }}</span>
+              <span>{{ enumLabel('product_category', selectedArchive.product_category) }}</span>
             </div>
           </div>
           <el-tooltip content="关闭档案编辑" placement="left">
@@ -232,23 +238,23 @@
                   </el-tooltip>
                 </div>
 
-                <el-form-item :prop="field.key" class="archive-drawer-form-item">
+                <el-form-item :prop="field.key" :error="archiveDrawerServerErrors[field.key]" class="archive-drawer-form-item">
                   <template v-if="archiveEditingField === field.key">
                     <div
                       class="archive-drawer-field-editor"
                       @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
                     >
                       <el-select
-                        v-if="field.key === 'product_line'"
+                        v-if="field.key === 'product_category'"
                         v-model="archiveDrawerForm[field.key]"
                         size="small"
                         filterable
-                        placeholder="选择产品线"
+                        placeholder="选择产品类别"
                         style="width: 100%;"
                         @change="commitArchiveFieldEdit"
                         @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
                       >
-                        <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
+                        <el-option v-for="item in filteredProductCategoryOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
                       </el-select>
                       <el-select
                         v-else-if="field.key === 'status'"
@@ -275,17 +281,17 @@
                         <el-option v-for="user in userList" :key="user.id" :label="user.real_name" :value="user.id" />
                       </el-select>
                       <el-select
-                        v-else-if="field.key === 'product_type'"
+                        v-else-if="field.key === 'equipment_series'"
                         v-model="archiveDrawerForm[field.key]"
                         size="small"
                         filterable
                         clearable
-                        placeholder="选择产品类型"
+                        placeholder="选择设备系列"
                         style="width: 100%;"
                         @change="commitArchiveFieldEdit"
                         @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
                       >
-                        <el-option v-for="item in dictOptions.product_type" :key="item.value" :label="item.label" :value="item.value" />
+                        <el-option v-for="item in dictOptions.equipment_series" :key="item.value" :label="item.label" :value="Number(item.value)" />
                       </el-select>
                       <el-date-picker
                         v-else-if="field.value_type === 'date'"
@@ -412,7 +418,7 @@ type ArchivePendingChange = {
   originalValue: unknown
 }
 
-const ARCHIVE_COLUMN_STORAGE_KEY = 'pms_project_archive_list_columns_v1'
+const ARCHIVE_COLUMN_STORAGE_KEY = 'pms_project_archive_list_columns_v2'
 const LEGACY_ARCHIVE_LAYOUT_KEY = 'pms_archive_grid_layout_v2'
 
 const ARCHIVE_COLUMN_GROUP_DEFINITIONS = [
@@ -420,10 +426,12 @@ const ARCHIVE_COLUMN_GROUP_DEFINITIONS = [
     key: 'business',
     label: '业务信息',
     fields: [
-      { key: 'product_line', label: '产品线', value_type: 'select', list_available: true, quick_addable: false },
+      { key: 'customer', label: '客户', value_type: 'text', list_available: true, quick_addable: false },
+      { key: 'product_category', label: '产品类别', value_type: 'select', list_available: true, quick_addable: false },
       { key: 'status', label: '状态', value_type: 'select', list_available: true, quick_addable: false },
       { key: 'manager_name', label: '负责人', value_type: 'text', list_available: true, quick_addable: false },
-      { key: 'product_type', label: '产品类型', value_type: 'select', list_available: true, quick_addable: false },
+      { key: 'equipment_series', label: '设备系列', value_type: 'select', list_available: true, quick_addable: false },
+      { key: 'serial_no', label: '序列号', value_type: 'text', list_available: true, quick_addable: false },
     ],
   },
   {
@@ -465,10 +473,12 @@ const ARCHIVE_DRAWER_GROUP_DEFINITIONS: Array<{
     fields: [
       { key: 'project_code', label: '项目编号', value_type: 'text', source_type: 'archive' },
       { key: 'project_name', label: '项目名称', value_type: 'text', source_type: 'archive' },
-      { key: 'product_line', label: '产品线', value_type: 'select', source_type: 'archive' },
+      { key: 'customer', label: '客户', value_type: 'text', source_type: 'archive' },
+      { key: 'product_category', label: '产品类别', value_type: 'select', source_type: 'archive' },
       { key: 'status', label: '状态', value_type: 'select', source_type: 'archive' },
       { key: 'manager_id', label: '负责人', value_type: 'user', source_type: 'archive' },
-      { key: 'product_type', label: '产品类型', value_type: 'select', source_type: 'archive' },
+      { key: 'equipment_series', label: '设备系列', value_type: 'select', source_type: 'archive' },
+      { key: 'serial_no', label: '序列号', value_type: 'text', source_type: 'archive' },
     ],
   },
   {
@@ -692,12 +702,12 @@ const archiveListRef = ref<InstanceType<typeof PmsDataList>>()
 const page = ref(1)
 const pageSize = ref(15)
 const filterStatus = ref<number | null>(null)
-const filterProductLine = ref<string | null>(null)
+const filterProductCategory = ref<number | null>(null)
 
 // 字典选项
 const dictOptions = reactive<Record<string, any[]>>({
-  product_line: [],
-  product_type: [],
+  product_category: [],
+  equipment_series: [],
   archive_status: [],
 })
 const dictLabelMaps = reactive<Record<string, Record<string, string>>>({})
@@ -707,16 +717,16 @@ function enumLabel(code: string, value: unknown) {
   return dictLabelMaps[code]?.[String(value)] || String(value)
 }
 
-// 用户允许的产品线
-const allowedProductLines = ref<string[] | null>(null)
+// 用户允许的产品类别
+const allowedProductCategoryIds = ref<number[] | null>(null)
 
-async function fetchAllowedProductLines() {
+async function fetchAllowedProductCategories() {
   try {
-    const res: any = await request.get('/auth/product-lines')
+    const res: any = await request.get('/auth/product-categories')
     if (res.unrestricted) {
-      allowedProductLines.value = null // null = 不限制
+      allowedProductCategoryIds.value = null // null = 不限制
     } else {
-      allowedProductLines.value = res.items || []
+      allowedProductCategoryIds.value = (res.items || []).map(Number)
     }
   } catch { /* ignore */ }
 }
@@ -730,11 +740,11 @@ async function fetchEffectiveArchiveFields() {
   }
 }
 
-// 筛选栏可用的产品线选项（取字典与权限的交集）
-const filteredProductLineOptions = computed(() => {
-  const all = dictOptions.product_line || []
-  if (allowedProductLines.value === null) return all
-  return all.filter(item => allowedProductLines.value!.includes(item.value))
+// 筛选栏可用的产品类别选项（取字典与权限的交集）
+const filteredProductCategoryOptions = computed(() => {
+  const all = dictOptions.product_category || []
+  if (allowedProductCategoryIds.value === null) return all
+  return all.filter(item => allowedProductCategoryIds.value!.includes(Number(item.value)))
 })
 
 const erpSyncStatusOptions: ListFilterOption[] = [
@@ -775,10 +785,12 @@ const archiveUserNameOptions = computed(() => uniqueValueOptions([
 const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
   { field: 'project_code', policyKey: 'project_code', label: '项目编号', type: 'text' },
   { field: 'project_name', policyKey: 'project_name', label: '项目名称', type: 'text' },
-  { field: 'product_line', policyKey: 'product_line', label: '产品线', type: 'select', options: () => filteredProductLineOptions.value },
+  { field: 'customer', policyKey: 'customer', label: '客户', type: 'text' },
+  { field: 'product_category', policyKey: 'product_category', label: '产品类别', type: 'select', options: () => filteredProductCategoryOptions.value.map(item => ({ ...item, value: Number(item.value) })) },
   { field: 'status', policyKey: 'status', label: '状态', type: 'select', options: () => dictFilterOptions('archive_status', true) },
   { field: 'manager_name', policyKey: 'manager_id', label: '负责人', type: 'select', options: () => archiveUserNameOptions.value },
-  { field: 'product_type', policyKey: 'product_type', label: '产品类型', type: 'select', options: () => dictFilterOptions('product_type') },
+  { field: 'equipment_series', policyKey: 'equipment_series', label: '设备系列', type: 'select', options: () => dictFilterOptions('equipment_series', true) },
+  { field: 'serial_no', policyKey: 'serial_no', label: '序列号', type: 'text' },
   { field: 'plan_start_date', policyKey: 'plan_start_date', label: '计划开始', type: 'date' },
   { field: 'plan_end_date', policyKey: 'plan_end_date', label: '计划结束', type: 'date' },
   { field: 'created_by_name', policyKey: 'created_by_name', label: '创建人', type: 'select', options: () => archiveUserNameOptions.value },
@@ -811,14 +823,16 @@ const filteredRowData = computed(() => {
     const kw = searchKeyword.value.toLowerCase()
     result = result.filter(r =>
       String(r.project_code ?? '').toLowerCase().includes(kw) ||
-      String(r.project_name ?? '').toLowerCase().includes(kw)
+      String(r.project_name ?? '').toLowerCase().includes(kw) ||
+      String(r.customer ?? '').toLowerCase().includes(kw) ||
+      String(r.serial_no ?? '').toLowerCase().includes(kw)
     )
   }
   if (filterStatus.value != null) {
     result = result.filter(r => r.status === filterStatus.value)
   }
-  if (filterProductLine.value) {
-    result = result.filter(r => r.product_line === filterProductLine.value)
+  if (filterProductCategory.value != null) {
+    result = result.filter(r => Number(r.product_category) === filterProductCategory.value)
   }
   return applyCustomFilters(result)
 })
@@ -840,13 +854,17 @@ const form = reactive({
   id: 0,
   project_code: '',
   project_name: '',
+  customer: '',
   status: 1,
   manager_id: null as number | null,
-  product_type: '',
-  product_line: '',
+  equipment_series: null as number | null,
+  product_category: null as number | null,
+  serial_no: '',
   plan_start_date: '',
   plan_end_date: '',
 })
+const archiveCreateServerErrors = reactive<Record<string, string>>({})
+const archiveDrawerServerErrors = reactive<Record<string, string>>({})
 const selectedArchive = ref<any | null>(null)
 const archiveDrawerFormRef = ref<FormInstance>()
 const archiveDrawerForm = reactive<Record<string, any>>({})
@@ -879,7 +897,7 @@ const archiveDrawerGroups = computed(() => ARCHIVE_DRAWER_GROUP_DEFINITIONS.map(
 const legacyArchiveRules: FormRules = {
   project_code: [{ required: true, message: '请输入项目编号' }],
   project_name: [{ required: true, message: '请输入项目名称' }],
-  product_line: [{ required: true, message: '请选择产品线' }],
+  product_category: [{ required: true, message: '请选择产品类别' }],
   plan_start_date: [{ required: true, message: '请选择计划开始日期' }],
   plan_end_date: [{ required: true, message: '请选择计划结束日期' }],
 }
@@ -931,9 +949,10 @@ const columnDefs = computed<ColDef[]>(() => [
     : []),
   { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left', hide: !archiveColumnListAvailable('project_code') },
   { colId: 'project_name', field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160, hide: !archiveColumnListAvailable('project_name') },
+  { ...archiveColumnVisibility('customer'), field: 'customer', headerName: '客户', width: 150, minWidth: 120 },
   {
-    ...archiveColumnVisibility('product_line'), field: 'product_line', headerName: '产品线', width: 110, minWidth: 100,
-    valueFormatter: (params: any) => enumLabel('product_line', params.value),
+    ...archiveColumnVisibility('product_category'), field: 'product_category', headerName: '产品类别', width: 110, minWidth: 100,
+    valueFormatter: (params: any) => enumLabel('product_category', params.value),
   },
   {
     ...archiveColumnVisibility('status'), field: 'status', headerName: '状态', width: 100, minWidth: 96,
@@ -946,9 +965,10 @@ const columnDefs = computed<ColDef[]>(() => [
   },
   { ...archiveColumnVisibility('manager_name'), field: 'manager_name', headerName: '负责人', width: 110, minWidth: 96 },
   {
-    ...archiveColumnVisibility('product_type'), field: 'product_type', headerName: '产品类型', width: 110, minWidth: 96,
-    valueFormatter: (params: any) => enumLabel('product_type', params.value),
+    ...archiveColumnVisibility('equipment_series'), field: 'equipment_series', headerName: '设备系列', width: 110, minWidth: 96,
+    valueFormatter: (params: any) => enumLabel('equipment_series', params.value),
   },
+  { ...archiveColumnVisibility('serial_no'), field: 'serial_no', headerName: '序列号', width: 130, minWidth: 110 },
   {
     ...archiveColumnVisibility('plan_start_date'), field: 'plan_start_date', headerName: '计划开始', width: 118, minWidth: 112,
     valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
@@ -1036,7 +1056,20 @@ function onSelectionChanged() {
 function openCreateDialog() {
   if (!hasPermission('project:archive:add')) return
   formRef.value?.resetFields()
-  Object.assign(form, { id: 0, project_code: '', project_name: '', status: 1, manager_id: null, product_type: '', product_line: '', plan_start_date: '', plan_end_date: '' })
+  clearArchiveServerErrors(archiveCreateServerErrors)
+  Object.assign(form, {
+    id: 0,
+    project_code: '',
+    project_name: '',
+    customer: '',
+    status: 1,
+    manager_id: null,
+    equipment_series: null,
+    product_category: null,
+    serial_no: '',
+    plan_start_date: '',
+    plan_end_date: '',
+  })
   dialogVisible.value = true
 }
 
@@ -1045,10 +1078,12 @@ function buildArchiveCreatePayload() {
   const values: Record<string, unknown> = {
     project_code: form.project_code,
     project_name: form.project_name,
+    customer: form.customer || null,
     status: form.status,
     manager_id: form.manager_id,
-    product_type: form.product_type || null,
-    product_line: form.product_line || null,
+    equipment_series: form.equipment_series,
+    product_category: form.product_category,
+    serial_no: form.serial_no || null,
     plan_start_date: form.plan_start_date || null,
     plan_end_date: form.plan_end_date || null,
   }
@@ -1067,10 +1102,12 @@ function archiveDrawerValues(row: any) {
   return {
     project_code: row.project_code || '',
     project_name: row.project_name || '',
+    customer: row.customer || '',
     status: row.status,
     manager_id: row.manager_id ?? null,
-    product_type: row.product_type || '',
-    product_line: row.product_line || '',
+    equipment_series: row.equipment_series ?? null,
+    product_category: row.product_category ?? null,
+    serial_no: row.serial_no || '',
     plan_start_date: archiveDateValue(row.plan_start_date),
     plan_end_date: archiveDateValue(row.plan_end_date),
     erp_sync_status: row.erp_sync_status || 'pending',
@@ -1085,6 +1122,7 @@ function archiveDrawerValues(row: any) {
 }
 
 function resetArchiveDrawer(row: any) {
+  clearArchiveServerErrors(archiveDrawerServerErrors)
   selectedArchive.value = { ...row }
   const values = archiveDrawerValues(row)
   Object.keys(archiveDrawerForm).forEach(key => delete archiveDrawerForm[key])
@@ -1130,13 +1168,11 @@ function archiveDrawerFieldRequired(field: ArchiveDrawerField) {
 
 function archiveDrawerFieldEditable(field: ArchiveDrawerField) {
   return field.source_type === 'archive'
-    && field.key !== 'project_code'
     && archiveFieldEditable(field.key)
     && hasPermission('project:archive:edit')
 }
 
 function archiveDrawerReadonlyReason(field: ArchiveDrawerField) {
-  if (field.key === 'project_code') return '项目编号创建后不可修改'
   if (field.source_type === 'system') return '系统维护字段，仅供查看'
   if (!hasPermission('project:archive:edit')) return '当前角色没有项目档案编辑权限'
   return '字段规则已设置为不可编辑'
@@ -1171,8 +1207,8 @@ function formatArchiveDrawerValue(field: ArchiveDrawerField) {
   }
   if (archiveDrawerValueEmpty(field)) return archiveDrawerFieldEditable(field) ? '点击填写' : '-'
   if (field.key === 'status') return enumLabel('archive_status', value)
-  if (field.key === 'product_line') return enumLabel('product_line', value)
-  if (field.key === 'product_type') return enumLabel('product_type', value)
+  if (field.key === 'product_category') return enumLabel('product_category', value)
+  if (field.key === 'equipment_series') return enumLabel('equipment_series', value)
   if (field.key === 'manager_id') {
     const user = userList.value.find(item => Number(item.id) === Number(value))
     return user?.real_name || selectedArchive.value?.manager_name || String(value)
@@ -1186,7 +1222,9 @@ function normalizeArchiveDrawerValue(field: ArchiveDrawerField, value: unknown) 
   if (field.key === 'status') return value === '' || value == null ? null : Number(value)
   if (field.key === 'manager_id') return value === '' || value == null ? null : Number(value)
   if (field.value_type === 'date') return value ? archiveDateValue(value) : null
-  if (['product_line', 'product_type'].includes(field.key)) return value || null
+  if (['product_category', 'equipment_series'].includes(field.key)) {
+    return value === '' || value == null ? null : Number(value)
+  }
   return value ?? ''
 }
 
@@ -1196,6 +1234,7 @@ function sameArchiveDrawerValue(left: unknown, right: unknown) {
 
 function startArchiveFieldEdit(field: ArchiveDrawerField) {
   if (!archiveDrawerFieldEditable(field)) return
+  clearArchiveServerError(archiveDrawerServerErrors, field.key)
   if (archiveEditingField.value && archiveEditingField.value !== field.key) commitArchiveFieldEdit()
   archiveEditingField.value = field.key
 }
@@ -1250,6 +1289,36 @@ function archivePolicyValidationFieldKeys(error: any): string[] {
     .filter(Boolean)
 }
 
+function clearArchiveServerErrors(target: Record<string, string>) {
+  Object.keys(target).forEach(key => delete target[key])
+}
+
+function clearArchiveServerError(target: Record<string, string>, fieldKey: string) {
+  delete target[fieldKey]
+}
+
+function archiveUniqueConflict(error: any) {
+  const detail = error?.response?.data?.detail
+  if (!['ARCHIVE_UNIQUE_CONFLICT', 'ARCHIVE_FIELD_REQUIRED'].includes(detail?.code) || !detail?.field_key) return null
+  return {
+    field_key: String(detail.field_key),
+    message: String(detail.message || '字段值已存在'),
+  }
+}
+
+async function focusArchiveUniqueConflict(
+  error: any,
+  targetForm: typeof formRef | typeof archiveDrawerFormRef,
+  targetErrors: Record<string, string>,
+) {
+  const conflict = archiveUniqueConflict(error)
+  if (!conflict) return false
+  targetErrors[conflict.field_key] = conflict.message
+  await nextTick()
+  targetForm.value?.scrollToField(conflict.field_key)
+  return true
+}
+
 async function focusArchivePolicyValidation(error: any, targetForm = formRef) {
   const fieldKeys = archivePolicyValidationFieldKeys(error)
   if (!fieldKeys.length) return
@@ -1272,6 +1341,7 @@ async function handleSubmit() {
     dialogVisible.value = false
     fetchList()
   } catch (error) {
+    if (await focusArchiveUniqueConflict(error, formRef, archiveCreateServerErrors)) return
     await focusArchivePolicyValidation(error)
   }
 }
@@ -1291,6 +1361,10 @@ async function saveArchiveDrawer(syncAfterSave: boolean) {
   try {
     if (Object.keys(payload).length) await request.put(`/projects/archives/${archiveId}`, payload)
   } catch (error) {
+    if (await focusArchiveUniqueConflict(error, archiveDrawerFormRef, archiveDrawerServerErrors)) {
+      archiveDrawerSaving.value = false
+      return
+    }
     await focusArchivePolicyValidation(error, archiveDrawerFormRef)
     archiveDrawerSaving.value = false
     return
@@ -1396,9 +1470,9 @@ async function handleBatchSync() {
 
 onMounted(async () => {
   await fetchEffectiveArchiveFields()
-  fetchList(); fetchUsers(); fetchAllowedProductLines()
-  fetchDictOptions('product_line')
-  fetchDictOptions('product_type')
+  fetchList(); fetchUsers(); fetchAllowedProductCategories()
+  fetchDictOptions('product_category')
+  fetchDictOptions('equipment_series')
   fetchDictOptions('archive_status')
   await resolveArchiveColumnPreferenceOwner()
   restoreSelectedArchiveColumnKeys()

@@ -15,7 +15,7 @@ class SysRole(Base):
     role_name: Mapped[str] = mapped_column(NVARCHAR(64), nullable=False, comment="角色名称")
     role_code: Mapped[str] = mapped_column(NVARCHAR(64), unique=True, nullable=False, comment="角色编码")
     data_scope: Mapped[int] = mapped_column(Integer, default=1, comment="数据权限: 1本人 2本部门 3本部门及子部门 4全部")
-    product_lines: Mapped[str | None] = mapped_column(NVARCHAR(256), default=None, comment="允许的产品线，逗号分隔，空=不限制")
+    product_category_ids: Mapped[str | None] = mapped_column(NVARCHAR(256), default=None, comment="允许的产品类别编号，逗号分隔，空=不限制")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1启用 0禁用")
     remark: Mapped[str | None] = mapped_column(NVARCHAR(256), default=None, comment="备注")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())

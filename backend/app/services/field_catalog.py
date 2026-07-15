@@ -167,14 +167,14 @@ ENUM_BINDINGS: dict[tuple[str, str], tuple[str | None, str]] = {
     ("department", "status"): (None, "system_fixed"),
     ("role", "status"): (None, "system_fixed"),
     ("role", "data_scope"): (None, "system_fixed"),
-    ("role", "product_lines"): ("product_line", "enum"),
+    ("role", "product_category_ids"): ("product_category", "enum"),
     ("project_archive", "status"): ("archive_status", "enum"),
-    ("project_archive", "product_line"): ("product_line", "enum"),
-    ("project_archive", "product_type"): ("product_type", "enum"),
+    ("project_archive", "product_category"): ("product_category", "enum"),
+    ("project_archive", "equipment_series"): ("equipment_series", "enum"),
     ("project_archive", "erp_sync_status"): (None, "system_fixed"),
     ("project_progress", "status"): ("project_status", "enum"),
     ("project_progress", "node_status"): ("project_status", "enum"),
-    ("project_progress", "product_line"): ("product_line", "enum"),
+    ("project_progress", "product_category"): ("product_category", "enum"),
     ("task", "status"): ("task_status", "enum"),
 }
 

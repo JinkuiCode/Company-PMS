@@ -1,4 +1,5 @@
 """业务枚举维护与兼容查询服务。"""
+from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, Request
 
@@ -17,8 +18,6 @@ def _normalize_item_value(dict_code: str, value: str) -> str:
     normalized = str(value).strip()
     if not normalized:
         raise HTTPException(status_code=400, detail="枚举存储值不能为空")
-    if dict_code == "product_line" and "," in normalized:
-        raise HTTPException(status_code=400, detail="产品线存储值不能包含逗号")
     return normalized
 
 
@@ -39,7 +38,7 @@ def get_dict_list(db: Session) -> list[dict]:
             "status": definition.status,
             "mode": config["mode"],
             "allow_add": config["mode"] == "configurable",
-            "allow_value_edit": config["mode"] == "configurable",
+            "allow_value_edit": False,
             "bindings": config["bindings"],
             "item_count": db.query(SysDictItem).filter(SysDictItem.dict_id == definition.id).count(),
         })
@@ -47,6 +46,20 @@ def get_dict_list(db: Session) -> list[dict]:
 
 
 # ==================== 字典项 ====================
+def _allocate_next_enum_value(db: Session, dict_id: int) -> str:
+    """原子递增并返回当前枚举的稳定数字流水。"""
+    statement = (
+        update(SysDict)
+        .where(SysDict.id == dict_id)
+        .values(next_value=func.coalesce(SysDict.next_value, 1) + 1)
+        .returning(SysDict.next_value)
+    )
+    next_value = db.execute(statement).scalar_one_or_none()
+    if next_value is None:
+        raise HTTPException(status_code=404, detail="枚举定义不存在或未开放维护")
+    return str(max(int(next_value) - 1, 1))
+
+
 def get_dict_items(db: Session, dict_id: int) -> list[dict]:
     """获取枚举值及引用数量。"""
     definition = db.query(SysDict).filter(SysDict.id == dict_id).first()
@@ -66,7 +79,7 @@ def get_dict_items(db: Session, dict_id: int) -> list[dict]:
             "sort": item.sort,
             "status": item.status,
             "reference_count": reference_count,
-            "value_locked": config["mode"] != "configurable" or reference_count > 0,
+            "value_locked": True,
             "deletable": config["mode"] == "configurable" and reference_count == 0,
             "created_at": item.created_at,
             "updated_at": item.updated_at,
@@ -82,15 +95,8 @@ def create_dict_item(db: Session, dict_id: int, data: DictItemCreate, operator_i
     config = get_enum_definition(d.dict_code, managed_only=True)
     if config["mode"] != "configurable":
         raise HTTPException(status_code=400, detail="固定流程枚举不允许新增存储值")
-    item_value = _normalize_item_value(d.dict_code, data.item_value)
-    # 检查同分类下 value 唯一性
-    existing = db.query(SysDictItem).filter(
-        SysDictItem.dict_id == dict_id,
-        SysDictItem.item_value == item_value,
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="该分类下已存在相同的存储值")
-    item_data = data.model_dump()
+    item_value = _allocate_next_enum_value(db, dict_id)
+    item_data = data.model_dump(exclude={"item_value"})
     item_data["item_value"] = item_value
     item = SysDictItem(dict_id=dict_id, **item_data)
     db.add(item)
@@ -127,10 +133,7 @@ def update_dict_item(db: Session, item_id: int, data: DictItemUpdate, operator_i
         update_data["item_value"] = _normalize_item_value(d.dict_code, update_data["item_value"])
     reference_count = count_enum_references(db, d.dict_code, item.item_value)
     if "item_value" in update_data and update_data["item_value"] != item.item_value:
-        if config["mode"] != "configurable":
-            raise HTTPException(status_code=400, detail="固定流程枚举不允许修改存储值")
-        if reference_count > 0:
-            raise HTTPException(status_code=409, detail="该枚举值已被引用，不可修改存储值")
+        raise HTTPException(status_code=400, detail="枚举存储值由系统生成或固定，不可修改")
     # 检查同分类下 value 唯一性
     if "item_value" in update_data:
         existing = db.query(SysDictItem).filter(

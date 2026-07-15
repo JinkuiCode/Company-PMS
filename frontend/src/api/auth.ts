@@ -28,7 +28,7 @@ export interface UserInfo {
   role_codes: string[]
   permissions: string[]
   data_scope: number
-  product_lines: string[] | null
+  product_category_ids: number[] | null
 }
 
 export function login(params: LoginParams): Promise<TokenResult> {

@@ -33,14 +33,14 @@ def test_authorization_context_uses_only_active_roles_and_live_permissions():
             role_name="有效角色",
             role_code="active-role",
             data_scope=2,
-            product_lines="Bench,Single",
+            product_category_ids="1,3",
             status=1,
         )
         disabled_role = SysRole(
             role_name="禁用角色",
             role_code="disabled-role",
             data_scope=4,
-            product_lines=None,
+            product_category_ids=None,
             status=0,
         )
         edit_menu = SysMenu(
@@ -71,7 +71,7 @@ def test_authorization_context_uses_only_active_roles_and_live_permissions():
         assert context["role_codes"] == ["active-role"]
         assert context["permissions"] == ["project:list:edit"]
         assert context["data_scope"] == 2
-        assert set(context["product_lines"]) == {"Bench", "Single"}
+        assert set(context["product_category_ids"]) == {1, 3}
         enforce_permission(context, "project:list:edit")
 
         try:
@@ -127,14 +127,14 @@ def test_multiple_active_roles_merge_permissions_and_widest_scope():
             role_name="本人角色",
             role_code="scope-self",
             data_scope=1,
-            product_lines="Bench",
+            product_category_ids="1",
             status=1,
         )
         wide_role = SysRole(
             role_name="全部角色",
             role_code="scope-all",
             data_scope=4,
-            product_lines=None,
+            product_category_ids=None,
             status=1,
         )
         view_menu = SysMenu(
@@ -167,12 +167,12 @@ def test_multiple_active_roles_merge_permissions_and_widest_scope():
             "project:list:edit:union-test",
         }
         assert context["data_scope"] == 4
-        assert context["product_lines"] is None
+        assert context["product_category_ids"] is None
     finally:
         db.close()
 
 
-def test_project_scope_denies_missing_department_and_uses_archive_product_line():
+def test_project_scope_denies_missing_department_and_uses_archive_product_category():
     from fastapi import HTTPException
 
     from app.core.database import Base, SessionLocal, engine
@@ -186,7 +186,7 @@ def test_project_scope_denies_missing_department_and_uses_archive_product_line()
         archive = PmsProjectArchive(
             project_code="RBAC-ARCHIVE",
             project_name="RBAC 档案",
-            product_line="Bench",
+            product_category=1,
             status=1,
         )
         db.add(archive)
@@ -195,7 +195,7 @@ def test_project_scope_denies_missing_department_and_uses_archive_product_line()
             project_code="RBAC-PROJECT",
             project_name="RBAC 项目",
             archive_id=archive.id,
-            product_line="Single",
+            product_category=3,
             dept_id=1,
             pm_id=1,
             status=1,
@@ -207,7 +207,7 @@ def test_project_scope_denies_missing_department_and_uses_archive_product_line()
             "user_id": 1,
             "dept_id": None,
             "data_scope": 2,
-            "product_lines": None,
+            "product_category_ids": None,
         }
         try:
             ensure_project_access(db, project.id, no_dept_context)
@@ -220,7 +220,7 @@ def test_project_scope_denies_missing_department_and_uses_archive_product_line()
             "user_id": 1,
             "dept_id": None,
             "data_scope": 4,
-            "product_lines": ["Single"],
+            "product_category_ids": [3],
         }
         try:
             ensure_project_access(db, project.id, stale_fallback_context)
@@ -233,13 +233,13 @@ def test_project_scope_denies_missing_department_and_uses_archive_product_line()
             "user_id": 1,
             "dept_id": None,
             "data_scope": 4,
-            "product_lines": None,
+            "product_category_ids": None,
         }
         try:
             update_project(
                 db,
                 project.id,
-                ProjectUpdate(product_line="Single"),
+                ProjectUpdate(product_category=3),
                 user_id=1,
                 scope_context=unrestricted_context,
             )
@@ -248,7 +248,7 @@ def test_project_scope_denies_missing_department_and_uses_archive_product_line()
         else:
             raise AssertionError("项目编辑权限不得绕过档案权限修改引用产品线")
         db.refresh(archive)
-        assert archive.product_line == "Bench"
+        assert archive.product_category == 1
     finally:
         db.close()
 
@@ -499,7 +499,7 @@ if __name__ == "__main__":
     test_authorization_context_uses_only_active_roles_and_live_permissions()
     test_disabled_user_is_rejected_on_every_context_load()
     test_multiple_active_roles_merge_permissions_and_widest_scope()
-    test_project_scope_denies_missing_department_and_uses_archive_product_line()
+    test_project_scope_denies_missing_department_and_uses_archive_product_category()
     test_role_menu_normalization_validates_nodes_and_adds_view_and_ancestors()
     test_init_db_does_not_restore_revoked_admin_permission()
     test_permission_dependencies_and_matrix_are_wired_to_apis()

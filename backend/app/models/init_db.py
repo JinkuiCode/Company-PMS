@@ -20,26 +20,13 @@ def _init_dict_data(db):
     return initialize_enum_definitions(db)
 
 
-def _ensure_role_product_lines_column():
-    """Upgrade existing role tables before any ORM query references the new column."""
-    inspector = inspect(engine)
-    if not inspector.has_table("sys_role"):
-        return
-
-    columns = {column["name"] for column in inspector.get_columns("sys_role")}
-    if "product_lines" in columns:
-        return
-
-    with engine.begin() as connection:
-        connection.execute(text("ALTER TABLE sys_role ADD product_lines NVARCHAR(256) NULL"))
-    print("迁移完成：sys_role 已添加产品线范围字段")
-
-
 def init_db():
     """创建所有表，并插入默认数据"""
     is_fresh_database = not inspect(engine).has_table("sys_role")
     Base.metadata.create_all(bind=engine)
-    _ensure_role_product_lines_column()
+    from app.services.project_archive_semantic_migration import upgrade_project_archive_semantics
+
+    upgrade_project_archive_semantics(engine)
 
     db = SessionLocal()
     try:
@@ -318,18 +305,6 @@ def init_db():
             db.commit()
             print("迁移完成：pms_project_archive 已添加 ERP 同步字段")
 
-        # 5.6 迁移：pms_project_archive 表添加新业务字段
-        try:
-            db.execute(text("SELECT product_line FROM pms_project_archive"))
-        except Exception:
-            db.execute(text("ALTER TABLE pms_project_archive ADD product_line NVARCHAR(32) NULL"))
-            db.execute(text("ALTER TABLE pms_project_archive ADD plan_start_date DATETIME NULL"))
-            db.execute(text("ALTER TABLE pms_project_archive ADD plan_end_date DATETIME NULL"))
-            db.execute(text("ALTER TABLE pms_project_archive ADD created_by INT NULL"))
-            db.execute(text("ALTER TABLE pms_project_archive ADD updated_by INT NULL"))
-            db.commit()
-            print("迁移完成：pms_project_archive 已添加 product_line/plan_start_date/plan_end_date/created_by/updated_by")
-
         # 5.7 迁移：pms_project_archive 表添加 erp_sync_by 字段
         try:
             db.execute(text("SELECT erp_sync_by FROM pms_project_archive"))
@@ -337,15 +312,6 @@ def init_db():
             db.execute(text("ALTER TABLE pms_project_archive ADD erp_sync_by INT NULL"))
             db.commit()
             print("迁移完成：pms_project_archive 已添加 erp_sync_by 字段")
-
-        # 5.8 迁移：pms_project 表添加产品线兜底字段
-        try:
-            db.execute(text("SELECT product_line FROM pms_project"))
-        except Exception:
-            db.rollback()
-            db.execute(text("ALTER TABLE pms_project ADD product_line NVARCHAR(32) NULL"))
-            db.commit()
-            print("迁移完成：pms_project 已添加 product_line 字段")
 
         # 5.9 迁移：pms_project 表添加阶段进度字段
         try:
@@ -376,7 +342,7 @@ def init_db():
             proj = PmsProject(
                 id=1, project_code="PMS-2026-001", project_name="企业内部项目管理系统",
                 dept_id=1, pm_id=admin.id, status=1,
-                product_line="Bench",
+                product_category=1,
                 start_date=datetime.date(2026, 5, 1), end_date=datetime.date(2026, 8, 31),
                 design_progress=100, order_progress=100, kit_progress=80, frame_progress=60,
                 dryer_progress=45, assembly_progress=30, test_progress=0,

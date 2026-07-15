@@ -43,27 +43,29 @@ ENUM_REGISTRY: dict[str, dict[str, Any]] = {
         "bindings": ["项目进度.status", "项目总表.node_status"],
         "items": [("1", "进行中"), ("2", "已完结"), ("3", "暂停")],
     },
-    "product_line": {
-        "name": "产品线",
-        "description": "档案、项目进度及角色范围共用产品线",
+    "product_category": {
+        "name": "产品类别",
+        "description": "档案、项目进度及角色范围共用产品类别",
         "mode": "configurable",
+        "value_strategy": "numeric_sequence",
         "visible": True,
         "sort": 12,
         "table_name": "pms_project_archive",
-        "field_name": "product_line",
-        "bindings": ["项目档案.product_line", "项目进度.product_line", "角色.product_lines"],
-        "items": [("Bench", "Bench"), ("光伏", "光伏"), ("Single", "Single"), ("HOTSPM", "HOTSPM")],
+        "field_name": "product_category",
+        "bindings": ["项目档案.product_category", "项目进度.product_category", "角色.product_category_ids"],
+        "items": [("1", "Bench"), ("2", "光伏"), ("3", "Single"), ("4", "HOTSPM")],
     },
-    "product_type": {
-        "name": "产品类型",
-        "description": "项目档案产品类型",
+    "equipment_series": {
+        "name": "设备系列",
+        "description": "项目档案设备系列",
         "mode": "configurable",
+        "value_strategy": "numeric_sequence",
         "visible": True,
         "sort": 13,
         "table_name": "pms_project_archive",
-        "field_name": "product_type",
-        "bindings": ["项目档案.product_type"],
-        "items": [("链式", "链式"), ("槽式", "槽式")],
+        "field_name": "equipment_series",
+        "bindings": ["项目档案.equipment_series"],
+        "items": [("1", "链式"), ("2", "槽式")],
     },
     "task_status": {
         "name": "任务状态",
@@ -148,6 +150,16 @@ def initialize_enum_definitions(db: Session) -> list[str]:
                         status=1,
                     ))
 
+        numeric_values = [
+            int(item.item_value)
+            for item in db.query(SysDictItem).filter(SysDictItem.dict_id == definition.id).all()
+            if str(item.item_value).isdigit()
+        ]
+        definition.next_value = max(
+            definition.next_value or 1,
+            max(numeric_values, default=0) + 1,
+        )
+
         if config["mode"] == "workflow":
             registered_values = {value for value, _label in config["items"]}
             for item in existing_items:
@@ -179,7 +191,7 @@ def get_enum_definition(code: str, *, managed_only: bool = False) -> dict[str, A
 def count_enum_references(db: Session, code: str, value: str) -> int:
     """按注册绑定统计精确引用数量。"""
     integer_value = None
-    if code in {"archive_status", "project_status", "task_status"}:
+    if code in {"archive_status", "project_status", "task_status", "product_category", "equipment_series"}:
         try:
             integer_value = int(value)
         except (TypeError, ValueError):
@@ -190,15 +202,16 @@ def count_enum_references(db: Session, code: str, value: str) -> int:
         return db.query(PmsProject).filter(PmsProject.status == integer_value).count()
     if code == "task_status":
         return db.query(PmsTask).filter(PmsTask.status == integer_value).count()
-    if code == "product_type":
-        return db.query(PmsProjectArchive).filter(PmsProjectArchive.product_type == value).count()
-    if code == "product_line":
-        archive_count = db.query(PmsProjectArchive).filter(PmsProjectArchive.product_line == value).count()
-        project_count = db.query(PmsProject).filter(PmsProject.product_line == value).count()
+    if code == "equipment_series":
+        return db.query(PmsProjectArchive).filter(PmsProjectArchive.equipment_series == integer_value).count()
+    if code == "product_category":
+        numeric_value = integer_value
+        archive_count = db.query(PmsProjectArchive).filter(PmsProjectArchive.product_category == numeric_value).count()
+        project_count = db.query(PmsProject).filter(PmsProject.product_category == numeric_value).count()
         role_count = sum(
             1
-            for (raw_lines,) in db.query(SysRole.product_lines).filter(SysRole.product_lines.isnot(None)).all()
-            if value in {line.strip() for line in (raw_lines or "").split(",") if line.strip()}
+            for (raw_ids,) in db.query(SysRole.product_category_ids).filter(SysRole.product_category_ids.isnot(None)).all()
+            if numeric_value in {int(item.strip()) for item in (raw_ids or "").split(",") if item.strip().isdigit()}
         )
         return archive_count + project_count + role_count
     return 0

@@ -72,5 +72,30 @@ assert.match(
   /<el-dialog[\s\S]*?title="新增项目档案"/,
   'Creating an archive should continue to use the focused creation dialog',
 )
+assert.match(archive, /客户/, 'Project archives should expose the customer field')
+assert.match(archive, /产品类别/, 'Project archives should use the product-category label')
+assert.match(archive, /设备系列/, 'Project archives should use the equipment-series label')
+assert.match(archive, /序列号/, 'Project archives should expose the serial-number field')
+assert.doesNotMatch(
+  archive,
+  /\bproduct_line\b|\bproduct_type\b/,
+  'Project archive UI must not retain legacy product-line or product-type API fields',
+)
+assert.doesNotMatch(
+  archive,
+  /field\.key === 'project_code'/,
+  'Project code should no longer be blocked from drawer editing',
+)
+assert.match(archive, /\/auth\/product-categories/, 'Product-category scope should use the semantic API route')
+assert.match(
+  archive,
+  /filteredProductCategoryOptions[\s\S]*?:value="Number\(item\.value\)"/,
+  'Configurable business enums should enter archive forms as numeric values',
+)
+assert.match(
+  archive,
+  /ARCHIVE_UNIQUE_CONFLICT[\s\S]*?field_key/,
+  'Archive uniqueness conflicts should be routed back to the matching field',
+)
 
 console.log('archive edit drawer contract passed')

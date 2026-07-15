@@ -114,12 +114,12 @@ def update_project_sheet_detail(
 def list_archives(
     page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000),
     keyword: str | None = Query(None), status: int | None = Query(None),
-    product_line: str | None = Query(None),
+    product_category: int | None = Query(None),
     db: Session = Depends(get_db),
     scope_ctx: dict = Depends(require_permission("project:archive:view")),
 ):
     return project_service.get_archive_list(
-        db, page, page_size, keyword, status, product_line, scope_context=scope_ctx
+        db, page, page_size, keyword, status, product_category, scope_context=scope_ctx
     )
 
 

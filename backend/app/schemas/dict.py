@@ -42,7 +42,7 @@ class DictResponse(BaseModel):
 
 # ========== 字典项 ==========
 class DictItemCreate(BaseModel):
-    item_value: str = Field(..., max_length=64)
+    item_value: str | None = Field(default=None, max_length=64)
     item_label: str = Field(..., max_length=64)
     field_type: str | None = None
     description: str | None = None

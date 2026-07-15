@@ -36,7 +36,7 @@ assert.match(
 )
 assert.match(
   archive,
-  /pms_project_archive_list_columns_v1/,
+  /pms_project_archive_list_columns_v2/,
   'Project archive should persist column selection and layout with the agreed storage key',
 )
 assert.match(

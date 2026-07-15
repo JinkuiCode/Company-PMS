@@ -40,7 +40,7 @@ def test_workbench_save_only_accepts_editable_project_sheet_fields():
     )
     assert accepted == {"status": 1, "end_date": "2026-08-31", "design_progress": 0}
 
-    for payload in [{"product_line": "Bench"}, {"project_name": "不可从进度页修改"}, {"unknown": "x"}]:
+    for payload in [{"product_category": 1}, {"project_name": "不可从进度页修改"}, {"unknown": "x"}]:
         try:
             validate_project_progress_workbench_updates(payload)
         except ValueError as exc:
@@ -65,39 +65,39 @@ def test_workbench_save_updates_both_sources_once_and_rejects_partial_writes():
         project = db.query(PmsProject).first()
         assert project is not None
         old_log_count = db.query(SysOperationLog).count()
-        customer = f"原子保存-{uuid4().hex}"
+        category = f"原子保存-{uuid4().hex}"
         saved_progress = 17 if project.design_progress != 17 else 18
 
         update_project_sheet_detail(
             db,
             project.id,
             ProjectSheetDetailUpdate(
-                values={"customer": customer},
+                values={"category": category},
                 project_values={"design_progress": saved_progress},
             ),
             operator_id=1,
-            scope_context={"data_scope": 4, "product_lines": None},
+            scope_context={"data_scope": 4, "product_category_ids": None},
         )
 
         db.refresh(project)
         detail = db.query(PmsProjectSheetDetail).filter(PmsProjectSheetDetail.project_id == project.id).first()
         log = db.query(SysOperationLog).order_by(SysOperationLog.id.desc()).first()
         assert project.design_progress == saved_progress
-        assert detail is not None and customer in (detail.detail_data or "")
+        assert detail is not None and category in (detail.detail_data or "")
         assert db.query(SysOperationLog).count() == old_log_count + 1
         assert log is not None and '"project.design_progress"' in (log.diff_data or "")
-        assert '"detail.customer"' in (log.diff_data or "")
+        assert '"detail.category"' in (log.diff_data or "")
 
         try:
             update_project_sheet_detail(
                 db,
                 project.id,
                 ProjectSheetDetailUpdate(
-                    values={"product_line": "不允许从进度页修改"},
+                    values={"product_category": 1},
                     project_values={"design_progress": 57},
                 ),
                 operator_id=1,
-                scope_context={"data_scope": 4, "product_lines": None},
+                scope_context={"data_scope": 4, "product_category_ids": None},
             )
         except HTTPException as exc:
             assert exc.status_code == 400

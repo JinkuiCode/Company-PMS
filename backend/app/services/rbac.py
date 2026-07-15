@@ -15,8 +15,11 @@ from app.services.operation_log import record_operation_log, serialize_model
 from app.services.enum_registry import validate_enum_value
 
 
-def _split_product_lines(raw_value: str | None) -> list[str]:
-    return [value.strip() for value in (raw_value or "").split(",") if value.strip()]
+def _split_product_category_ids(raw_value: str | None) -> list[int]:
+    values = [value.strip() for value in (raw_value or "").split(",") if value.strip()]
+    if any(not value.isdigit() for value in values):
+        raise HTTPException(status_code=422, detail="产品类别范围只能使用数字枚举编号")
+    return [int(value) for value in values]
 
 
 RECOVERY_PERMISSIONS = {
@@ -281,8 +284,8 @@ def create_role(db: Session, data: RoleCreate, operator_id: int | None = None, r
     if db.query(SysRole).filter(SysRole.role_code == data.role_code).first():
         raise HTTPException(status_code=400, detail="角色编码已存在")
     normalized_menu_ids = normalize_role_menu_ids(db, data.menu_ids)
-    for product_line in _split_product_lines(data.product_lines):
-        validate_enum_value(db, "product_line", product_line)
+    for product_category_id in _split_product_category_ids(data.product_category_ids):
+        validate_enum_value(db, "product_category", product_category_id)
     try:
         role_data = data.model_dump(exclude={"menu_ids"})
         role = SysRole(**role_data)
@@ -322,14 +325,14 @@ def update_role(db: Session, role_id: int, data: RoleUpdate, operator_id: int | 
     normalized_menu_ids = normalize_role_menu_ids(db, data.menu_ids) if data.menu_ids is not None else before_menu_ids
     try:
         update_data = data.model_dump(exclude_unset=True, exclude={"menu_ids"})
-        if "product_lines" in update_data:
-            current_lines = _split_product_lines(role.product_lines)
-            for product_line in _split_product_lines(update_data["product_lines"]):
+        if "product_category_ids" in update_data:
+            current_category_ids = _split_product_category_ids(role.product_category_ids)
+            for product_category_id in _split_product_category_ids(update_data["product_category_ids"]):
                 validate_enum_value(
                     db,
-                    "product_line",
-                    product_line,
-                    current_value=product_line if product_line in current_lines else None,
+                    "product_category",
+                    product_category_id,
+                    current_value=product_category_id if product_category_id in current_category_ids else None,
                 )
         for key, val in update_data.items():
             setattr(role, key, val)

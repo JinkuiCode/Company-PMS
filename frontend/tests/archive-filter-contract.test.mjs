@@ -14,10 +14,10 @@ assert.match(archive, /PmsListFilters/, 'Project archive should render custom fi
 for (const field of [
   'project_code',
   'project_name',
-  'product_line',
+  'product_category',
   'status',
   'manager_name',
-  'product_type',
+  'equipment_series',
   'plan_start_date',
   'plan_end_date',
   'erp_sync_status',

@@ -35,8 +35,8 @@ def test_sqlite_init_db() -> None:
         assert {
             "archive_status",
             "project_status",
-            "product_line",
-            "product_type",
+            "product_category",
+            "equipment_series",
             "task_status",
             "erp_sync_status",
             "data_scope",
