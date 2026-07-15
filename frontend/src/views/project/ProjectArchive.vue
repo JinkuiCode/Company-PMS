@@ -1,9 +1,14 @@
 <template>
-  <PmsDataList
-    ref="archiveListRef"
-    class="project-archive-page"
-    scrollbar-label="项目档案表格横向滚动条"
+  <section
+    class="project-archive-workbench"
+    :class="{ 'is-drawer-open': selectedArchive }"
   >
+    <div class="archive-list-shell">
+      <PmsDataList
+        ref="archiveListRef"
+        class="project-archive-page"
+        scrollbar-label="项目档案表格横向滚动条"
+      >
     <template #toolbar-left>
         <el-button v-if="hasPermission('project:archive:add')" type="primary" size="small" @click="openCreateDialog">
           <el-icon style="margin-right:4px;"><Plus /></el-icon>
@@ -93,7 +98,6 @@
         @column-moved="handleArchiveGridStructureChanged"
         @column-pinned="handleArchiveGridStructureChanged"
         @displayed-columns-changed="handleArchiveGridStructureChanged"
-        @row-double-clicked="onRowDoubleClicked"
         @selection-changed="onSelectionChanged"
       />
     </template>
@@ -109,66 +113,257 @@
       />
     </template>
 
-    <!-- 新增 / 编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目档案' : '新增项目档案'" width="560px">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-form-item v-if="archiveFieldVisible('project_code')" label="项目编号" prop="project_code">
-          <el-input v-model="form.project_code" placeholder="请输入项目编号" :disabled="isEdit || !archiveFieldEditable('project_code')" />
-        </el-form-item>
-        <el-form-item v-if="archiveFieldVisible('project_name')" label="项目名称" prop="project_name">
-          <el-input v-model="form.project_name" placeholder="请输入项目名称" :disabled="!archiveFieldEditable('project_name')" />
-        </el-form-item>
-        <el-form-item v-if="archiveFieldVisible('product_line')" label="产品线" prop="product_line">
-          <el-select v-model="form.product_line" placeholder="请选择产品线" style="width: 100%;" :disabled="!archiveFieldEditable('product_line')">
-            <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="archiveFieldVisible('status')" label="状态" prop="status">
-          <el-select v-model="form.status" style="width: 100%;" :disabled="!archiveFieldEditable('status')">
-            <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="archiveFieldVisible('manager_id')" label="负责人" prop="manager_id">
-          <el-select v-model="form.manager_id" placeholder="请选择负责人" clearable style="width: 100%;" :disabled="!archiveFieldEditable('manager_id')">
-            <el-option
-              v-for="u in userList"
-              :key="u.id"
-              :label="u.real_name"
-              :value="u.id"
+        <!-- 新增档案保持集中录入，编辑使用右侧字段级抽屉。 -->
+        <el-dialog v-model="dialogVisible" title="新增项目档案" width="560px">
+          <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+            <el-form-item v-if="archiveFieldVisible('project_code')" label="项目编号" prop="project_code">
+              <el-input v-model="form.project_code" placeholder="请输入项目编号" :disabled="!archiveFieldEditable('project_code')" />
+            </el-form-item>
+            <el-form-item v-if="archiveFieldVisible('project_name')" label="项目名称" prop="project_name">
+              <el-input v-model="form.project_name" placeholder="请输入项目名称" :disabled="!archiveFieldEditable('project_name')" />
+            </el-form-item>
+            <el-form-item v-if="archiveFieldVisible('product_line')" label="产品线" prop="product_line">
+              <el-select v-model="form.product_line" placeholder="请选择产品线" style="width: 100%;" :disabled="!archiveFieldEditable('product_line')">
+                <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="archiveFieldVisible('status')" label="状态" prop="status">
+              <el-select v-model="form.status" style="width: 100%;" :disabled="!archiveFieldEditable('status')">
+                <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="archiveFieldVisible('manager_id')" label="负责人" prop="manager_id">
+              <el-select v-model="form.manager_id" placeholder="请选择负责人" clearable style="width: 100%;" :disabled="!archiveFieldEditable('manager_id')">
+                <el-option
+                  v-for="u in userList"
+                  :key="u.id"
+                  :label="u.real_name"
+                  :value="u.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="archiveFieldVisible('product_type')" label="产品类型" prop="product_type">
+              <el-select v-model="form.product_type" placeholder="请选择产品类型" clearable style="width: 100%;" :disabled="!archiveFieldEditable('product_type')">
+                <el-option v-for="item in dictOptions.product_type" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+            <el-row :gutter="12">
+              <el-col v-if="archiveFieldVisible('plan_start_date')" :span="12">
+                <el-form-item label="计划开始" prop="plan_start_date">
+                  <el-date-picker v-model="form.plan_start_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_start_date')" />
+                </el-form-item>
+              </el-col>
+              <el-col v-if="archiveFieldVisible('plan_end_date')" :span="12">
+                <el-form-item label="计划结束" prop="plan_end_date">
+                  <el-date-picker v-model="form.plan_end_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_end_date')" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+          <template #footer>
+            <el-button @click="dialogVisible = false">取消</el-button>
+            <el-button v-if="hasPermission('project:archive:add')" type="primary" @click="handleSubmit">保存</el-button>
+          </template>
+        </el-dialog>
+      </PmsDataList>
+    </div>
+
+    <aside
+      v-if="selectedArchive"
+      class="archive-edit-drawer"
+      aria-label="项目档案编辑"
+    >
+      <header class="archive-drawer-head">
+        <div class="archive-drawer-title-row">
+          <div class="archive-drawer-identity">
+            <div class="archive-drawer-title">{{ selectedArchive.project_name || '-' }}</div>
+            <div class="archive-drawer-meta">
+              <span>{{ selectedArchive.project_code || '-' }}</span>
+              <span>·</span>
+              <span>{{ enumLabel('product_line', selectedArchive.product_line) }}</span>
+            </div>
+          </div>
+          <el-tooltip content="关闭档案编辑" placement="left">
+            <el-button
+              class="archive-drawer-close"
+              :icon="Close"
+              text
+              circle
+              aria-label="关闭档案编辑"
+              @click="closeArchiveDrawer"
             />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="archiveFieldVisible('product_type')" label="产品类型" prop="product_type">
-          <el-select v-model="form.product_type" placeholder="请选择产品类型" clearable style="width: 100%;" :disabled="!archiveFieldEditable('product_type')">
-            <el-option v-for="item in dictOptions.product_type" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
-        </el-form-item>
-        <el-row :gutter="12">
-          <el-col v-if="archiveFieldVisible('plan_start_date')" :span="12">
-            <el-form-item label="计划开始" prop="plan_start_date">
-              <el-date-picker v-model="form.plan_start_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_start_date')" />
-            </el-form-item>
-          </el-col>
-          <el-col v-if="archiveFieldVisible('plan_end_date')" :span="12">
-            <el-form-item label="计划结束" prop="plan_end_date">
-              <el-date-picker v-model="form.plan_end_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_end_date')" />
-            </el-form-item>
-          </el-col>
-        </el-row>
+          </el-tooltip>
+        </div>
+      </header>
+
+      <el-form
+        ref="archiveDrawerFormRef"
+        :model="archiveDrawerForm"
+        :rules="rules"
+        class="archive-drawer-form"
+        label-position="top"
+      >
+        <div class="archive-drawer-body">
+          <section
+            v-for="group in archiveDrawerGroups"
+            :key="group.key"
+            class="archive-drawer-section"
+          >
+            <h3 class="archive-drawer-section-title">{{ group.label }}</h3>
+            <div class="archive-drawer-field-list">
+              <div
+                v-for="field in group.fields"
+                :key="field.key"
+                class="archive-drawer-field-row"
+                :class="{
+                  editing: archiveEditingField === field.key,
+                  'is-long-text': field.value_type === 'long_text',
+                }"
+              >
+                <div class="archive-drawer-field-label">
+                  <span>{{ field.label }}</span>
+                  <span v-if="archiveDrawerFieldRequired(field)" class="archive-required-mark" aria-label="必填">*</span>
+                  <el-tooltip
+                    v-if="!archiveDrawerFieldEditable(field)"
+                    :content="archiveDrawerReadonlyReason(field)"
+                    placement="top"
+                  >
+                    <el-icon class="archive-field-lock" aria-hidden="true"><Lock /></el-icon>
+                  </el-tooltip>
+                </div>
+
+                <el-form-item :prop="field.key" class="archive-drawer-form-item">
+                  <template v-if="archiveEditingField === field.key">
+                    <div
+                      class="archive-drawer-field-editor"
+                      @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+                    >
+                      <el-select
+                        v-if="field.key === 'product_line'"
+                        v-model="archiveDrawerForm[field.key]"
+                        size="small"
+                        filterable
+                        placeholder="选择产品线"
+                        style="width: 100%;"
+                        @change="commitArchiveFieldEdit"
+                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+                      >
+                        <el-option v-for="item in filteredProductLineOptions" :key="item.value" :label="item.label" :value="item.value" />
+                      </el-select>
+                      <el-select
+                        v-else-if="field.key === 'status'"
+                        v-model="archiveDrawerForm[field.key]"
+                        size="small"
+                        placeholder="选择状态"
+                        style="width: 100%;"
+                        @change="commitArchiveFieldEdit"
+                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+                      >
+                        <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
+                      </el-select>
+                      <el-select
+                        v-else-if="field.key === 'manager_id'"
+                        v-model="archiveDrawerForm[field.key]"
+                        size="small"
+                        filterable
+                        clearable
+                        placeholder="选择负责人"
+                        style="width: 100%;"
+                        @change="commitArchiveFieldEdit"
+                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+                      >
+                        <el-option v-for="user in userList" :key="user.id" :label="user.real_name" :value="user.id" />
+                      </el-select>
+                      <el-select
+                        v-else-if="field.key === 'product_type'"
+                        v-model="archiveDrawerForm[field.key]"
+                        size="small"
+                        filterable
+                        clearable
+                        placeholder="选择产品类型"
+                        style="width: 100%;"
+                        @change="commitArchiveFieldEdit"
+                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+                      >
+                        <el-option v-for="item in dictOptions.product_type" :key="item.value" :label="item.label" :value="item.value" />
+                      </el-select>
+                      <el-date-picker
+                        v-else-if="field.value_type === 'date'"
+                        v-model="archiveDrawerForm[field.key]"
+                        type="date"
+                        size="small"
+                        value-format="YYYY-MM-DD"
+                        placeholder="选择日期"
+                        style="width: 100%;"
+                        @change="commitArchiveFieldEdit"
+                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+                      />
+                      <el-input
+                        v-else
+                        v-model="archiveDrawerForm[field.key]"
+                        size="small"
+                        :placeholder="`输入${field.label}`"
+                        @keydown.enter.exact.prevent="commitArchiveFieldEdit"
+                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+                      />
+                    </div>
+                  </template>
+
+                  <button
+                    v-else-if="archiveDrawerFieldEditable(field)"
+                    type="button"
+                    class="archive-drawer-field-value"
+                    :class="{ 'is-empty': archiveDrawerValueEmpty(field) }"
+                    :aria-label="`编辑${field.label}`"
+                    @click="startArchiveFieldEdit(field)"
+                  >
+                    {{ formatArchiveDrawerValue(field) }}
+                  </button>
+                  <div
+                    v-else
+                    class="archive-drawer-field-static"
+                    :class="{ 'is-empty': archiveDrawerValueEmpty(field) }"
+                  >
+                    {{ formatArchiveDrawerValue(field) }}
+                  </div>
+                </el-form-item>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="archive-drawer-savebar">
+          <el-button
+            class="archive-drawer-save"
+            type="primary"
+            size="small"
+            :disabled="!archivePendingChangeCount"
+            :loading="archiveDrawerSaving"
+            @click="saveArchiveDrawer(false)"
+          >
+            保存修改{{ archivePendingChangeCount ? ` (${archivePendingChangeCount})` : '' }}
+          </el-button>
+          <el-button
+            v-if="hasPermission('project:archive:sync')"
+            class="archive-drawer-sync"
+            type="success"
+            size="small"
+            plain
+            :loading="archiveDrawerSaving"
+            @click="saveArchiveDrawer(true)"
+          >
+            保存并同步 ERP
+          </el-button>
+        </div>
       </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button v-if="isEdit ? hasPermission('project:archive:edit') : hasPermission('project:archive:add')" type="primary" @click="handleSubmit">保存</el-button>
-        <el-button v-if="isEdit && hasPermission('project:archive:edit') && hasPermission('project:archive:sync')" type="success" @click="handleSubmitAndSync">保存并同步</el-button>
-      </template>
-    </el-dialog>
-  </PmsDataList>
+    </aside>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Delete, Search, Connection } from '@element-plus/icons-vue'
+import { Plus, Delete, Search, Connection, Close, Lock } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
@@ -201,6 +396,20 @@ type EffectiveArchiveField = {
   editable: boolean
   required: boolean
   list_available: boolean
+}
+
+type ArchiveDrawerValueType = 'text' | 'select' | 'user' | 'date' | 'datetime' | 'long_text'
+
+type ArchiveDrawerField = {
+  key: string
+  label: string
+  value_type: ArchiveDrawerValueType
+  source_type: 'archive' | 'system'
+}
+
+type ArchivePendingChange = {
+  value: unknown
+  originalValue: unknown
 }
 
 const ARCHIVE_COLUMN_STORAGE_KEY = 'pms_project_archive_list_columns_v1'
@@ -241,6 +450,53 @@ const ARCHIVE_COLUMN_GROUP_DEFINITIONS = [
       { key: 'erp_sync_time', label: '最后同步时间', value_type: 'datetime', list_available: true, quick_addable: false },
       { key: 'erp_sync_by_name', label: '最后同步人', value_type: 'text', list_available: true, quick_addable: false },
       { key: 'erp_sync_status', label: '同步状态', value_type: 'select', list_available: true, quick_addable: false },
+    ],
+  },
+]
+
+const ARCHIVE_DRAWER_GROUP_DEFINITIONS: Array<{
+  key: string
+  label: string
+  fields: ArchiveDrawerField[]
+}> = [
+  {
+    key: 'basic',
+    label: '基础信息',
+    fields: [
+      { key: 'project_code', label: '项目编号', value_type: 'text', source_type: 'archive' },
+      { key: 'project_name', label: '项目名称', value_type: 'text', source_type: 'archive' },
+      { key: 'product_line', label: '产品线', value_type: 'select', source_type: 'archive' },
+      { key: 'status', label: '状态', value_type: 'select', source_type: 'archive' },
+      { key: 'manager_id', label: '负责人', value_type: 'user', source_type: 'archive' },
+      { key: 'product_type', label: '产品类型', value_type: 'select', source_type: 'archive' },
+    ],
+  },
+  {
+    key: 'plan',
+    label: '计划信息',
+    fields: [
+      { key: 'plan_start_date', label: '计划开始', value_type: 'date', source_type: 'archive' },
+      { key: 'plan_end_date', label: '计划结束', value_type: 'date', source_type: 'archive' },
+    ],
+  },
+  {
+    key: 'erp',
+    label: 'ERP 同步',
+    fields: [
+      { key: 'erp_sync_status', label: '同步状态', value_type: 'select', source_type: 'system' },
+      { key: 'erp_sync_time', label: '最后同步时间', value_type: 'datetime', source_type: 'system' },
+      { key: 'erp_sync_by_name', label: '最后同步人', value_type: 'text', source_type: 'system' },
+      { key: 'erp_error_msg', label: '同步异常', value_type: 'long_text', source_type: 'system' },
+    ],
+  },
+  {
+    key: 'system',
+    label: '维护信息',
+    fields: [
+      { key: 'created_by_name', label: '创建人', value_type: 'text', source_type: 'system' },
+      { key: 'created_at', label: '创建时间', value_type: 'datetime', source_type: 'system' },
+      { key: 'updated_by_name', label: '最后编辑人', value_type: 'text', source_type: 'system' },
+      { key: 'updated_at', label: '最后编辑时间', value_type: 'datetime', source_type: 'system' },
     ],
   },
 ]
@@ -577,9 +833,8 @@ function scheduleArchiveScrollbarMetrics() {
   archiveListRef.value?.refreshScrollbar()
 }
 
-// ========== 弹窗 ==========
+// ========== 新增弹窗与编辑抽屉 ==========
 const dialogVisible = ref(false)
-const isEdit = ref(false)
 const formRef = ref<FormInstance>()
 const form = reactive({
   id: 0,
@@ -592,6 +847,34 @@ const form = reactive({
   plan_start_date: '',
   plan_end_date: '',
 })
+const selectedArchive = ref<any | null>(null)
+const archiveDrawerFormRef = ref<FormInstance>()
+const archiveDrawerForm = reactive<Record<string, any>>({})
+const archiveOriginalValues = ref<Record<string, unknown>>({})
+const archivePendingChanges = ref<Record<string, ArchivePendingChange>>({})
+const archiveEditingField = ref<string | null>(null)
+const archiveDrawerSaving = ref(false)
+const archivePendingChangeCount = computed(() => {
+  const changedKeys = new Set(Object.keys(archivePendingChanges.value))
+  const activeFieldKey = archiveEditingField.value
+  if (!activeFieldKey) return changedKeys.size
+  const activeField = archiveDrawerFieldByKey(activeFieldKey)
+  if (!activeField) return changedKeys.size
+  const activeValue = normalizeArchiveDrawerValue(activeField, archiveDrawerForm[activeFieldKey])
+  if (sameArchiveDrawerValue(activeValue, archiveOriginalValues.value[activeFieldKey])) {
+    changedKeys.delete(activeFieldKey)
+  } else {
+    changedKeys.add(activeFieldKey)
+  }
+  return changedKeys.size
+})
+const archiveDrawerGroups = computed(() => ARCHIVE_DRAWER_GROUP_DEFINITIONS.map(group => ({
+  ...group,
+  fields: group.fields.filter((field) => {
+    if (field.key === 'erp_error_msg') return Boolean(selectedArchive.value?.erp_error_msg)
+    return archiveFieldVisible(field.key)
+  }),
+})).filter(group => group.fields.length > 0))
 
 const legacyArchiveRules: FormRules = {
   project_code: [{ required: true, message: '请输入项目编号' }],
@@ -712,7 +995,7 @@ const columnDefs = computed<ColDef[]>(() => [
     },
     onCellClicked: (params: any) => {
       if (params.event.target.classList.contains('edit-btn')) {
-        openEditDialog(params.data)
+        openEditDrawer(params.data)
       } else if (params.event.target.classList.contains('sync-btn')) {
         handleSyncSingle(params.data.id)
       } else if (params.event.target.classList.contains('del-btn')) {
@@ -749,40 +1032,15 @@ function onSelectionChanged() {
   selectedRows.value = agGridRef.value?.api?.getSelectedRows?.() || []
 }
 
-// ========== 双击编辑 ==========
-function onRowDoubleClicked(event: any) {
-  if (!hasPermission('project:archive:edit')) return
-  if (event.data) openEditDialog(event.data)
-}
-
-// ========== 弹窗操作 ==========
+// ========== 新增与字段级抽屉编辑 ==========
 function openCreateDialog() {
   if (!hasPermission('project:archive:add')) return
   formRef.value?.resetFields()
   Object.assign(form, { id: 0, project_code: '', project_name: '', status: 1, manager_id: null, product_type: '', product_line: '', plan_start_date: '', plan_end_date: '' })
-  isEdit.value = false
   dialogVisible.value = true
 }
 
-function openEditDialog(row: any) {
-  if (!hasPermission('project:archive:edit')) return
-  formRef.value?.resetFields()
-  Object.assign(form, {
-    id: row.id,
-    project_code: row.project_code,
-    project_name: row.project_name,
-    status: row.status,
-    manager_id: row.manager_id,
-    product_type: row.product_type || '',
-    product_line: row.product_line || '',
-    plan_start_date: row.plan_start_date ? row.plan_start_date.substring(0, 10) : '',
-    plan_end_date: row.plan_end_date ? row.plan_end_date.substring(0, 10) : '',
-  })
-  isEdit.value = true
-  dialogVisible.value = true
-}
-
-function buildArchivePayload(includeProjectCode = false) {
+function buildArchiveCreatePayload() {
   const payload: Record<string, unknown> = {}
   const values: Record<string, unknown> = {
     project_code: form.project_code,
@@ -795,9 +1053,190 @@ function buildArchivePayload(includeProjectCode = false) {
     plan_end_date: form.plan_end_date || null,
   }
   Object.entries(values).forEach(([fieldKey, value]) => {
-    if (fieldKey === 'project_code' && !includeProjectCode) return
     if (!archiveFieldVisible(fieldKey) || !archiveFieldEditable(fieldKey)) return
     payload[fieldKey] = value
+  })
+  return payload
+}
+
+function archiveDateValue(value: unknown) {
+  return value ? String(value).substring(0, 10) : ''
+}
+
+function archiveDrawerValues(row: any) {
+  return {
+    project_code: row.project_code || '',
+    project_name: row.project_name || '',
+    status: row.status,
+    manager_id: row.manager_id ?? null,
+    product_type: row.product_type || '',
+    product_line: row.product_line || '',
+    plan_start_date: archiveDateValue(row.plan_start_date),
+    plan_end_date: archiveDateValue(row.plan_end_date),
+    erp_sync_status: row.erp_sync_status || 'pending',
+    erp_sync_time: row.erp_sync_time || '',
+    erp_sync_by_name: row.erp_sync_by_name || '',
+    erp_error_msg: row.erp_error_msg || '',
+    created_by_name: row.created_by_name || '',
+    created_at: row.created_at || '',
+    updated_by_name: row.updated_by_name || '',
+    updated_at: row.updated_at || '',
+  }
+}
+
+function resetArchiveDrawer(row: any) {
+  selectedArchive.value = { ...row }
+  const values = archiveDrawerValues(row)
+  Object.keys(archiveDrawerForm).forEach(key => delete archiveDrawerForm[key])
+  Object.assign(archiveDrawerForm, values)
+  archiveOriginalValues.value = { ...values }
+  archivePendingChanges.value = {}
+  archiveEditingField.value = null
+  nextTick(() => archiveDrawerFormRef.value?.clearValidate())
+}
+
+async function confirmDiscardArchiveChanges() {
+  commitArchiveFieldEdit()
+  if (!archivePendingChangeCount.value) return true
+  try {
+    await ElMessageBox.confirm('当前档案有未保存的修改。', '未保存修改', {
+      confirmButtonText: '放弃修改',
+      cancelButtonText: '继续编辑',
+      type: 'warning',
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function openEditDrawer(row: any) {
+  if (!hasPermission('project:archive:edit')) return
+  if (selectedArchive.value?.id === row.id) return
+  if (!await confirmDiscardArchiveChanges()) return
+  resetArchiveDrawer(row)
+}
+
+async function closeArchiveDrawer() {
+  if (!await confirmDiscardArchiveChanges()) return
+  selectedArchive.value = null
+  archivePendingChanges.value = {}
+  archiveEditingField.value = null
+}
+
+function archiveDrawerFieldRequired(field: ArchiveDrawerField) {
+  return archiveFieldPolicy(field.key)?.required === true
+}
+
+function archiveDrawerFieldEditable(field: ArchiveDrawerField) {
+  return field.source_type === 'archive'
+    && field.key !== 'project_code'
+    && archiveFieldEditable(field.key)
+    && hasPermission('project:archive:edit')
+}
+
+function archiveDrawerReadonlyReason(field: ArchiveDrawerField) {
+  if (field.key === 'project_code') return '项目编号创建后不可修改'
+  if (field.source_type === 'system') return '系统维护字段，仅供查看'
+  if (!hasPermission('project:archive:edit')) return '当前角色没有项目档案编辑权限'
+  return '字段规则已设置为不可编辑'
+}
+
+function archiveDrawerFieldByKey(fieldKey: string) {
+  return ARCHIVE_DRAWER_GROUP_DEFINITIONS
+    .flatMap(group => group.fields)
+    .find(field => field.key === fieldKey)
+}
+
+function archiveDrawerCurrentValue(field: ArchiveDrawerField) {
+  return archiveDrawerForm[field.key]
+}
+
+function archiveDrawerValueEmpty(field: ArchiveDrawerField) {
+  const value = archiveDrawerCurrentValue(field)
+  return value === null || value === undefined || value === ''
+}
+
+function formatArchiveDateTime(value: unknown) {
+  if (!value) return '-'
+  const date = new Date(String(value))
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function formatArchiveDrawerValue(field: ArchiveDrawerField) {
+  const value = archiveDrawerCurrentValue(field)
+  if (field.key === 'erp_sync_status') {
+    return ({ pending: '待同步', success: '已同步', failed: '同步失败' } as Record<string, string>)[String(value || 'pending')] || String(value)
+  }
+  if (archiveDrawerValueEmpty(field)) return archiveDrawerFieldEditable(field) ? '点击填写' : '-'
+  if (field.key === 'status') return enumLabel('archive_status', value)
+  if (field.key === 'product_line') return enumLabel('product_line', value)
+  if (field.key === 'product_type') return enumLabel('product_type', value)
+  if (field.key === 'manager_id') {
+    const user = userList.value.find(item => Number(item.id) === Number(value))
+    return user?.real_name || selectedArchive.value?.manager_name || String(value)
+  }
+  if (field.value_type === 'date') return archiveDateValue(value) || '-'
+  if (field.value_type === 'datetime') return formatArchiveDateTime(value)
+  return String(value)
+}
+
+function normalizeArchiveDrawerValue(field: ArchiveDrawerField, value: unknown) {
+  if (field.key === 'status') return value === '' || value == null ? null : Number(value)
+  if (field.key === 'manager_id') return value === '' || value == null ? null : Number(value)
+  if (field.value_type === 'date') return value ? archiveDateValue(value) : null
+  if (['product_line', 'product_type'].includes(field.key)) return value || null
+  return value ?? ''
+}
+
+function sameArchiveDrawerValue(left: unknown, right: unknown) {
+  return String(left ?? '') === String(right ?? '')
+}
+
+function startArchiveFieldEdit(field: ArchiveDrawerField) {
+  if (!archiveDrawerFieldEditable(field)) return
+  if (archiveEditingField.value && archiveEditingField.value !== field.key) commitArchiveFieldEdit()
+  archiveEditingField.value = field.key
+}
+
+function cancelArchiveFieldEdit() {
+  if (!archiveEditingField.value) return
+  const fieldKey = archiveEditingField.value
+  archiveDrawerForm[fieldKey] = archivePendingChanges.value[fieldKey]?.value ?? archiveOriginalValues.value[fieldKey]
+  archiveEditingField.value = null
+}
+
+function commitArchiveFieldEdit() {
+  const fieldKey = archiveEditingField.value
+  if (!fieldKey) return
+  const field = archiveDrawerFieldByKey(fieldKey)
+  if (!field) {
+    archiveEditingField.value = null
+    return
+  }
+  const value = normalizeArchiveDrawerValue(field, archiveDrawerForm[fieldKey])
+  const originalValue = archiveOriginalValues.value[fieldKey]
+  archiveDrawerForm[fieldKey] = value
+  if (sameArchiveDrawerValue(value, originalValue)) {
+    const nextChanges = { ...archivePendingChanges.value }
+    delete nextChanges[fieldKey]
+    archivePendingChanges.value = nextChanges
+  } else {
+    archivePendingChanges.value = {
+      ...archivePendingChanges.value,
+      [fieldKey]: { value, originalValue },
+    }
+  }
+  archiveEditingField.value = null
+}
+
+function buildArchiveDrawerPayload() {
+  const payload: Record<string, unknown> = {}
+  Object.entries(archivePendingChanges.value).forEach(([fieldKey, change]) => {
+    const field = archiveDrawerFieldByKey(fieldKey)
+    if (!field || !archiveDrawerFieldEditable(field)) return
+    payload[fieldKey] = change.value
   })
   return payload
 }
@@ -811,30 +1250,25 @@ function archivePolicyValidationFieldKeys(error: any): string[] {
     .filter(Boolean)
 }
 
-async function focusArchivePolicyValidation(error: any) {
+async function focusArchivePolicyValidation(error: any, targetForm = formRef) {
   const fieldKeys = archivePolicyValidationFieldKeys(error)
   if (!fieldKeys.length) return
   await fetchEffectiveArchiveFields()
   await nextTick()
   const visibleProps = fieldKeys.filter(fieldKey => archiveFieldVisible(fieldKey))
   if (!visibleProps.length) return
-  await formRef.value?.validateField(visibleProps).catch(() => false)
-  formRef.value?.scrollToField(visibleProps[0])
+  await targetForm.value?.validateField(visibleProps).catch(() => false)
+  targetForm.value?.scrollToField(visibleProps[0])
 }
 
 async function handleSubmit() {
-  if (isEdit.value ? !hasPermission('project:archive:edit') : !hasPermission('project:archive:add')) return
+  if (!hasPermission('project:archive:add')) return
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
   try {
-    if (isEdit.value) {
-      await request.put(`/projects/archives/${form.id}`, buildArchivePayload())
-      ElMessage.success('更新成功')
-    } else {
-      await request.post('/projects/archives', buildArchivePayload(true))
-      ElMessage.success('创建成功')
-    }
+    await request.post('/projects/archives', buildArchiveCreatePayload())
+    ElMessage.success('创建成功')
     dialogVisible.value = false
     fetchList()
   } catch (error) {
@@ -842,36 +1276,54 @@ async function handleSubmit() {
   }
 }
 
-async function handleSubmitAndSync() {
-  if (!hasPermission('project:archive:edit') || !hasPermission('project:archive:sync')) return
-  const valid = await formRef.value?.validate().catch(() => false)
+async function saveArchiveDrawer(syncAfterSave: boolean) {
+  if (!selectedArchive.value || archiveDrawerSaving.value || !hasPermission('project:archive:edit')) return
+  if (syncAfterSave && !hasPermission('project:archive:sync')) return
+  commitArchiveFieldEdit()
+  if (!archivePendingChangeCount.value && !syncAfterSave) return
+
+  const valid = await archiveDrawerFormRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  const archiveId = selectedArchive.value.id
+  const payload = buildArchiveDrawerPayload()
+  archiveDrawerSaving.value = true
   try {
-    if (isEdit.value) {
-      await request.put(`/projects/archives/${form.id}`, buildArchivePayload())
-    } else {
-      const createRes: any = await request.post('/projects/archives', buildArchivePayload(true))
-      form.id = createRes.id
-    }
+    if (Object.keys(payload).length) await request.put(`/projects/archives/${archiveId}`, payload)
   } catch (error) {
-    await focusArchivePolicyValidation(error)
+    await focusArchivePolicyValidation(error, archiveDrawerFormRef)
+    archiveDrawerSaving.value = false
     return
   }
-  dialogVisible.value = false
 
-  // 保存完成后同步到金蝶ERP
-  try {
-    const syncRes: any = await request.post('/erp/sync', { archive_id: form.id })
-    if (syncRes.success) {
-      ElMessage.success('保存并同步成功')
-    } else {
-      ElMessage.warning(`保存成功，但同步失败：${syncRes.message}`)
+  archivePendingChanges.value = {}
+  archiveEditingField.value = null
+  let syncSucceeded = false
+  if (syncAfterSave) {
+    try {
+      const syncRes: any = await request.post('/erp/sync', { archive_id: archiveId })
+      syncSucceeded = Boolean(syncRes.success)
+      if (!syncRes.success) ElMessage.warning(`档案已保存，但同步失败：${syncRes.message}`)
+    } catch (error: any) {
+      ElMessage.warning('档案已保存，但同步异常：' + (error?.response?.data?.message || error?.message))
     }
-  } catch (e: any) {
-    ElMessage.warning('保存成功，但同步异常：' + (e?.response?.data?.message || e?.message))
   }
-  fetchList()
+
+  let refreshSucceeded = true
+  try {
+    await fetchList()
+    const refreshed = rowData.value.find(row => row.id === archiveId)
+    if (refreshed) resetArchiveDrawer(refreshed)
+  } catch {
+    refreshSucceeded = false
+    ElMessage.warning('档案已保存，但列表刷新失败，请手动刷新页面')
+  } finally {
+    archiveDrawerSaving.value = false
+  }
+
+  if (!refreshSucceeded) return
+  if (!syncAfterSave) ElMessage.success('项目档案已保存')
+  if (syncAfterSave && syncSucceeded) ElMessage.success('保存并同步成功')
 }
 
 // ========== 删除 ==========
@@ -958,8 +1410,218 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.project-archive-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.project-archive-workbench.is-drawer-open {
+  grid-template-columns: minmax(0, 1fr) 400px;
+}
+
+.archive-list-shell,
 .project-archive-page {
+  min-width: 0;
+  min-height: 0;
+}
+
+.project-archive-page {
+  height: 100%;
   min-height: 100%;
+}
+
+.archive-edit-drawer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--pms-border-soft);
+  border-radius: var(--pms-radius);
+  background: var(--pms-surface);
+  box-shadow: var(--pms-shadow-sm);
+}
+
+.archive-drawer-head {
+  flex: 0 0 auto;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--pms-border-soft);
+}
+
+.archive-drawer-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.archive-drawer-identity {
+  min-width: 0;
+}
+
+.archive-drawer-title {
+  color: var(--pms-text);
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.archive-drawer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+  color: var(--pms-text-secondary);
+  font-family: var(--pms-font-mono);
+  font-size: 12px;
+}
+
+.archive-drawer-close {
+  flex: 0 0 auto;
+  margin-top: -3px;
+}
+
+.archive-drawer-form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.archive-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 16px 16px;
+}
+
+.archive-drawer-section + .archive-drawer-section {
+  margin-top: 4px;
+}
+
+.archive-drawer-section-title {
+  margin: 0;
+  padding: 12px 0 7px;
+  border-bottom: 1px solid var(--pms-border-soft);
+  color: var(--pms-text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.archive-drawer-field-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
+}
+
+.archive-drawer-field-row.is-long-text {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
+
+.archive-drawer-field-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  color: var(--pms-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.archive-required-mark {
+  color: var(--pms-danger);
+}
+
+.archive-field-lock {
+  color: var(--pms-text-muted);
+  font-size: 12px;
+}
+
+.archive-drawer-form-item {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.archive-drawer-form-item :deep(.el-form-item__content) {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  line-height: inherit;
+}
+
+.archive-drawer-form-item :deep(.el-form-item__error) {
+  position: static;
+  padding: 3px 6px 0;
+  font-size: 11px;
+}
+
+.archive-drawer-field-value,
+.archive-drawer-field-static {
+  display: block;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--pms-radius-sm);
+  background: transparent;
+  color: var(--pms-text);
+  font-family: var(--pms-font);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.archive-drawer-field-value {
+  cursor: text;
+}
+
+.archive-drawer-field-value:hover,
+.archive-drawer-field-value:focus-visible {
+  border-color: rgba(79, 70, 229, 0.22);
+  outline: none;
+  background: var(--pms-primary-soft);
+  color: var(--pms-primary);
+}
+
+.archive-drawer-field-value.is-empty,
+.archive-drawer-field-static.is-empty {
+  color: var(--pms-text-muted);
+}
+
+.archive-drawer-field-editor {
+  width: 100%;
+  padding: 1px 0;
+}
+
+.archive-drawer-savebar {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--pms-border-soft);
+  background: var(--pms-surface);
+}
+
+.archive-drawer-savebar :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.archive-drawer-save {
+  min-width: 0;
 }
 
 :deep(.pms-table-action + .pms-table-action) {
@@ -968,5 +1630,15 @@ onMounted(async () => {
 
 :deep(.archive-list-header-center .ag-header-cell-label) {
   justify-content: center;
+}
+
+@media (max-width: 1280px) {
+  .project-archive-workbench.is-drawer-open {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+
+  .archive-drawer-field-row {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
 }
 </style>
