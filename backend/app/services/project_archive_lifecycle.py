@@ -37,19 +37,21 @@ def get_archive_delete_guards(db: Session, archive_ids: list[int]) -> dict[int, 
         .group_by(ErpSyncLog.source_id)
         .all()
     )
-    pending_ids = {
-        archive_id
-        for (archive_id,) in db.query(PmsProjectArchive.id)
-        .filter(
-            PmsProjectArchive.id.in_(unique_ids),
-            PmsProjectArchive.erp_sync_status == "pending",
+    archive_sync_states = {
+        archive_id: (erp_synced, erp_sync_status)
+        for archive_id, erp_synced, erp_sync_status in db.query(
+            PmsProjectArchive.id,
+            PmsProjectArchive.erp_synced,
+            PmsProjectArchive.erp_sync_status,
         )
+        .filter(PmsProjectArchive.id.in_(unique_ids))
         .all()
     }
 
     guards: dict[int, dict[str, Any]] = {}
     for archive_id in unique_ids:
         blockers: list[dict[str, Any]] = []
+        erp_synced, erp_sync_status = archive_sync_states.get(archive_id, (0, None))
         if project_count := project_counts.get(archive_id, 0):
             blockers.append({
                 "type": "business_reference",
@@ -57,14 +59,15 @@ def get_archive_delete_guards(db: Session, archive_ids: list[int]) -> dict[int, 
                 "label": "项目进度",
                 "count": project_count,
             })
-        if sync_count := sync_counts.get(archive_id, 0):
+        sync_count = sync_counts.get(archive_id, 0)
+        if sync_count or erp_synced == 1:
             blockers.append({
                 "type": "external_sync",
                 "source": "kingdee",
                 "label": "金蝶 ERP",
-                "count": sync_count,
+                "count": max(sync_count, int(erp_synced == 1)),
             })
-        if archive_id in pending_ids:
+        if erp_sync_status == "pending":
             blockers.append({
                 "type": "operation_pending",
                 "source": "kingdee",
@@ -100,13 +103,13 @@ def set_archive_enabled(
     action = "enable" if enabled else "disable"
     message = "启用成功" if enabled else "禁用成功"
 
+    if archive.is_enabled == target_enabled:
+        return {"msg": message}
     if not enabled and archive.erp_sync_status == "pending":
         raise HTTPException(status_code=409, detail={
             "code": "ARCHIVE_OPERATION_PENDING",
             "message": "项目档案正在同步，无法禁用，请等待同步完成",
         })
-    if archive.is_enabled == target_enabled:
-        return {"msg": message}
 
     before = serialize_model(archive)
     archive.is_enabled = target_enabled

@@ -2,6 +2,7 @@
 import os
 import sqlite3
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -113,11 +114,18 @@ def test_archive_delete_guards_and_enabled_lifecycle():
         db.add_all([user, dept])
         db.commit()
 
-        def create_archive(code: str, *, enabled: int = 1, pending: bool = False) -> PmsProjectArchive:
+        def create_archive(
+            code: str,
+            *,
+            enabled: int = 1,
+            pending: bool = False,
+            erp_synced: int = 0,
+        ) -> PmsProjectArchive:
             archive = PmsProjectArchive(
                 project_code=code,
                 project_name=f"项目档案 {code}",
                 is_enabled=enabled,
+                erp_synced=erp_synced,
                 erp_sync_status="pending" if pending else None,
             )
             db.add(archive)
@@ -128,8 +136,10 @@ def test_archive_delete_guards_and_enabled_lifecycle():
         referenced = create_archive("LC-REFERENCED")
         failed_only = create_archive("LC-FAILED")
         historical_success = create_archive("LC-SUCCESS")
+        synced_without_log = create_archive("LC-SYNCED-FLAG", erp_synced=1)
         pending = create_archive("LC-PENDING", pending=True)
         disabled = create_archive("LC-DISABLED", enabled=0)
+        disabled_pending = create_archive("LC-DISABLED-PENDING", enabled=0, pending=True)
         db.add_all([
             PmsProject(
                 archive_id=referenced.id,
@@ -184,6 +194,15 @@ def test_archive_delete_guards_and_enabled_lifecycle():
                 "count": 1,
             }],
         }
+        assert get_archive_delete_guard(db, synced_without_log.id) == {
+            "can_delete": False,
+            "blockers": [{
+                "type": "external_sync",
+                "source": "kingdee",
+                "label": "金蝶 ERP",
+                "count": 1,
+            }],
+        }
         assert get_archive_delete_guard(db, pending.id) == {
             "can_delete": False,
             "blockers": [{
@@ -204,11 +223,24 @@ def test_archive_delete_guards_and_enabled_lifecycle():
         try:
             guards = get_archive_delete_guards(
                 db,
-                [available.id, referenced.id, historical_success.id, pending.id, available.id],
+                [
+                    available.id,
+                    referenced.id,
+                    historical_success.id,
+                    synced_without_log.id,
+                    pending.id,
+                    available.id,
+                ],
             )
         finally:
             event.remove(engine, "before_cursor_execute", track_select)
-        assert set(guards) == {available.id, referenced.id, historical_success.id, pending.id}
+        assert set(guards) == {
+            available.id,
+            referenced.id,
+            historical_success.id,
+            synced_without_log.id,
+            pending.id,
+        }
         assert len(select_statements) == 3
 
         try:
@@ -225,6 +257,16 @@ def test_archive_delete_guards_and_enabled_lifecycle():
 
         assert set_archive_enabled(db, disabled, False, user.id, None) == {"msg": "禁用成功"}
         assert db.query(SysOperationLog).filter(SysOperationLog.entity_id == str(disabled.id)).count() == 0
+        disabled_pending_logs = db.query(SysOperationLog).filter(
+            SysOperationLog.entity_id == str(disabled_pending.id)
+        ).count()
+        with patch.object(db, "commit", wraps=db.commit) as commit:
+            assert set_archive_enabled(db, disabled_pending, False, user.id, None) == {"msg": "禁用成功"}
+            assert commit.call_count == 0
+        assert disabled_pending.is_enabled == 0
+        assert db.query(SysOperationLog).filter(
+            SysOperationLog.entity_id == str(disabled_pending.id)
+        ).count() == disabled_pending_logs
         assert set_archive_enabled(db, disabled, True, user.id, None) == {"msg": "启用成功"}
         assert disabled.is_enabled == 1
         assert [log.action for log in db.query(SysOperationLog).filter(
