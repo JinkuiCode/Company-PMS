@@ -25,8 +25,10 @@ def init_db():
     is_fresh_database = not inspect(engine).has_table("sys_role")
     Base.metadata.create_all(bind=engine)
     from app.services.project_archive_semantic_migration import upgrade_project_archive_semantics
+    from app.services.project_archive_lifecycle_migration import upgrade_project_archive_lifecycle
 
     upgrade_project_archive_semantics(engine)
+    upgrade_project_archive_lifecycle(engine)
 
     db = SessionLocal()
     try:

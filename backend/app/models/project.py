@@ -18,6 +18,13 @@ class PmsProjectArchive(Base):
     project_name_key: Mapped[str] = mapped_column(NVARCHAR(128), nullable=False, comment="项目名称唯一键")
     customer: Mapped[str | None] = mapped_column(NVARCHAR(128), default=None, comment="客户")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1未启动 2进行中 3已完结 4暂停")
+    is_enabled: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default=text("1"),
+        comment="启用状态: 1启用 0禁用",
+    )
     manager_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="负责人ID")
     product_category: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品类别枚举值")
     equipment_series: Mapped[int | None] = mapped_column(Integer, default=None, comment="设备系列枚举值")
@@ -37,6 +44,7 @@ class PmsProjectArchive(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
+        Index("idx_project_archive_enabled", "is_enabled"),
         Index("ux_pms_project_archive_project_code_key", "project_code_key", unique=True),
         Index("ux_pms_project_archive_project_name_key", "project_name_key", unique=True),
         Index(
