@@ -83,7 +83,174 @@ def test_archive_lifecycle_upgrades_historical_schema():
         )).scalar_one() == 1
 
 
+def test_archive_delete_guards_and_enabled_lifecycle():
+    from fastapi import HTTPException
+    from sqlalchemy import event
+
+    from app.core.database import Base, SessionLocal, engine
+    from app.models.operation_log import SysOperationLog
+    from app.models.project import ErpSyncLog, PmsProject, PmsProjectArchive
+    from app.models.rbac import SysDept
+    from app.models.user import SysUser
+    from app.schemas.project import ArchiveDeleteBlocker
+    from app.services.project_archive_lifecycle import (
+        ensure_archive_enabled,
+        get_archive_delete_guard,
+        get_archive_delete_guards,
+        set_archive_enabled,
+    )
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        user = SysUser(
+            username="archive-lifecycle",
+            real_name="生命周期测试",
+            password_hash="x",
+            status=1,
+        )
+        dept = SysDept(dept_name="生命周期测试部门", status=1)
+        db.add_all([user, dept])
+        db.commit()
+
+        def create_archive(code: str, *, enabled: int = 1, pending: bool = False) -> PmsProjectArchive:
+            archive = PmsProjectArchive(
+                project_code=code,
+                project_name=f"项目档案 {code}",
+                is_enabled=enabled,
+                erp_sync_status="pending" if pending else None,
+            )
+            db.add(archive)
+            db.flush()
+            return archive
+
+        available = create_archive("LC-AVAILABLE")
+        referenced = create_archive("LC-REFERENCED")
+        failed_only = create_archive("LC-FAILED")
+        historical_success = create_archive("LC-SUCCESS")
+        pending = create_archive("LC-PENDING", pending=True)
+        disabled = create_archive("LC-DISABLED", enabled=0)
+        db.add_all([
+            PmsProject(
+                archive_id=referenced.id,
+                project_code="LC-001",
+                project_name="引用项目",
+                dept_id=dept.id,
+                pm_id=user.id,
+                status=1,
+            ),
+            ErpSyncLog(source_id=failed_only.id, action="sync", status="failed"),
+            ErpSyncLog(source_id=historical_success.id, action="sync", status="failed"),
+            ErpSyncLog(source_id=historical_success.id, action="sync", status="success"),
+        ])
+        db.commit()
+
+        assert ArchiveDeleteBlocker(
+            type="business_reference",
+            source="project_progress",
+            label="项目进度",
+            count=1,
+        ).model_dump() == {
+            "type": "business_reference",
+            "source": "project_progress",
+            "label": "项目进度",
+            "count": 1,
+        }
+        assert get_archive_delete_guard(db, available.id) == {
+            "can_delete": True,
+            "blockers": [],
+        }
+
+        referenced_guard = get_archive_delete_guard(db, referenced.id)
+        assert referenced_guard == {
+            "can_delete": False,
+            "blockers": [{
+                "type": "business_reference",
+                "source": "project_progress",
+                "label": "项目进度",
+                "count": 1,
+            }],
+        }
+        assert get_archive_delete_guard(db, failed_only.id) == {
+            "can_delete": True,
+            "blockers": [],
+        }
+        assert get_archive_delete_guard(db, historical_success.id) == {
+            "can_delete": False,
+            "blockers": [{
+                "type": "external_sync",
+                "source": "kingdee",
+                "label": "金蝶 ERP",
+                "count": 1,
+            }],
+        }
+        assert get_archive_delete_guard(db, pending.id) == {
+            "can_delete": False,
+            "blockers": [{
+                "type": "operation_pending",
+                "source": "kingdee",
+                "label": "ERP 同步中",
+                "count": 1,
+            }],
+        }
+
+        select_statements: list[str] = []
+
+        def track_select(_connection, _cursor, statement, _parameters, _context, _executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                select_statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", track_select)
+        try:
+            guards = get_archive_delete_guards(
+                db,
+                [available.id, referenced.id, historical_success.id, pending.id, available.id],
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", track_select)
+        assert set(guards) == {available.id, referenced.id, historical_success.id, pending.id}
+        assert len(select_statements) == 3
+
+        try:
+            ensure_archive_enabled(disabled, "编辑")
+        except HTTPException as exc:
+            assert exc.status_code == 409
+            assert exc.detail == {
+                "code": "ARCHIVE_DISABLED",
+                "message": "项目档案已禁用，无法编辑，请先重新启用",
+            }
+        else:
+            raise AssertionError("禁用档案必须拒绝编辑")
+        ensure_archive_enabled(available, "编辑")
+
+        assert set_archive_enabled(db, disabled, False, user.id, None) == {"msg": "禁用成功"}
+        assert db.query(SysOperationLog).filter(SysOperationLog.entity_id == str(disabled.id)).count() == 0
+        assert set_archive_enabled(db, disabled, True, user.id, None) == {"msg": "启用成功"}
+        assert disabled.is_enabled == 1
+        assert [log.action for log in db.query(SysOperationLog).filter(
+            SysOperationLog.entity_id == str(disabled.id)
+        ).all()] == ["enable"]
+        assert set_archive_enabled(db, disabled, True, user.id, None) == {"msg": "启用成功"}
+        assert set_archive_enabled(db, disabled, False, user.id, None) == {"msg": "禁用成功"}
+        assert disabled.is_enabled == 0
+        assert [log.action for log in db.query(SysOperationLog).filter(
+            SysOperationLog.entity_id == str(disabled.id)
+        ).order_by(SysOperationLog.id).all()] == ["enable", "disable"]
+
+        try:
+            set_archive_enabled(db, pending, False, user.id, None)
+        except HTTPException as exc:
+            assert exc.status_code == 409
+            assert exc.detail["code"] == "ARCHIVE_OPERATION_PENDING"
+        else:
+            raise AssertionError("同步中的档案必须拒绝禁用")
+        assert pending.is_enabled == 1
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     test_archive_enabled_model_and_idempotent_upgrade()
     test_archive_lifecycle_upgrades_historical_schema()
+    test_archive_delete_guards_and_enabled_lifecycle()
     print("project archive lifecycle contract passed")

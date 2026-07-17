@@ -30,6 +30,13 @@ class ArchiveUpdate(BaseModel):
     plan_end_date: datetime | None = None
 
 
+class ArchiveDeleteBlocker(BaseModel):
+    type: str
+    source: str
+    label: str
+    count: int
+
+
 class ArchiveResponse(BaseModel):
     id: int
     project_code: str
