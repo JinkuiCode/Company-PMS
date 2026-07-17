@@ -4,7 +4,13 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.authorization import require_any_permission, require_permission
 from app.schemas.project import ProjectCreate, ProjectUpdate, TaskCreate, TaskUpdate, ProjectSheetDetailUpdate
-from app.schemas.project import ArchiveCreate, ArchiveUpdate
+from app.schemas.project import (
+    ArchiveBatchDelete,
+    ArchiveBatchEnabledUpdate,
+    ArchiveCreate,
+    ArchiveEnabledUpdate,
+    ArchiveUpdate,
+)
 from app.services import project as project_service
 
 router = APIRouter(prefix="/api/projects", tags=["项目管理"])
@@ -115,11 +121,12 @@ def list_archives(
     page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000),
     keyword: str | None = Query(None), status: int | None = Query(None),
     product_category: int | None = Query(None),
+    enabled: bool | None = Query(True),
     db: Session = Depends(get_db),
     scope_ctx: dict = Depends(require_permission("project:archive:view")),
 ):
     return project_service.get_archive_list(
-        db, page, page_size, keyword, status, product_category, scope_context=scope_ctx
+        db, page, page_size, keyword, status, product_category, enabled=enabled, scope_context=scope_ctx
     )
 
 
@@ -140,6 +147,57 @@ def create_archive(
 ):
     return project_service.create_archive(
         db, data, scope_ctx["user_id"], request=request, scope_context=scope_ctx
+    )
+
+
+@router.post("/archives/batch-delete", summary="批量删除项目档案")
+def batch_delete_archives(
+    data: ArchiveBatchDelete,
+    request: Request,
+    db: Session = Depends(get_db),
+    scope_ctx: dict = Depends(require_permission("project:archive:delete")),
+):
+    return project_service.batch_delete_archives(
+        db,
+        data.archive_ids,
+        operator_id=scope_ctx["user_id"],
+        request=request,
+        scope_context=scope_ctx,
+    )
+
+
+@router.put("/archives/batch-enabled", summary="批量启用或禁用项目档案")
+def batch_set_archives_enabled(
+    data: ArchiveBatchEnabledUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    scope_ctx: dict = Depends(require_permission("project:archive:toggle")),
+):
+    return project_service.batch_change_archives_enabled(
+        db,
+        data.archive_ids,
+        data.enabled,
+        operator_id=scope_ctx["user_id"],
+        request=request,
+        scope_context=scope_ctx,
+    )
+
+
+@router.put("/archives/{archive_id}/enabled", summary="启用或禁用项目档案")
+def set_archive_enabled_route(
+    archive_id: int,
+    data: ArchiveEnabledUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    scope_ctx: dict = Depends(require_permission("project:archive:toggle")),
+):
+    return project_service.change_archive_enabled(
+        db,
+        archive_id,
+        data.enabled,
+        operator_id=scope_ctx["user_id"],
+        request=request,
+        scope_context=scope_ctx,
     )
 
 

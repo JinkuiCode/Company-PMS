@@ -37,6 +37,18 @@ class ArchiveDeleteBlocker(BaseModel):
     count: int
 
 
+class ArchiveBatchDelete(BaseModel):
+    archive_ids: list[int] = Field(..., min_length=1)
+
+
+class ArchiveEnabledUpdate(BaseModel):
+    enabled: bool
+
+
+class ArchiveBatchEnabledUpdate(ArchiveEnabledUpdate):
+    archive_ids: list[int] = Field(..., min_length=1)
+
+
 class ArchiveResponse(BaseModel):
     id: int
     project_code: str
@@ -58,6 +70,9 @@ class ArchiveResponse(BaseModel):
     erp_sync_by_name: str = ""      # 最后同步人姓名
     erp_sync_status: str | None = None
     erp_error_msg: str | None = None
+    is_enabled: int = 1
+    can_delete: bool = True
+    delete_blockers: list[ArchiveDeleteBlocker] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
     model_config = {"from_attributes": True}

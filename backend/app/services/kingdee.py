@@ -7,12 +7,13 @@ import logging
 from datetime import datetime
 from typing import Optional
 import httpx
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.project import PmsProjectArchive, ErpSyncLog
 from app.services.operation_log import record_operation_log, serialize_model
+from app.services.project_archive_lifecycle import ensure_archive_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,8 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
         )
         return {"success": False, "message": "项目档案不存在"}
 
+    ensure_archive_enabled(archive, "同步 ERP")
+
     # 更新状态为 pending
     before = serialize_model(archive)
     archive.erp_sync_status = "pending"
@@ -391,7 +394,18 @@ def batch_sync_project_archives(db: Session, archive_ids: list[int], user_id: in
     errors = []
 
     for archive_id in archive_ids:
-        result = sync_project_archive_to_erp(db, archive_id, user_id=user_id, request=request)
+        archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id).first()
+        if archive:
+            try:
+                ensure_archive_enabled(archive, "同步 ERP")
+            except HTTPException as exc:
+                if exc.detail.get("code") != "ARCHIVE_DISABLED":
+                    raise
+                result = {"success": False, "message": exc.detail["message"]}
+            else:
+                result = sync_project_archive_to_erp(db, archive_id, user_id=user_id, request=request)
+        else:
+            result = sync_project_archive_to_erp(db, archive_id, user_id=user_id, request=request)
         if result["success"]:
             success_count += 1
         else:
