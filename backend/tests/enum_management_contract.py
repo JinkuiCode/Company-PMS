@@ -44,7 +44,6 @@ def test_registry_separates_managed_system_and_legacy_definitions():
     )
 
     assert MANAGED_ENUM_CODES == {
-        "archive_status",
         "project_status",
         "product_category",
         "equipment_series",
@@ -62,6 +61,8 @@ def test_registry_separates_managed_system_and_legacy_definitions():
     assert ENUM_REGISTRY["product_category"]["value_strategy"] == "numeric_sequence"
     assert ENUM_REGISTRY["equipment_series"]["value_strategy"] == "numeric_sequence"
     assert ENUM_REGISTRY["archive_status"]["mode"] == "workflow"
+    assert ENUM_REGISTRY["archive_status"]["visible"] is False
+    assert ENUM_REGISTRY["archive_status"]["description"] == "项目档案保留状态，暂未启用"
 
 
 def test_enum_list_hides_unregistered_and_system_definitions():
@@ -73,6 +74,7 @@ def test_enum_list_hides_unregistered_and_system_definitions():
     db = SessionLocal()
     try:
         seed_enum(db, "product_category", [("1", "Bench", 1)])
+        seed_enum(db, "archive_status", [("1", "未启动", 1)])
         seed_enum(db, "data_scope", [("4", "全部", 1)])
         seed_enum(db, "custom_history", [("A", "历史自建", 1)])
 
@@ -197,28 +199,25 @@ def test_project_writes_reject_unknown_or_disabled_enum_values():
 
     db = SessionLocal()
     try:
-        seed_enum(db, "archive_status", [("1", "未启动", 1)])
         seed_enum(db, "product_category", [("1", "Bench", 0)])
         seed_enum(db, "equipment_series", [("1", "链式", 1)])
         for code, payload in [
             (
-                "archive_status",
+                "product_category",
                 ArchiveCreate(
-                    project_code="ENUM-INVALID-STATUS",
-                    project_name="非法状态",
-                    status=99,
-                    product_category=None,
+                    project_code="ENUM-DISABLED-CATEGORY",
+                    project_name="禁用产品类别",
+                    product_category=1,
                     equipment_series=1,
                 ),
             ),
             (
-                "product_category",
+                "equipment_series",
                 ArchiveCreate(
-                    project_code="ENUM-DISABLED-LINE",
-                    project_name="禁用产品线",
-                    status=1,
-                    product_category=1,
-                    equipment_series=1,
+                    project_code="ENUM-UNKNOWN-SERIES",
+                    project_name="未知设备系列",
+                    product_category=None,
+                    equipment_series=99,
                 ),
             ),
         ]:

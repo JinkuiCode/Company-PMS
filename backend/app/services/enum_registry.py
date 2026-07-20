@@ -23,9 +23,9 @@ LEGACY_DICT_CODES = {
 ENUM_REGISTRY: dict[str, dict[str, Any]] = {
     "archive_status": {
         "name": "档案状态",
-        "description": "项目档案生命周期状态",
+        "description": "项目档案保留状态，暂未启用",
         "mode": "workflow",
-        "visible": True,
+        "visible": False,
         "sort": 10,
         "table_name": "pms_project_archive",
         "field_name": "status",

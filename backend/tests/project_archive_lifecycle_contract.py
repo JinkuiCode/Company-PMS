@@ -17,6 +17,98 @@ os.environ["DB_DIALECT"] = "sqlite"
 os.environ["SQLITE_DB_PATH"] = str(DB_PATH)
 
 
+def test_archive_toggle_permission_and_hidden_legacy_metadata():
+    from app.core.database import SessionLocal
+    from app.models.init_db import init_db
+    from app.models.project import PmsProjectArchive
+    from app.models.rbac import SysMenu, SysRole, SysRoleMenu
+    from app.schemas.project import ArchiveCreate, ArchiveResponse, ArchiveUpdate
+    from app.services.enum_registry import ENUM_REGISTRY, MANAGED_ENUM_CODES
+    from app.services.field_catalog import build_field_catalog
+    from app.services.field_policy import (
+        MODULE_PROJECT_ARCHIVE,
+        get_business_field_registry,
+    )
+    from app.services.role_templates import ROLE_TEMPLATES
+
+    init_db()
+    db = SessionLocal()
+    try:
+        toggle_menu = db.query(SysMenu).filter(SysMenu.id == 226).first()
+        assert toggle_menu is not None
+        assert {
+            "parent_id": toggle_menu.parent_id,
+            "menu_name": toggle_menu.menu_name,
+            "menu_type": toggle_menu.menu_type,
+            "permission_code": toggle_menu.permission_code,
+            "sort": toggle_menu.sort,
+        } == {
+            "parent_id": 22,
+            "menu_name": "启用/禁用",
+            "menu_type": "B",
+            "permission_code": "project:archive:toggle",
+            "sort": 6,
+        }
+
+        assert "project:archive:toggle" in ROLE_TEMPLATES["business_admin"]["permissions"]
+        assert "project:archive:toggle" not in ROLE_TEMPLATES["operator"]["permissions"]
+        roles = {
+            role.role_code: role
+            for role in db.query(SysRole).filter(
+                SysRole.role_code.in_(("admin", "business_admin", "operator"))
+            ).all()
+        }
+        granted_role_ids = {
+            role_id
+            for (role_id,) in db.query(SysRoleMenu.role_id).filter(
+                SysRoleMenu.menu_id == 226
+            ).all()
+        }
+        assert roles["admin"].id in granted_role_ids
+        assert roles["business_admin"].id in granted_role_ids
+        assert roles["operator"].id not in granted_role_ids
+
+        db.query(SysRoleMenu).filter(
+            SysRoleMenu.menu_id == 226,
+            SysRoleMenu.role_id.in_((roles["admin"].id, roles["business_admin"].id)),
+        ).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
+    init_db()
+    db = SessionLocal()
+    try:
+        assert db.query(SysRoleMenu).filter(SysRoleMenu.menu_id == 226).count() == 0
+    finally:
+        db.close()
+
+    assert ENUM_REGISTRY["archive_status"]["visible"] is False
+    assert ENUM_REGISTRY["archive_status"]["description"] == "项目档案保留状态，暂未启用"
+    assert "archive_status" not in MANAGED_ENUM_CODES
+    assert "status" not in ArchiveCreate.model_fields
+    assert "status" not in ArchiveUpdate.model_fields
+    assert "status" in ArchiveResponse.model_fields
+    assert PmsProjectArchive.__table__.columns.status.default.arg == 1
+    assert "status" not in {
+        item["key"]
+        for item in get_business_field_registry(MODULE_PROJECT_ARCHIVE)
+    }
+
+    catalog = {
+        (item["module"], item["field_code"]): item
+        for item in build_field_catalog()
+    }
+    legacy_status = catalog[("project_archive", "status")]
+    assert legacy_status["source_type"] == "system_fixed"
+    assert legacy_status["editable"] is False
+    assert "保留字段" in legacy_status["description"]
+    enabled = catalog[("project_archive", "is_enabled")]
+    assert enabled["source_type"] == "system_fixed"
+    assert enabled["editable"] is False
+    assert "启用" in enabled["description"] and "禁用" in enabled["description"]
+
+
 def test_archive_enabled_model_and_idempotent_upgrade():
     from sqlalchemy import create_engine, inspect, text
 
@@ -608,6 +700,7 @@ def test_batch_archive_routes_enforce_permissions_and_static_order():
 
 
 if __name__ == "__main__":
+    test_archive_toggle_permission_and_hidden_legacy_metadata()
     test_archive_enabled_model_and_idempotent_upgrade()
     test_archive_lifecycle_upgrades_historical_schema()
     test_archive_delete_guards_and_enabled_lifecycle()

@@ -57,6 +57,10 @@ def test_sqlite_init_db() -> None:
             "SELECT menu_name, path, permission_code FROM sys_menu WHERE id = 17"
         ).fetchone()
         assert field_policy_menu == ("字段规则", "/system/field-policy", "system:field-policy:list")
+        archive_toggle_menu = conn.execute(
+            "SELECT parent_id, menu_name, permission_code, sort FROM sys_menu WHERE id = 226"
+        ).fetchone()
+        assert archive_toggle_menu == (22, "启用/禁用", "project:archive:toggle", 6)
         role_templates = {
             row[0]: (row[1], row[2])
             for row in conn.execute(
@@ -85,6 +89,7 @@ def test_sqlite_init_db() -> None:
         assert "system:field-policy:edit" in template_permissions["admin"]
         assert {
             "project:archive:sync",
+            "project:archive:toggle",
             "system:enum:edit",
             "system:operation-log:view",
             "system:field-policy:edit",
@@ -101,6 +106,7 @@ def test_sqlite_init_db() -> None:
             "project:list:delete",
             "project:archive:delete",
             "project:archive:sync",
+            "project:archive:toggle",
             "system:operation-log:view",
             "system:field-policy:edit",
         }.intersection(template_permissions["operator"])
@@ -119,14 +125,14 @@ def test_sqlite_init_db() -> None:
         assert conn.execute("SELECT COUNT(*) FROM sys_menu WHERE id IN (132, 133, 134)").fetchone()[0] == 0
 
         conn.execute(
-            "DELETE FROM sys_role_menu WHERE menu_id = 172 AND role_id IN "
+            "DELETE FROM sys_role_menu WHERE menu_id IN (172, 226) AND role_id IN "
             "(SELECT id FROM sys_role WHERE role_code IN ('admin', 'business_admin'))"
         )
         conn.commit()
         init_db()
         assert conn.execute(
             "SELECT COUNT(*) FROM sys_role_menu rm JOIN sys_role r ON r.id = rm.role_id "
-            "WHERE rm.menu_id = 172 AND r.role_code IN ('admin', 'business_admin')"
+            "WHERE rm.menu_id IN (172, 226) AND r.role_code IN ('admin', 'business_admin')"
         ).fetchone()[0] == 0
     finally:
         conn.close()

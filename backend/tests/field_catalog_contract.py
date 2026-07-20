@@ -74,7 +74,12 @@ def test_catalog_exposes_enum_metadata_and_supports_filters():
 
     fields = build_field_catalog()
     by_key = {(field["module"], field["field_code"]): field for field in fields}
-    assert by_key[("project_archive", "status")]["enum_code"] == "archive_status"
+    assert by_key[("project_archive", "status")]["enum_code"] is None
+    assert by_key[("project_archive", "status")]["source_type"] == "system_fixed"
+    assert by_key[("project_archive", "status")]["editable"] is False
+    assert "保留字段" in by_key[("project_archive", "status")]["description"]
+    assert by_key[("project_archive", "is_enabled")]["source_type"] == "system_fixed"
+    assert by_key[("project_archive", "is_enabled")]["editable"] is False
     assert by_key[("project_archive", "product_category")]["enum_code"] == "product_category"
     assert by_key[("project_archive", "equipment_series")]["enum_code"] == "equipment_series"
     assert by_key[("project_progress", "node_status")]["enum_code"] == "project_status"

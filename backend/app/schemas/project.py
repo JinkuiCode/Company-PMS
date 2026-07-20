@@ -7,7 +7,6 @@ from typing import Any
 class ArchiveCreate(BaseModel):
     project_code: str = Field(..., max_length=32)
     project_name: str = Field(..., max_length=128)
-    status: int = 1
     manager_id: int | None = None
     customer: str | None = Field(None, max_length=128)
     product_category: int | None = None
@@ -20,7 +19,6 @@ class ArchiveCreate(BaseModel):
 class ArchiveUpdate(BaseModel):
     project_code: str | None = Field(None, max_length=32)
     project_name: str | None = Field(None, max_length=128)
-    status: int | None = None
     manager_id: int | None = None
     customer: str | None = Field(None, max_length=128)
     product_category: int | None = None

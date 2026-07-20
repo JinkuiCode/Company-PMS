@@ -443,6 +443,7 @@ def test_role_templates_and_sso_default_are_fail_closed():
     assert '"business_admin"' in templates
     assert '"operator"' in templates
     assert '"project:archive:sync"' in templates
+    assert '"project:archive:toggle"' in templates
     assert '"system:field-policy:edit"' in templates
     assert '"system:operation-log:view"' in templates
     assert 'role_code == "operator"' in sso

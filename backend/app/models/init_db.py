@@ -166,8 +166,8 @@ def init_db():
                 db.commit()
                 print("迁移完成：已更新操作日志菜单")
 
-        # 4.3.1 字段规则权限仅在节点首次出现时做一次迁移授权。
-        new_field_policy_permission_ids: set[int] = set()
+        # 新权限只在节点首次出现时迁移授权，后续启动不得回补人工撤权。
+        new_template_permission_ids: set[int] = set()
         field_policy_menu = db.query(SysMenu).filter(SysMenu.id == 17).first()
         field_policy_menu_values = {
             "parent_id": 1,
@@ -182,7 +182,7 @@ def init_db():
             field_policy_menu = SysMenu(id=17, **field_policy_menu_values)
             db.add(field_policy_menu)
             db.commit()
-            new_field_policy_permission_ids.add(17)
+            new_template_permission_ids.add(17)
             print("迁移完成：已添加字段规则菜单")
         else:
             changed = False
@@ -206,6 +206,7 @@ def init_db():
             {"id": 223, "parent_id": 22, "menu_name": "编辑", "menu_type": "B", "permission_code": "project:archive:edit", "sort": 3},
             {"id": 224, "parent_id": 22, "menu_name": "删除", "menu_type": "B", "permission_code": "project:archive:delete", "sort": 4},
             {"id": 225, "parent_id": 22, "menu_name": "同步", "menu_type": "B", "permission_code": "project:archive:sync", "sort": 5},
+            {"id": 226, "parent_id": 22, "menu_name": "启用/禁用", "menu_type": "B", "permission_code": "project:archive:toggle", "sort": 6},
             # 系统管理 按钮权限 (parent_id=1)
             {"id": 111, "parent_id": 11, "menu_name": "查看", "menu_type": "B", "permission_code": "system:user:view", "sort": 1},
             {"id": 112, "parent_id": 11, "menu_name": "新增", "menu_type": "B", "permission_code": "system:user:add", "sort": 2},
@@ -231,8 +232,8 @@ def init_db():
             existing = db.query(SysMenu).filter(SysMenu.id == bm["id"]).first()
             if not existing:
                 db.add(SysMenu(**bm))
-                if bm["id"] in {171, 172}:
-                    new_field_policy_permission_ids.add(bm["id"])
+                if bm["id"] in {171, 172, 226}:
+                    new_template_permission_ids.add(bm["id"])
             else:
                 for key, value in bm.items():
                     if key != "id":
@@ -269,7 +270,7 @@ def init_db():
         db.commit()
 
         # 新权限节点首次迁移时授予管理员和业务管理员；节点存在后的重启不再回补。
-        if new_field_policy_permission_ids:
+        if new_template_permission_ids:
             for role_code in ("admin", "business_admin"):
                 template_role = role_map.get(role_code)
                 if not template_role:
@@ -277,12 +278,12 @@ def init_db():
                 existing_ids = {
                     menu_id for (menu_id,) in db.query(SysRoleMenu.menu_id).filter(
                         SysRoleMenu.role_id == template_role.id,
-                        SysRoleMenu.menu_id.in_(new_field_policy_permission_ids),
+                        SysRoleMenu.menu_id.in_(new_template_permission_ids),
                     ).all()
                 }
                 db.add_all([
                     SysRoleMenu(role_id=template_role.id, menu_id=menu_id)
-                    for menu_id in sorted(new_field_policy_permission_ids - existing_ids)
+                    for menu_id in sorted(new_template_permission_ids - existing_ids)
                 ])
             db.commit()
 

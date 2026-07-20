@@ -37,9 +37,7 @@ def test_field_policy_registry_preserves_technical_limits():
     assert archive_fields["project_code"]["required_locked"] is True
     assert archive_fields["project_code"]["editable_locked"] is True
     assert archive_fields["project_code"]["source_type"] == "detail"
-    assert archive_fields["status"]["visible_locked"] is True
-    assert archive_fields["status"]["editable_locked"] is True
-    assert archive_fields["status"]["required_locked"] is True
+    assert "status" not in archive_fields
     assert progress_fields["archive_id"]["required_locked"] is True
     assert progress_fields["archive_id"]["required_cap"] is True
     assert progress_fields["dept_id"]["required_locked"] is True
