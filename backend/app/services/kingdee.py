@@ -7,14 +7,22 @@ import logging
 from datetime import datetime
 from typing import Optional
 import httpx
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.project import PmsProjectArchive, ErpSyncLog
 from app.services.operation_log import record_operation_log, serialize_model
+from app.services.project import get_scoped_archive_query, validate_archive_for_business_operation
+from app.services.project_archive_lifecycle import (
+    claim_archive_for_sync,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class KingdeeSaveOutcomeAmbiguous(RuntimeError):
+    """保存请求已开始，但无法可靠确认金蝶是否落库。"""
 
 
 class KingdeeClient:
@@ -115,6 +123,7 @@ class KingdeeClient:
         :param entry_id: 记录内码（FEntryID），有值时为更新，空时为新建
         :return: 包含 success 和 message 的结果字典
         """
+        request_started = False
         try:
             url = f"{self.base_url}/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.Save.common.kdsvc"
 
@@ -150,38 +159,53 @@ class KingdeeClient:
             logger.info(f"金蝶Save请求 - formid: {form_id}")
             logger.info(f"金蝶Save请求 - data: {data_str[:300]}")
 
+            request_started = True
             response = self.client.post(url, json=payload)
             response.raise_for_status()
 
             result = response.json()
             logger.info(f"金蝶Save返回: {json.dumps(result, ensure_ascii=False)[:500]}")
 
-            # 检查返回结果
-            if "Result" in result:
-                result_data = result["Result"]
-                if isinstance(result_data, dict):
-                    status = result_data.get("ResponseStatus", {})
-                    if status.get("IsSuccess"):
-                        return {
-                            "success": True,
-                            "message": "保存成功",
-                            "data": result_data
-                        }
-                    else:
-                        errors = status.get("Errors", [])
-                        error_msg = errors[0].get("Message", "未知错误") if errors else "未知错误"
-                        return {
-                            "success": False,
-                            "message": f"保存失败: {error_msg}"
-                        }
+            result_data = result.get("Result") if isinstance(result, dict) else None
+            status = (
+                result_data.get("ResponseStatus")
+                if isinstance(result_data, dict)
+                else None
+            )
+            if not isinstance(status, dict) or "IsSuccess" not in status:
+                raise KingdeeSaveOutcomeAmbiguous(f"金蝶保存返回格式异常: {result}")
 
-            return {
-                "success": False,
-                "message": f"返回格式异常: {result}"
-            }
+            is_success = status["IsSuccess"]
+            if is_success is True:
+                return {
+                    "success": True,
+                    "message": "保存成功",
+                    "data": result_data,
+                }
+            if is_success is False:
+                errors = status.get("Errors", [])
+                first_error = errors[0] if isinstance(errors, list) and errors else None
+                error_msg = (
+                    first_error.get("Message", "未知错误")
+                    if isinstance(first_error, dict)
+                    else "未知错误"
+                )
+                return {
+                    "success": False,
+                    "message": f"保存失败: {error_msg}",
+                }
+            raise KingdeeSaveOutcomeAmbiguous(
+                f"金蝶保存返回未知成功标记: {is_success!r}"
+            )
 
+        except KingdeeSaveOutcomeAmbiguous:
+            raise
         except Exception as e:
             logger.error(f"保存辅助资料异常: {str(e)}")
+            if request_started:
+                raise KingdeeSaveOutcomeAmbiguous(
+                    f"金蝶保存结果不确定: {e}"
+                ) from e
             return {
                 "success": False,
                 "message": f"保存异常: {str(e)}"
@@ -192,48 +216,58 @@ class KingdeeClient:
         self.client.close()
 
 
-def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | None = None, request: Request | None = None) -> dict:
+def sync_project_archive_to_erp(
+    db: Session,
+    archive_id: int,
+    user_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+) -> dict:
     """
     同步单个项目档案到金蝶 ERP
     :param db: 数据库会话
     :param archive_id: 项目档案 ID
     :return: 包含 success 和 message 的结果字典
     """
-    # 查询项目档案
-    archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id).first()
-    if not archive:
-        record_operation_log(
-            db,
-            module="ERP同步",
-            action="sync",
-            entity_type="pms_project_archive",
-            entity_id=archive_id,
-            operator_id=user_id,
-            request=request,
-            status="failed",
-            summary=f"同步项目档案失败：档案不存在（ID {archive_id}）",
-            error_msg="项目档案不存在",
-            commit=True,
-        )
+    claimed = claim_archive_for_sync(
+        db,
+        archive_id,
+        archive_query=get_scoped_archive_query(db, scope_context),
+        validator=lambda current: validate_archive_for_business_operation(db, current),
+    )
+    if claimed is None:
+        try:
+            record_operation_log(
+                db,
+                module="ERP同步",
+                action="sync",
+                entity_type="pms_project_archive",
+                entity_id=archive_id,
+                operator_id=user_id,
+                request=request,
+                status="failed",
+                summary=f"同步项目档案失败：档案不存在（ID {archive_id}）",
+                error_msg="项目档案不存在",
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         return {"success": False, "message": "项目档案不存在"}
 
-    # 更新状态为 pending
-    before = serialize_model(archive)
-    archive.erp_sync_status = "pending"
-    db.commit()
-
-    # 创建金蝶客户端
-    client = KingdeeClient()
+    archive, before = claimed
+    client: KingdeeClient | None = None
+    external_save_started = False
 
     try:
+        # pending 已通过条件 mutation 独立提交，随后才允许创建客户端并访问外部系统。
+        client = KingdeeClient()
+
         # 1. 登录金蝶
         if not client.login():
             error_msg = "金蝶登录失败，请检查配置"
             archive.erp_sync_status = "failed"
             archive.erp_error_msg = error_msg
-            db.commit()
-
-            # 记录日志
             log = ErpSyncLog(
                 source_id=archive_id,
                 action="sync",
@@ -256,7 +290,11 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
                 after_data=serialize_model(archive),
                 error_msg=error_msg,
             )
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
 
             return {"success": False, "message": error_msg}
 
@@ -274,6 +312,7 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
         entry_id = str(existing["FEntryID"]) if existing else ""
 
         # 3. 保存（创建或更新）
+        external_save_started = True
         save_result = client.save_assistant_data(
             form_id=form_id,
             category_code=category_code,
@@ -311,7 +350,11 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
                 before_data=before,
                 after_data=serialize_model(archive),
             )
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
 
             return {"success": True, "message": f"同步成功（{action}）"}
         else:
@@ -340,12 +383,54 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
                 after_data=serialize_model(archive),
                 error_msg=save_result["message"],
             )
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
 
             return save_result
 
     except Exception as e:
+        db.rollback()
         error_msg = f"同步异常: {str(e)}"
+        archive = (
+            get_scoped_archive_query(db, scope_context)
+            .populate_existing()
+            .filter(PmsProjectArchive.id == archive_id)
+            .first()
+        )
+        if archive is None:
+            return {"success": False, "message": "项目档案不存在"}
+        if external_save_started:
+            try:
+                log = ErpSyncLog(
+                    source_id=archive_id,
+                    action="sync",
+                    status="failed",
+                    error_msg=error_msg,
+                )
+                db.add(log)
+                record_operation_log(
+                    db,
+                    module="ERP同步",
+                    action="sync",
+                    entity_type="pms_project_archive",
+                    entity_id=archive.id,
+                    entity_name=archive.project_name,
+                    operator_id=user_id,
+                    request=request,
+                    status="failed",
+                    summary=f"同步项目档案结果不确定：{archive.project_name}",
+                    before_data=before,
+                    after_data=serialize_model(archive),
+                    error_msg=error_msg,
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+            return {"success": False, "message": error_msg}
+
         archive.erp_sync_status = "failed"
         archive.erp_error_msg = error_msg
 
@@ -371,15 +456,26 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
             after_data=serialize_model(archive),
             error_msg=error_msg,
         )
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
         return {"success": False, "message": error_msg}
 
     finally:
-        client.close()
+        if client is not None:
+            client.close()
 
 
-def batch_sync_project_archives(db: Session, archive_ids: list[int], user_id: int | None = None, request: Request | None = None) -> dict:
+def batch_sync_project_archives(
+    db: Session,
+    archive_ids: list[int],
+    user_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+) -> dict:
     """
     批量同步项目档案到金蝶 ERP
     :param db: 数据库会话
@@ -391,7 +487,18 @@ def batch_sync_project_archives(db: Session, archive_ids: list[int], user_id: in
     errors = []
 
     for archive_id in archive_ids:
-        result = sync_project_archive_to_erp(db, archive_id, user_id=user_id, request=request)
+        try:
+            result = sync_project_archive_to_erp(
+                db,
+                archive_id,
+                user_id=user_id,
+                request=request,
+                scope_context=scope_context,
+            )
+        except HTTPException as exc:
+            if not isinstance(exc.detail, dict) or exc.detail.get("code") != "ARCHIVE_DISABLED":
+                raise
+            result = {"success": False, "message": exc.detail["message"]}
         if result["success"]:
             success_count += 1
         else:

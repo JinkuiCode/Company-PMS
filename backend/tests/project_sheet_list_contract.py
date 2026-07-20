@@ -47,10 +47,12 @@ def seed_project_sheet_list_runtime_data() -> int:
         archive = PmsProjectArchive(
             project_code="PA-001",
             project_name="档案项目A",
+            customer="客户甲",
             status=1,
             manager_id=pm.id,
-            product_type="链式",
-            product_line="Bench",
+            equipment_series=1,
+            product_category=1,
+            serial_no="SN-PA-001",
         )
         db.add(archive)
         db.flush()
@@ -61,7 +63,7 @@ def seed_project_sheet_list_runtime_data() -> int:
             project_name="进度项目A",
             dept_id=dept.id,
             pm_id=pm.id,
-            product_line="Single",
+            product_category=3,
             status=1,
             start_date=date(2026, 1, 5),
             end_date=date(2026, 3, 10),
@@ -75,7 +77,6 @@ def seed_project_sheet_list_runtime_data() -> int:
             project_id=project.id,
             detail_data=json.dumps(
                 {
-                    "customer": "客户甲",
                     "plan_ship_date": "2026-02-01",
                     "actual_ship_date": "2026-02-06",
                     "progress_notes": "长文本说明",
@@ -141,9 +142,9 @@ def test_normalize_sheet_field_keys_deduplicates_and_ignores_unknown_or_hidden()
     from app.services.project_sheet_fields import normalize_sheet_field_keys
 
     normalized = normalize_sheet_field_keys(
-        "customer,customer,last_editor,unknown,progress_notes,product_line"
+        "customer,customer,last_editor,unknown,progress_notes,product_category"
     )
-    assert normalized == ["customer", "progress_notes", "product_line"]
+    assert normalized == ["customer", "progress_notes", "product_category"]
 
 
 def test_project_sheet_fields_metadata_endpoint_returns_groups_without_values():
@@ -156,7 +157,7 @@ def test_project_sheet_fields_metadata_endpoint_returns_groups_without_values():
         "user_id": 1,
         "dept_id": None,
         "data_scope": 4,
-        "product_lines": None,
+        "product_category_ids": None,
         "role_codes": ["contract-test"],
         "permissions": ["project:list:view"],
     }
@@ -206,21 +207,21 @@ def test_project_list_sheet_fields_projection_and_backwards_compatibility():
             "user_id": 1,
             "dept_id": None,
             "data_scope": 4,
-            "product_lines": None,
+            "product_category_ids": None,
         }
         result = get_project_list(
             db,
             page=1,
             page_size=20,
             scope_context=scoped,
-            sheet_field_keys="customer,product_line,difference_days,design_progress,project_code,last_editor,unknown",
+            sheet_field_keys="customer,product_category,difference_days,design_progress,project_code,last_editor,unknown",
         )
         items_by_id = {item.id: item for item in result["items"]}
         item = items_by_id[project_id]
 
         assert item.sheet_fields == {
             "customer": "客户甲",
-            "product_line": "Bench",
+            "product_category": 1,
             "difference_days": 5,
             "design_progress": 35,
             "project_code": "PA-001",

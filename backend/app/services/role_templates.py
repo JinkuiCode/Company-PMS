@@ -27,6 +27,7 @@ ROLE_TEMPLATES = {
             "project:archive:edit",
             "project:archive:delete",
             "project:archive:sync",
+            "project:archive:toggle",
             "system:dict:list",
             "system:dict:view",
             "system:enum:list",

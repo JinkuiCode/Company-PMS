@@ -36,14 +36,14 @@ def test_project_sheet_registry_covers_all_excel_fields():
         assert label in group_labels
 
     labels = [field["label"] for field in PROJECT_SHEET_FIELDS]
-    for label in ["项目号", "项目名称", "产品类", "推进记录", "设计进度", "配置", "工艺工期"]:
+    for label in ["项目号", "项目名称", "产品类别", "推进记录", "设计进度", "配置", "工艺工期"]:
         assert label in labels
 
 
 def test_project_sheet_reference_and_computed_fields_are_readonly():
     from app.services.project_sheet_fields import FIELD_BY_KEY
 
-    for key in ["project_code", "project_name", "product_line"]:
+    for key in ["project_code", "project_name", "customer", "product_category", "equipment_series", "serial_no"]:
         field = FIELD_BY_KEY[key]
         assert field["source_type"] in {"archive", "project"}
         assert field["editable"] is False
@@ -93,13 +93,16 @@ def test_project_sheet_backend_contract_files_and_routes():
 def test_project_sheet_update_only_accepts_editable_detail_fields():
     from app.services.project_sheet_fields import validate_sheet_detail_updates
 
-    accepted = validate_sheet_detail_updates({"customer": "客户A", "configuration": "配置说明"})
-    assert accepted == {"customer": "客户A", "configuration": "配置说明"}
+    accepted = validate_sheet_detail_updates({"category": "标准项目", "configuration": "配置说明"})
+    assert accepted == {"category": "标准项目", "configuration": "配置说明"}
 
     for payload in [
         {"project_code": "P-001"},
         {"planned_ship_year": 2026},
-        {"product_line": "Bench"},
+        {"customer": "客户A"},
+        {"product_category": 1},
+        {"equipment_series": 1},
+        {"serial_no": "SN-001"},
     ]:
         try:
             validate_sheet_detail_updates(payload)

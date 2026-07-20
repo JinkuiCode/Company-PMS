@@ -38,18 +38,18 @@
               :prefix-icon="Search"
             />
             <el-select
-              v-if="isProgressPolicyVisible('product_line')"
-              v-model="filterProductLine"
-              placeholder="产品类"
+              v-if="isProgressPolicyVisible('product_category')"
+              v-model="filterProductCategory"
+              placeholder="产品类别"
               size="small"
               clearable
               style="width: 128px;"
             >
               <el-option
-                v-for="item in filteredProductLineOptions"
+                v-for="item in filteredProductCategoryOptions"
                 :key="item.value"
                 :label="item.label"
-                :value="item.value"
+                :value="Number(item.value)"
               />
             </el-select>
             <el-select
@@ -299,7 +299,7 @@
             <div class="drawer-meta">
               {{ selectedProject.project_code || '-' }}
               <span>·</span>
-              {{ productLineLabel(selectedProject.product_line) }}
+              {{ productCategoryLabel(selectedProject.product_category) }}
             </div>
           </div>
           <el-tooltip content="收起项目详情" placement="left">
@@ -574,7 +574,7 @@ type ProjectRow = {
   end_date?: string | null
   budget?: number | null
   description?: string | null
-  product_line?: string | null
+  product_category?: number | null
   task_count?: number
   total_progress?: number
   design_progress?: number
@@ -664,7 +664,7 @@ type ColumnPreferenceState = {
 const localeText = chineseLocaleText
 const authStore = useAuthStore()
 const hasPermission = authStore.hasPermission
-const COLUMN_STORAGE_KEY = 'pms_project_progress_list_columns_v1'
+const COLUMN_STORAGE_KEY = 'pms_project_progress_list_columns_v2'
 const progressSummaryMaxLength = 24
 const drawerDefaultExpandedGroupKeys = ['basic', 'stage', 'plan']
 
@@ -725,7 +725,7 @@ const pageSize = ref(15)
 const filterKeyword = ref('')
 const filterStatus = ref<number | null>(null)
 const filterDeptId = ref<number | null>(null)
-const filterProductLine = ref<string | null>(null)
+const filterProductCategory = ref<number | null>(null)
 const selectedProject = ref<ProjectRow | null>(null)
 const drawerOpenGroups = ref<string[]>([...drawerDefaultExpandedGroupKeys])
 const drawerEditingField = ref<string | null>(null)
@@ -746,17 +746,17 @@ const columnPreferenceOwnerId = ref<number | null>(null)
 const restoringColumnState = ref(false)
 const listRequestSerial = ref(0)
 
-const productLineOptions = ref<ListFilterOption[]>([])
-const productLineLabelMap = reactive<Record<string, string>>({})
-const allowedProductLines = ref<string[] | null>(null)
+const productCategoryOptions = ref<ListFilterOption[]>([])
+const productCategoryLabelMap = reactive<Record<string, string>>({})
+const allowedProductCategories = ref<number[] | null>(null)
 const projectStatusOptions = reactive<ListFilterOption[]>([])
 const projectStatusLabelMap = reactive<Record<string, string>>({})
 const sheetEnumDefinitions = reactive<Record<string, EnumDefinition>>({})
 const projectStatusEditorValues = computed(() => projectStatusOptions.map(item => item.value))
 
-const filteredProductLineOptions = computed(() => {
-  if (allowedProductLines.value === null) return productLineOptions.value
-  return productLineOptions.value.filter(item => allowedProductLines.value!.includes(String(item.value)))
+const filteredProductCategoryOptions = computed(() => {
+  if (allowedProductCategories.value === null) return productCategoryOptions.value
+  return productCategoryOptions.value.filter(item => allowedProductCategories.value!.includes(Number(item.value)))
 })
 
 const deptNameOptions = computed(() => deptFlatList.value.map((dept: any) => ({
@@ -810,7 +810,7 @@ const projectListFilterFields = computed<ListFilterField<ProjectRow>[]>(() => {
   const fixedFields = ([
     { field: 'project_code', policyKey: 'project_code', label: '项目编号', type: 'text' },
     { field: 'project_name', policyKey: 'project_name', label: '项目名称', type: 'text' },
-    { field: 'product_line', policyKey: 'product_line', label: '产品类', type: 'select', options: () => filteredProductLineOptions.value },
+    { field: 'product_category', policyKey: 'product_category', label: '产品类别', type: 'select', options: () => filteredProductCategoryOptions.value },
     { field: 'status', policyKey: 'node_status', label: '节点', type: 'select', options: () => projectStatusOptions },
     { field: 'dept_name', policyKey: 'dept_id', label: '所属部门', type: 'select', options: () => deptNameOptions.value },
     { field: 'pm_name', policyKey: 'pm_id', label: '负责人', type: 'select', options: () => userNameFilterOptions.value },
@@ -863,7 +863,7 @@ const filteredRowData = computed(() => {
     result = result.filter(row =>
       String(row.project_code ?? '').toLowerCase().includes(kw)
       || String(row.project_name ?? '').toLowerCase().includes(kw)
-      || String(row.product_line ?? '').toLowerCase().includes(kw)
+      || productCategoryLabel(row.product_category).toLowerCase().includes(kw)
     )
   }
   if (filterStatus.value != null) {
@@ -872,8 +872,8 @@ const filteredRowData = computed(() => {
   if (filterDeptId.value != null) {
     result = result.filter(row => row.dept_id === filterDeptId.value)
   }
-  if (filterProductLine.value) {
-    result = result.filter(row => row.product_line === filterProductLine.value)
+  if (filterProductCategory.value != null) {
+    result = result.filter(row => Number(row.product_category) === filterProductCategory.value)
   }
   return applyCustomFilters(result)
 })
@@ -889,7 +889,7 @@ const orderedDrawerGroups = computed(() => {
   return buildDrawerGroupsFromRow(selectedProject.value)
 })
 
-watch([filterKeyword, filterStatus, filterDeptId, filterProductLine, customFilters], () => {
+watch([filterKeyword, filterStatus, filterDeptId, filterProductCategory, customFilters], () => {
   page.value = 1
   if (selectedProject.value && !filteredRowData.value.some(row => row.id === selectedProject.value?.id)) {
     selectedProject.value = null
@@ -1137,6 +1137,7 @@ function normalizeProgressInput(value: unknown) {
 function normalizeProjectRow(row: ProjectRow) {
   return {
     ...row,
+    product_category: row.product_category == null ? null : Number(row.product_category),
     sheet_fields: row.sheet_fields && typeof row.sheet_fields === 'object' ? { ...row.sheet_fields } : {},
   }
 }
@@ -1304,8 +1305,8 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
     cellRenderer: (params: any) => `<span class="proj-name-cell">${escapeHtml(params.value || '-')}</span>`,
   },
   {
-    field: 'product_line', headerName: '产品类', width: 100, hide: !isProgressPolicyVisible('product_line'),
-    valueFormatter: (params: any) => productLineLabel(params.value),
+    field: 'product_category', headerName: '产品类别', width: 100, hide: !isProgressPolicyVisible('product_category'),
+    valueFormatter: (params: any) => productCategoryLabel(params.value),
   },
   {
     field: 'status',
@@ -1529,13 +1530,16 @@ async function fetchOptions() {
   archiveList.value = (await request.get('/projects/archives/options')) as any
 
   try {
-    const [productLineDefinition, projectStatusDefinition] = await Promise.all([
-      loadEnumOptions('product_line'),
+    const [productCategoryDefinition, projectStatusDefinition] = await Promise.all([
+      loadEnumOptions('product_category'),
       loadEnumOptions('project_status'),
     ])
-    productLineOptions.value = productLineDefinition.items
-    Object.keys(productLineLabelMap).forEach(key => delete productLineLabelMap[key])
-    Object.assign(productLineLabelMap, productLineDefinition.label_map)
+    productCategoryOptions.value = productCategoryDefinition.items.map(item => ({
+      label: item.label,
+      value: Number(item.value),
+    }))
+    Object.keys(productCategoryLabelMap).forEach(key => delete productCategoryLabelMap[key])
+    Object.assign(productCategoryLabelMap, productCategoryDefinition.label_map)
     projectStatusOptions.splice(
       0,
       projectStatusOptions.length,
@@ -1544,15 +1548,15 @@ async function fetchOptions() {
     Object.keys(projectStatusLabelMap).forEach(key => delete projectStatusLabelMap[key])
     Object.assign(projectStatusLabelMap, projectStatusDefinition.label_map)
   } catch {
-    productLineOptions.value = []
+    productCategoryOptions.value = []
     projectStatusOptions.splice(0)
   }
 
   try {
-    const plRes: any = await request.get('/auth/product-lines')
-    allowedProductLines.value = plRes.unrestricted ? null : (plRes.items || [])
+    const categoryRes: any = await request.get('/auth/product-categories')
+    allowedProductCategories.value = categoryRes.unrestricted ? null : (categoryRes.items || []).map(Number)
   } catch {
-    allowedProductLines.value = null
+    allowedProductCategories.value = null
   }
 
   const deptOptions = (await request.get('/depts/options')) as any[]
@@ -1733,9 +1737,9 @@ function formatSheetFieldValue(field: ProjectSheetField) {
   return String(value)
 }
 
-function productLineLabel(value: unknown) {
-  if (value === null || value === undefined || value === '') return '未设置产品类'
-  return productLineLabelMap[String(value)] || String(value)
+function productCategoryLabel(value: unknown) {
+  if (value === null || value === undefined || value === '') return '未设置产品类别'
+  return productCategoryLabelMap[String(value)] || String(value)
 }
 
 function startSheetFieldEdit(field: ProjectSheetField) {

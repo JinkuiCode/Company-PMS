@@ -167,15 +167,32 @@ ENUM_BINDINGS: dict[tuple[str, str], tuple[str | None, str]] = {
     ("department", "status"): (None, "system_fixed"),
     ("role", "status"): (None, "system_fixed"),
     ("role", "data_scope"): (None, "system_fixed"),
-    ("role", "product_lines"): ("product_line", "enum"),
-    ("project_archive", "status"): ("archive_status", "enum"),
-    ("project_archive", "product_line"): ("product_line", "enum"),
-    ("project_archive", "product_type"): ("product_type", "enum"),
+    ("role", "product_category_ids"): ("product_category", "enum"),
+    ("project_archive", "status"): (None, "system_fixed"),
+    ("project_archive", "is_enabled"): (None, "system_fixed"),
+    ("project_archive", "product_category"): ("product_category", "enum"),
+    ("project_archive", "equipment_series"): ("equipment_series", "enum"),
     ("project_archive", "erp_sync_status"): (None, "system_fixed"),
     ("project_progress", "status"): ("project_status", "enum"),
     ("project_progress", "node_status"): ("project_status", "enum"),
-    ("project_progress", "product_line"): ("product_line", "enum"),
+    ("project_progress", "product_category"): ("product_category", "enum"),
     ("task", "status"): ("task_status", "enum"),
+}
+
+
+FIELD_METADATA_OVERRIDES: dict[tuple[str, str], dict[str, Any]] = {
+    ("project_archive", "status"): {
+        "editable": False,
+        "enum_code": None,
+        "source_type": "system_fixed",
+        "description": "保留字段，项目档案原状态暂未启用，仅用于兼容历史数据",
+    },
+    ("project_archive", "is_enabled"): {
+        "editable": False,
+        "enum_code": None,
+        "source_type": "system_fixed",
+        "description": "系统控制的项目档案启用/禁用状态，不允许在业务表单直接编辑",
+    },
 }
 
 
@@ -275,6 +292,7 @@ def _base_catalog_for_module(config: dict[str, Any]) -> dict[str, dict[str, Any]
             "description": comment or ("接口关联/展示字段" if column is None else ""),
             "catalog_source": "+".join(sources),
         }
+        result[code].update(FIELD_METADATA_OVERRIDES.get((config["key"], code), {}))
     return result
 
 

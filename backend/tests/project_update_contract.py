@@ -17,22 +17,22 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_project_update_keeps_archive_product_line_read_only() -> None:
+def test_project_update_keeps_archive_product_category_read_only() -> None:
     schema = read("app/schemas/project.py")
     model = read("app/models/project.py")
     service = read("app/services/project.py")
     api = read("app/api/projects.py")
     init_db = read("app/models/init_db.py")
 
-    assert "product_line: str | None = None" in schema
-    assert 'product_line: Mapped[str | None] = mapped_column(NVARCHAR(32)' in model
-    assert "product_line: str | None = Field(None, max_length=32)" in schema
-    assert 'if "product_line" in update_data' in service
-    assert "产品线来自项目档案，请在项目档案中维护" in service
+    assert "product_category: int | None = None" in schema
+    assert 'product_category: Mapped[int | None] = mapped_column(Integer' in model
+    assert 'if "product_category" in update_data' in service
+    assert "产品类别来自项目档案，请在项目档案中维护" in service
     assert "PmsProjectArchive" in service
-    assert "archive.product_line if archive and archive.product_line else p.product_line" in service
-    assert "项目未关联档案，无法更新产品类" not in service
-    assert "ALTER TABLE pms_project ADD product_line NVARCHAR(32) NULL" in init_db
+    assert "archive.product_category if archive and archive.product_category else p.product_category" in service
+    assert "项目未关联档案，无法更新产品类别" not in service
+    migration = read("app/services/project_archive_semantic_migration.py")
+    assert '_add_column(connection, "pms_project", "product_category", "INT NULL")' in migration
     assert 'require_permission("project:list:edit")' in api
     assert 'scope_ctx["user_id"]' in api
     assert "scope_context=scope_ctx" in api
@@ -52,6 +52,6 @@ def test_project_update_can_save_stage_progress_fields() -> None:
 
 
 if __name__ == "__main__":
-    test_project_update_keeps_archive_product_line_read_only()
+    test_project_update_keeps_archive_product_category_read_only()
     test_project_update_can_save_stage_progress_fields()
     print("project update contract passed")

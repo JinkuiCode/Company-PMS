@@ -35,7 +35,7 @@ class UserInfo(BaseModel):
     role_codes: list[str] = []
     permissions: list[str] = []
     data_scope: int = 1
-    product_lines: list[str] | None = None
+    product_category_ids: list[int] | None = None
     model_config = {"from_attributes": True}
 
 

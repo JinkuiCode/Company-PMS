@@ -172,7 +172,7 @@ assert.doesNotMatch(
 )
 assert.doesNotMatch(
   projectList,
-  /field === 'product_line'/,
+  /field === 'product_category'/,
   'Progress page should continue to reject direct edits to archive-derived product line',
 )
 assert.doesNotMatch(

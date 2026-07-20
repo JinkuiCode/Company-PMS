@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Integer, DateTime, ForeignKey, func, DECIMAL, Index
+from sqlalchemy import Integer, DateTime, ForeignKey, func, DECIMAL, Index, event, text
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,11 +13,23 @@ class PmsProjectArchive(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_code: Mapped[str] = mapped_column(NVARCHAR(32), unique=True, nullable=False, comment="项目编号")
+    project_code_key: Mapped[str] = mapped_column(NVARCHAR(32), nullable=False, comment="项目编号唯一键")
     project_name: Mapped[str] = mapped_column(NVARCHAR(128), nullable=False, comment="项目名称")
+    project_name_key: Mapped[str] = mapped_column(NVARCHAR(128), nullable=False, comment="项目名称唯一键")
+    customer: Mapped[str | None] = mapped_column(NVARCHAR(128), default=None, comment="客户")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1未启动 2进行中 3已完结 4暂停")
+    is_enabled: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default=text("1"),
+        comment="启用状态: 1启用 0禁用",
+    )
     manager_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="负责人ID")
-    product_type: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="产品类型")
-    product_line: Mapped[str | None] = mapped_column(NVARCHAR(32), default=None, comment="产品线: Bench/光伏/Single/HOTSPM")
+    product_category: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品类别枚举值")
+    equipment_series: Mapped[int | None] = mapped_column(Integer, default=None, comment="设备系列枚举值")
+    serial_no: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="序列号")
+    serial_no_key: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="序列号唯一键")
     plan_start_date: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="计划开始日期")
     plan_end_date: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="计划结束日期")
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="创建人ID")
@@ -30,6 +42,19 @@ class PmsProjectArchive(Base):
     erp_error_msg: Mapped[str | None] = mapped_column(NVARCHAR(512), default=None, comment="同步失败错误信息")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("idx_project_archive_enabled", "is_enabled"),
+        Index("ux_pms_project_archive_project_code_key", "project_code_key", unique=True),
+        Index("ux_pms_project_archive_project_name_key", "project_name_key", unique=True),
+        Index(
+            "ux_pms_project_archive_serial_no_key",
+            "serial_no_key",
+            unique=True,
+            sqlite_where=text("serial_no_key IS NOT NULL"),
+            mssql_where=text("serial_no_key IS NOT NULL"),
+        ),
+    )
 
 
 class ErpSyncLog(Base):
@@ -54,7 +79,7 @@ class PmsProject(Base):
     project_name: Mapped[str] = mapped_column(NVARCHAR(128), nullable=False, comment="项目名称")
     dept_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_dept.id"), nullable=False, comment="所属部门ID")
     pm_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, comment="项目经理ID")
-    product_line: Mapped[str | None] = mapped_column(NVARCHAR(32), default=None, comment="产品线: Bench/光伏/Single/HOTSPM")
+    product_category: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品类别枚举值")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1进行中 2已完结 3暂停")
     start_date: Mapped[datetime.date | None] = mapped_column(DateTime, default=None, comment="开始日期")
     end_date: Mapped[datetime.date | None] = mapped_column(DateTime, default=None, comment="结束日期")
@@ -71,6 +96,22 @@ class PmsProject(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (Index("idx_project_dept", "dept_id"), Index("idx_project_pm", "pm_id"))
+
+
+def _clean_identity(value: str | None) -> str:
+    return (value or "").strip()
+
+
+@event.listens_for(PmsProjectArchive, "before_insert")
+@event.listens_for(PmsProjectArchive, "before_update")
+def _populate_archive_identity_keys(_mapper, _connection, target: PmsProjectArchive) -> None:
+    target.project_code = _clean_identity(target.project_code)
+    target.project_name = _clean_identity(target.project_name)
+    target.serial_no = _clean_identity(target.serial_no) or None
+    target.customer = _clean_identity(target.customer) or None
+    target.project_code_key = target.project_code.casefold()
+    target.project_name_key = target.project_name
+    target.serial_no_key = target.serial_no.casefold() if target.serial_no else None
 
 
 class PmsProjectSheetDetail(Base):

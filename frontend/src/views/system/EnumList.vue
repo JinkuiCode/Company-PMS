@@ -108,12 +108,11 @@
 
     <el-dialog v-model="itemDialogVisible" :title="isItemEdit ? '编辑枚举值' : '新增枚举值'" width="440px">
       <el-form ref="itemFormRef" :model="itemForm" :rules="itemRules" label-width="84px">
-        <el-form-item label="存储值" prop="item_value">
-          <el-input
-            v-model="itemForm.item_value"
-            :disabled="isItemEdit && itemValueLocked"
-            placeholder="写入业务数据的稳定值"
-          />
+        <el-form-item label="存储值">
+          <div class="enum-generated-value">
+            <code v-if="isItemEdit" class="pms-code">{{ itemForm.item_value }}</code>
+            <span v-else>保存后由系统自动分配数字流水</span>
+          </div>
         </el-form-item>
         <el-form-item label="显示名称" prop="item_label">
           <el-input v-model="itemForm.item_label" placeholder="页面展示文字" />
@@ -220,27 +219,14 @@ async function refreshSelectedEnumCache() {
 
 const itemDialogVisible = ref(false)
 const isItemEdit = ref(false)
-const itemValueLocked = ref(false)
 const itemFormRef = ref<FormInstance>()
 const itemForm = reactive({ id: 0, item_value: '', item_label: '', sort: 0, status: 1 })
-function validateItemValue(_rule: unknown, value: string, callback: (error?: Error) => void) {
-  if (selectedDict.value?.dict_code === 'product_line' && value.includes(',')) {
-    callback(new Error('产品线存储值不能包含逗号'))
-    return
-  }
-  callback()
-}
 const itemRules: FormRules = {
-  item_value: [
-    { required: true, message: '请输入存储值' },
-    { validator: validateItemValue, trigger: 'blur' },
-  ],
   item_label: [{ required: true, message: '请输入显示名称' }],
 }
 
 function openItemDialog(row?: EnumItem) {
   isItemEdit.value = Boolean(row)
-  itemValueLocked.value = Boolean(row?.value_locked || !selectedDict.value?.allow_value_edit)
   Object.assign(itemForm, row
     ? { id: row.id, item_value: row.item_value, item_label: row.item_label, sort: row.sort, status: row.status }
     : { id: 0, item_value: '', item_label: '', sort: dictItems.value.length + 1, status: 1 })
@@ -251,7 +237,6 @@ async function handleItemSubmit() {
   const valid = await itemFormRef.value?.validate().catch(() => false)
   if (!valid || !selectedDict.value) return
   const payload = {
-    item_value: itemForm.item_value,
     item_label: itemForm.item_label,
     sort: itemForm.sort,
     status: itemForm.status,
@@ -444,6 +429,14 @@ onMounted(fetchDicts)
   border-radius: 4px;
   color: var(--pms-text-secondary);
   font-size: 11px;
+}
+
+.enum-generated-value {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  color: var(--pms-text-secondary);
+  font-size: 12px;
 }
 
 .has-reference {

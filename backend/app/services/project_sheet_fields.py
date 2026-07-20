@@ -57,7 +57,7 @@ def _field(
 
 PROJECT_SHEET_FIELDS = [
     _field(1, "project_code", "项目号", "basic", source_type="archive", editable=False),
-    _field(2, "customer", "客户", "basic"),
+    _field(2, "customer", "客户", "basic", source_type="archive", editable=False),
     _field(3, "customer_code", "客户端代号", "basic"),
     _field(4, "project_owner", "项目", "basic"),
     _field(5, "progress_notes", "推进记录", "progress_notes", "long_text"),
@@ -74,10 +74,10 @@ PROJECT_SHEET_FIELDS = [
         enum_code="project_status",
     ),
     _field(9, "category", "类别", "basic"),
-    _field(10, "product_line", "产品类", "basic", source_type="archive", editable=False),
+    _field(10, "product_category", "产品类别", "basic", "select", source_type="archive", editable=False, enum_code="product_category"),
     _field(11, "project_name", "项目名称", "basic", source_type="archive", editable=False),
-    _field(12, "equipment_series", "设备系列", "product"),
-    _field(13, "serial_no", "序列号", "product"),
+    _field(12, "equipment_series", "设备系列", "product", "select", source_type="archive", editable=False, enum_code="equipment_series"),
+    _field(13, "serial_no", "序列号", "product", source_type="archive", editable=False),
     _field(14, "salesperson", "业务员", "people"),
     _field(15, "project_start_date", "立项日期", "basic", "date", source_type="project", editable=True),
     _field(16, "original_planned_ship_date", "原计划发货", "plan", "date", source_type="project", editable=True),

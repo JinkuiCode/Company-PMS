@@ -5,7 +5,8 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, exists, func, or_
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, Request
 
 from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive, PmsProjectSheetDetail
@@ -17,6 +18,14 @@ from app.schemas.project import (
     ArchiveCreate, ArchiveUpdate, ArchiveResponse, ArchiveOption, ProjectSheetDetailUpdate,
 )
 from app.services.operation_log import record_operation_log, serialize_model
+from app.services.project_archive_lifecycle import (
+    archive_not_pending_condition,
+    claim_archive_lifecycle_rows,
+    ensure_archive_enabled,
+    get_archive_delete_guard,
+    get_archive_delete_guards,
+    set_archive_enabled,
+)
 from app.services.enum_registry import validate_enum_value
 from app.services.project_sheet_fields import (
     build_sheet_detail_groups,
@@ -62,14 +71,14 @@ def _apply_project_scope(query, db: Session, scope_context: dict | None = None):
         else:
             query = query.filter(PmsProject.id == -1)
 
-    allowed_lines = scope_context.get("product_lines")
-    if allowed_lines is not None:
+    allowed_category_ids = scope_context.get("product_category_ids")
+    if allowed_category_ids is not None:
         query = query.outerjoin(PmsProjectArchive, PmsProject.archive_id == PmsProjectArchive.id).filter(
             or_(
-                PmsProjectArchive.product_line.in_(allowed_lines),
+                PmsProjectArchive.product_category.in_(allowed_category_ids),
                 and_(
-                    PmsProjectArchive.product_line.is_(None),
-                    PmsProject.product_line.in_(allowed_lines),
+                    PmsProjectArchive.product_category.is_(None),
+                    PmsProject.product_category.in_(allowed_category_ids),
                 ),
             )
         )
@@ -94,9 +103,9 @@ def _apply_archive_scope(query, db: Session, scope_context: dict | None = None):
         ).all()]
         query = query.filter(PmsProjectArchive.manager_id.in_(manager_ids or [-1]))
 
-    allowed_lines = scope_context.get("product_lines")
-    if allowed_lines is not None:
-        query = query.filter(PmsProjectArchive.product_line.in_(allowed_lines or ["__none__"]))
+    allowed_category_ids = scope_context.get("product_category_ids")
+    if allowed_category_ids is not None:
+        query = query.filter(PmsProjectArchive.product_category.in_(allowed_category_ids or [-1]))
     return query
 
 
@@ -122,12 +131,70 @@ def ensure_archive_access(
     return archive
 
 
-def _ensure_product_line_allowed(product_line: str | None, scope_context: dict | None) -> None:
+def get_scoped_archive_query(db: Session, scope_context: dict | None = None):
+    """返回同时应用数据范围与产品类别范围的档案查询。"""
+    return _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context)
+
+
+def _archive_operation_pending_conflict() -> HTTPException:
+    return HTTPException(status_code=409, detail={
+        "code": "ARCHIVE_OPERATION_PENDING",
+        "message": "项目档案正在同步，无法执行当前操作，请等待同步完成",
+    })
+
+
+def _claim_enabled_archive_for_write(
+    db: Session,
+    archive_id: int,
+    scope_context: dict | None,
+    *,
+    action_label: str,
+    reject_pending: bool,
+) -> PmsProjectArchive:
+    """声明启用档案并保持事务，供依赖写入与档案编辑复用。"""
+    scoped_query = _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context)
+    conditions = [PmsProjectArchive.is_enabled == 1]
+    if reject_pending:
+        conditions.append(archive_not_pending_condition())
+    claimed = claim_archive_lifecycle_rows(
+        scoped_query,
+        [archive_id],
+        *conditions,
+    )
+    if claimed:
+        return claimed[0]
+
+    db.rollback()
+    current = (
+        _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context)
+        .populate_existing()
+        .filter(PmsProjectArchive.id == archive_id)
+        .first()
+    )
+    if current is None:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="档案不存在或无权访问")
+    try:
+        ensure_archive_enabled(current, action_label)
+    except HTTPException:
+        db.rollback()
+        raise
+    if reject_pending and current.erp_sync_status == "pending":
+        db.rollback()
+        raise _archive_operation_pending_conflict()
+    db.rollback()
+    raise HTTPException(status_code=409, detail={
+        "code": "ARCHIVE_LIFECYCLE_CONFLICT",
+        "message": "项目档案状态已变化，请刷新后重试",
+    })
+
+
+def _ensure_product_category_allowed(product_category: int | None, scope_context: dict | None) -> None:
     if not scope_context:
         return
-    allowed_lines = scope_context.get("product_lines")
-    if allowed_lines is not None and product_line not in allowed_lines:
-        raise HTTPException(status_code=404, detail="产品线超出当前数据权限")
+    allowed_category_ids = scope_context.get("product_category_ids")
+    if allowed_category_ids is not None and product_category not in allowed_category_ids:
+        raise HTTPException(status_code=404, detail="产品类别超出当前数据权限")
 
 
 def _ensure_project_assignment_allowed(
@@ -135,7 +202,7 @@ def _ensure_project_assignment_allowed(
     *,
     dept_id: int | None,
     pm_id: int | None,
-    product_line: str | None,
+    product_category: int | None,
     scope_context: dict | None,
 ) -> None:
     if not scope_context:
@@ -150,14 +217,14 @@ def _ensure_project_assignment_allowed(
         )
         if dept_id not in allowed_depts:
             raise HTTPException(status_code=404, detail="项目部门超出当前数据权限")
-    _ensure_product_line_allowed(product_line, scope_context)
+    _ensure_product_category_allowed(product_category, scope_context)
 
 
 def _ensure_archive_assignment_allowed(
     db: Session,
     *,
     manager_id: int | None,
-    product_line: str | None,
+    product_category: int | None,
     scope_context: dict | None,
 ) -> None:
     if not scope_context:
@@ -173,7 +240,7 @@ def _ensure_archive_assignment_allowed(
         )
         if not manager or manager.dept_id not in allowed_depts:
             raise HTTPException(status_code=404, detail="档案负责人超出当前数据权限")
-    _ensure_product_line_allowed(product_line, scope_context)
+    _ensure_product_category_allowed(product_category, scope_context)
 
 
 def _jsonable(value):
@@ -249,8 +316,10 @@ def _build_project_sheet_values(
     values.update({
         "project_code": archive.project_code if archive else project.project_code,
         "project_name": archive.project_name if archive else project.project_name,
-        "product_line": archive.product_line if archive and archive.product_line else project.product_line,
-        "product_type": archive.product_type if archive else None,
+        "customer": archive.customer if archive else None,
+        "product_category": archive.product_category if archive and archive.product_category else project.product_category,
+        "equipment_series": archive.equipment_series if archive else None,
+        "serial_no": archive.serial_no if archive else None,
         "node_status": project.status,
         "project_start_date": project.start_date,
         "original_planned_ship_date": project.end_date,
@@ -377,7 +446,7 @@ def get_project_list(db: Session, page: int = 1, page_size: int = 15,
             test_progress=p.test_progress,
             dept_name=dept.dept_name if dept else "",
             pm_name=pm.real_name if pm else "",
-            product_line=archive.product_line if archive and archive.product_line else p.product_line,
+            product_category=archive.product_category if archive and archive.product_category else p.product_category,
             task_count=stats["task_count"], total_progress=stats["avg_progress"],
             sheet_fields=sheet_fields,
             created_at=p.created_at, updated_at=p.updated_at,
@@ -523,7 +592,7 @@ def validate_project_progress_workbench_updates(values: dict[str, Any]) -> dict[
     accepted: dict[str, Any] = {}
     for key, value in values.items():
         if key not in PROJECT_PROGRESS_WORKBENCH_EDITABLE_FIELDS:
-            if key in {"project_code", "project_name", "product_line", "archive_id", "dept_id", "pm_id", "budget"}:
+            if key in {"project_code", "project_name", "product_category", "archive_id", "dept_id", "pm_id", "budget"}:
                 raise ValueError(f"字段不可编辑：{key}")
             raise ValueError(f"未知字段：{key}")
         accepted[key] = value
@@ -544,7 +613,7 @@ PROJECT_TO_POLICY_FIELD = {
     "archive_id": "archive_id",
     "project_code": "project_code",
     "project_name": "project_name",
-    "product_line": "product_line",
+    "product_category": "product_category",
     "dept_id": "dept_id",
     "pm_id": "pm_id",
     "budget": "budget",
@@ -583,8 +652,6 @@ def create_project(
     request: Request | None = None,
     scope_context: dict | None = None,
 ):
-    if db.query(PmsProject).filter(PmsProject.project_code == data.project_code).first():
-        raise HTTPException(status_code=400, detail="项目编号已存在")
     values = data.model_dump()
     provided_values = data.model_dump(exclude_unset=True)
     raw_sheet_values = values.pop("sheet_values", {})
@@ -598,44 +665,67 @@ def create_project(
         }) from exc
     archive = None
     if values.get("archive_id"):
-        archive = ensure_archive_access(db, values["archive_id"], scope_context)
-    effective_product_line = archive.product_line if archive and archive.product_line else values.get("product_line")
-    validate_enum_value(db, "project_status", values.get("status"))
-    if archive and archive.product_line:
-        values["product_line"] = archive.product_line
-    else:
-        validate_enum_value(db, "product_line", values.get("product_line"))
-    _ensure_project_assignment_allowed(
-        db,
-        dept_id=values.get("dept_id"),
-        pm_id=values.get("pm_id"),
-        product_line=effective_product_line,
-        scope_context=scope_context,
-    )
-    policy_initial_values = {
-        **_project_updates_to_policy_values({
-            key: value
-            for key, value in values.items()
-            if key not in provided_values
-            if key not in {"archive_id", "project_code", "project_name", "product_line"}
-        }),
-    }
-    policy_user_updates = {
-        **_project_updates_to_policy_values({
-            key: value
-            for key, value in provided_values.items()
-            if key not in {"archive_id", "project_code", "project_name", "product_line"}
-        }),
-        **detail_updates,
-    }
-    validate_business_field_write(
-        db,
-        MODULE_PROJECT_PROGRESS,
-        current_values=policy_initial_values,
-        updates=policy_user_updates,
-        entity_created_at=None,
-        is_create=True,
-    )
+        archive = _claim_enabled_archive_for_write(
+            db,
+            values["archive_id"],
+            scope_context,
+            action_label="建立项目进度",
+            reject_pending=False,
+        )
+        values["project_code"] = archive.project_code
+        values["project_name"] = archive.project_name
+        values["product_category"] = archive.product_category
+    try:
+        if db.query(PmsProject).filter(PmsProject.project_code == values["project_code"]).first():
+            raise HTTPException(status_code=409, detail={
+                "code": "PROJECT_ARCHIVE_ALREADY_LINKED",
+                "field_key": "archive_id",
+                "message": "该项目档案已经建立项目进度",
+            })
+        effective_product_category = (
+            archive.product_category
+            if archive and archive.product_category
+            else values.get("product_category")
+        )
+        validate_enum_value(db, "project_status", values.get("status"))
+        if archive and archive.product_category:
+            values["product_category"] = archive.product_category
+        else:
+            validate_enum_value(db, "product_category", values.get("product_category"))
+        _ensure_project_assignment_allowed(
+            db,
+            dept_id=values.get("dept_id"),
+            pm_id=values.get("pm_id"),
+            product_category=effective_product_category,
+            scope_context=scope_context,
+        )
+        policy_initial_values = {
+            **_project_updates_to_policy_values({
+                key: value
+                for key, value in values.items()
+                if key not in provided_values
+                if key not in {"archive_id", "project_code", "project_name", "product_category"}
+            }),
+        }
+        policy_user_updates = {
+            **_project_updates_to_policy_values({
+                key: value
+                for key, value in provided_values.items()
+                if key not in {"archive_id", "project_code", "project_name", "product_category"}
+            }),
+            **detail_updates,
+        }
+        validate_business_field_write(
+            db,
+            MODULE_PROJECT_PROGRESS,
+            current_values=policy_initial_values,
+            updates=policy_user_updates,
+            entity_created_at=None,
+            is_create=True,
+        )
+    except Exception:
+        db.rollback()
+        raise
 
     try:
         proj = PmsProject(**values)
@@ -661,6 +751,13 @@ def create_project(
             after_data={**serialize_model(proj), "sheet_values": detail_updates},
         )
         db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={
+            "code": "PROJECT_ARCHIVE_ALREADY_LINKED",
+            "field_key": "archive_id",
+            "message": "该项目档案已经建立项目进度",
+        }) from exc
     except Exception:
         db.rollback()
         raise
@@ -679,8 +776,8 @@ def update_project(
     proj = ensure_project_access(db, project_id, scope_context)
     before = serialize_model(proj)
     update_data = data.model_dump(exclude_unset=True)
-    if "product_line" in update_data:
-        raise HTTPException(status_code=400, detail="产品线来自项目档案，请在项目档案中维护")
+    if "product_category" in update_data:
+        raise HTTPException(status_code=400, detail="产品类别来自项目档案，请在项目档案中维护")
     if "status" in update_data:
         validate_enum_value(db, "project_status", update_data["status"], current_value=proj.status)
 
@@ -688,13 +785,13 @@ def update_project(
         db.query(PmsProjectArchive).filter(PmsProjectArchive.id == proj.archive_id).first()
         if proj.archive_id else None
     )
-    effective_product_line = archive.product_line if archive and archive.product_line else proj.product_line
+    effective_product_category = archive.product_category if archive and archive.product_category else proj.product_category
 
     _ensure_project_assignment_allowed(
         db,
         dept_id=update_data.get("dept_id", proj.dept_id),
         pm_id=update_data.get("pm_id", proj.pm_id),
-        product_line=effective_product_line,
+        product_category=effective_product_category,
         scope_context=scope_context,
     )
 
@@ -897,10 +994,58 @@ def get_progress_logs(db: Session, task_id: int) -> list[dict]:
 
 
 # ==================== 项目档案 ====================
+ARCHIVE_UNIQUE_FIELDS = {
+    "project_code": ("project_code_key", "项目编号", True),
+    "project_name": ("project_name_key", "项目名称", False),
+    "serial_no": ("serial_no_key", "序列号", True),
+}
+
+
+def _normalize_archive_values(values: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(values)
+    for field_key in ("project_code", "project_name", "customer", "serial_no"):
+        if field_key not in normalized:
+            continue
+        cleaned = str(normalized[field_key] or "").strip()
+        if field_key in {"project_code", "project_name"} and not cleaned:
+            label = "项目编号" if field_key == "project_code" else "项目名称"
+            raise HTTPException(status_code=422, detail={
+                "code": "ARCHIVE_FIELD_REQUIRED",
+                "field_key": field_key,
+                "message": f"{label}不能为空",
+            })
+        normalized[field_key] = cleaned or None
+    return normalized
+
+
+def _ensure_archive_unique_values(
+    db: Session,
+    values: dict[str, Any],
+    *,
+    exclude_archive_id: int | None = None,
+) -> None:
+    for field_key, (column_name, label, case_insensitive) in ARCHIVE_UNIQUE_FIELDS.items():
+        if field_key not in values or values[field_key] in (None, ""):
+            continue
+        normalized = str(values[field_key]).casefold() if case_insensitive else str(values[field_key])
+        query = db.query(PmsProjectArchive.id).filter(
+            getattr(PmsProjectArchive, column_name) == normalized
+        )
+        if exclude_archive_id is not None:
+            query = query.filter(PmsProjectArchive.id != exclude_archive_id)
+        if query.first():
+            raise HTTPException(status_code=409, detail={
+                "code": "ARCHIVE_UNIQUE_CONFLICT",
+                "field_key": field_key,
+                "message": f"{label}已存在",
+            })
+
+
 def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
                      keyword: str | None = None, status: int | None = None,
-                     product_line: str | None = None,
-                     allowed_lines: list[str] | None = None,
+                     product_category: int | None = None,
+                     allowed_category_ids: list[int] | None = None,
+                     enabled: bool | None = None,
                      scope_context: dict | None = None):
     """查询项目档案列表"""
     query = _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context)
@@ -912,25 +1057,29 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
         )
     if status is not None:
         query = query.filter(PmsProjectArchive.status == status)
-    if product_line:
-        query = query.filter(PmsProjectArchive.product_line == product_line)
-    # 产品线权限过滤
-    if allowed_lines is not None:
-        query = query.filter(PmsProjectArchive.product_line.in_(allowed_lines))
+    if product_category is not None:
+        query = query.filter(PmsProjectArchive.product_category == product_category)
+    if allowed_category_ids is not None:
+        query = query.filter(PmsProjectArchive.product_category.in_(allowed_category_ids))
+    if enabled is not None:
+        query = query.filter(PmsProjectArchive.is_enabled == int(enabled))
 
     total = query.count()
     rows = query.order_by(PmsProjectArchive.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    guards = get_archive_delete_guards(db, [archive.id for archive in rows])
 
     items = []
     for a in rows:
+        guard = guards[a.id]
         manager = db.query(SysUser).filter(SysUser.id == a.manager_id).first()
         creator = db.query(SysUser).filter(SysUser.id == a.created_by).first()
         editor = db.query(SysUser).filter(SysUser.id == a.updated_by).first()
         syncer = db.query(SysUser).filter(SysUser.id == a.erp_sync_by).first() if a.erp_sync_by else None
         items.append(ArchiveResponse(
             id=a.id, project_code=a.project_code, project_name=a.project_name,
-            status=a.status, manager_id=a.manager_id, product_type=a.product_type,
-            product_line=a.product_line,
+            status=a.status, manager_id=a.manager_id, customer=a.customer,
+            equipment_series=a.equipment_series, serial_no=a.serial_no,
+            product_category=a.product_category,
             plan_start_date=a.plan_start_date, plan_end_date=a.plan_end_date,
             manager_name=manager.real_name if manager else "",
             created_by_name=creator.real_name if creator else "",
@@ -938,6 +1087,9 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
             erp_synced=a.erp_synced, erp_sync_time=a.erp_sync_time,
             erp_sync_by_name=syncer.real_name if syncer else "",
             erp_sync_status=a.erp_sync_status, erp_error_msg=a.erp_error_msg,
+            is_enabled=a.is_enabled,
+            can_delete=guard["can_delete"],
+            delete_blockers=guard["blockers"],
             created_at=a.created_at, updated_at=a.updated_at,
         ))
     return {"total": total, "items": items}
@@ -945,7 +1097,9 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
 
 def get_archive_options(db: Session, scope_context: dict | None = None):
     """获取档案下拉选项（精简版，不分页）"""
-    rows = _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context).order_by(
+    rows = _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context).filter(
+        PmsProjectArchive.is_enabled == 1
+    ).order_by(
         PmsProjectArchive.project_code
     ).all()
     return [ArchiveOption(id=a.id, project_code=a.project_code, project_name=a.project_name) for a in rows]
@@ -959,16 +1113,15 @@ def create_archive(
     scope_context: dict | None = None,
 ):
     """创建项目档案"""
-    if db.query(PmsProjectArchive).filter(PmsProjectArchive.project_code == data.project_code).first():
-        raise HTTPException(status_code=400, detail="项目编号已存在")
-    values = data.model_dump()
+    values = _normalize_archive_values(data.model_dump())
+    _ensure_archive_unique_values(db, values)
     validate_enum_value(db, "archive_status", values.get("status"))
-    validate_enum_value(db, "product_line", values.get("product_line"))
-    validate_enum_value(db, "product_type", values.get("product_type"))
+    validate_enum_value(db, "product_category", values.get("product_category"))
+    validate_enum_value(db, "equipment_series", values.get("equipment_series"))
     _ensure_archive_assignment_allowed(
         db,
         manager_id=values.get("manager_id"),
-        product_line=values.get("product_line"),
+        product_category=values.get("product_category"),
         scope_context=scope_context,
     )
     validate_business_field_write(
@@ -979,22 +1132,34 @@ def create_archive(
         entity_created_at=None,
         is_create=True,
     )
-    archive = PmsProjectArchive(**values, created_by=user_id, updated_by=user_id)
-    db.add(archive)
-    db.flush()
-    record_operation_log(
-        db,
-        module="项目档案",
-        action="create",
-        entity_type="pms_project_archive",
-        entity_id=archive.id,
-        entity_name=archive.project_name,
-        operator_id=user_id,
-        request=request,
-        summary=f"创建项目档案：{archive.project_name}",
-        after_data=serialize_model(archive),
-    )
-    db.commit()
+    try:
+        archive = PmsProjectArchive(**values, created_by=user_id, updated_by=user_id)
+        db.add(archive)
+        db.flush()
+        record_operation_log(
+            db,
+            module="项目档案",
+            action="create",
+            entity_type="pms_project_archive",
+            entity_id=archive.id,
+            entity_name=archive.project_name,
+            operator_id=user_id,
+            request=request,
+            summary=f"创建项目档案：{archive.project_name}",
+            after_data=serialize_model(archive),
+        )
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        _ensure_archive_unique_values(db, values)
+        raise HTTPException(status_code=409, detail={
+            "code": "ARCHIVE_UNIQUE_CONFLICT",
+            "field_key": "project_code",
+            "message": "项目编号已存在",
+        }) from exc
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(archive)
     return {"msg": "创建成功", "id": archive.id}
 
@@ -1008,64 +1173,93 @@ def update_archive(
     scope_context: dict | None = None,
 ):
     """更新项目档案"""
-    archive = ensure_archive_access(db, archive_id, scope_context)
+    archive = _claim_enabled_archive_for_write(
+        db,
+        archive_id,
+        scope_context,
+        action_label="编辑",
+        reject_pending=True,
+    )
     before = serialize_model(archive)
 
-    update_data = data.model_dump(exclude_unset=True)
-    if "status" in update_data:
-        validate_enum_value(db, "archive_status", update_data["status"], current_value=archive.status)
-    if "product_line" in update_data:
-        validate_enum_value(
+    update_data = _normalize_archive_values(data.model_dump(exclude_unset=True))
+    try:
+        _ensure_archive_unique_values(db, update_data, exclude_archive_id=archive.id)
+        if "status" in update_data:
+            validate_enum_value(db, "archive_status", update_data["status"], current_value=archive.status)
+        if "product_category" in update_data:
+            validate_enum_value(
+                db,
+                "product_category",
+                update_data["product_category"],
+                current_value=archive.product_category,
+            )
+        if "equipment_series" in update_data:
+            validate_enum_value(
+                db,
+                "equipment_series",
+                update_data["equipment_series"],
+                current_value=archive.equipment_series,
+            )
+        _ensure_archive_assignment_allowed(
             db,
-            "product_line",
-            update_data["product_line"],
-            current_value=archive.product_line,
+            manager_id=update_data.get("manager_id", archive.manager_id),
+            product_category=update_data.get("product_category", archive.product_category),
+            scope_context=scope_context,
         )
-    if "product_type" in update_data:
-        validate_enum_value(
+        validate_business_field_write(
             db,
-            "product_type",
-            update_data["product_type"],
-            current_value=archive.product_type,
+            MODULE_PROJECT_ARCHIVE,
+            current_values={key: _jsonable(getattr(archive, key, None)) for key in {
+                item["field_key"] for item in get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)["items"]
+            }},
+            updates=update_data,
+            entity_created_at=archive.created_at,
+            is_create=False,
         )
-    _ensure_archive_assignment_allowed(
-        db,
-        manager_id=update_data.get("manager_id", archive.manager_id),
-        product_line=update_data.get("product_line", archive.product_line),
-        scope_context=scope_context,
-    )
-    validate_business_field_write(
-        db,
-        MODULE_PROJECT_ARCHIVE,
-        current_values={key: _jsonable(getattr(archive, key, None)) for key in {
-            item["field_key"] for item in get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)["items"]
-        }},
-        updates=update_data,
-        entity_created_at=archive.created_at,
-        is_create=False,
-    )
-    # 项目编号唯一性校验
-    if "project_code" in update_data and update_data["project_code"] != archive.project_code:
-        if db.query(PmsProjectArchive).filter(PmsProjectArchive.project_code == update_data["project_code"]).first():
-            raise HTTPException(status_code=400, detail="项目编号已存在")
-
-    for key, val in update_data.items():
-        setattr(archive, key, val)
-    archive.updated_by = user_id
-    record_operation_log(
-        db,
-        module="项目档案",
-        action="update",
-        entity_type="pms_project_archive",
-        entity_id=archive.id,
-        entity_name=archive.project_name,
-        operator_id=user_id,
-        request=request,
-        summary=f"更新项目档案：{archive.project_name}",
-        before_data=before,
-        after_data=serialize_model(archive),
-    )
-    db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    try:
+        for key, val in update_data.items():
+            setattr(archive, key, val)
+        archive.updated_by = user_id
+        linked_project_updates = {
+            source: update_data[source]
+            for source in ("project_code", "project_name", "product_category")
+            if source in update_data
+        }
+        if linked_project_updates:
+            db.query(PmsProject).filter(PmsProject.archive_id == archive.id).update(
+                linked_project_updates,
+                synchronize_session=False,
+            )
+        db.flush()
+        record_operation_log(
+            db,
+            module="项目档案",
+            action="update",
+            entity_type="pms_project_archive",
+            entity_id=archive.id,
+            entity_name=archive.project_name,
+            operator_id=user_id,
+            request=request,
+            summary=f"更新项目档案：{archive.project_name}",
+            before_data=before,
+            after_data=serialize_model(archive),
+        )
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        _ensure_archive_unique_values(db, update_data, exclude_archive_id=archive_id)
+        raise HTTPException(status_code=409, detail={
+            "code": "ARCHIVE_UNIQUE_CONFLICT",
+            "field_key": "project_code",
+            "message": "项目编号已存在",
+        }) from exc
+    except Exception:
+        db.rollback()
+        raise
     return {"msg": "更新成功"}
 
 
@@ -1086,6 +1280,19 @@ def validate_archive_for_business_operation(db: Session, archive: PmsProjectArch
     )
 
 
+def _record_blocked_delete_log(db: Session, **kwargs) -> None:
+    """失败日志不得覆盖项目档案删除保护响应。"""
+    try:
+        record_operation_log(db, commit=True, **kwargs)
+    except Exception:
+        if db.in_transaction():
+            db.rollback()
+
+
+def _archive_has_no_project_reference():
+    return ~exists().where(PmsProject.archive_id == PmsProjectArchive.id)
+
+
 def delete_archive(
     db: Session,
     archive_id: int,
@@ -1093,27 +1300,345 @@ def delete_archive(
     request: Request | None = None,
     scope_context: dict | None = None,
 ):
-    """删除项目档案（需检查是否被项目引用）"""
-    archive = ensure_archive_access(db, archive_id, scope_context)
+    """删除未被业务或 ERP 操作保护的项目档案。"""
+    archive = _load_batch_archives(db, [archive_id], scope_context)[0]
     before = serialize_model(archive)
+    guard = get_archive_delete_guard(db, archive_id)
+    if not guard["can_delete"]:
+        message = format_archive_delete_blockers(guard["blockers"])
+        _record_blocked_delete_log(
+            db,
+            module="项目档案",
+            action="delete",
+            entity_type="pms_project_archive",
+            entity_id=archive_id,
+            entity_name=archive.project_name,
+            operator_id=operator_id,
+            request=request,
+            status="failed",
+            summary=f"删除项目档案失败：{archive.project_name}",
+            before_data=before,
+            after_data={"blockers": guard["blockers"]},
+            error_msg=message,
+        )
+        raise HTTPException(status_code=409, detail={
+            "code": "ARCHIVE_DELETE_BLOCKED",
+            "message": message,
+            "blockers": guard["blockers"],
+            "suggested_action": "disable",
+        })
 
-    # 检查是否被项目进度引用
-    ref_count = db.query(PmsProject).filter(PmsProject.archive_id == archive_id).count()
-    if ref_count > 0:
-        raise HTTPException(status_code=400, detail=f"该档案已被 {ref_count} 个项目引用，无法删除")
+    try:
+        deleted = (
+            db.query(PmsProjectArchive)
+            .filter(
+                PmsProjectArchive.id == archive_id,
+                or_(
+                    PmsProjectArchive.erp_synced.is_(None),
+                    PmsProjectArchive.erp_synced != 1,
+                ),
+                archive_not_pending_condition(),
+                _archive_has_no_project_reference(),
+            )
+            .delete(synchronize_session=False)
+        )
+        if deleted != 1:
+            db.rollback()
+            current = _load_batch_archives(db, [archive_id], scope_context)[0]
+            current_guard = get_archive_delete_guard(db, current.id)
+            if current_guard["can_delete"]:
+                raise HTTPException(status_code=409, detail={
+                    "code": "ARCHIVE_LIFECYCLE_CONFLICT",
+                    "message": "项目档案状态已变化，请刷新后重试",
+                })
+            message = format_archive_delete_blockers(current_guard["blockers"])
+            _record_blocked_delete_log(
+                db,
+                module="项目档案",
+                action="delete",
+                entity_type="pms_project_archive",
+                entity_id=current.id,
+                entity_name=current.project_name,
+                operator_id=operator_id,
+                request=request,
+                status="failed",
+                summary=f"删除项目档案失败：{current.project_name}",
+                before_data=serialize_model(current),
+                after_data={"blockers": current_guard["blockers"]},
+                error_msg=message,
+            )
+            raise HTTPException(status_code=409, detail={
+                "code": "ARCHIVE_DELETE_BLOCKED",
+                "message": message,
+                "blockers": current_guard["blockers"],
+                "suggested_action": "disable",
+            })
 
-    db.delete(archive)
-    record_operation_log(
-        db,
-        module="项目档案",
-        action="delete",
-        entity_type="pms_project_archive",
-        entity_id=archive_id,
-        entity_name=archive.project_name,
-        operator_id=operator_id,
-        request=request,
-        summary=f"删除项目档案：{archive.project_name}",
-        before_data=before,
-    )
-    db.commit()
+        record_operation_log(
+            db,
+            module="项目档案",
+            action="delete",
+            entity_type="pms_project_archive",
+            entity_id=archive_id,
+            entity_name=archive.project_name,
+            operator_id=operator_id,
+            request=request,
+            summary=f"删除项目档案：{archive.project_name}",
+            before_data=before,
+        )
+        db.expunge(archive)
+        db.commit()
+    except Exception:
+        if db.in_transaction():
+            db.rollback()
+        raise
     return {"msg": "删除成功"}
+
+
+def format_archive_delete_blockers(blockers: list[dict[str, Any]]) -> str:
+    """将删除保护项转换为可直接反馈给用户的原因。"""
+    details = "；".join(
+        f"{item['label']}（{item['count']}）" for item in blockers
+    )
+    return f"项目档案无法删除：{details}"
+
+
+def _load_batch_archives(
+    db: Session,
+    archive_ids: list[int],
+    scope_context: dict | None = None,
+) -> list[PmsProjectArchive]:
+    """按固定 ID 顺序锁定目标档案，并应用现有范围限制。"""
+    unique_ids = sorted(set(archive_ids))
+    scoped_query = _apply_archive_scope(
+        db.query(PmsProjectArchive), db, scope_context
+    )
+    archives = claim_archive_lifecycle_rows(scoped_query, unique_ids)
+    archive_by_id = {archive.id: archive for archive in archives}
+    if len(archive_by_id) != len(unique_ids):
+        db.rollback()
+        raise HTTPException(status_code=404, detail="档案不存在或无权访问")
+    return [archive_by_id[archive_id] for archive_id in unique_ids]
+
+
+def batch_delete_archives(
+    db: Session,
+    archive_ids: list[int],
+    operator_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+) -> dict:
+    """原子删除多个项目档案，存在任一保护项时不删除任何记录。"""
+    archives = _load_batch_archives(db, archive_ids, scope_context)
+    guards = get_archive_delete_guards(db, [archive.id for archive in archives])
+    blocked_archives = [
+        {
+            "archive_id": archive.id,
+            "project_code": archive.project_code,
+            "project_name": archive.project_name,
+            "blockers": guards[archive.id]["blockers"],
+        }
+        for archive in archives
+        if not guards[archive.id]["can_delete"]
+    ]
+    if blocked_archives:
+        message = "；".join(
+            f"{item['project_name']}：{format_archive_delete_blockers(item['blockers'])}"
+            for item in blocked_archives
+        )
+        _record_blocked_delete_log(
+            db,
+            module="项目档案",
+            action="batch_delete",
+            entity_type="pms_project_archive",
+            entity_id=",".join(str(archive.id) for archive in archives),
+            entity_name="项目档案批量删除",
+            operator_id=operator_id,
+            request=request,
+            status="failed",
+            summary="批量删除项目档案失败",
+            after_data={
+                "archive_ids": [archive.id for archive in archives],
+                "blockers": blocked_archives,
+            },
+            error_msg=message,
+        )
+        raise HTTPException(status_code=409, detail={
+            "code": "ARCHIVE_DELETE_BLOCKED",
+            "message": message,
+            "blockers": blocked_archives,
+            "suggested_action": "disable",
+        })
+
+    archive_id_set = [archive.id for archive in archives]
+    before_by_id = {archive.id: serialize_model(archive) for archive in archives}
+    try:
+        deleted = (
+            db.query(PmsProjectArchive)
+            .filter(
+                PmsProjectArchive.id.in_(archive_id_set),
+                or_(
+                    PmsProjectArchive.erp_synced.is_(None),
+                    PmsProjectArchive.erp_synced != 1,
+                ),
+                archive_not_pending_condition(),
+                _archive_has_no_project_reference(),
+            )
+            .delete(synchronize_session=False)
+        )
+        if deleted != len(archives):
+            db.rollback()
+            current_archives = _load_batch_archives(db, archive_id_set, scope_context)
+            current_guards = get_archive_delete_guards(
+                db, [archive.id for archive in current_archives]
+            )
+            current_blocked = [
+                {
+                    "archive_id": archive.id,
+                    "project_code": archive.project_code,
+                    "project_name": archive.project_name,
+                    "blockers": current_guards[archive.id]["blockers"],
+                }
+                for archive in current_archives
+                if not current_guards[archive.id]["can_delete"]
+            ]
+            if current_blocked:
+                message = "；".join(
+                    f"{item['project_name']}：{format_archive_delete_blockers(item['blockers'])}"
+                    for item in current_blocked
+                )
+                _record_blocked_delete_log(
+                    db,
+                    module="项目档案",
+                    action="batch_delete",
+                    entity_type="pms_project_archive",
+                    entity_id=",".join(str(item_id) for item_id in archive_id_set),
+                    entity_name="项目档案批量删除",
+                    operator_id=operator_id,
+                    request=request,
+                    status="failed",
+                    summary="批量删除项目档案失败",
+                    after_data={"archive_ids": archive_id_set, "blockers": current_blocked},
+                    error_msg=message,
+                )
+                raise HTTPException(status_code=409, detail={
+                    "code": "ARCHIVE_DELETE_BLOCKED",
+                    "message": message,
+                    "blockers": current_blocked,
+                    "suggested_action": "disable",
+                })
+            raise HTTPException(status_code=409, detail={
+                "code": "ARCHIVE_LIFECYCLE_CONFLICT",
+                "message": "项目档案状态已变化，请刷新后重试",
+            })
+
+        for archive in archives:
+            record_operation_log(
+                db,
+                module="项目档案",
+                action="delete",
+                entity_type="pms_project_archive",
+                entity_id=archive.id,
+                entity_name=archive.project_name,
+                operator_id=operator_id,
+                request=request,
+                summary=f"批量删除项目档案：{archive.project_name}",
+                before_data=before_by_id[archive.id],
+            )
+            db.expunge(archive)
+        db.commit()
+    except Exception:
+        if db.in_transaction():
+            db.rollback()
+        raise
+    return {"msg": "批量删除成功", "count": len(archives)}
+
+
+def change_archive_enabled(
+    db: Session,
+    archive_id: int,
+    enabled: bool,
+    operator_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+) -> dict:
+    """在数据范围校验后，启用或禁用单个项目档案。"""
+    archive = _load_batch_archives(db, [archive_id], scope_context)[0]
+    return set_archive_enabled(db, archive, enabled, operator_id, request)
+
+
+def batch_change_archives_enabled(
+    db: Session,
+    archive_ids: list[int],
+    enabled: bool,
+    operator_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+) -> dict:
+    """原子启用或禁用多个项目档案，成功时仅提交一次。"""
+    archives = _load_batch_archives(db, archive_ids, scope_context)
+    target_enabled = int(enabled)
+    changes = [archive for archive in archives if archive.is_enabled != target_enabled]
+    if not enabled and any(archive.erp_sync_status == "pending" for archive in changes):
+        db.rollback()
+        raise HTTPException(status_code=409, detail={
+            "code": "ARCHIVE_OPERATION_PENDING",
+            "message": "项目档案正在同步，无法禁用，请等待同步完成",
+        })
+    if not changes:
+        db.rollback()
+        return {"msg": "批量启用成功" if enabled else "批量禁用成功", "count": 0}
+
+    action = "enable" if enabled else "disable"
+    action_label = "启用" if enabled else "禁用"
+    change_ids = [archive.id for archive in changes]
+    before_by_id = {archive.id: serialize_model(archive) for archive in changes}
+    mutation = db.query(PmsProjectArchive).filter(
+        PmsProjectArchive.id.in_(change_ids),
+        PmsProjectArchive.is_enabled != target_enabled,
+    )
+    if not enabled:
+        mutation = mutation.filter(archive_not_pending_condition())
+
+    try:
+        changed_count = mutation.update(
+            {PmsProjectArchive.is_enabled: target_enabled},
+            synchronize_session=False,
+        )
+        if changed_count != len(changes):
+            db.rollback()
+            current_archives = _load_batch_archives(db, change_ids, scope_context)
+            if not enabled and any(
+                archive.erp_sync_status == "pending" for archive in current_archives
+            ):
+                raise HTTPException(status_code=409, detail={
+                    "code": "ARCHIVE_OPERATION_PENDING",
+                    "message": "项目档案正在同步，无法禁用，请等待同步完成",
+                })
+            raise HTTPException(status_code=409, detail={
+                "code": "ARCHIVE_LIFECYCLE_CONFLICT",
+                "message": "项目档案状态已变化，请刷新后重试",
+            })
+
+        for archive in changes:
+            after = dict(before_by_id[archive.id])
+            after["is_enabled"] = target_enabled
+            record_operation_log(
+                db,
+                module="项目档案",
+                action=action,
+                entity_type="pms_project_archive",
+                entity_id=archive.id,
+                entity_name=archive.project_name,
+                operator_id=operator_id,
+                request=request,
+                summary=f"批量{action_label}项目档案：{archive.project_name}",
+                before_data=before_by_id[archive.id],
+                after_data=after,
+            )
+        db.commit()
+    except Exception:
+        if db.in_transaction():
+            db.rollback()
+        raise
+    return {"msg": f"批量{action_label}成功", "count": len(changes)}

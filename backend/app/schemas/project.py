@@ -7,23 +7,44 @@ from typing import Any
 class ArchiveCreate(BaseModel):
     project_code: str = Field(..., max_length=32)
     project_name: str = Field(..., max_length=128)
-    status: int = 1
     manager_id: int | None = None
-    product_type: str | None = Field(None, max_length=64)
-    product_line: str | None = Field(None, max_length=32)
+    customer: str | None = Field(None, max_length=128)
+    product_category: int | None = None
+    equipment_series: int | None = None
+    serial_no: str | None = Field(None, max_length=64)
     plan_start_date: datetime | None = None
     plan_end_date: datetime | None = None
 
 
 class ArchiveUpdate(BaseModel):
-    project_code: str | None = None
-    project_name: str | None = None
-    status: int | None = None
+    project_code: str | None = Field(None, max_length=32)
+    project_name: str | None = Field(None, max_length=128)
     manager_id: int | None = None
-    product_type: str | None = None
-    product_line: str | None = None
+    customer: str | None = Field(None, max_length=128)
+    product_category: int | None = None
+    equipment_series: int | None = None
+    serial_no: str | None = Field(None, max_length=64)
     plan_start_date: datetime | None = None
     plan_end_date: datetime | None = None
+
+
+class ArchiveDeleteBlocker(BaseModel):
+    type: str
+    source: str
+    label: str
+    count: int
+
+
+class ArchiveBatchDelete(BaseModel):
+    archive_ids: list[int] = Field(..., min_length=1)
+
+
+class ArchiveEnabledUpdate(BaseModel):
+    enabled: bool
+
+
+class ArchiveBatchEnabledUpdate(ArchiveEnabledUpdate):
+    archive_ids: list[int] = Field(..., min_length=1)
 
 
 class ArchiveResponse(BaseModel):
@@ -32,8 +53,10 @@ class ArchiveResponse(BaseModel):
     project_name: str
     status: int
     manager_id: int | None = None
-    product_type: str | None = None
-    product_line: str | None = None
+    customer: str | None = None
+    product_category: int | None = None
+    equipment_series: int | None = None
+    serial_no: str | None = None
     plan_start_date: datetime | None = None
     plan_end_date: datetime | None = None
     manager_name: str = ""    # 关联查询
@@ -45,6 +68,9 @@ class ArchiveResponse(BaseModel):
     erp_sync_by_name: str = ""      # 最后同步人姓名
     erp_sync_status: str | None = None
     erp_error_msg: str | None = None
+    is_enabled: int = 1
+    can_delete: bool = True
+    delete_blockers: list[ArchiveDeleteBlocker] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
     model_config = {"from_attributes": True}
@@ -65,7 +91,7 @@ class ProjectCreate(BaseModel):
     project_name: str = Field(..., max_length=128)
     dept_id: int
     pm_id: int
-    product_line: str | None = Field(None, max_length=32)
+    product_category: int | None = None
     status: int = 1
     start_date: date | None = None
     end_date: date | None = None
@@ -83,7 +109,7 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     project_name: str | None = None
-    product_line: str | None = None
+    product_category: int | None = None
     dept_id: int | None = None
     pm_id: int | None = None
     status: int | None = None
@@ -120,7 +146,7 @@ class ProjectResponse(BaseModel):
     test_progress: int | None = None
     dept_name: str = ""    # 关联查询
     pm_name: str = ""      # 关联查询
-    product_line: str | None = None  # 从档案关联
+    product_category: int | None = None  # 从档案关联
     task_count: int = 0    # 任务数
     total_progress: float = 0  # 总进度
     sheet_fields: dict[str, Any] = Field(default_factory=dict)

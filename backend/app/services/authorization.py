@@ -65,17 +65,17 @@ def build_authorization_context(db: Session, user_id: int) -> AuthorizationConte
         )
         permissions = {code for (code,) in rows if code}
 
-    product_lines: list[str] | None
+    product_category_ids: list[int] | None
     if not roles:
-        product_lines = []
-    elif any(not role.product_lines for role in roles):
-        product_lines = None
+        product_category_ids = []
+    elif any(not role.product_category_ids for role in roles):
+        product_category_ids = None
     else:
-        product_lines = sorted({
-            value.strip()
+        product_category_ids = sorted({
+            int(value.strip())
             for role in roles
-            for value in (role.product_lines or "").split(",")
-            if value.strip()
+            for value in (role.product_category_ids or "").split(",")
+            if value.strip().isdigit()
         })
 
     return {
@@ -87,7 +87,7 @@ def build_authorization_context(db: Session, user_id: int) -> AuthorizationConte
             (role.data_scope if 1 <= role.data_scope <= 4 else 1 for role in roles),
             default=1,
         ),
-        "product_lines": product_lines,
+        "product_category_ids": product_category_ids,
     }
 
 

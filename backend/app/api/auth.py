@@ -84,21 +84,21 @@ def get_me(
     return auth_service.get_current_user(db, scope_ctx["user_id"], authorization_context=scope_ctx)
 
 
-@router.get("/product-lines", summary="获取当前用户允许的产品线")
-def get_allowed_product_lines(
+@router.get("/product-categories", summary="获取当前用户允许的产品类别")
+def get_allowed_product_category_ids(
     scope_ctx: dict = Depends(get_current_user_context),
     db: Session = Depends(get_db),
 ):
-    """返回当前用户允许的产品线列表，null 表示不限制"""
-    allowed = scope_ctx.get("product_lines")  # None = 不限制
-    # 从字典接口获取所有产品线定义
+    """返回当前用户允许的产品类别编号，null 表示不限制。"""
+    allowed = scope_ctx.get("product_category_ids")  # None = 不限制
+    # 从统一枚举接口获取全部产品类别编号。
     from app.services.dict import get_dict_by_code
-    all_lines_data = get_dict_by_code(db, "product_line")
-    all_lines = [item["value"] for item in (all_lines_data.get("items", []) if all_lines_data else [])]
+    all_categories_data = get_dict_by_code(db, "product_category")
+    all_category_ids = [int(item["value"]) for item in (all_categories_data.get("items", []) if all_categories_data else [])]
 
     if allowed is None:
         # 不限制，返回全部
-        return {"unrestricted": True, "items": all_lines}
+        return {"unrestricted": True, "items": all_category_ids}
     else:
         # 只返回允许的
         return {"unrestricted": False, "items": allowed}

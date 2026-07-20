@@ -71,7 +71,7 @@
     <el-dialog v-model="dictDialogVisible" :title="isDictEdit ? '编辑字段分类' : '新增字段分类'" width="520px">
       <el-form ref="dictFormRef" :model="dictForm" :rules="dictRules" label-width="90px">
         <el-form-item label="字段编码" prop="dict_code">
-          <el-input v-model="dictForm.dict_code" :disabled="isDictEdit" placeholder="如: product_type" />
+          <el-input v-model="dictForm.dict_code" :disabled="isDictEdit" placeholder="如: equipment_series" />
         </el-form-item>
         <el-form-item label="字段名称" prop="dict_name">
           <el-input v-model="dictForm.dict_name" />
@@ -83,7 +83,7 @@
           <el-input v-model="dictForm.table_name" placeholder="如: pms_project_archive" />
         </el-form-item>
         <el-form-item label="字段名">
-          <el-input v-model="dictForm.field_name" placeholder="如: product_type" />
+          <el-input v-model="dictForm.field_name" placeholder="如: equipment_series" />
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="dictForm.description" type="textarea" :rows="2" />

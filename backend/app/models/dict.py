@@ -20,6 +20,7 @@ class SysDict(Base):
     description: Mapped[str | None] = mapped_column(NVARCHAR(256), default=None, comment="描述")
     sort: Mapped[int] = mapped_column(Integer, default=0, comment="排序")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1启用 0禁用")
+    next_value: Mapped[int] = mapped_column(Integer, default=1, nullable=False, comment="可配置枚举的下一稳定数字值")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

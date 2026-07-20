@@ -37,16 +37,14 @@ def test_field_policy_registry_preserves_technical_limits():
     assert archive_fields["project_code"]["required_locked"] is True
     assert archive_fields["project_code"]["editable_locked"] is True
     assert archive_fields["project_code"]["source_type"] == "detail"
-    assert archive_fields["status"]["visible_locked"] is True
-    assert archive_fields["status"]["editable_locked"] is True
-    assert archive_fields["status"]["required_locked"] is True
+    assert "status" not in archive_fields
     assert progress_fields["archive_id"]["required_locked"] is True
     assert progress_fields["archive_id"]["required_cap"] is True
     assert progress_fields["dept_id"]["required_locked"] is True
     assert progress_fields["pm_id"]["required_locked"] is True
     assert progress_fields["budget"]["source_type"] == "project"
-    assert progress_fields["customer"]["editable_cap"] is True
-    assert progress_fields["product_line"]["editable_cap"] is False
+    assert progress_fields["customer"]["editable_cap"] is False
+    assert progress_fields["product_category"]["editable_cap"] is False
     assert progress_fields["design_days"]["editable_cap"] is False
 
 
@@ -66,7 +64,7 @@ def test_field_policy_rejects_invalid_combinations_and_tracks_required_effective
                 "project_progress",
                 FieldPolicyBatchUpdate(items=[
                     FieldPolicyUpdateItem(
-                        field_key="customer",
+                        field_key="category",
                         visible=True,
                         editable=False,
                         required=True,
@@ -85,7 +83,7 @@ def test_field_policy_rejects_invalid_combinations_and_tracks_required_effective
             "project_progress",
             FieldPolicyBatchUpdate(items=[
                 FieldPolicyUpdateItem(
-                    field_key="customer",
+                    field_key="category",
                     visible=True,
                     editable=True,
                     required=True,
@@ -94,9 +92,9 @@ def test_field_policy_rejects_invalid_combinations_and_tracks_required_effective
             ]),
             operator_id=1,
         )
-        customer = next(item for item in result["items"] if item["field_key"] == "customer")
-        assert customer["required"] is True
-        assert customer["required_effective_at"] is not None
+        category = next(item for item in result["items"] if item["field_key"] == "category")
+        assert category["required"] is True
+        assert category["required_effective_at"] is not None
 
         try:
             update_field_policies(
@@ -104,7 +102,7 @@ def test_field_policy_rejects_invalid_combinations_and_tracks_required_effective
                 "project_progress",
                 FieldPolicyBatchUpdate(items=[
                     FieldPolicyUpdateItem(
-                        field_key="customer",
+                        field_key="category",
                         visible=True,
                         editable=True,
                         required=True,
@@ -123,12 +121,12 @@ def test_field_policy_rejects_invalid_combinations_and_tracks_required_effective
             "project_progress",
             FieldPolicyBatchUpdate(items=[
                 FieldPolicyUpdateItem(
-                    field_key="customer",
+                    field_key="category",
                     visible=True,
                     editable=True,
                     required=True,
                     list_available=False,
-                    expected_updated_at=customer["updated_at"],
+                    expected_updated_at=category["updated_at"],
                 )
             ]),
             operator_id=2,
@@ -158,7 +156,7 @@ def test_required_policy_applies_to_new_entities_and_exempts_legacy_entities():
         except HTTPException as exc:
             assert exc.status_code == 422
             assert exc.detail["code"] == "FIELD_POLICY_VALIDATION_FAILED"
-            assert exc.detail["fields"][0]["field_key"] == "customer"
+            assert exc.detail["fields"][0]["field_key"] == "category"
         else:
             raise AssertionError("规则生效后的项目必须满足必填字段")
 
@@ -212,7 +210,7 @@ def test_project_create_enforces_dynamic_required_fields_and_rolls_back():
             )
         except HTTPException as exc:
             assert exc.status_code == 422
-            assert exc.detail["fields"][0]["field_key"] == "customer"
+            assert exc.detail["fields"][0]["field_key"] == "category"
         else:
             raise AssertionError("新项目缺少生效后的动态必填字段时必须拒绝")
         assert db.query(PmsProject).filter(PmsProject.project_code == "FP-PROJECT").count() == 0
@@ -220,13 +218,13 @@ def test_project_create_enforces_dynamic_required_fields_and_rolls_back():
 
         result = create_project(
             db,
-            ProjectCreate(**base_data, sheet_values={"customer": "客户 A"}),
+            ProjectCreate(**base_data, sheet_values={"category": "标准项目"}),
             operator_id=user.id,
         )
         detail = db.query(PmsProjectSheetDetail).filter(
             PmsProjectSheetDetail.project_id == result["id"]
         ).one()
-        assert json.loads(detail.detail_data)["customer"] == "客户 A"
+        assert json.loads(detail.detail_data)["category"] == "标准项目"
     finally:
         db.close()
 

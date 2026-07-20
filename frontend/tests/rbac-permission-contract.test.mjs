@@ -17,7 +17,7 @@ const userList = read('src/views/system/UserList.vue')
 const dictList = read('src/views/system/DataDictionaryList.vue')
 const enumList = read('src/views/system/EnumList.vue')
 
-for (const field of ['role_codes', 'permissions', 'data_scope', 'product_lines']) {
+for (const field of ['role_codes', 'permissions', 'data_scope', 'product_category_ids']) {
   assert.match(authApi, new RegExp(field), `/auth/me 类型应包含 ${field}`)
 }
 assert.match(authStore, /function hasPermission/)
