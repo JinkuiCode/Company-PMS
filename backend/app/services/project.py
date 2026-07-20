@@ -19,6 +19,8 @@ from app.schemas.project import (
 )
 from app.services.operation_log import record_operation_log, serialize_model
 from app.services.project_archive_lifecycle import (
+    apply_archive_lifecycle_lock,
+    archive_not_pending_condition,
     ensure_archive_enabled,
     get_archive_delete_guard,
     get_archive_delete_guards,
@@ -1206,7 +1208,7 @@ def delete_archive(
     scope_context: dict | None = None,
 ):
     """删除未被业务或 ERP 操作保护的项目档案。"""
-    archive = ensure_archive_access(db, archive_id, scope_context)
+    archive = _load_batch_archives(db, [archive_id], scope_context)[0]
     before = serialize_model(archive)
     guard = get_archive_delete_guard(db, archive_id)
     if not guard["can_delete"]:
@@ -1234,20 +1236,70 @@ def delete_archive(
             "suggested_action": "disable",
         })
 
-    db.delete(archive)
-    record_operation_log(
-        db,
-        module="项目档案",
-        action="delete",
-        entity_type="pms_project_archive",
-        entity_id=archive_id,
-        entity_name=archive.project_name,
-        operator_id=operator_id,
-        request=request,
-        summary=f"删除项目档案：{archive.project_name}",
-        before_data=before,
-    )
-    db.commit()
+    try:
+        deleted = (
+            db.query(PmsProjectArchive)
+            .filter(
+                PmsProjectArchive.id == archive_id,
+                or_(
+                    PmsProjectArchive.erp_synced.is_(None),
+                    PmsProjectArchive.erp_synced != 1,
+                ),
+                archive_not_pending_condition(),
+            )
+            .delete(synchronize_session=False)
+        )
+        if deleted != 1:
+            db.rollback()
+            current = _load_batch_archives(db, [archive_id], scope_context)[0]
+            current_guard = get_archive_delete_guard(db, current.id)
+            if current_guard["can_delete"]:
+                raise HTTPException(status_code=409, detail={
+                    "code": "ARCHIVE_LIFECYCLE_CONFLICT",
+                    "message": "项目档案状态已变化，请刷新后重试",
+                })
+            message = format_archive_delete_blockers(current_guard["blockers"])
+            record_operation_log(
+                db,
+                module="项目档案",
+                action="delete",
+                entity_type="pms_project_archive",
+                entity_id=current.id,
+                entity_name=current.project_name,
+                operator_id=operator_id,
+                request=request,
+                status="failed",
+                summary=f"删除项目档案失败：{current.project_name}",
+                before_data=serialize_model(current),
+                after_data={"blockers": current_guard["blockers"]},
+                error_msg=message,
+                commit=True,
+            )
+            raise HTTPException(status_code=409, detail={
+                "code": "ARCHIVE_DELETE_BLOCKED",
+                "message": message,
+                "blockers": current_guard["blockers"],
+                "suggested_action": "disable",
+            })
+
+        record_operation_log(
+            db,
+            module="项目档案",
+            action="delete",
+            entity_type="pms_project_archive",
+            entity_id=archive_id,
+            entity_name=archive.project_name,
+            operator_id=operator_id,
+            request=request,
+            summary=f"删除项目档案：{archive.project_name}",
+            before_data=before,
+        )
+        db.expunge(archive)
+        db.commit()
+    except Exception:
+        if db.in_transaction():
+            db.rollback()
+        raise
     return {"msg": "删除成功"}
 
 
@@ -1264,15 +1316,15 @@ def _load_batch_archives(
     archive_ids: list[int],
     scope_context: dict | None = None,
 ) -> list[PmsProjectArchive]:
-    """一次加载所有目标档案，并对每一项应用现有范围限制。"""
-    unique_ids = list(dict.fromkeys(archive_ids))
-    archives = _apply_archive_scope(
-        db.query(PmsProjectArchive).filter(PmsProjectArchive.id.in_(unique_ids)),
-        db,
-        scope_context,
-    ).all()
+    """按固定 ID 顺序锁定目标档案，并应用现有范围限制。"""
+    unique_ids = sorted(set(archive_ids))
+    scoped_query = _apply_archive_scope(
+        db.query(PmsProjectArchive), db, scope_context
+    )
+    archives = apply_archive_lifecycle_lock(scoped_query, unique_ids).all()
     archive_by_id = {archive.id: archive for archive in archives}
     if len(archive_by_id) != len(unique_ids):
+        db.rollback()
         raise HTTPException(status_code=404, detail="档案不存在或无权访问")
     return [archive_by_id[archive_id] for archive_id in unique_ids]
 
@@ -1327,22 +1379,87 @@ def batch_delete_archives(
             "suggested_action": "disable",
         })
 
-    for archive in archives:
-        before = serialize_model(archive)
-        db.delete(archive)
-        record_operation_log(
-            db,
-            module="项目档案",
-            action="delete",
-            entity_type="pms_project_archive",
-            entity_id=archive.id,
-            entity_name=archive.project_name,
-            operator_id=operator_id,
-            request=request,
-            summary=f"批量删除项目档案：{archive.project_name}",
-            before_data=before,
+    archive_id_set = [archive.id for archive in archives]
+    before_by_id = {archive.id: serialize_model(archive) for archive in archives}
+    try:
+        deleted = (
+            db.query(PmsProjectArchive)
+            .filter(
+                PmsProjectArchive.id.in_(archive_id_set),
+                or_(
+                    PmsProjectArchive.erp_synced.is_(None),
+                    PmsProjectArchive.erp_synced != 1,
+                ),
+                archive_not_pending_condition(),
+            )
+            .delete(synchronize_session=False)
         )
-    db.commit()
+        if deleted != len(archives):
+            db.rollback()
+            current_archives = _load_batch_archives(db, archive_id_set, scope_context)
+            current_guards = get_archive_delete_guards(
+                db, [archive.id for archive in current_archives]
+            )
+            current_blocked = [
+                {
+                    "archive_id": archive.id,
+                    "project_code": archive.project_code,
+                    "project_name": archive.project_name,
+                    "blockers": current_guards[archive.id]["blockers"],
+                }
+                for archive in current_archives
+                if not current_guards[archive.id]["can_delete"]
+            ]
+            if current_blocked:
+                message = "；".join(
+                    f"{item['project_name']}：{format_archive_delete_blockers(item['blockers'])}"
+                    for item in current_blocked
+                )
+                record_operation_log(
+                    db,
+                    module="项目档案",
+                    action="batch_delete",
+                    entity_type="pms_project_archive",
+                    entity_id=",".join(str(item_id) for item_id in archive_id_set),
+                    entity_name="项目档案批量删除",
+                    operator_id=operator_id,
+                    request=request,
+                    status="failed",
+                    summary="批量删除项目档案失败",
+                    after_data={"archive_ids": archive_id_set, "blockers": current_blocked},
+                    error_msg=message,
+                    commit=True,
+                )
+                raise HTTPException(status_code=409, detail={
+                    "code": "ARCHIVE_DELETE_BLOCKED",
+                    "message": message,
+                    "blockers": current_blocked,
+                    "suggested_action": "disable",
+                })
+            raise HTTPException(status_code=409, detail={
+                "code": "ARCHIVE_LIFECYCLE_CONFLICT",
+                "message": "项目档案状态已变化，请刷新后重试",
+            })
+
+        for archive in archives:
+            record_operation_log(
+                db,
+                module="项目档案",
+                action="delete",
+                entity_type="pms_project_archive",
+                entity_id=archive.id,
+                entity_name=archive.project_name,
+                operator_id=operator_id,
+                request=request,
+                summary=f"批量删除项目档案：{archive.project_name}",
+                before_data=before_by_id[archive.id],
+            )
+            db.expunge(archive)
+        db.commit()
+    except Exception:
+        if db.in_transaction():
+            db.rollback()
+        raise
     return {"msg": "批量删除成功", "count": len(archives)}
 
 
@@ -1355,7 +1472,7 @@ def change_archive_enabled(
     scope_context: dict | None = None,
 ) -> dict:
     """在数据范围校验后，启用或禁用单个项目档案。"""
-    archive = ensure_archive_access(db, archive_id, scope_context)
+    archive = _load_batch_archives(db, [archive_id], scope_context)[0]
     return set_archive_enabled(db, archive, enabled, operator_id, request)
 
 
@@ -1372,30 +1489,65 @@ def batch_change_archives_enabled(
     target_enabled = int(enabled)
     changes = [archive for archive in archives if archive.is_enabled != target_enabled]
     if not enabled and any(archive.erp_sync_status == "pending" for archive in changes):
+        db.rollback()
         raise HTTPException(status_code=409, detail={
             "code": "ARCHIVE_OPERATION_PENDING",
             "message": "项目档案正在同步，无法禁用，请等待同步完成",
         })
     if not changes:
+        db.rollback()
         return {"msg": "批量启用成功" if enabled else "批量禁用成功", "count": 0}
 
     action = "enable" if enabled else "disable"
     action_label = "启用" if enabled else "禁用"
-    for archive in changes:
-        before = serialize_model(archive)
-        archive.is_enabled = target_enabled
-        record_operation_log(
-            db,
-            module="项目档案",
-            action=action,
-            entity_type="pms_project_archive",
-            entity_id=archive.id,
-            entity_name=archive.project_name,
-            operator_id=operator_id,
-            request=request,
-            summary=f"批量{action_label}项目档案：{archive.project_name}",
-            before_data=before,
-            after_data=serialize_model(archive),
+    change_ids = [archive.id for archive in changes]
+    before_by_id = {archive.id: serialize_model(archive) for archive in changes}
+    mutation = db.query(PmsProjectArchive).filter(
+        PmsProjectArchive.id.in_(change_ids),
+        PmsProjectArchive.is_enabled != target_enabled,
+    )
+    if not enabled:
+        mutation = mutation.filter(archive_not_pending_condition())
+
+    try:
+        changed_count = mutation.update(
+            {PmsProjectArchive.is_enabled: target_enabled},
+            synchronize_session=False,
         )
-    db.commit()
+        if changed_count != len(changes):
+            db.rollback()
+            current_archives = _load_batch_archives(db, change_ids, scope_context)
+            if not enabled and any(
+                archive.erp_sync_status == "pending" for archive in current_archives
+            ):
+                raise HTTPException(status_code=409, detail={
+                    "code": "ARCHIVE_OPERATION_PENDING",
+                    "message": "项目档案正在同步，无法禁用，请等待同步完成",
+                })
+            raise HTTPException(status_code=409, detail={
+                "code": "ARCHIVE_LIFECYCLE_CONFLICT",
+                "message": "项目档案状态已变化，请刷新后重试",
+            })
+
+        for archive in changes:
+            after = dict(before_by_id[archive.id])
+            after["is_enabled"] = target_enabled
+            record_operation_log(
+                db,
+                module="项目档案",
+                action=action,
+                entity_type="pms_project_archive",
+                entity_id=archive.id,
+                entity_name=archive.project_name,
+                operator_id=operator_id,
+                request=request,
+                summary=f"批量{action_label}项目档案：{archive.project_name}",
+                before_data=before_by_id[archive.id],
+                after_data=after,
+            )
+        db.commit()
+    except Exception:
+        if db.in_transaction():
+            db.rollback()
+        raise
     return {"msg": f"批量{action_label}成功", "count": len(changes)}

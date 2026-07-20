@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.project import PmsProjectArchive, ErpSyncLog
 from app.services.operation_log import record_operation_log, serialize_model
-from app.services.project_archive_lifecycle import ensure_archive_enabled
+from app.services.project_archive_lifecycle import (
+    claim_archive_for_sync,
+    ensure_archive_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -200,43 +203,39 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
     :param archive_id: 项目档案 ID
     :return: 包含 success 和 message 的结果字典
     """
-    # 查询项目档案
-    archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id).first()
-    if not archive:
-        record_operation_log(
-            db,
-            module="ERP同步",
-            action="sync",
-            entity_type="pms_project_archive",
-            entity_id=archive_id,
-            operator_id=user_id,
-            request=request,
-            status="failed",
-            summary=f"同步项目档案失败：档案不存在（ID {archive_id}）",
-            error_msg="项目档案不存在",
-            commit=True,
-        )
+    claimed = claim_archive_for_sync(db, archive_id)
+    if claimed is None:
+        try:
+            record_operation_log(
+                db,
+                module="ERP同步",
+                action="sync",
+                entity_type="pms_project_archive",
+                entity_id=archive_id,
+                operator_id=user_id,
+                request=request,
+                status="failed",
+                summary=f"同步项目档案失败：档案不存在（ID {archive_id}）",
+                error_msg="项目档案不存在",
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         return {"success": False, "message": "项目档案不存在"}
 
-    ensure_archive_enabled(archive, "同步 ERP")
-
-    # 更新状态为 pending
-    before = serialize_model(archive)
-    archive.erp_sync_status = "pending"
-    db.commit()
-
-    # 创建金蝶客户端
-    client = KingdeeClient()
+    archive, before = claimed
+    client: KingdeeClient | None = None
 
     try:
+        # pending 已通过条件 mutation 独立提交，随后才允许创建客户端并访问外部系统。
+        client = KingdeeClient()
+
         # 1. 登录金蝶
         if not client.login():
             error_msg = "金蝶登录失败，请检查配置"
             archive.erp_sync_status = "failed"
             archive.erp_error_msg = error_msg
-            db.commit()
-
-            # 记录日志
             log = ErpSyncLog(
                 source_id=archive_id,
                 action="sync",
@@ -259,7 +258,11 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
                 after_data=serialize_model(archive),
                 error_msg=error_msg,
             )
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
 
             return {"success": False, "message": error_msg}
 
@@ -314,7 +317,11 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
                 before_data=before,
                 after_data=serialize_model(archive),
             )
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
 
             return {"success": True, "message": f"同步成功（{action}）"}
         else:
@@ -343,12 +350,20 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
                 after_data=serialize_model(archive),
                 error_msg=save_result["message"],
             )
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
 
             return save_result
 
     except Exception as e:
+        db.rollback()
         error_msg = f"同步异常: {str(e)}"
+        archive = db.get(PmsProjectArchive, archive_id)
+        if archive is None:
+            return {"success": False, "message": "项目档案不存在"}
         archive.erp_sync_status = "failed"
         archive.erp_error_msg = error_msg
 
@@ -374,12 +389,17 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
             after_data=serialize_model(archive),
             error_msg=error_msg,
         )
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
         return {"success": False, "message": error_msg}
 
     finally:
-        client.close()
+        if client is not None:
+            client.close()
 
 
 def batch_sync_project_archives(db: Session, archive_ids: list[int], user_id: int | None = None, request: Request | None = None) -> dict:

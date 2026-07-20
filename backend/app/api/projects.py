@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -14,6 +14,21 @@ from app.schemas.project import (
 from app.services import project as project_service
 
 router = APIRouter(prefix="/api/projects", tags=["项目管理"])
+
+
+def _parse_archive_enabled_filter(value: str) -> bool | None:
+    normalized = value.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    if normalized == "all":
+        return None
+    raise HTTPException(status_code=422, detail={
+        "code": "ARCHIVE_ENABLED_FILTER_INVALID",
+        "field": "enabled",
+        "message": "enabled 仅支持 true、false 或 all",
+    })
 
 
 @router.get("", summary="项目列表")
@@ -121,12 +136,19 @@ def list_archives(
     page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000),
     keyword: str | None = Query(None), status: int | None = Query(None),
     product_category: int | None = Query(None),
-    enabled: bool | None = Query(True),
+    enabled: str = Query("true", description="true=仅启用，false=仅禁用，all=全部"),
     db: Session = Depends(get_db),
     scope_ctx: dict = Depends(require_permission("project:archive:view")),
 ):
     return project_service.get_archive_list(
-        db, page, page_size, keyword, status, product_category, enabled=enabled, scope_context=scope_ctx
+        db,
+        page,
+        page_size,
+        keyword,
+        status,
+        product_category,
+        enabled=_parse_archive_enabled_filter(enabled),
+        scope_context=scope_ctx,
     )
 
 
