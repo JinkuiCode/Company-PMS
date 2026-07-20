@@ -19,7 +19,15 @@
           批量删除
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
         </el-button>
-        <el-button v-if="hasPermission('project:archive:sync')" type="success" size="small" :disabled="selectedRows.length === 0" @click="handleBatchSync">
+        <el-button v-if="hasPermission('project:archive:toggle')" size="small" :disabled="selectedRows.length === 0" @click="handleBatchEnabledChange(true)">
+          批量启用
+          <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
+        </el-button>
+        <el-button v-if="hasPermission('project:archive:toggle')" size="small" :disabled="selectedRows.length === 0" @click="handleBatchEnabledChange(false)">
+          批量禁用
+          <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
+        </el-button>
+        <el-button v-if="hasPermission('project:archive:sync')" type="success" size="small" :disabled="selectedRows.length === 0 || selectedRowsIncludeDisabled" @click="handleBatchSync">
           <el-icon style="margin-right:4px;"><Connection /></el-icon>
           批量同步 ERP
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
@@ -55,6 +63,20 @@
           :prefix-icon="Search"
         />
         <el-select
+          v-model="archiveQuery.enabled"
+          aria-label="启用状态"
+          size="small"
+          style="width: 112px;"
+          @change="handleArchiveEnabledFilterChange"
+        >
+          <el-option
+            v-for="item in archiveEnabledFilterOptions"
+            :key="String(item.value)"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+        <el-select
           v-if="archiveFieldVisible('product_category')"
           v-model="filterProductCategory"
           placeholder="全部产品类别"
@@ -63,16 +85,6 @@
           style="width: 140px;"
         >
           <el-option v-for="item in filteredProductCategoryOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
-        </el-select>
-        <el-select
-          v-if="archiveFieldVisible('status')"
-          v-model="filterStatus"
-          placeholder="全部状态"
-          size="small"
-          clearable
-          style="width: 120px;"
-        >
-          <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
         </el-select>
       </PmsListFilters>
     </template>
@@ -89,6 +101,7 @@
         :theme="'legacy'"
         :pagination="false"
         :rowSelection="'multiple'"
+        :getRowClass="getArchiveRowClass"
         :enableCellTextSelection="true"
         :alwaysShowHorizontalScroll="true"
         @grid-ready="onGridReady"
@@ -128,11 +141,6 @@
             <el-form-item v-if="archiveFieldVisible('product_category')" label="产品类别" prop="product_category">
               <el-select v-model="form.product_category" placeholder="请选择产品类别" style="width: 100%;" :disabled="!archiveFieldEditable('product_category')">
                 <el-option v-for="item in filteredProductCategoryOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
-              </el-select>
-            </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('status')" label="状态" prop="status">
-              <el-select v-model="form.status" style="width: 100%;" :disabled="!archiveFieldEditable('status')">
-                <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
               </el-select>
             </el-form-item>
             <el-form-item v-if="archiveFieldVisible('manager_id')" label="负责人" prop="manager_id">
@@ -177,12 +185,17 @@
     <aside
       v-if="selectedArchive"
       class="archive-edit-drawer"
-      aria-label="项目档案编辑"
+      :aria-label="archiveDrawerReadOnly ? '项目档案查看' : '项目档案编辑'"
     >
       <header class="archive-drawer-head">
         <div class="archive-drawer-title-row">
           <div class="archive-drawer-identity">
-            <div class="archive-drawer-title">{{ selectedArchive.project_name || '-' }}</div>
+            <div class="archive-drawer-title-line">
+              <div class="archive-drawer-title">{{ selectedArchive.project_name || '-' }}</div>
+              <span v-if="archiveDrawerReadOnly" class="pms-status pms-status-neutral">
+                <span class="pms-status-dot"></span>已禁用
+              </span>
+            </div>
             <div class="archive-drawer-meta">
               <span>{{ selectedArchive.project_code || '-' }}</span>
               <span>·</span>
@@ -208,6 +221,7 @@
         :rules="rules"
         class="archive-drawer-form"
         label-position="top"
+        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
       >
         <div class="archive-drawer-body">
           <section
@@ -255,17 +269,6 @@
                         @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
                       >
                         <el-option v-for="item in filteredProductCategoryOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
-                      </el-select>
-                      <el-select
-                        v-else-if="field.key === 'status'"
-                        v-model="archiveDrawerForm[field.key]"
-                        size="small"
-                        placeholder="选择状态"
-                        style="width: 100%;"
-                        @change="commitArchiveFieldEdit"
-                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
-                      >
-                        <el-option v-for="item in dictOptions.archive_status" :key="item.value" :label="item.label" :value="Number(item.value)" />
                       </el-select>
                       <el-select
                         v-else-if="field.key === 'manager_id'"
@@ -338,7 +341,7 @@
           </section>
         </div>
 
-        <div class="archive-drawer-savebar">
+        <div v-if="!archiveDrawerReadOnly" class="archive-drawer-savebar">
           <el-button
             class="archive-drawer-save"
             type="primary"
@@ -428,7 +431,7 @@ const ARCHIVE_COLUMN_GROUP_DEFINITIONS = [
     fields: [
       { key: 'customer', label: '客户', value_type: 'text', list_available: true, quick_addable: false },
       { key: 'product_category', label: '产品类别', value_type: 'select', list_available: true, quick_addable: false },
-      { key: 'status', label: '状态', value_type: 'select', list_available: true, quick_addable: false },
+      { key: 'is_enabled', label: '启用状态', value_type: 'select', list_available: true, quick_addable: false },
       { key: 'manager_name', label: '负责人', value_type: 'text', list_available: true, quick_addable: false },
       { key: 'equipment_series', label: '设备系列', value_type: 'select', list_available: true, quick_addable: false },
       { key: 'serial_no', label: '序列号', value_type: 'text', list_available: true, quick_addable: false },
@@ -475,7 +478,6 @@ const ARCHIVE_DRAWER_GROUP_DEFINITIONS: Array<{
       { key: 'project_name', label: '项目名称', value_type: 'text', source_type: 'archive' },
       { key: 'customer', label: '客户', value_type: 'text', source_type: 'archive' },
       { key: 'product_category', label: '产品类别', value_type: 'select', source_type: 'archive' },
-      { key: 'status', label: '状态', value_type: 'select', source_type: 'archive' },
       { key: 'manager_id', label: '负责人', value_type: 'user', source_type: 'archive' },
       { key: 'equipment_series', label: '设备系列', value_type: 'select', source_type: 'archive' },
       { key: 'serial_no', label: '序列号', value_type: 'text', source_type: 'archive' },
@@ -638,7 +640,13 @@ function restoreArchiveColumnState() {
   try {
     const selectedKeys = new Set(selectedArchiveColumnKeys.value)
     const reconciledState = saved.columnState.map((state) => {
-      if (fixedArchiveColumnKeys.has(state.colId)) return { ...state, hide: false }
+      if (fixedArchiveColumnKeys.has(state.colId)) {
+        return {
+          ...state,
+          hide: false,
+          pinned: state.colId === 'archive_actions' ? 'right' : 'left',
+        }
+      }
       if (state.colId === 'project_code' || state.colId === 'project_name') {
         return { ...state, hide: !archiveColumnListAvailable(state.colId) }
       }
@@ -686,6 +694,12 @@ function restoreArchiveColumnDefaults() {
   selectedArchiveColumnKeys.value = [...defaultArchiveColumnKeys.value]
   nextTick(() => {
     gridApi?.resetColumnState?.()
+    gridApi?.applyColumnState?.({
+      state: [
+        { colId: 'archive_selection', hide: false, pinned: 'left' },
+        { colId: 'archive_actions', hide: false, pinned: 'right' },
+      ],
+    })
     scheduleArchiveScrollbarMetrics()
     persistArchiveColumnPreferences()
   })
@@ -701,14 +715,20 @@ const agGridRef = ref()
 const archiveListRef = ref<InstanceType<typeof PmsDataList>>()
 const page = ref(1)
 const pageSize = ref(15)
-const filterStatus = ref<number | null>(null)
 const filterProductCategory = ref<number | null>(null)
+const archiveQuery = reactive({
+  enabled: true as boolean | null,
+})
+const archiveEnabledFilterOptions = [
+  { label: '启用', value: true },
+  { label: '已禁用', value: false },
+  { label: '全部', value: null },
+]
 
 // 字典选项
 const dictOptions = reactive<Record<string, any[]>>({
   product_category: [],
   equipment_series: [],
-  archive_status: [],
 })
 const dictLabelMaps = reactive<Record<string, Record<string, string>>>({})
 
@@ -787,7 +807,6 @@ const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
   { field: 'project_name', policyKey: 'project_name', label: '项目名称', type: 'text' },
   { field: 'customer', policyKey: 'customer', label: '客户', type: 'text' },
   { field: 'product_category', policyKey: 'product_category', label: '产品类别', type: 'select', options: () => filteredProductCategoryOptions.value.map(item => ({ ...item, value: Number(item.value) })) },
-  { field: 'status', policyKey: 'status', label: '状态', type: 'select', options: () => dictFilterOptions('archive_status', true) },
   { field: 'manager_name', policyKey: 'manager_id', label: '负责人', type: 'select', options: () => archiveUserNameOptions.value },
   { field: 'equipment_series', policyKey: 'equipment_series', label: '设备系列', type: 'select', options: () => dictFilterOptions('equipment_series', true) },
   { field: 'serial_no', policyKey: 'serial_no', label: '序列号', type: 'text' },
@@ -828,9 +847,6 @@ const filteredRowData = computed(() => {
       String(r.serial_no ?? '').toLowerCase().includes(kw)
     )
   }
-  if (filterStatus.value != null) {
-    result = result.filter(r => r.status === filterStatus.value)
-  }
   if (filterProductCategory.value != null) {
     result = result.filter(r => Number(r.product_category) === filterProductCategory.value)
   }
@@ -855,7 +871,6 @@ const form = reactive({
   project_code: '',
   project_name: '',
   customer: '',
-  status: 1,
   manager_id: null as number | null,
   equipment_series: null as number | null,
   product_category: null as number | null,
@@ -866,6 +881,7 @@ const form = reactive({
 const archiveCreateServerErrors = reactive<Record<string, string>>({})
 const archiveDrawerServerErrors = reactive<Record<string, string>>({})
 const selectedArchive = ref<any | null>(null)
+const archiveDrawerReadOnly = computed(() => selectedArchive.value?.is_enabled !== 1)
 const archiveDrawerFormRef = ref<FormInstance>()
 const archiveDrawerForm = reactive<Record<string, any>>({})
 const archiveOriginalValues = ref<Record<string, unknown>>({})
@@ -918,15 +934,6 @@ const rules = computed<FormRules>(() => {
 })
 
 // ========== AG Grid 列定义 ==========
-const statusMap = computed(() => {
-  const map: Record<number, string> = {}
-  Object.entries(dictLabelMaps.archive_status || {}).forEach(([value, label]) => {
-    map[Number(value)] = label
-  })
-  return map
-})
-const archiveStatusTone: Record<number, string> = { 1: 'neutral', 2: 'info', 3: 'success', 4: 'warning' }
-
 function escapeHtml(value: any) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -934,6 +941,17 @@ function escapeHtml(value: any) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+function formatDeleteBlockers(blockers: unknown) {
+  if (!Array.isArray(blockers) || blockers.length === 0) return '该档案当前受保护，无法删除'
+  return blockers
+    .map(blocker => `${blocker?.label || '业务关联'}（${Number(blocker?.count) || 0}）`)
+    .join('；')
+}
+
+function archiveIsEnabled(row: any) {
+  return row?.is_enabled === 1
 }
 
 function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
@@ -944,8 +962,8 @@ function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
 }
 
 const columnDefs = computed<ColDef[]>(() => [
-  ...(hasPermission('project:archive:delete') || hasPermission('project:archive:sync')
-    ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', filter: false, sortable: false, resizable: false } as ColDef]
+  ...(hasPermission('project:archive:delete') || hasPermission('project:archive:sync') || hasPermission('project:archive:toggle')
+    ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false } as ColDef]
     : []),
   { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left', hide: !archiveColumnListAvailable('project_code') },
   { colId: 'project_name', field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160, hide: !archiveColumnListAvailable('project_name') },
@@ -955,12 +973,11 @@ const columnDefs = computed<ColDef[]>(() => [
     valueFormatter: (params: any) => enumLabel('product_category', params.value),
   },
   {
-    ...archiveColumnVisibility('status'), field: 'status', headerName: '状态', width: 100, minWidth: 96,
+    ...archiveColumnVisibility('is_enabled'), field: 'is_enabled', headerName: '启用状态', width: 92, minWidth: 88,
     cellRenderer: (params: any) => {
-      const v = params.value
-      const tone = archiveStatusTone[v] || 'neutral'
-      const label = escapeHtml(statusMap.value[v] || '-')
-      return `<span class="pms-status pms-status-${tone}"><span class="pms-status-dot"></span>${label}</span>`
+      return params.value === 1
+        ? '<span class="pms-status pms-status-success"><span class="pms-status-dot"></span>启用</span>'
+        : '<span class="pms-status pms-status-neutral"><span class="pms-status-dot"></span>已禁用</span>'
     },
   },
   { ...archiveColumnVisibility('manager_name'), field: 'manager_name', headerName: '负责人', width: 110, minWidth: 96 },
@@ -1007,19 +1024,39 @@ const columnDefs = computed<ColDef[]>(() => [
     },
   },
   {
-    colId: 'archive_actions', headerName: '操作', width: 146, minWidth: 136, pinned: 'right', filter: false, sortable: false, resizable: false,
+    colId: 'archive_actions', headerName: '操作', width: 200, minWidth: 196, pinned: 'right', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false,
     cellRenderer: (params: any) => {
-      return `${hasPermission('project:archive:edit') ? `<button class="pms-table-action edit-btn" data-id="${params.data.id}">编辑</button>` : ''}
-              ${hasPermission('project:archive:sync') ? `<button class="pms-table-action pms-link-success sync-btn" data-id="${params.data.id}">同步</button>` : ''}
-              ${hasPermission('project:archive:delete') ? `<button class="pms-table-action pms-link-danger del-btn" data-id="${params.data.id}">删除</button>` : ''}`
+      const row = params.data
+      const actions: string[] = []
+      if (archiveIsEnabled(row)) {
+        if (hasPermission('project:archive:edit')) actions.push('<button type="button" class="pms-table-action edit-btn">编辑</button>')
+        if (hasPermission('project:archive:sync')) actions.push('<button type="button" class="pms-table-action pms-link-success sync-btn">同步</button>')
+        if (hasPermission('project:archive:toggle')) actions.push('<button type="button" class="pms-table-action pms-link-muted disable-btn">禁用</button>')
+      } else {
+        actions.push('<button type="button" class="pms-table-action view-btn">查看</button>')
+        if (hasPermission('project:archive:toggle')) actions.push('<button type="button" class="pms-table-action pms-link-success enable-btn">启用</button>')
+      }
+      if (hasPermission('project:archive:delete')) {
+        if (row.can_delete !== false) {
+          actions.push('<button type="button" class="pms-table-action pms-link-danger del-btn">删除</button>')
+        } else {
+          const blockerTooltip = escapeHtml(formatDeleteBlockers(row.delete_blockers))
+          actions.push(`<button type="button" class="pms-table-action archive-delete-disabled" title="${blockerTooltip}" aria-disabled="true" disabled>删除</button>`)
+        }
+      }
+      return actions.join('')
     },
     onCellClicked: (params: any) => {
-      if (params.event.target.classList.contains('edit-btn')) {
-        openEditDrawer(params.data)
+      if (params.event.target.classList.contains('edit-btn') || params.event.target.classList.contains('view-btn')) {
+        openArchiveDrawer(params.data)
       } else if (params.event.target.classList.contains('sync-btn')) {
         handleSyncSingle(params.data.id)
+      } else if (params.event.target.classList.contains('disable-btn')) {
+        handleArchiveEnabledChange(params.data, false)
+      } else if (params.event.target.classList.contains('enable-btn')) {
+        handleArchiveEnabledChange(params.data, true)
       } else if (params.event.target.classList.contains('del-btn')) {
-        handleDeleteSingle(params.data.id)
+        handleDeleteSingle(params.data)
       }
     },
   },
@@ -1034,13 +1071,30 @@ const defaultColDef = {
 }
 
 // ========== 数据加载 ==========
+function archiveEnabledHttpValue(enabled: boolean | null) {
+  if (enabled === true) return 'true'
+  if (enabled === false) return 'false'
+  return 'all'
+}
+
 async function fetchList() {
   const res: any = await request.get('/projects/archives/list', {
-    params: { page: 1, page_size: 1000 },
+    params: {
+      page: 1,
+      page_size: 1000,
+      enabled: archiveEnabledHttpValue(archiveQuery.enabled),
+    },
   })
   rowData.value = res.items
   total.value = res.total
   scheduleArchiveScrollbarMetrics()
+}
+
+function handleArchiveEnabledFilterChange() {
+  page.value = 1
+  agGridRef.value?.api?.deselectAll?.()
+  selectedRows.value = []
+  fetchList()
 }
 
 async function fetchUsers() {
@@ -1050,6 +1104,12 @@ async function fetchUsers() {
 // ========== 选择事件 ==========
 function onSelectionChanged() {
   selectedRows.value = agGridRef.value?.api?.getSelectedRows?.() || []
+}
+
+const selectedRowsIncludeDisabled = computed(() => selectedRows.value.some(row => !archiveIsEnabled(row)))
+
+function getArchiveRowClass(params: any) {
+  return archiveIsEnabled(params.data) ? undefined : 'archive-row-disabled'
 }
 
 // ========== 新增与字段级抽屉编辑 ==========
@@ -1062,7 +1122,6 @@ function openCreateDialog() {
     project_code: '',
     project_name: '',
     customer: '',
-    status: 1,
     manager_id: null,
     equipment_series: null,
     product_category: null,
@@ -1079,7 +1138,6 @@ function buildArchiveCreatePayload() {
     project_code: form.project_code,
     project_name: form.project_name,
     customer: form.customer || null,
-    status: form.status,
     manager_id: form.manager_id,
     equipment_series: form.equipment_series,
     product_category: form.product_category,
@@ -1103,7 +1161,6 @@ function archiveDrawerValues(row: any) {
     project_code: row.project_code || '',
     project_name: row.project_name || '',
     customer: row.customer || '',
-    status: row.status,
     manager_id: row.manager_id ?? null,
     equipment_series: row.equipment_series ?? null,
     product_category: row.product_category ?? null,
@@ -1148,8 +1205,8 @@ async function confirmDiscardArchiveChanges() {
   }
 }
 
-async function openEditDrawer(row: any) {
-  if (!hasPermission('project:archive:edit')) return
+async function openArchiveDrawer(row: any) {
+  if (archiveIsEnabled(row) && !hasPermission('project:archive:edit')) return
   if (selectedArchive.value?.id === row.id) return
   if (!await confirmDiscardArchiveChanges()) return
   resetArchiveDrawer(row)
@@ -1167,12 +1224,14 @@ function archiveDrawerFieldRequired(field: ArchiveDrawerField) {
 }
 
 function archiveDrawerFieldEditable(field: ArchiveDrawerField) {
-  return field.source_type === 'archive'
+  return !archiveDrawerReadOnly.value
+    && field.source_type === 'archive'
     && archiveFieldEditable(field.key)
     && hasPermission('project:archive:edit')
 }
 
 function archiveDrawerReadonlyReason(field: ArchiveDrawerField) {
+  if (archiveDrawerReadOnly.value) return '项目档案已禁用，仅供查看'
   if (field.source_type === 'system') return '系统维护字段，仅供查看'
   if (!hasPermission('project:archive:edit')) return '当前角色没有项目档案编辑权限'
   return '字段规则已设置为不可编辑'
@@ -1206,7 +1265,6 @@ function formatArchiveDrawerValue(field: ArchiveDrawerField) {
     return ({ pending: '待同步', success: '已同步', failed: '同步失败' } as Record<string, string>)[String(value || 'pending')] || String(value)
   }
   if (archiveDrawerValueEmpty(field)) return archiveDrawerFieldEditable(field) ? '点击填写' : '-'
-  if (field.key === 'status') return enumLabel('archive_status', value)
   if (field.key === 'product_category') return enumLabel('product_category', value)
   if (field.key === 'equipment_series') return enumLabel('equipment_series', value)
   if (field.key === 'manager_id') {
@@ -1219,7 +1277,6 @@ function formatArchiveDrawerValue(field: ArchiveDrawerField) {
 }
 
 function normalizeArchiveDrawerValue(field: ArchiveDrawerField, value: unknown) {
-  if (field.key === 'status') return value === '' || value == null ? null : Number(value)
   if (field.key === 'manager_id') return value === '' || value == null ? null : Number(value)
   if (field.value_type === 'date') return value ? archiveDateValue(value) : null
   if (['product_category', 'equipment_series'].includes(field.key)) {
@@ -1233,6 +1290,7 @@ function sameArchiveDrawerValue(left: unknown, right: unknown) {
 }
 
 function startArchiveFieldEdit(field: ArchiveDrawerField) {
+  if (archiveDrawerReadOnly.value) return
   if (!archiveDrawerFieldEditable(field)) return
   clearArchiveServerError(archiveDrawerServerErrors, field.key)
   if (archiveEditingField.value && archiveEditingField.value !== field.key) commitArchiveFieldEdit()
@@ -1347,7 +1405,7 @@ async function handleSubmit() {
 }
 
 async function saveArchiveDrawer(syncAfterSave: boolean) {
-  if (!selectedArchive.value || archiveDrawerSaving.value || !hasPermission('project:archive:edit')) return
+  if (!selectedArchive.value || archiveDrawerReadOnly.value || archiveDrawerSaving.value || !hasPermission('project:archive:edit')) return
   if (syncAfterSave && !hasPermission('project:archive:sync')) return
   commitArchiveFieldEdit()
   if (!archivePendingChangeCount.value && !syncAfterSave) return
@@ -1400,33 +1458,108 @@ async function saveArchiveDrawer(syncAfterSave: boolean) {
   if (syncAfterSave && syncSucceeded) ElMessage.success('保存并同步成功')
 }
 
+async function refreshArchiveListAfterConflict(error: any) {
+  if (error?.response?.status !== 409) return
+  await fetchList().catch(() => undefined)
+}
+
+function resetArchiveSelection() {
+  agGridRef.value?.api?.deselectAll?.()
+  selectedRows.value = []
+}
+
+async function releaseArchiveDrawerForLifecycle(archiveIds: number[]) {
+  if (!selectedArchive.value || !archiveIds.includes(selectedArchive.value.id)) return true
+  if (!await confirmDiscardArchiveChanges()) return false
+  selectedArchive.value = null
+  archivePendingChanges.value = {}
+  archiveEditingField.value = null
+  return true
+}
+
+// ========== 启用状态 ==========
+async function handleArchiveEnabledChange(row: any, enabled: boolean) {
+  if (!hasPermission('project:archive:toggle')) return
+  const action = enabled ? '启用' : '禁用'
+  try {
+    await ElMessageBox.confirm(`确定${action}项目档案“${row.project_name}”吗？`, `${action}确认`, { type: 'warning' })
+  } catch {
+    return
+  }
+  if (!await releaseArchiveDrawerForLifecycle([row.id])) return
+  try {
+    const res: any = await request.put(`/projects/archives/${row.id}/enabled`, { enabled })
+    ElMessage.success(res.msg || `${action}成功`)
+    resetArchiveSelection()
+    await fetchList()
+  } catch (error) {
+    await refreshArchiveListAfterConflict(error)
+  }
+}
+
+async function handleBatchEnabledChange(enabled: boolean) {
+  if (!hasPermission('project:archive:toggle') || selectedRows.value.length === 0) return
+  const archiveIds = selectedRows.value.map(row => row.id)
+  const action = enabled ? '启用' : '禁用'
+  try {
+    await ElMessageBox.confirm(`确定${action}选中的 ${archiveIds.length} 条档案吗？`, `批量${action}确认`, { type: 'warning' })
+  } catch {
+    return
+  }
+  if (!await releaseArchiveDrawerForLifecycle(archiveIds)) return
+  try {
+    const res: any = await request.put('/projects/archives/batch-enabled', {
+      archive_ids: archiveIds,
+      enabled,
+    })
+    ElMessage.success(`${res.msg || `批量${action}成功`}，处理 ${Number(res.count) || 0} 条`)
+    resetArchiveSelection()
+    await fetchList()
+  } catch (error) {
+    await refreshArchiveListAfterConflict(error)
+  }
+}
+
 // ========== 删除 ==========
-async function handleDeleteSingle(id: number) {
+async function handleDeleteSingle(row: any) {
   if (!hasPermission('project:archive:delete')) return
+  if (row.can_delete === false) return
   try {
     await ElMessageBox.confirm('确定删除该项目档案吗？', '提示', { type: 'warning' })
   } catch {
     return
   }
-  await request.delete(`/projects/archives/${id}`)
-  ElMessage.success('删除成功')
-  fetchList()
+  if (!await releaseArchiveDrawerForLifecycle([row.id])) return
+  try {
+    await request.delete(`/projects/archives/${row.id}`)
+    ElMessage.success('删除成功')
+    resetArchiveSelection()
+    await fetchList()
+  } catch (error) {
+    await refreshArchiveListAfterConflict(error)
+  }
 }
 
 async function handleBatchDelete() {
   if (!hasPermission('project:archive:delete')) return
   if (selectedRows.value.length === 0) return
+  const archiveIds = selectedRows.value.map(row => row.id)
   try {
-    await ElMessageBox.confirm(`确定删除选中的 ${selectedRows.value.length} 条档案吗？`, '提示', { type: 'warning' })
+    await ElMessageBox.confirm(`确定删除选中的 ${archiveIds.length} 条档案吗？`, '提示', { type: 'warning' })
   } catch {
     return
   }
-  for (const row of selectedRows.value) {
-    await request.delete(`/projects/archives/${row.id}`)
+  if (!await releaseArchiveDrawerForLifecycle(archiveIds)) return
+  try {
+    const res: any = await request.post('/projects/archives/batch-delete', {
+      archive_ids: archiveIds,
+    })
+    ElMessage.success(`${res.msg || '批量删除成功'}，删除 ${Number(res.count) || 0} 条`)
+    resetArchiveSelection()
+    await fetchList()
+  } catch (error) {
+    await refreshArchiveListAfterConflict(error)
   }
-  ElMessage.success('批量删除成功')
-  selectedRows.value = []
-  fetchList()
 }
 
 // ========== ERP 同步 ==========
@@ -1473,7 +1606,6 @@ onMounted(async () => {
   fetchList(); fetchUsers(); fetchAllowedProductCategories()
   fetchDictOptions('product_category')
   fetchDictOptions('equipment_series')
-  fetchDictOptions('archive_status')
   await resolveArchiveColumnPreferenceOwner()
   restoreSelectedArchiveColumnKeys()
   archiveColumnPreferencesReady.value = true
@@ -1535,6 +1667,13 @@ onMounted(async () => {
 
 .archive-drawer-identity {
   min-width: 0;
+}
+
+.archive-drawer-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .archive-drawer-title {
@@ -1700,6 +1839,18 @@ onMounted(async () => {
 
 :deep(.pms-table-action + .pms-table-action) {
   margin-left: 2px;
+}
+
+:deep(.archive-delete-disabled),
+:deep(.archive-delete-disabled:hover) {
+  color: var(--pms-text-muted);
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+:deep(.archive-row-disabled .ag-cell) {
+  color: var(--pms-text-muted);
+  background: var(--pms-surface-muted);
 }
 
 :deep(.archive-list-header-center .ag-header-cell-label) {
