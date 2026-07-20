@@ -192,8 +192,11 @@
           <div class="archive-drawer-identity">
             <div class="archive-drawer-title-line">
               <div class="archive-drawer-title">{{ selectedArchive.project_name || '-' }}</div>
-              <span v-if="archiveDrawerReadOnly" class="pms-status pms-status-neutral">
+              <span v-if="selectedArchive.is_enabled !== 1" class="pms-status pms-status-neutral">
                 <span class="pms-status-dot"></span>已禁用
+              </span>
+              <span v-else-if="archiveDrawerLifecycleConflict" class="pms-status pms-status-warning">
+                <span class="pms-status-dot"></span>状态已变化
               </span>
             </div>
             <div class="archive-drawer-meta">
@@ -370,8 +373,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, nextTick, onMounted } from 'vue'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ref, reactive, computed, defineComponent, h, nextTick, onMounted } from 'vue'
+import { ElMessage, ElMessageBox, ElTooltip, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Delete, Search, Connection, Close, Lock } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
@@ -881,7 +884,11 @@ const form = reactive({
 const archiveCreateServerErrors = reactive<Record<string, string>>({})
 const archiveDrawerServerErrors = reactive<Record<string, string>>({})
 const selectedArchive = ref<any | null>(null)
-const archiveDrawerReadOnly = computed(() => selectedArchive.value?.is_enabled !== 1)
+const archiveDrawerLifecycleConflict = ref(false)
+const archiveDrawerReadOnly = computed(() => (
+  selectedArchive.value?.is_enabled !== 1
+  || archiveDrawerLifecycleConflict.value
+))
 const archiveDrawerFormRef = ref<FormInstance>()
 const archiveDrawerForm = reactive<Record<string, any>>({})
 const archiveOriginalValues = ref<Record<string, unknown>>({})
@@ -954,6 +961,65 @@ function archiveIsEnabled(row: any) {
   return row?.is_enabled === 1
 }
 
+function archiveActionButton(label: string, className: string, action: () => void) {
+  return h('button', {
+    type: 'button',
+    class: ['pms-table-action', className],
+    onClick: (event: MouseEvent) => {
+      event.stopPropagation()
+      action()
+    },
+  }, label)
+}
+
+const ArchiveActionsRenderer = defineComponent({
+  name: 'ArchiveActionsRenderer',
+  props: {
+    params: { type: Object, required: true },
+  },
+  setup(props) {
+    return () => {
+      const row = (props.params as any).data
+      const actions = []
+      if (archiveIsEnabled(row)) {
+        if (hasPermission('project:archive:edit')) actions.push(archiveActionButton('编辑', 'edit-btn', () => openArchiveDrawer(row)))
+        if (hasPermission('project:archive:sync')) actions.push(archiveActionButton('同步', 'pms-link-success sync-btn', () => handleSyncSingle(row.id)))
+        if (hasPermission('project:archive:toggle')) actions.push(archiveActionButton('禁用', 'pms-link-muted disable-btn', () => handleArchiveEnabledChange(row, false)))
+      } else {
+        actions.push(archiveActionButton('查看', 'view-btn', () => openArchiveDrawer(row)))
+        if (hasPermission('project:archive:toggle')) actions.push(archiveActionButton('启用', 'pms-link-success enable-btn', () => handleArchiveEnabledChange(row, true)))
+      }
+      if (hasPermission('project:archive:delete')) {
+        if (row.can_delete !== false) {
+          actions.push(archiveActionButton('删除', 'pms-link-danger del-btn', () => handleDeleteSingle(row)))
+        } else {
+          const blockerText = formatDeleteBlockers(row.delete_blockers)
+          actions.push(h(ElTooltip, { content: blockerText, placement: 'top' }, {
+            default: () => h('span', {
+              class: 'archive-delete-tooltip-owner',
+              tabindex: 0,
+              role: 'button',
+              'aria-disabled': 'true',
+              'aria-label': `删除不可用：${blockerText}`,
+              onClick: (event: MouseEvent) => event.stopPropagation(),
+              onKeydown: (event: KeyboardEvent) => event.stopPropagation(),
+            }, [
+              h('button', {
+                type: 'button',
+                class: 'pms-table-action archive-delete-disabled',
+                disabled: true,
+                tabindex: -1,
+                'aria-hidden': 'true',
+              }, '删除'),
+            ]),
+          }))
+        }
+      }
+      return h('div', { class: 'archive-row-actions' }, actions)
+    }
+  },
+})
+
 function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
   return {
     colId: key,
@@ -1025,40 +1091,7 @@ const columnDefs = computed<ColDef[]>(() => [
   },
   {
     colId: 'archive_actions', headerName: '操作', width: 200, minWidth: 196, pinned: 'right', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false,
-    cellRenderer: (params: any) => {
-      const row = params.data
-      const actions: string[] = []
-      if (archiveIsEnabled(row)) {
-        if (hasPermission('project:archive:edit')) actions.push('<button type="button" class="pms-table-action edit-btn">编辑</button>')
-        if (hasPermission('project:archive:sync')) actions.push('<button type="button" class="pms-table-action pms-link-success sync-btn">同步</button>')
-        if (hasPermission('project:archive:toggle')) actions.push('<button type="button" class="pms-table-action pms-link-muted disable-btn">禁用</button>')
-      } else {
-        actions.push('<button type="button" class="pms-table-action view-btn">查看</button>')
-        if (hasPermission('project:archive:toggle')) actions.push('<button type="button" class="pms-table-action pms-link-success enable-btn">启用</button>')
-      }
-      if (hasPermission('project:archive:delete')) {
-        if (row.can_delete !== false) {
-          actions.push('<button type="button" class="pms-table-action pms-link-danger del-btn">删除</button>')
-        } else {
-          const blockerTooltip = escapeHtml(formatDeleteBlockers(row.delete_blockers))
-          actions.push(`<button type="button" class="pms-table-action archive-delete-disabled" title="${blockerTooltip}" aria-disabled="true" disabled>删除</button>`)
-        }
-      }
-      return actions.join('')
-    },
-    onCellClicked: (params: any) => {
-      if (params.event.target.classList.contains('edit-btn') || params.event.target.classList.contains('view-btn')) {
-        openArchiveDrawer(params.data)
-      } else if (params.event.target.classList.contains('sync-btn')) {
-        handleSyncSingle(params.data.id)
-      } else if (params.event.target.classList.contains('disable-btn')) {
-        handleArchiveEnabledChange(params.data, false)
-      } else if (params.event.target.classList.contains('enable-btn')) {
-        handleArchiveEnabledChange(params.data, true)
-      } else if (params.event.target.classList.contains('del-btn')) {
-        handleDeleteSingle(params.data)
-      }
-    },
+    cellRenderer: ArchiveActionsRenderer,
   },
 ])
 
@@ -1181,6 +1214,7 @@ function archiveDrawerValues(row: any) {
 function resetArchiveDrawer(row: any) {
   clearArchiveServerErrors(archiveDrawerServerErrors)
   selectedArchive.value = { ...row }
+  archiveDrawerLifecycleConflict.value = false
   const values = archiveDrawerValues(row)
   Object.keys(archiveDrawerForm).forEach(key => delete archiveDrawerForm[key])
   Object.assign(archiveDrawerForm, values)
@@ -1188,6 +1222,11 @@ function resetArchiveDrawer(row: any) {
   archivePendingChanges.value = {}
   archiveEditingField.value = null
   nextTick(() => archiveDrawerFormRef.value?.clearValidate())
+}
+
+function reconcileSelectedArchiveLifecycle(row: any) {
+  if (!selectedArchive.value || selectedArchive.value.id !== row.id) return
+  selectedArchive.value = { ...selectedArchive.value, ...row }
 }
 
 async function confirmDiscardArchiveChanges() {
@@ -1207,7 +1246,10 @@ async function confirmDiscardArchiveChanges() {
 
 async function openArchiveDrawer(row: any) {
   if (archiveIsEnabled(row) && !hasPermission('project:archive:edit')) return
-  if (selectedArchive.value?.id === row.id) return
+  if (selectedArchive.value?.id === row.id) {
+    reconcileSelectedArchiveLifecycle(row)
+    return
+  }
   if (!await confirmDiscardArchiveChanges()) return
   resetArchiveDrawer(row)
 }
@@ -1217,6 +1259,7 @@ async function closeArchiveDrawer() {
   selectedArchive.value = null
   archivePendingChanges.value = {}
   archiveEditingField.value = null
+  archiveDrawerLifecycleConflict.value = false
 }
 
 function archiveDrawerFieldRequired(field: ArchiveDrawerField) {
@@ -1231,7 +1274,8 @@ function archiveDrawerFieldEditable(field: ArchiveDrawerField) {
 }
 
 function archiveDrawerReadonlyReason(field: ArchiveDrawerField) {
-  if (archiveDrawerReadOnly.value) return '项目档案已禁用，仅供查看'
+  if (archiveDrawerLifecycleConflict.value) return '档案状态已变化，当前草稿仅供查看'
+  if (selectedArchive.value?.is_enabled !== 1) return '项目档案已禁用，仅供查看'
   if (field.source_type === 'system') return '系统维护字段，仅供查看'
   if (!hasPermission('project:archive:edit')) return '当前角色没有项目档案编辑权限'
   return '字段规则已设置为不可编辑'
@@ -1404,6 +1448,54 @@ async function handleSubmit() {
   }
 }
 
+const ARCHIVE_DRAWER_LIFECYCLE_CONFLICT_CODES = new Set([
+  'ARCHIVE_DISABLED',
+  'ARCHIVE_OPERATION_PENDING',
+  'ARCHIVE_LIFECYCLE_CONFLICT',
+])
+
+function archiveLifecycleConflictDetail(error: any) {
+  if (error?.response?.status !== 409) return null
+  const detail = error?.response?.data?.detail
+  const code = String(detail?.code || '')
+  if (!ARCHIVE_DRAWER_LIFECYCLE_CONFLICT_CODES.has(code) && !code.startsWith('ARCHIVE_LIFECYCLE_')) return null
+  return {
+    code,
+    message: String(detail?.message || '项目档案状态已变化，请刷新后重试'),
+  }
+}
+
+async function fetchArchiveLifecycleSnapshot(archiveId: number) {
+  const response: any = await request.get('/projects/archives/list', {
+    params: { page: 1, page_size: 10000, enabled: 'all' },
+  })
+  return (response.items || []).find((row: any) => row.id === archiveId) || null
+}
+
+async function reconcileArchiveDrawerLifecycleConflict(error: any, archiveId: number, actionLabel: string) {
+  const conflict = archiveLifecycleConflictDetail(error)
+  if (!conflict) return false
+
+  archiveDrawerLifecycleConflict.value = true
+  const draftNotice = archivePendingChangeCount.value
+    ? '未保存草稿已保留，请关闭抽屉时明确决定是否放弃。'
+    : '当前抽屉已转为只读。'
+  ElMessage.warning(`${actionLabel}失败：${conflict.message}。${draftNotice}`)
+
+  let refreshed: any | null = null
+  try {
+    refreshed = await fetchArchiveLifecycleSnapshot(archiveId)
+  } catch { /* 统一请求层已提示快照刷新失败 */ }
+  if (!refreshed && conflict.code === 'ARCHIVE_DISABLED' && selectedArchive.value?.id === archiveId) {
+    refreshed = { ...selectedArchive.value, is_enabled: 0 }
+  }
+  if (refreshed) reconcileSelectedArchiveLifecycle(refreshed)
+  try {
+    await fetchList()
+  } catch { /* 统一请求层已提示列表刷新失败 */ }
+  return true
+}
+
 async function saveArchiveDrawer(syncAfterSave: boolean) {
   if (!selectedArchive.value || archiveDrawerReadOnly.value || archiveDrawerSaving.value || !hasPermission('project:archive:edit')) return
   if (syncAfterSave && !hasPermission('project:archive:sync')) return
@@ -1423,6 +1515,10 @@ async function saveArchiveDrawer(syncAfterSave: boolean) {
       archiveDrawerSaving.value = false
       return
     }
+    if (await reconcileArchiveDrawerLifecycleConflict(error, archiveId, '保存')) {
+      archiveDrawerSaving.value = false
+      return
+    }
     await focusArchivePolicyValidation(error, archiveDrawerFormRef)
     archiveDrawerSaving.value = false
     return
@@ -1437,6 +1533,10 @@ async function saveArchiveDrawer(syncAfterSave: boolean) {
       syncSucceeded = Boolean(syncRes.success)
       if (!syncRes.success) ElMessage.warning(`档案已保存，但同步失败：${syncRes.message}`)
     } catch (error: any) {
+      if (await reconcileArchiveDrawerLifecycleConflict(error, archiveId, '同步')) {
+        archiveDrawerSaving.value = false
+        return
+      }
       ElMessage.warning('档案已保存，但同步异常：' + (error?.response?.data?.message || error?.message))
     }
   }
@@ -1474,6 +1574,7 @@ async function releaseArchiveDrawerForLifecycle(archiveIds: number[]) {
   selectedArchive.value = null
   archivePendingChanges.value = {}
   archiveEditingField.value = null
+  archiveDrawerLifecycleConflict.value = false
   return true
 }
 
@@ -1839,6 +1940,18 @@ onMounted(async () => {
 
 :deep(.pms-table-action + .pms-table-action) {
   margin-left: 2px;
+}
+
+:deep(.archive-row-actions) {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+:deep(.archive-delete-tooltip-owner) {
+  display: inline-flex;
+  border-radius: var(--pms-radius-sm);
 }
 
 :deep(.archive-delete-disabled),

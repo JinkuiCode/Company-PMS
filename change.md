@@ -1,5 +1,14 @@
 # PMS 变更记录
 
+## 2026-07-20 - 项目档案启停生命周期与删除保护 UI
+
+- 原因：项目档案列表需要与后端启停、删除保护和批量事务接口保持一致，同时修复受保护删除原因无法被键盘/辅助技术访问，以及并发禁用或同步占用后抽屉仍可重复提交的问题。
+- 调整内容：列表默认仅查询启用档案并显式发送 `true / false / all` 三态参数，移除旧档案状态筛选、列和编辑器；按启用状态与 RBAC 展示编辑、查看、同步、启用、禁用和删除动作；批量删除与批量启停分别使用一次原子接口并发送全部选中 ID；禁用档案抽屉只读并保留启用状态列、禁用行弱化和固定操作列恢复。
+- 调整内容：受保护删除改为 Element Plus tooltip，使用可聚焦且带 `aria-label`、`aria-disabled` 的 owner 包裹实际原生禁用按钮，使鼠标、键盘和辅助技术均可获得后端 blocker 说明，删除动作继续不可点击。
+- 调整内容：抽屉保存或同步遇到 `ARCHIVE_DISABLED`、`ARCHIVE_OPERATION_PENDING`、`ARCHIVE_LIFECYCLE_CONFLICT` 等生命周期 `409` 时立即锁定编辑，明确提示失败并保留未保存草稿；随后以 `enabled=all` 刷新同 ID 档案并替换 `selectedArchive` 生命周期状态，关闭时仍需用户明确决定是否放弃草稿。
+- 涉及文件：`frontend/src/views/project/ProjectArchive.vue`、`frontend/tests/archive-lifecycle-contract.test.mjs`、`frontend/tests/archive-lifecycle-conflict-contract.test.mjs`、`frontend/tests/archive-filter-contract.test.mjs`、`.superpowers/sdd/task-5-report.md`、`change.md`。
+- 验证结果：`node tests/archive-lifecycle-contract.test.mjs`、`node tests/archive-lifecycle-conflict-contract.test.mjs`、`node tests/archive-edit-drawer-contract.test.mjs`、`node tests/archive-filter-contract.test.mjs`、`node tests/list-standard-contract.test.mjs`、`node tests/system-ui-consistency-contract.test.mjs`、`node tests/list-navigation-polish-contract.test.mjs`、`node tests/style-contract.test.mjs` 均退出 `0`；`npm run build`（`vue-tsc -b && vite build`）退出 `0`，Vite 转换 2293 个模块。浏览器全套验收留待 Task 6 单独记录。
+
 ## 2026-07-15 - 项目档案语义化字段与数字枚举迁移
 
 - 项目档案新增客户、序列号字段；项目编号改为可编辑，并对项目编号、项目名称、序列号执行去除首尾空格后的唯一性校验，其中项目编号和序列号不区分大小写。

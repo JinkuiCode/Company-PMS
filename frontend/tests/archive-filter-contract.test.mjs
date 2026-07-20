@@ -15,7 +15,6 @@ for (const field of [
   'project_code',
   'project_name',
   'product_category',
-  'status',
   'manager_name',
   'equipment_series',
   'plan_start_date',
@@ -24,5 +23,12 @@ for (const field of [
 ]) {
   assert.match(archive, new RegExp(field), `Project archive custom filters should include ${field}`)
 }
+
+assert.match(archive, /v-model="archiveQuery\.enabled"/, 'Project archive should expose the enabled-state filter')
+assert.match(archive, /label:\s*'启用',\s*value:\s*true/, 'Enabled-state filter should include enabled records')
+assert.match(archive, /label:\s*'已禁用',\s*value:\s*false/, 'Enabled-state filter should include disabled records')
+assert.match(archive, /label:\s*'全部',\s*value:\s*null/, 'Enabled-state filter should include all records explicitly')
+const archiveFilterFields = archive.match(/const archiveFilterFields =[\s\S]*?useListFilters\(archiveFilterFields\)/)?.[0] || ''
+assert.doesNotMatch(archiveFilterFields, /field:\s*'status'/, 'Project archive custom filters must not restore the legacy status field')
 
 console.log('archive filter contract passed')
