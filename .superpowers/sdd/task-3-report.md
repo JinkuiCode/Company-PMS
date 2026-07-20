@@ -157,3 +157,55 @@ Key outputs were the six expected `... contract passed` lines; `py_compile` prod
 
 - MSSQL lock SQL and acquisition order are dialect-compiled/behaviorally asserted, but no live MSSQL instance was available for a real two-session integration race.
 - The existing Passlib/bcrypt metadata warning remains outside this task's scope; both affected contracts exited `0`.
+
+## 2026-07-20 Follow-up Review Critical / Important Fixes
+
+Implementation commit: `bfd48177b54424732065aa6a804c4b8ce0645328` (`Preserve ambiguous Kingdee save outcomes`)
+
+### Test-first evidence
+
+The concurrency contract was changed before production code and the four focused cases were run independently:
+
+- **RED:** the real `KingdeeClient.save_assistant_data()` path used an underlying `httpx.Client.post` timeout, logged `保存辅助资料异常: ERP save response timed out`, and failed the durable-`pending` assertion because the archive became ordinary `failed`.
+- **Baseline GREEN:** an explicit Kingdee `ResponseStatus.IsSuccess == false` response remained a clear business rejection with `erp_sync_status == "failed"`.
+- **Baseline GREEN:** single and batch delete both returned structured `ARCHIVE_DELETE_BLOCKED` after the guard hook committed a new project reference immediately before the real conditional `DELETE`; all archives and projects remained.
+- **Baseline GREEN:** the actual `load_archive_lifecycle_rows()` path emitted one MSSQL-compiled statement per distinct ID in ascending order, and every captured statement contained `WITH (UPDLOCK, ROWLOCK, HOLDLOCK)`.
+
+The two Important findings therefore required stronger behavioral coverage, not a production mutation change. The Critical finding required the Kingdee client correction.
+
+### Implemented correction
+
+- Added `KingdeeSaveOutcomeAmbiguous` as the explicit post-request unknown-outcome signal.
+- Once the save `post()` begins, transport, HTTP, JSON decoding, malformed response shape, missing success marker, and unknown marker values now raise the ambiguity signal. The existing sync finalizer retains durable `pending` and deletion protection.
+- Only a valid response containing explicit boolean `ResponseStatus.IsSuccess == false` remains an ordinary clear rejection and may transition to `failed`.
+- Replaced the SQL-text-only delete test with single and batch mutation-boundary behavior tests.
+- Replaced the disconnected MSSQL assertions with compiled capture around the actual sequential loader.
+
+### Changed files
+
+- `backend/app/services/kingdee.py`
+- `backend/tests/project_archive_lifecycle_concurrency_contract.py`
+- `.superpowers/sdd/task-3-report.md`
+- `.superpowers/sdd/task-3-followup-agent-report.md`
+
+### GREEN verification
+
+All commands exited `0`:
+
+```sh
+env PYTHONPATH=.:.venv-deps312 /Users/jin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 tests/project_archive_lifecycle_concurrency_contract.py
+env PYTHONPATH=.:.venv-deps312 /Users/jin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 tests/project_archive_lifecycle_contract.py
+env PYTHONPATH=.:.venv-deps312 /Users/jin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 tests/project_archive_semantic_contract.py
+env PYTHONPATH=.:.venv-deps312 /Users/jin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 tests/project_update_contract.py
+env PYTHONPATH=.:.venv-deps312 /Users/jin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 tests/rbac_permission_contract.py
+env PYTHONPATH=.:.venv-deps312 /Users/jin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 tests/operation_log_contract.py
+env PYTHONPATH=.:.venv-deps312 /Users/jin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m py_compile app/services/kingdee.py tests/project_archive_lifecycle_concurrency_contract.py
+```
+
+The concurrency script intentionally logs the simulated Kingdee timeout before passing. No test hung. The lifecycle and RBAC scripts still emit the pre-existing non-fatal Passlib/bcrypt metadata warning.
+
+### Remaining risks
+
+- No live MSSQL instance was available; the stronger loader test compiles every actual per-ID loader statement with the MSSQL dialect but cannot verify server lock scheduling.
+- The review's Minor one-sided archive-edit race coverage remains recorded and intentionally deferred, per the follow-up scope.
+- The existing Passlib/bcrypt metadata warning remains outside this task.
