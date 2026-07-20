@@ -123,11 +123,6 @@ class _SuccessfulKingdeeClient:
         return None
 
 
-class _AmbiguousKingdeeClient(_SuccessfulKingdeeClient):
-    def save_assistant_data(self, **_kwargs):
-        raise TimeoutError("ERP save response timed out")
-
-
 def _run_in_thread(target):
     result: dict[str, object] = {}
 
@@ -323,49 +318,70 @@ def test_batch_lifecycle_mutations_process_rows_in_fixed_id_order():
 
 
 def test_mssql_lifecycle_query_uses_update_row_lock_and_fixed_order():
-    from sqlalchemy import event
+    from sqlalchemy import select
     from sqlalchemy.dialects import mssql
 
-    from app.core.database import SessionLocal, engine
     from app.models.project import PmsProjectArchive
-    from app.services.project_archive_lifecycle import (
-        apply_archive_lifecycle_lock,
-        load_archive_lifecycle_rows,
+    from app.services.project_archive_lifecycle import load_archive_lifecycle_rows
+
+    archive_ids = [9, 3, 7, 3]
+    captured: list[tuple[int, str]] = []
+
+    class RecordingMssqlQuery:
+        def __init__(self, statement):
+            self.statement = statement
+
+        def _with(self, statement):
+            return RecordingMssqlQuery(statement)
+
+        def filter(self, *criteria):
+            return self._with(self.statement.where(*criteria))
+
+        def order_by(self, *columns):
+            return self._with(self.statement.order_by(*columns))
+
+        def with_hint(self, selectable, text, dialect_name):
+            return self._with(
+                self.statement.with_hint(
+                    selectable,
+                    text,
+                    dialect_name=dialect_name,
+                )
+            )
+
+        def with_for_update(self):
+            return self._with(self.statement.with_for_update())
+
+        def populate_existing(self):
+            return self
+
+        def first(self):
+            compiled = self.statement.limit(1).compile(dialect=mssql.dialect())
+            values: list[int] = []
+            for value in compiled.params.values():
+                if isinstance(value, int):
+                    values.append(value)
+                elif isinstance(value, (list, tuple)):
+                    values.extend(item for item in value if isinstance(item, int))
+            archive_id = next(value for value in values if value in archive_ids)
+            captured.append((archive_id, str(compiled).upper()))
+            row = PmsProjectArchive(
+                project_code=f"MSSQL-{archive_id}",
+                project_name=f"MSSQL {archive_id}",
+            )
+            row.id = archive_id
+            return row
+
+    rows = load_archive_lifecycle_rows(
+        RecordingMssqlQuery(select(PmsProjectArchive)),
+        archive_ids,
     )
 
-    archive_ids = [
-        _create_archive("MSSQL-ORDER-1"),
-        _create_archive("MSSQL-ORDER-2"),
-        _create_archive("MSSQL-ORDER-3"),
-    ]
-    selected_ids: list[int] = []
-
-    def capture_select(_connection, _cursor, statement, parameters, _context, _executemany):
-        if statement.lstrip().upper().startswith("SELECT") and "pms_project_archive" in statement.lower():
-            values = parameters if isinstance(parameters, (tuple, list)) else tuple(parameters.values())
-            matching = [value for value in values if value in archive_ids]
-            if matching:
-                selected_ids.append(int(matching[-1]))
-
-    event.listen(engine, "before_cursor_execute", capture_select)
-
-    db = SessionLocal()
-    try:
-        query = apply_archive_lifecycle_lock(
-            db.query(PmsProjectArchive),
-            [archive_ids[0]],
-        )
-        compiled = str(query.statement.compile(dialect=mssql.dialect())).upper()
-        rows = load_archive_lifecycle_rows(
-            db.query(PmsProjectArchive), list(reversed(archive_ids))
-        )
-    finally:
-        db.close()
-        event.remove(engine, "before_cursor_execute", capture_select)
-
-    assert "WITH (UPDLOCK, ROWLOCK, HOLDLOCK)" in compiled
-    assert [row.id for row in rows] == sorted(archive_ids)
-    assert selected_ids == sorted(archive_ids)
+    assert [row.id for row in rows] == sorted(set(archive_ids))
+    assert [archive_id for archive_id, _statement in captured] == sorted(set(archive_ids))
+    assert len(captured) == len(set(archive_ids))
+    for _archive_id, statement in captured:
+        assert "WITH (UPDLOCK, ROWLOCK, HOLDLOCK)" in statement
 
 
 def test_sqlite_lifecycle_claim_does_not_change_archive_timestamp():
@@ -401,37 +417,110 @@ def test_sqlite_lifecycle_claim_does_not_change_archive_timestamp():
         verify.close()
 
 
-def test_delete_mutations_recheck_project_references_with_correlated_not_exists():
-    from sqlalchemy import event
+def test_delete_mutations_block_references_added_at_the_mutation_boundary():
+    from fastapi import HTTPException
 
-    from app.core.database import SessionLocal, engine
-    from app.services.project import batch_delete_archives, delete_archive
+    from app.core.database import SessionLocal
+    from app.models.project import PmsProject, PmsProjectArchive
+    from app.services.project import (
+        batch_delete_archives,
+        delete_archive,
+        get_archive_delete_guard as real_single_guard,
+        get_archive_delete_guards as real_batch_guards,
+    )
 
-    single_id = _create_archive("DELETE-NOT-EXISTS-SINGLE")
-    batch_ids = [
-        _create_archive("DELETE-NOT-EXISTS-BATCH-1"),
-        _create_archive("DELETE-NOT-EXISTS-BATCH-2"),
-    ]
-    delete_sql: list[str] = []
-
-    def capture_delete(_connection, _cursor, statement, _parameters, _context, _executemany):
-        normalized = statement.strip().upper()
-        if normalized.startswith("DELETE") and "PMS_PROJECT_ARCHIVE" in normalized:
-            delete_sql.append(normalized)
-
-    event.listen(engine, "before_cursor_execute", capture_delete)
+    single_id, dept_id, user_id = _create_project_context("BOUNDARY-SINGLE")
     db = SessionLocal()
     try:
-        delete_archive(db, single_id)
-        batch_delete_archives(db, batch_ids)
+        single_guard_calls = 0
+
+        def inject_single_reference(guard_db, archive_id):
+            nonlocal single_guard_calls
+            single_guard_calls += 1
+            guard = real_single_guard(guard_db, archive_id)
+            if single_guard_calls == 1:
+                assert guard["can_delete"] is True
+                guard_db.add(PmsProject(
+                    archive_id=archive_id,
+                    project_code="BOUNDARY-SINGLE-PROJECT",
+                    project_name="单删 mutation 边界引用",
+                    dept_id=dept_id,
+                    pm_id=user_id,
+                    status=1,
+                ))
+                guard_db.commit()
+            return guard
+
+        with patch(
+            "app.services.project.get_archive_delete_guard",
+            side_effect=inject_single_reference,
+        ):
+            try:
+                delete_archive(db, single_id)
+            except HTTPException as exc:
+                assert exc.status_code == 409
+                assert exc.detail["code"] == "ARCHIVE_DELETE_BLOCKED"
+                assert any(
+                    blocker["type"] == "business_reference"
+                    for blocker in exc.detail["blockers"]
+                )
+            else:
+                raise AssertionError("mutation 边界新增引用后单删必须返回结构化 409")
+
+        assert db.get(PmsProjectArchive, single_id) is not None
+        assert db.query(PmsProject).filter(PmsProject.archive_id == single_id).count() == 1
     finally:
         db.close()
-        event.remove(engine, "before_cursor_execute", capture_delete)
 
-    assert len(delete_sql) == 2
-    for statement in delete_sql:
-        assert "EXISTS" in statement
-        assert "PMS_PROJECT.ARCHIVE_ID" in statement
+    batch_referenced_id, batch_dept_id, batch_user_id = _create_project_context(
+        "BOUNDARY-BATCH-REFERENCED"
+    )
+    batch_peer_id = _create_archive("BOUNDARY-BATCH-PEER")
+    batch_ids = [batch_referenced_id, batch_peer_id]
+    batch_db = SessionLocal()
+    try:
+        batch_guard_calls = 0
+
+        def inject_batch_reference(guard_db, archive_ids):
+            nonlocal batch_guard_calls
+            batch_guard_calls += 1
+            guards = real_batch_guards(guard_db, archive_ids)
+            if batch_guard_calls == 1:
+                assert all(guard["can_delete"] for guard in guards.values())
+                guard_db.add(PmsProject(
+                    archive_id=batch_referenced_id,
+                    project_code="BOUNDARY-BATCH-PROJECT",
+                    project_name="批删 mutation 边界引用",
+                    dept_id=batch_dept_id,
+                    pm_id=batch_user_id,
+                    status=1,
+                ))
+                guard_db.commit()
+            return guards
+
+        with patch(
+            "app.services.project.get_archive_delete_guards",
+            side_effect=inject_batch_reference,
+        ):
+            try:
+                batch_delete_archives(batch_db, batch_ids)
+            except HTTPException as exc:
+                assert exc.status_code == 409
+                assert exc.detail["code"] == "ARCHIVE_DELETE_BLOCKED"
+                blocked_ids = {item["archive_id"] for item in exc.detail["blockers"]}
+                assert blocked_ids == {batch_referenced_id}
+            else:
+                raise AssertionError("mutation 边界新增引用后批删必须整体返回结构化 409")
+
+        assert all(
+            batch_db.get(PmsProjectArchive, archive_id) is not None
+            for archive_id in batch_ids
+        )
+        assert batch_db.query(PmsProject).filter(
+            PmsProject.archive_id == batch_referenced_id
+        ).count() == 1
+    finally:
+        batch_db.close()
 
 
 def test_blocked_delete_keeps_structured_conflict_when_operation_log_fails():
@@ -1032,18 +1121,29 @@ def test_erp_claim_rechecks_scope_and_latest_field_policy_before_client_creation
 
 
 def test_erp_ambiguous_network_outcome_stays_pending_and_blocks_delete():
+    import httpx
+
     from fastapi import HTTPException
 
     from app.core.database import SessionLocal
     from app.models.project import PmsProjectArchive
-    from app.services.kingdee import sync_project_archive_to_erp
+    from app.services.kingdee import KingdeeClient, sync_project_archive_to_erp
     from app.services.project import delete_archive
 
     archive_id = _create_archive("ERP-NETWORK-AMBIGUOUS")
     db = SessionLocal()
     try:
-        with patch("app.services.kingdee.KingdeeClient", _AmbiguousKingdeeClient):
+        timeout = httpx.ReadTimeout(
+            "ERP save response timed out",
+            request=httpx.Request("POST", "https://kingdee.invalid/save"),
+        )
+        with patch.object(KingdeeClient, "login", return_value=True), patch.object(
+            KingdeeClient,
+            "query_assistant_data",
+            return_value=None,
+        ), patch.object(httpx.Client, "post", side_effect=timeout) as save_post:
             result = sync_project_archive_to_erp(db, archive_id)
+        assert save_post.call_count == 1
         assert result["success"] is False
         db.expire_all()
         assert db.get(PmsProjectArchive, archive_id).erp_sync_status == "pending"
@@ -1061,6 +1161,47 @@ def test_erp_ambiguous_network_outcome_stays_pending_and_blocks_delete():
             raise AssertionError("ERP 网络结果不明时必须阻止物理删除")
     finally:
         delete_db.close()
+
+
+def test_real_kingdee_clear_business_rejection_remains_failed():
+    import httpx
+
+    from app.core.database import SessionLocal
+    from app.models.project import PmsProjectArchive
+    from app.services.kingdee import KingdeeClient, sync_project_archive_to_erp
+
+    archive_id = _create_archive("ERP-CLEAR-REJECTION")
+    response = httpx.Response(
+        200,
+        request=httpx.Request("POST", "https://kingdee.invalid/save"),
+        json={
+            "Result": {
+                "ResponseStatus": {
+                    "IsSuccess": False,
+                    "Errors": [{"Message": "项目编号不允许"}],
+                }
+            }
+        },
+    )
+    db = SessionLocal()
+    try:
+        with patch.object(KingdeeClient, "login", return_value=True), patch.object(
+            KingdeeClient,
+            "query_assistant_data",
+            return_value=None,
+        ), patch.object(httpx.Client, "post", return_value=response) as save_post:
+            result = sync_project_archive_to_erp(db, archive_id)
+        assert save_post.call_count == 1
+        assert result == {
+            "success": False,
+            "message": "保存失败: 项目编号不允许",
+        }
+        db.expire_all()
+        archive = db.get(PmsProjectArchive, archive_id)
+        assert archive.erp_sync_status == "failed"
+        assert archive.erp_synced == 0
+    finally:
+        db.close()
 
 
 def test_erp_success_with_local_commit_failure_stays_pending_and_blocks_delete():
@@ -1318,7 +1459,7 @@ if __name__ == "__main__":
     test_batch_lifecycle_mutations_process_rows_in_fixed_id_order()
     test_mssql_lifecycle_query_uses_update_row_lock_and_fixed_order()
     test_sqlite_lifecycle_claim_does_not_change_archive_timestamp()
-    test_delete_mutations_recheck_project_references_with_correlated_not_exists()
+    test_delete_mutations_block_references_added_at_the_mutation_boundary()
     test_blocked_delete_keeps_structured_conflict_when_operation_log_fails()
     test_pending_archive_edit_is_rejected_and_releases_transaction()
     test_blocked_lifecycle_operations_release_database_transaction()
@@ -1327,6 +1468,7 @@ if __name__ == "__main__":
     test_disable_winner_prevents_concurrent_archive_edit()
     test_erp_claim_rechecks_scope_and_latest_field_policy_before_client_creation()
     test_erp_ambiguous_network_outcome_stays_pending_and_blocks_delete()
+    test_real_kingdee_clear_business_rejection_remains_failed()
     test_erp_success_with_local_commit_failure_stays_pending_and_blocks_delete()
     test_delete_winner_prevents_sync_from_calling_external_system()
     test_disable_winner_prevents_sync_and_sync_winner_blocks_delete_and_disable()

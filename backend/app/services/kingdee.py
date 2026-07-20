@@ -21,6 +21,10 @@ from app.services.project_archive_lifecycle import (
 logger = logging.getLogger(__name__)
 
 
+class KingdeeSaveOutcomeAmbiguous(RuntimeError):
+    """保存请求已开始，但无法可靠确认金蝶是否落库。"""
+
+
 class KingdeeClient:
     """金蝶云星空 WebAPI 客户端"""
 
@@ -119,6 +123,7 @@ class KingdeeClient:
         :param entry_id: 记录内码（FEntryID），有值时为更新，空时为新建
         :return: 包含 success 和 message 的结果字典
         """
+        request_started = False
         try:
             url = f"{self.base_url}/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.Save.common.kdsvc"
 
@@ -154,38 +159,53 @@ class KingdeeClient:
             logger.info(f"金蝶Save请求 - formid: {form_id}")
             logger.info(f"金蝶Save请求 - data: {data_str[:300]}")
 
+            request_started = True
             response = self.client.post(url, json=payload)
             response.raise_for_status()
 
             result = response.json()
             logger.info(f"金蝶Save返回: {json.dumps(result, ensure_ascii=False)[:500]}")
 
-            # 检查返回结果
-            if "Result" in result:
-                result_data = result["Result"]
-                if isinstance(result_data, dict):
-                    status = result_data.get("ResponseStatus", {})
-                    if status.get("IsSuccess"):
-                        return {
-                            "success": True,
-                            "message": "保存成功",
-                            "data": result_data
-                        }
-                    else:
-                        errors = status.get("Errors", [])
-                        error_msg = errors[0].get("Message", "未知错误") if errors else "未知错误"
-                        return {
-                            "success": False,
-                            "message": f"保存失败: {error_msg}"
-                        }
+            result_data = result.get("Result") if isinstance(result, dict) else None
+            status = (
+                result_data.get("ResponseStatus")
+                if isinstance(result_data, dict)
+                else None
+            )
+            if not isinstance(status, dict) or "IsSuccess" not in status:
+                raise KingdeeSaveOutcomeAmbiguous(f"金蝶保存返回格式异常: {result}")
 
-            return {
-                "success": False,
-                "message": f"返回格式异常: {result}"
-            }
+            is_success = status["IsSuccess"]
+            if is_success is True:
+                return {
+                    "success": True,
+                    "message": "保存成功",
+                    "data": result_data,
+                }
+            if is_success is False:
+                errors = status.get("Errors", [])
+                first_error = errors[0] if isinstance(errors, list) and errors else None
+                error_msg = (
+                    first_error.get("Message", "未知错误")
+                    if isinstance(first_error, dict)
+                    else "未知错误"
+                )
+                return {
+                    "success": False,
+                    "message": f"保存失败: {error_msg}",
+                }
+            raise KingdeeSaveOutcomeAmbiguous(
+                f"金蝶保存返回未知成功标记: {is_success!r}"
+            )
 
+        except KingdeeSaveOutcomeAmbiguous:
+            raise
         except Exception as e:
             logger.error(f"保存辅助资料异常: {str(e)}")
+            if request_started:
+                raise KingdeeSaveOutcomeAmbiguous(
+                    f"金蝶保存结果不确定: {e}"
+                ) from e
             return {
                 "success": False,
                 "message": f"保存异常: {str(e)}"
