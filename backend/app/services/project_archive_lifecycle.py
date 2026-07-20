@@ -1,6 +1,7 @@
 """项目档案删除保护与启停生命周期服务。"""
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -27,7 +28,43 @@ def apply_archive_lifecycle_lock(query, archive_ids: list[int]):
             dialect_name="mssql",
         )
         .with_for_update()
+        .populate_existing()
     )
+
+
+def load_archive_lifecycle_rows(query, archive_ids: list[int], *conditions) -> list[PmsProjectArchive]:
+    """按升序逐行获取生命周期锁，避免批量锁顺序依赖执行计划。"""
+    rows: list[PmsProjectArchive] = []
+    for archive_id in sorted(set(archive_ids)):
+        row = apply_archive_lifecycle_lock(
+            query.filter(PmsProjectArchive.id == archive_id, *conditions),
+            [archive_id],
+        ).first()
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+def claim_archive_lifecycle_rows(query, archive_ids: list[int], *conditions) -> list[PmsProjectArchive]:
+    """声明档案生命周期行，并让 SQLite 写事务串行化后续 mutation。"""
+    ordered_ids = sorted(set(archive_ids))
+    if query.session.get_bind().dialect.name == "sqlite":
+        claimed_ids: list[int] = []
+        for archive_id in ordered_ids:
+            changed = (
+                query.filter(PmsProjectArchive.id == archive_id, *conditions)
+                .update(
+                    {
+                        PmsProjectArchive.id: PmsProjectArchive.id,
+                        PmsProjectArchive.updated_at: PmsProjectArchive.updated_at,
+                    },
+                    synchronize_session=False,
+                )
+            )
+            if changed == 1:
+                claimed_ids.append(archive_id)
+        ordered_ids = claimed_ids
+    return load_archive_lifecycle_rows(query, ordered_ids, *conditions)
 
 
 def archive_not_pending_condition():
@@ -56,62 +93,62 @@ def _pending_conflict() -> HTTPException:
 def claim_archive_for_sync(
     db: Session,
     archive_id: int,
+    *,
+    archive_query=None,
+    validator: Callable[[PmsProjectArchive], None] | None = None,
 ) -> tuple[PmsProjectArchive, dict[str, Any]] | None:
     """以锁和条件更新声明 ERP 同步，成功提交 pending 后才允许外部调用。"""
-    archive = apply_archive_lifecycle_lock(
-        db.query(PmsProjectArchive), [archive_id]
-    ).first()
-    if archive is None:
-        db.rollback()
-        return None
-
+    scoped_query = archive_query or db.query(PmsProjectArchive)
     try:
-        ensure_archive_enabled(archive, "同步 ERP")
-    except HTTPException:
-        db.rollback()
-        raise
-    if archive.erp_sync_status == "pending":
-        db.rollback()
-        raise _pending_conflict()
-
-    before = serialize_model(archive)
-    try:
-        changed = (
-            db.query(PmsProjectArchive)
-            .filter(
-                PmsProjectArchive.id == archive_id,
-                PmsProjectArchive.is_enabled == 1,
-                archive_not_pending_condition(),
-            )
-            .update(
-                {
-                    PmsProjectArchive.erp_sync_status: "pending",
-                    PmsProjectArchive.erp_error_msg: None,
-                },
-                synchronize_session=False,
-            )
+        claimed_rows = claim_archive_lifecycle_rows(
+            scoped_query,
+            [archive_id],
+            PmsProjectArchive.is_enabled == 1,
+            archive_not_pending_condition(),
         )
-        if changed != 1:
+        if not claimed_rows:
             db.rollback()
-            current = db.get(PmsProjectArchive, archive_id)
+            current = (
+                scoped_query.populate_existing()
+                .filter(PmsProjectArchive.id == archive_id)
+                .first()
+            )
             if current is None:
+                db.rollback()
                 return None
-            ensure_archive_enabled(current, "同步 ERP")
+            try:
+                ensure_archive_enabled(current, "同步 ERP")
+            except HTTPException:
+                db.rollback()
+                raise
             if current.erp_sync_status == "pending":
+                db.rollback()
                 raise _pending_conflict()
+            db.rollback()
             raise HTTPException(status_code=409, detail={
                 "code": "ARCHIVE_LIFECYCLE_CONFLICT",
                 "message": "项目档案状态已变化，请刷新后重试",
             })
+
+        archive = claimed_rows[0]
+        if validator is not None:
+            validator(archive)
+        before = serialize_model(archive)
+        archive.erp_sync_status = "pending"
+        archive.erp_error_msg = None
         _commit_or_rollback(db)
     except Exception:
         if db.in_transaction():
             db.rollback()
         raise
 
-    claimed = db.get(PmsProjectArchive, archive_id)
+    claimed = scoped_query.populate_existing().filter(
+        PmsProjectArchive.id == archive_id
+    ).first()
     if claimed is None:
+        db.rollback()
         return None
+    db.rollback()
     return claimed, before
 
 

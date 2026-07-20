@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.project import PmsProjectArchive, ErpSyncLog
 from app.services.operation_log import record_operation_log, serialize_model
+from app.services.project import get_scoped_archive_query, validate_archive_for_business_operation
 from app.services.project_archive_lifecycle import (
     claim_archive_for_sync,
-    ensure_archive_enabled,
 )
 
 logger = logging.getLogger(__name__)
@@ -196,14 +196,25 @@ class KingdeeClient:
         self.client.close()
 
 
-def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | None = None, request: Request | None = None) -> dict:
+def sync_project_archive_to_erp(
+    db: Session,
+    archive_id: int,
+    user_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+) -> dict:
     """
     同步单个项目档案到金蝶 ERP
     :param db: 数据库会话
     :param archive_id: 项目档案 ID
     :return: 包含 success 和 message 的结果字典
     """
-    claimed = claim_archive_for_sync(db, archive_id)
+    claimed = claim_archive_for_sync(
+        db,
+        archive_id,
+        archive_query=get_scoped_archive_query(db, scope_context),
+        validator=lambda current: validate_archive_for_business_operation(db, current),
+    )
     if claimed is None:
         try:
             record_operation_log(
@@ -226,6 +237,7 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
 
     archive, before = claimed
     client: KingdeeClient | None = None
+    external_save_started = False
 
     try:
         # pending 已通过条件 mutation 独立提交，随后才允许创建客户端并访问外部系统。
@@ -280,6 +292,7 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
         entry_id = str(existing["FEntryID"]) if existing else ""
 
         # 3. 保存（创建或更新）
+        external_save_started = True
         save_result = client.save_assistant_data(
             form_id=form_id,
             category_code=category_code,
@@ -361,9 +374,43 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
     except Exception as e:
         db.rollback()
         error_msg = f"同步异常: {str(e)}"
-        archive = db.get(PmsProjectArchive, archive_id)
+        archive = (
+            get_scoped_archive_query(db, scope_context)
+            .populate_existing()
+            .filter(PmsProjectArchive.id == archive_id)
+            .first()
+        )
         if archive is None:
             return {"success": False, "message": "项目档案不存在"}
+        if external_save_started:
+            try:
+                log = ErpSyncLog(
+                    source_id=archive_id,
+                    action="sync",
+                    status="failed",
+                    error_msg=error_msg,
+                )
+                db.add(log)
+                record_operation_log(
+                    db,
+                    module="ERP同步",
+                    action="sync",
+                    entity_type="pms_project_archive",
+                    entity_id=archive.id,
+                    entity_name=archive.project_name,
+                    operator_id=user_id,
+                    request=request,
+                    status="failed",
+                    summary=f"同步项目档案结果不确定：{archive.project_name}",
+                    before_data=before,
+                    after_data=serialize_model(archive),
+                    error_msg=error_msg,
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+            return {"success": False, "message": error_msg}
+
         archive.erp_sync_status = "failed"
         archive.erp_error_msg = error_msg
 
@@ -402,7 +449,13 @@ def sync_project_archive_to_erp(db: Session, archive_id: int, user_id: int | Non
             client.close()
 
 
-def batch_sync_project_archives(db: Session, archive_ids: list[int], user_id: int | None = None, request: Request | None = None) -> dict:
+def batch_sync_project_archives(
+    db: Session,
+    archive_ids: list[int],
+    user_id: int | None = None,
+    request: Request | None = None,
+    scope_context: dict | None = None,
+) -> dict:
     """
     批量同步项目档案到金蝶 ERP
     :param db: 数据库会话
@@ -414,18 +467,18 @@ def batch_sync_project_archives(db: Session, archive_ids: list[int], user_id: in
     errors = []
 
     for archive_id in archive_ids:
-        archive = db.query(PmsProjectArchive).filter(PmsProjectArchive.id == archive_id).first()
-        if archive:
-            try:
-                ensure_archive_enabled(archive, "同步 ERP")
-            except HTTPException as exc:
-                if exc.detail.get("code") != "ARCHIVE_DISABLED":
-                    raise
-                result = {"success": False, "message": exc.detail["message"]}
-            else:
-                result = sync_project_archive_to_erp(db, archive_id, user_id=user_id, request=request)
-        else:
-            result = sync_project_archive_to_erp(db, archive_id, user_id=user_id, request=request)
+        try:
+            result = sync_project_archive_to_erp(
+                db,
+                archive_id,
+                user_id=user_id,
+                request=request,
+                scope_context=scope_context,
+            )
+        except HTTPException as exc:
+            if not isinstance(exc.detail, dict) or exc.detail.get("code") != "ARCHIVE_DISABLED":
+                raise
+            result = {"success": False, "message": exc.detail["message"]}
         if result["success"]:
             success_count += 1
         else:
