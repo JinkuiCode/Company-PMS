@@ -124,3 +124,25 @@
 
 - 移除项目进度列表编辑状态下由 AG Grid 单元格、选择器和输入框叠加形成的多重边框。
 - 编辑器保持铺满原单元格，仅由单元格提供一层浅色焦点边界，避免出现嵌套的小输入框。
+
+## 2026-09-07 - 项目指令的批准复用与交付边界
+
+- 原因：用户批准项目级 AGENTS 审查建议，要求实施 PMS 的建议修改。
+- 调整内容：明确复用既有分支、worktree、项目 UI 规范和已批准设计；将架构及 OA/ERP/权限影响放入该批方案；明确现有验证清单与证据复用方式；保留 master 合并确认及安全清理边界。
+- 涉及文件：`AGENTS.md`、`change.md`。
+- 验证结果：AGENTS 与已批准 PMS 建议稿逐字一致；后端权限、业务日志、字段治理、字体和原验证命令保持不变；文件回读及差异空白检查通过。仅改指令文档，未运行前后端构建或业务测试。
+- Git 状态：本地 `codex/agents-rule-clarity` 分支，未暂存、提交、推送、创建 PR 或合并。既有未提交内容保留，另一工作树未修改。
+
+## 2026-09-10 - 项目档案选择字段无内框样例
+
+- 原因：项目档案抽屉进入编辑态后，Element Plus 控件的白底和内阴影与字段行叠加，形成“字段行内再套一个小框”，展示态与编辑态观感不一致。
+- 调整内容：仅将“产品类别”作为第一项确认样例，使用统一行内编辑样式；内部选择控件改为透明、无边框和无阴影，整块值区域使用淡色背景提示编辑状态。其他字段暂未改动，待用户确认样例后再统一应用。
+- 涉及文件：`frontend/src/views/project/ProjectArchive.vue`、`frontend/src/styles/pms-theme.css`、`frontend/tests/archive-edit-drawer-contract.test.mjs`。
+- 验证结果：回归测试先因缺少无内框样式按预期失败，实施后通过；`archive-edit-drawer-contract`、`style-contract`、`list-standard-contract`、`system-ui-consistency-contract`、`project-sheet-detail-drawer-contract` 和 `npm run build` 均通过。浏览器实测内部控件 `box-shadow: none`、背景透明，外层编辑区域使用淡色背景。
+
+## 2026-09-10 - 登录默认凭据清理与无凭据启动探活
+
+- 原因：登录页公开并预填固定本地管理员账号，且 macOS 启动器使用同一固定账号密码检查 API，修改管理员密码后会被误判为启动失败。
+- 调整内容：登录页移除默认账号提示和预填值，仅保留 OA 门户入口提示；新增无需登录的 `/api/health` 健康接口，启动器改为通过该接口检查前端代理；新数据库不再创建固定 `admin` 账号，只在无用户时读取 `PMS_BOOTSTRAP_ADMIN_USERNAME` 与 `PMS_BOOTSTRAP_ADMIN_PASSWORD` 创建初始管理员，密码至少 12 位且只保存哈希；兼容角色已初始化但用户表为空的恢复场景，确保用户与管理员角色在同一事务内正确关联。
+- 涉及文件：`frontend/src/views/Login.vue`、`frontend/tests/login-security-contract.test.mjs`、`backend/app/core/config.py`、`backend/app/models/init_db.py`、`backend/main.py`、`backend/tests/bootstrap_admin_contract.py`、`backend/tests/project_progress_workbench_contract.py`、`start-pms.command`、`change.md`。
+- 验证结果：登录安全、启动器、样式、标准列表、系统 UI、项目档案抽屉、配置、SQLite 初始化、RBAC、操作日志及初始管理员契约测试通过；`zsh -n start-pms.command` 与 `npm run build` 通过；浏览器确认登录输入框为空，`/api/health` 经 Vite 代理返回 `{"status":"ok"}`。RBAC 测试仍输出既有 `passlib/bcrypt` 版本探测警告，但测试结果通过。

@@ -2,6 +2,7 @@
 import datetime
 
 from sqlalchemy import inspect, text
+from app.core.config import settings
 from app.core.database import engine, SessionLocal, Base
 from app.core.security import hash_password
 
@@ -32,13 +33,26 @@ def init_db():
 
     db = SessionLocal()
     try:
-        # 1. 仅全新数据库创建默认管理员和角色，已有数据库不补建权限主体
-        admin = db.query(SysUser).filter(SysUser.username == "admin").first()
-        if is_fresh_database and not admin:
-            admin = SysUser(username="admin", real_name="系统管理员", password_hash=hash_password("admin123"), status=1)
-            db.add(admin)
-            db.commit()
-            print("默认管理员已创建: admin / admin123")
+        # 1. 无用户的新数据库仅使用部署环境显式提供的初始管理员凭据。
+        bootstrap_username = settings.PMS_BOOTSTRAP_ADMIN_USERNAME.strip()
+        bootstrap_password = settings.PMS_BOOTSTRAP_ADMIN_PASSWORD
+        bootstrap_admin = None
+        if not db.query(SysUser.id).first():
+            if bool(bootstrap_username) != bool(bootstrap_password):
+                raise RuntimeError("初始管理员用户名和密码必须同时配置")
+            if bootstrap_password and len(bootstrap_password) < 12:
+                raise RuntimeError("初始管理员密码至少需要 12 个字符")
+            if bootstrap_username:
+                bootstrap_admin = SysUser(
+                    username=bootstrap_username,
+                    real_name="系统管理员",
+                    password_hash=hash_password(bootstrap_password),
+                    status=1,
+                )
+                db.add(bootstrap_admin)
+                db.flush()
+            else:
+                print("未配置初始管理员环境变量，未创建固定默认账号")
 
         # 2. 创建默认角色
         role = db.query(SysRole).filter(SysRole.role_code == "admin").first()
@@ -51,13 +65,19 @@ def init_db():
                 remark="默认拥有全部权限，可在角色管理中调整",
             )
             db.add(role)
-            db.commit()
+            db.flush()
             admin_role_created = True
 
         # 3. 分配管理员角色
-        if is_fresh_database and admin and role and not db.query(SysUserRole).filter_by(user_id=admin.id, role_id=role.id).first():
-            db.add(SysUserRole(user_id=admin.id, role_id=role.id))
-            db.commit()
+        if bootstrap_admin and role and not db.query(SysUserRole).filter_by(user_id=bootstrap_admin.id, role_id=role.id).first():
+            db.add(SysUserRole(user_id=bootstrap_admin.id, role_id=role.id))
+        db.commit()
+        if bootstrap_admin:
+            print(f"初始本地管理员已创建: {bootstrap_username}")
+
+        admin = db.query(SysUser).join(
+            SysUserRole, SysUserRole.user_id == SysUser.id
+        ).filter(SysUserRole.role_id == role.id).first()
 
         # 4. 创建默认菜单
         if not db.query(SysMenu).first():

@@ -45,6 +45,11 @@ app.include_router(field_catalog.router)
 app.include_router(field_policies.router)
 
 
+@app.get("/api/health", tags=["系统"], include_in_schema=False)
+def health_check():
+    return {"status": "ok"}
+
+
 @app.get("/api/my-menus", tags=["系统"])
 def get_my_menus(scope_ctx: dict = Depends(get_current_user_context), db: Session = Depends(get_db)):
     """获取当前用户的菜单树（根据角色）"""

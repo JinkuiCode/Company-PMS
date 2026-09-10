@@ -442,6 +442,38 @@ a {
   box-shadow: 0 0 0 1px var(--pms-primary) inset;
 }
 
+/* Inline drawer editors use the value row as their only visual surface. */
+.pms-inline-field-editor {
+  min-height: 30px;
+  padding: 0 7px;
+  border-radius: var(--pms-radius-sm);
+  background: rgba(79, 70, 229, 0.05);
+  transition: background-color 0.16s ease;
+}
+
+.pms-inline-field-editor:focus-within {
+  background: var(--pms-primary-soft);
+}
+
+.pms-inline-field-editor .el-input__wrapper,
+.pms-inline-field-editor .el-select__wrapper,
+.pms-inline-field-editor .el-textarea__inner {
+  min-height: 30px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.pms-inline-field-editor .el-input__wrapper:hover,
+.pms-inline-field-editor .el-select__wrapper:hover,
+.pms-inline-field-editor .el-textarea__inner:hover,
+.pms-inline-field-editor .el-input__wrapper.is-focus,
+.pms-inline-field-editor .el-select__wrapper.is-focused,
+.pms-inline-field-editor .el-textarea__inner:focus {
+  box-shadow: none;
+}
+
 .el-card {
   border-color: var(--pms-border-soft);
   border-radius: var(--pms-radius);

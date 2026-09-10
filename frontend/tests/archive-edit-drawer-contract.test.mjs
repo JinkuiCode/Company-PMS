@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const archive = readFileSync(new URL('../src/views/project/ProjectArchive.vue', import.meta.url), 'utf8')
+const theme = readFileSync(new URL('../src/styles/pms-theme.css', import.meta.url), 'utf8')
 
 assert.doesNotMatch(
   archive,
@@ -96,6 +97,16 @@ assert.match(
   archive,
   /ARCHIVE_UNIQUE_CONFLICT[\s\S]*?field_key/,
   'Archive uniqueness conflicts should be routed back to the matching field',
+)
+assert.match(
+  archive,
+  /class="archive-drawer-field-editor"[\s\S]*?:class="\{\s*'pms-inline-field-editor': field\.key === 'product_category'\s*\}"/,
+  'The product-category field should be the single flat-editor preview before the pattern is rolled out',
+)
+assert.match(
+  theme,
+  /\.pms-inline-field-editor\s+\.el-select__wrapper[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;/,
+  'Inline drawer selects should not render a second bordered box inside the field row',
 )
 
 console.log('archive edit drawer contract passed')

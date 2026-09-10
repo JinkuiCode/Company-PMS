@@ -24,8 +24,7 @@
         </el-form-item>
       </el-form>
       <div class="login-footnote">
-        <p class="login-hint">默认账号：admin / admin123</p>
-        <p class="login-hint sso-hint">泛微 OA 用户请从 OA 门户进入</p>
+        <p class="login-hint">泛微 OA 用户请从 OA 门户进入</p>
       </div>
     </div>
   </div>
@@ -44,8 +43,8 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 const form = reactive({
-  username: 'admin',
-  password: 'admin123',
+  username: '',
+  password: '',
 })
 
 const rules: FormRules = {
@@ -139,11 +138,6 @@ async function handleLogin() {
   font-size: 12px;
   color: var(--pms-text-muted);
 }
-.sso-hint {
-  margin-top: 6px;
-  color: var(--pms-text-secondary);
-}
-
 @media (max-width: 480px) {
   .login-card {
     padding: 28px 22px 24px;

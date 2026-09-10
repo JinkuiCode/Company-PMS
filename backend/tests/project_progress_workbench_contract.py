@@ -11,6 +11,8 @@ if str(ROOT) not in sys.path:
 
 os.environ.setdefault("DB_DIALECT", "sqlite")
 os.environ.setdefault("SQLITE_DB_PATH", "data/pms-test-progress-workbench.db")
+os.environ.setdefault("PMS_BOOTSTRAP_ADMIN_USERNAME", "progress-contract-admin")
+os.environ.setdefault("PMS_BOOTSTRAP_ADMIN_PASSWORD", "progress-contract-password-only")
 
 
 def read(path: str) -> str:

@@ -521,16 +521,14 @@ start_frontend() {
   )
 }
 
-check_admin_login() {
+check_api_proxy() {
   local body
-  body="$(curl -fsS -X POST "http://127.0.0.1:$FRONTEND_PORT/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d '{"username":"admin","password":"admin123","remember_me":false}' 2>/dev/null || true)"
-  if [[ "$body" == *"access_token"* ]]; then
-    log "Admin login API is ready: admin / admin123"
+  body="$(curl -fsS "http://127.0.0.1:$FRONTEND_PORT/api/health" 2>/dev/null || true)"
+  if [[ "$body" == *'"status":"ok"'* ]]; then
+    log "Frontend API proxy is ready."
     return 0
   fi
-  log "Admin login API is not ready. Backend log: $BACKEND_LOG"
+  log "Frontend API proxy is not ready. Backend log: $BACKEND_LOG"
   return 1
 }
 
@@ -550,7 +548,7 @@ if ! wait_for_url "http://127.0.0.1:$FRONTEND_PORT/" "Frontend"; then
 fi
 finalize_listener_start "frontend" "$FRONTEND_PORT" "$FRONTEND_DIR" "$FRONTEND_SPAWN_FILE" "$PID_DIR/frontend.pid" || exit 1
 
-if ! check_admin_login; then
+if ! check_api_proxy; then
   log "Restarting frontend because the Vite API proxy is not healthy."
   stop_port "$FRONTEND_PORT" "frontend" || exit 1
   rm -f "$PID_DIR/frontend.pid" "$FRONTEND_VERSION_FILE"
@@ -560,7 +558,7 @@ if ! check_admin_login; then
     exit 1
   fi
   finalize_listener_start "frontend" "$FRONTEND_PORT" "$FRONTEND_DIR" "$FRONTEND_SPAWN_FILE" "$PID_DIR/frontend.pid" || exit 1
-  if ! check_admin_login; then
+  if ! check_api_proxy; then
     cleanup_failed_start "frontend" "$FRONTEND_PORT" "$FRONTEND_SPAWN_FILE" "$PID_DIR/frontend.pid"
     exit 1
   fi

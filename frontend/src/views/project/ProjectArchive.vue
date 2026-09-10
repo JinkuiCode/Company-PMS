@@ -259,6 +259,7 @@
                   <template v-if="archiveEditingField === field.key">
                     <div
                       class="archive-drawer-field-editor"
+                      :class="{ 'pms-inline-field-editor': field.key === 'product_category' }"
                       @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
                     >
                       <el-select
