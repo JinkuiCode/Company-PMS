@@ -136,9 +136,9 @@
 ## 2026-09-10 - 项目档案选择字段无内框样例
 
 - 原因：项目档案抽屉进入编辑态后，Element Plus 控件的白底和内阴影与字段行叠加，形成“字段行内再套一个小框”，展示态与编辑态观感不一致。
-- 调整内容：仅将“产品类别”作为第一项确认样例，使用统一行内编辑样式；内部选择控件改为透明、无边框和无阴影，整块值区域使用淡色背景提示编辑状态。其他字段暂未改动，待用户确认样例后再统一应用。
+- 调整内容：仅将“产品类别”作为第一项确认样例，使用统一行内编辑样式；内部选择控件改为透明、无边框和无阴影，整块值区域使用淡色背景提示编辑状态；同时清除可搜索选择器内部真实输入元素继承的全局焦点轮廓，避免 Mac/Windows 浏览器出现第二层紫色框。其他字段暂未改动，待用户确认样例后再统一应用。
 - 涉及文件：`frontend/src/views/project/ProjectArchive.vue`、`frontend/src/styles/pms-theme.css`、`frontend/tests/archive-edit-drawer-contract.test.mjs`。
-- 验证结果：回归测试先因缺少无内框样式按预期失败，实施后通过；`archive-edit-drawer-contract`、`style-contract`、`list-standard-contract`、`system-ui-consistency-contract`、`project-sheet-detail-drawer-contract` 和 `npm run build` 均通过。浏览器实测内部控件 `box-shadow: none`、背景透明，外层编辑区域使用淡色背景。
+- 验证结果：两轮回归测试分别先因缺少无内框样式、缺少内部输入焦点轮廓规则按预期失败，实施后通过；`archive-edit-drawer-contract`、`style-contract`、`list-standard-contract`、`system-ui-consistency-contract`、`project-sheet-detail-drawer-contract` 和 `npm run build` 均通过。浏览器实测内部控件 `box-shadow: none`、`outline: none`、背景透明，外层编辑区域使用淡色背景。
 
 ## 2026-09-10 - 登录默认凭据清理与无凭据启动探活
 

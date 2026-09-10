@@ -474,6 +474,13 @@ a {
   box-shadow: none;
 }
 
+.pms-inline-field-editor .el-input__inner:focus-visible,
+.pms-inline-field-editor .el-select__input:focus-visible,
+.pms-inline-field-editor .el-textarea__inner:focus-visible {
+  outline: none;
+  outline-offset: 0;
+}
+
 .el-card {
   border-color: var(--pms-border-soft);
   border-radius: var(--pms-radius);

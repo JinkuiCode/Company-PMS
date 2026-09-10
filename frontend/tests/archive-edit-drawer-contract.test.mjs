@@ -108,5 +108,10 @@ assert.match(
   /\.pms-inline-field-editor\s+\.el-select__wrapper[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;/,
   'Inline drawer selects should not render a second bordered box inside the field row',
 )
+assert.match(
+  theme,
+  /\.pms-inline-field-editor\s+\.el-select__input:focus-visible[\s\S]*?outline:\s*none;/,
+  'Inline drawer select inputs should not render a nested focus outline',
+)
 
 console.log('archive edit drawer contract passed')
