@@ -1,0 +1,1041 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PMS 统一表单框架样稿</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --surface-muted: #f8fafc;
+      --border: #dfe5ee;
+      --border-soft: #edf1f6;
+      --text: #162033;
+      --text-secondary: #667085;
+      --text-muted: #98a2b3;
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-soft: rgba(79, 70, 229, 0.08);
+      --success: #0f9f7a;
+      --danger: #dc2626;
+      --danger-soft: rgba(220, 38, 38, 0.06);
+      --radius-sm: 6px;
+      --radius: 8px;
+      --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+      --shadow-popover: 0 10px 28px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.06);
+      --font: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font: 13px/1.5 var(--font);
+      font-synthesis: none;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    button, input, textarea { font: inherit; }
+    button { color: inherit; }
+
+    .prototype-shell {
+      min-width: 1080px;
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: 52px 1fr;
+    }
+
+    .prototype-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--surface);
+    }
+
+    .prototype-brand,
+    .prototype-actions,
+    .prototype-tabs {
+      display: flex;
+      align-items: center;
+    }
+
+    .prototype-brand { gap: 10px; }
+    .prototype-actions { gap: 8px; }
+    .prototype-tabs { gap: 2px; }
+
+    .prototype-mark {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 1px solid rgba(79, 70, 229, 0.2);
+      border-radius: 7px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    .prototype-title { font-weight: 650; }
+
+    .prototype-version {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .tab-button,
+    .ghost-button,
+    .primary-button {
+      min-height: 32px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+
+    .tab-button {
+      padding: 0 12px;
+      border: 0;
+      background: transparent;
+      color: var(--text-secondary);
+    }
+
+    .tab-button:hover { background: var(--surface-muted); }
+    .tab-button.active { background: var(--primary-soft); color: var(--primary); font-weight: 650; }
+
+    .ghost-button {
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+    }
+
+    .primary-button {
+      padding: 0 14px;
+      border: 1px solid var(--primary);
+      background: var(--primary);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .primary-button:hover { border-color: var(--primary-hover); background: var(--primary-hover); }
+    .primary-button:disabled { cursor: not-allowed; opacity: 0.45; }
+
+    .prototype-main {
+      min-height: 0;
+      padding: 14px;
+    }
+
+    .demo-panel {
+      display: none;
+      height: calc(100vh - 80px);
+      min-height: 640px;
+    }
+
+    .demo-panel.active { display: block; }
+
+    .app-window {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 164px minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .app-sidebar {
+      padding: 14px 10px;
+      border-right: 1px solid var(--border-soft);
+      background: #fbfcfe;
+    }
+
+    .sidebar-brand {
+      margin: 0 8px 18px;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      min-height: 34px;
+      margin: 3px 0;
+      padding: 0 10px;
+      border-radius: 6px;
+      color: var(--text-secondary);
+    }
+
+    .sidebar-item.active {
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-weight: 650;
+    }
+
+    .app-content {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 48px 1fr;
+    }
+
+    .app-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .app-topbar strong { font-size: 14px; }
+    .app-user { color: var(--text-secondary); font-size: 12px; }
+
+    .archive-stage {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(620px, 1fr) 390px;
+      gap: 12px;
+      padding: 12px;
+      background: var(--bg);
+    }
+
+    .list-card,
+    .drawer-card,
+    .form-card,
+    .state-card {
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .list-card {
+      min-width: 0;
+      padding: 12px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 42px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .toolbar-actions { display: flex; align-items: center; gap: 8px; }
+
+    .filter-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .filter-pill {
+      min-width: 150px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+    }
+
+    .data-table {
+      width: 100%;
+      margin-top: 10px;
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: 12px;
+    }
+
+    .data-table th,
+    .data-table td {
+      height: 40px;
+      padding: 0 12px;
+      border-right: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .data-table th {
+      background: var(--surface-muted);
+      color: var(--text-secondary);
+      font-weight: 650;
+    }
+
+    .data-table tr:last-child td { border-bottom: 0; }
+    .data-table th:last-child, .data-table td:last-child { border-right: 0; }
+    .data-table tbody tr:first-child { background: rgba(79, 70, 229, 0.025); }
+    .data-table .align-left { text-align: left; }
+    .table-link { color: var(--primary); font-weight: 600; }
+    .table-action { margin: 0 5px; color: var(--primary); }
+    .table-action.success { color: var(--success); }
+    .table-action.muted { color: var(--text-secondary); }
+
+    .drawer-card {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow: hidden;
+    }
+
+    .drawer-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .drawer-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .drawer-meta { margin-top: 3px; color: var(--text-secondary); }
+
+    .icon-button {
+      width: 30px;
+      height: 30px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .icon-button:hover { background: var(--surface-muted); color: var(--text); }
+
+    .drawer-scroll {
+      min-height: 0;
+      overflow-y: auto;
+      padding: 0 18px 18px;
+      overscroll-behavior: contain;
+    }
+
+    .field-section { padding-top: 14px; }
+
+    .section-heading {
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--border-soft);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .field-row {
+      min-height: 48px;
+      display: grid;
+      grid-template-columns: 112px minmax(0, 1fr);
+      align-items: center;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .field-label {
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .required { margin-left: 4px; color: var(--danger); }
+
+    .field-slot {
+      min-width: 0;
+      min-height: 32px;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .field-surface {
+      width: 100%;
+      min-width: 0;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text);
+      outline: none;
+      text-align: left;
+      line-height: 20px;
+      transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+    }
+
+    button.field-surface { cursor: text; }
+
+    .field-row.is-editable:hover .field-surface:not(.is-editing),
+    .field-surface.is-hover-demo {
+      background: var(--surface-muted);
+    }
+
+    .field-surface.is-empty { color: var(--text-muted); }
+
+    .field-surface.is-editing {
+      border-color: rgba(79, 70, 229, 0.36);
+      background: var(--primary-soft);
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.08);
+    }
+
+    .field-surface.is-error {
+      border-color: rgba(220, 38, 38, 0.58);
+      background: var(--danger-soft);
+      box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.07);
+    }
+
+    .field-surface.is-disabled {
+      cursor: not-allowed;
+      background: #f5f7fa;
+      color: var(--text-muted);
+    }
+
+    .field-input {
+      width: 100%;
+      min-width: 0;
+      height: 30px;
+      padding: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: inherit;
+      line-height: 20px;
+      caret-color: var(--primary);
+    }
+
+    .field-input::placeholder { color: var(--text-muted); }
+
+    .select-trigger {
+      padding-right: 30px;
+      cursor: pointer;
+    }
+
+    .select-trigger::after {
+      content: "";
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      width: 7px;
+      height: 7px;
+      border-right: 1px solid var(--text-muted);
+      border-bottom: 1px solid var(--text-muted);
+      transform: translateY(-65%) rotate(45deg);
+      transition: transform 140ms ease;
+    }
+
+    .select-trigger.open::after { transform: translateY(-25%) rotate(225deg); }
+
+    .select-menu {
+      position: absolute;
+      z-index: 20;
+      top: 38px;
+      left: 0;
+      right: 0;
+      display: none;
+      padding: 5px;
+      border: 1px solid var(--border-soft);
+      border-radius: 7px;
+      background: var(--surface);
+      box-shadow: var(--shadow-popover);
+    }
+
+    .select-menu.open { display: block; }
+
+    .select-option {
+      width: 100%;
+      min-height: 34px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .select-option:hover { background: var(--surface-muted); }
+    .select-option.selected { background: var(--primary-soft); color: var(--primary); font-weight: 650; }
+
+    .field-note {
+      margin-top: 3px;
+      color: var(--danger);
+      font-size: 11px;
+    }
+
+    .drawer-footer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 10px 18px;
+      border-top: 1px solid var(--border-soft);
+      background: rgba(255, 255, 255, 0.96);
+    }
+
+    .save-status {
+      display: flex;
+      align-items: center;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .save-status.dirty { color: var(--primary); }
+
+    .canvas {
+      height: 100%;
+      overflow: auto;
+      padding: 22px;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .canvas-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .canvas-heading h2 { margin: 0; font-size: 18px; }
+    .canvas-heading p { margin: 5px 0 0; color: var(--text-secondary); }
+
+    .form-card {
+      max-width: 760px;
+      margin: 0 auto;
+      overflow: hidden;
+    }
+
+    .form-card-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .form-card-header h3 { margin: 0; font-size: 16px; }
+    .form-card-header p { margin: 4px 0 0; color: var(--text-secondary); }
+
+    .standard-form { padding: 18px; }
+
+    .standard-section + .standard-section { margin-top: 22px; }
+
+    .standard-section-title {
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-soft);
+      font-weight: 700;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px 16px;
+    }
+
+    .form-field label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .control {
+      width: 100%;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--text);
+      outline: 0;
+      transition: border-color 140ms ease, box-shadow 140ms ease;
+    }
+
+    .control:hover { border-color: #c7cfdb; }
+    .control:focus { border-color: rgba(79, 70, 229, 0.58); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08); }
+    .control.error { border-color: rgba(220, 38, 38, 0.58); }
+    .control[disabled] { background: #f5f7fa; color: var(--text-muted); }
+
+    textarea.control {
+      height: 86px;
+      resize: vertical;
+      padding-top: 8px;
+    }
+
+    .field-span-2 { grid-column: 1 / -1; }
+
+    .standard-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 18px;
+      border-top: 1px solid var(--border-soft);
+      background: var(--surface-muted);
+    }
+
+    .grid-demo-wrap {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+    }
+
+    .grid-demo {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .grid-demo th,
+    .grid-demo td {
+      height: 38px;
+      padding: 0 10px;
+      border-right: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+      text-align: center;
+      position: relative;
+    }
+
+    .grid-demo th { background: var(--surface-muted); color: var(--text-secondary); font-weight: 650; }
+    .grid-demo tr:last-child td { border-bottom: 0; }
+    .grid-demo th:last-child, .grid-demo td:last-child { border-right: 0; }
+
+    .editable-cell { cursor: text; }
+    .editable-cell:hover { background: var(--surface-muted); }
+
+    .cell-editor {
+      position: absolute;
+      inset: -1px;
+      z-index: 2;
+      width: calc(100% + 2px);
+      height: calc(100% + 2px);
+      padding: 0 10px;
+      border: 1px solid var(--primary);
+      border-radius: 0;
+      background: var(--primary-soft);
+      color: var(--text);
+      outline: 0;
+      text-align: inherit;
+      box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.04);
+    }
+
+    .grid-tip { margin: 12px 0 0; color: var(--text-muted); font-size: 12px; }
+
+    .state-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .state-card { padding: 14px; }
+    .state-card h3 { margin: 0 0 4px; font-size: 13px; }
+    .state-card p { min-height: 36px; margin: 0 0 10px; color: var(--text-secondary); font-size: 12px; }
+
+    .measure-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+      color: var(--text-muted);
+      font: 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+
+    .state-preview {
+      height: 32px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      line-height: 20px;
+    }
+
+    .state-preview.hover { background: var(--surface-muted); }
+    .state-preview.focus { border-color: rgba(79, 70, 229, 0.36); background: var(--primary-soft); box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.08); }
+    .state-preview.error { border-color: rgba(220, 38, 38, 0.58); background: var(--danger-soft); box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.07); }
+    .state-preview.disabled { background: #f5f7fa; color: var(--text-muted); }
+    .state-preview.readonly { color: var(--text-secondary); }
+
+    .prototype-note {
+      max-width: 860px;
+      margin: 16px auto 0;
+      padding: 10px 12px;
+      border: 1px solid var(--border-soft);
+      border-radius: 7px;
+      background: var(--surface-muted);
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    @media (max-width: 1280px) {
+      .prototype-header { padding: 0 14px; }
+      .tab-button { padding: 0 9px; }
+      .archive-stage { grid-template-columns: minmax(560px, 1fr) 360px; }
+      .field-row { grid-template-columns: 104px minmax(0, 1fr); }
+      .state-grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="prototype-shell">
+    <header class="prototype-header">
+      <div class="prototype-brand">
+        <span class="prototype-mark">P</span>
+        <span class="prototype-title">PMS 统一表单框架样稿</span>
+        <span class="prototype-version">Design preview v1</span>
+      </div>
+      <nav class="prototype-tabs" aria-label="样稿场景">
+        <button class="tab-button active" data-panel="drawer-demo">详情抽屉</button>
+        <button class="tab-button" data-panel="form-demo">新增表单</button>
+        <button class="tab-button" data-panel="grid-demo">表格编辑</button>
+        <button class="tab-button" data-panel="state-demo">状态矩阵</button>
+      </nav>
+      <div class="prototype-actions">
+        <span class="prototype-version">样稿不连接业务数据</span>
+      </div>
+    </header>
+
+    <main class="prototype-main">
+      <section class="demo-panel active" id="drawer-demo">
+        <div class="app-window">
+          <aside class="app-sidebar">
+            <div class="sidebar-brand">PMS 管理系统</div>
+            <div class="sidebar-item">仪表盘</div>
+            <div class="sidebar-item">系统管理</div>
+            <div class="sidebar-item">项目管理</div>
+            <div class="sidebar-item active">项目档案</div>
+            <div class="sidebar-item">项目进度</div>
+          </aside>
+          <div class="app-content">
+            <div class="app-topbar">
+              <strong>项目档案</strong>
+              <span class="app-user">本地应急管理员</span>
+            </div>
+            <div class="archive-stage">
+              <div class="list-card">
+                <div class="toolbar">
+                  <div class="toolbar-actions">
+                    <button class="primary-button">+ 新增档案</button>
+                    <button class="ghost-button">批量启用</button>
+                    <button class="ghost-button">批量禁用</button>
+                  </div>
+                  <button class="ghost-button">列设置</button>
+                </div>
+                <div class="filter-row">
+                  <div class="filter-pill">搜索编号、名称、客户</div>
+                  <div class="filter-pill" style="min-width: 110px;">启用</div>
+                  <div class="filter-pill">全部产品类别</div>
+                  <button class="ghost-button">添加筛选</button>
+                </div>
+                <table class="data-table">
+                  <thead>
+                    <tr><th style="width: 38px;">□</th><th>项目编号</th><th>项目名称</th><th>客户</th><th>产品类别</th><th>操作</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>□</td><td class="align-left">PMS-2026-001</td><td class="align-left">企业内部项目管理系统</td><td>星河科技</td><td>Bench</td><td><span class="table-action">编辑</span><span class="table-action success">同步</span><span class="table-action muted">禁用</span></td></tr>
+                    <tr><td>□</td><td class="align-left">OA-2026-001</td><td class="align-left">OA 办公自动化系统</td><td>总部</td><td>Single</td><td><span class="table-action">编辑</span><span class="table-action success">同步</span><span class="table-action muted">禁用</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <aside class="drawer-card" aria-label="项目档案详情样稿">
+                <header class="drawer-header">
+                  <div>
+                    <h2 class="drawer-title">企业内部项目管理系统</h2>
+                    <div class="drawer-meta">PMS-2026-001 · Bench</div>
+                  </div>
+                  <button class="icon-button" title="关闭" aria-label="关闭">×</button>
+                </header>
+                <div class="drawer-scroll">
+                  <section class="field-section">
+                    <div class="section-heading">基础信息</div>
+
+                    <div class="field-row">
+                      <div class="field-label">项目编号<span class="required">*</span></div>
+                      <div class="field-slot"><div class="field-surface">PMS-2026-001</div></div>
+                    </div>
+
+                    <div class="field-row">
+                      <div class="field-label">项目名称<span class="required">*</span></div>
+                      <div class="field-slot"><div class="field-surface">企业内部项目管理系统</div></div>
+                    </div>
+
+                    <div class="field-row is-editable" id="customer-row">
+                      <div class="field-label">客户<span class="required">*</span></div>
+                      <div class="field-slot" id="customer-slot">
+                        <button class="field-surface" id="customer-display" type="button">星河科技</button>
+                      </div>
+                    </div>
+
+                    <div class="field-row is-editable" id="category-row">
+                      <div class="field-label">产品类别<span class="required">*</span></div>
+                      <div class="field-slot" id="category-slot">
+                        <button class="field-surface select-trigger" id="category-trigger" type="button">Bench</button>
+                        <div class="select-menu" id="category-menu">
+                          <button class="select-option selected" data-value="Bench">Bench</button>
+                          <button class="select-option" data-value="光伏">光伏</button>
+                          <button class="select-option" data-value="Single">Single</button>
+                          <button class="select-option" data-value="HOTSPM">HOTSPM</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="field-row">
+                      <div class="field-label">负责人</div>
+                      <div class="field-slot"><div class="field-surface">系统管理员</div></div>
+                    </div>
+
+                    <div class="field-row is-editable">
+                      <div class="field-label">设备系列</div>
+                      <div class="field-slot"><button class="field-surface" type="button">测试系列</button></div>
+                    </div>
+
+                    <div class="field-row is-editable">
+                      <div class="field-label">序列号</div>
+                      <div class="field-slot"><button class="field-surface is-empty" type="button">点击填写</button></div>
+                    </div>
+                  </section>
+
+                  <section class="field-section">
+                    <div class="section-heading">计划信息</div>
+                    <div class="field-row is-editable"><div class="field-label">计划开始</div><div class="field-slot"><button class="field-surface" type="button">2026-06-01</button></div></div>
+                    <div class="field-row is-editable"><div class="field-label">计划结束</div><div class="field-slot"><button class="field-surface" type="button">2026-06-30</button></div></div>
+                  </section>
+
+                  <section class="field-section">
+                    <div class="section-heading">ERP 同步</div>
+                    <div class="field-row"><div class="field-label">同步状态</div><div class="field-slot"><div class="field-surface">已同步</div></div></div>
+                    <div class="field-row"><div class="field-label">最后同步时间</div><div class="field-slot"><div class="field-surface">2026-09-11 10:36</div></div></div>
+                  </section>
+                </div>
+                <footer class="drawer-footer">
+                  <div class="save-status" id="save-status">尚无未保存修改</div>
+                  <button class="primary-button" id="save-button" disabled>保存修改</button>
+                </footer>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="demo-panel" id="form-demo">
+        <div class="canvas">
+          <div class="canvas-heading">
+            <div><h2>标准新增表单</h2><p>保留明确的输入边界，统一 36px 控件高度和校验表达。</p></div>
+            <span class="prototype-version">场景：弹窗 / 独立编辑页</span>
+          </div>
+          <div class="form-card">
+            <div class="form-card-header"><h3>新增项目档案</h3><p>基础信息完成后可继续补充计划信息。</p></div>
+            <form class="standard-form">
+              <section class="standard-section">
+                <div class="standard-section-title">基础信息</div>
+                <div class="form-grid">
+                  <div class="form-field"><label for="new-code">项目编号 <span class="required">*</span></label><input class="control" id="new-code" value="PMS-2026-002"></div>
+                  <div class="form-field"><label for="new-name">项目名称 <span class="required">*</span></label><input class="control" id="new-name" value="新型设备升级项目"></div>
+                  <div class="form-field"><label for="new-customer">客户 <span class="required">*</span></label><input class="control" id="new-customer" placeholder="输入客户"></div>
+                  <div class="form-field"><label for="new-category">产品类别 <span class="required">*</span></label><select class="control" id="new-category"><option>Bench</option><option>光伏</option><option>Single</option></select></div>
+                  <div class="form-field"><label for="new-series">设备系列</label><select class="control" id="new-series"><option>测试系列</option><option>标准系列</option></select></div>
+                  <div class="form-field"><label for="new-serial">序列号</label><input class="control" id="new-serial" placeholder="输入序列号"></div>
+                </div>
+              </section>
+              <section class="standard-section">
+                <div class="standard-section-title">计划信息</div>
+                <div class="form-grid">
+                  <div class="form-field"><label for="new-start">计划开始</label><input class="control" id="new-start" type="date" value="2026-09-15"></div>
+                  <div class="form-field"><label for="new-end">计划结束</label><input class="control" id="new-end" type="date" value="2026-12-30"></div>
+                  <div class="form-field field-span-2"><label for="new-note">备注</label><textarea class="control" id="new-note" placeholder="输入备注"></textarea></div>
+                </div>
+              </section>
+            </form>
+            <div class="standard-footer"><button class="ghost-button">取消</button><button class="primary-button">保存档案</button></div>
+          </div>
+          <div class="prototype-note">样稿原则：新增表单强调“正在填写”，所以始终显示输入边界；详情抽屉强调“先阅读、再编辑”，因此仅在悬停和编辑时出现容器背景。两者共享同一字号、边框、焦点、错误和间距令牌。</div>
+        </div>
+      </section>
+
+      <section class="demo-panel" id="grid-demo">
+        <div class="canvas">
+          <div class="canvas-heading">
+            <div><h2>表格单元格编辑</h2><p>双击“节点”或“设计进度”，编辑器会完整覆盖单元格，不再出现内嵌小框。</p></div>
+            <span class="prototype-version">场景：高频快速维护</span>
+          </div>
+          <div class="grid-demo-wrap">
+            <table class="grid-demo">
+              <thead><tr><th>项目号</th><th>项目名称</th><th>产品类别</th><th>节点</th><th>设计进度</th><th>下单进度</th></tr></thead>
+              <tbody>
+                <tr><td>PMS-2026-001</td><td>企业内部项目管理系统</td><td>Bench</td><td class="editable-cell" data-type="select">进行中</td><td class="editable-cell" data-type="number">80%</td><td class="editable-cell" data-type="number">50%</td></tr>
+                <tr><td>PMS-2026-002</td><td>新型设备升级项目</td><td>Single</td><td class="editable-cell" data-type="select">暂停</td><td class="editable-cell" data-type="number">32%</td><td class="editable-cell" data-type="number">20%</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="grid-tip">Enter 保存，Esc 取消。项目编号、项目名称、产品类别等引用字段保持只读。</p>
+        </div>
+      </section>
+
+      <section class="demo-panel" id="state-demo">
+        <div class="canvas">
+          <div class="canvas-heading">
+            <div><h2>字段状态矩阵</h2><p>同一容器尺寸、同一文字起点和基线，状态只改变必要的视觉属性。</p></div>
+            <span class="prototype-version">验收基线：位移 ≤ 1px</span>
+          </div>
+          <div class="state-grid">
+            <article class="state-card"><h3>默认显示</h3><p>用于详情阅读，不显示多余输入框。</p><div class="state-preview">Bench</div><div class="measure-row"><span>32px</span><span>padding-x 10px</span></div></article>
+            <article class="state-card"><h3>可编辑悬停</h3><p>仅增加浅灰背景，文字不移动、尺寸不改变。</p><div class="state-preview hover">Bench</div><div class="measure-row"><span>32px</span><span>x/y unchanged</span></div></article>
+            <article class="state-card"><h3>编辑 / 焦点</h3><p>只有一层外容器焦点表达，内部控件透明。</p><div class="state-preview focus">Bench</div><div class="measure-row"><span>32px</span><span>single ring</span></div></article>
+            <article class="state-card"><h3>校验错误</h3><p>红色外边界与字段下方错误文字同时出现。</p><div class="state-preview error">序列号已存在</div><div class="measure-row"><span>32px</span><span>no layout jump</span></div></article>
+            <article class="state-card"><h3>禁用</h3><p>当前操作不允许修改，保留可读性和禁用提示。</p><div class="state-preview disabled">不可修改</div><div class="measure-row"><span>32px</span><span>disabled cursor</span></div></article>
+            <article class="state-card"><h3>只读引用</h3><p>来自档案、主数据或外部系统，没有假的编辑暗示。</p><div class="state-preview readonly">PMS-2026-001</div><div class="measure-row"><span>32px</span><span>read only</span></div></article>
+          </div>
+          <div class="prototype-note">所有正式组件都会通过这一状态矩阵验收。业务页面只提供字段数据、规则和保存动作，不再自行调整 Element Plus 内部边框、内边距或焦点样式。</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab-button');
+    const panels = document.querySelectorAll('.demo-panel');
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach((item) => item.classList.toggle('active', item === tab));
+        panels.forEach((panel) => panel.classList.toggle('active', panel.id === tab.dataset.panel));
+      });
+    });
+
+    let dirtyCount = 0;
+    const saveButton = document.getElementById('save-button');
+    const saveStatus = document.getElementById('save-status');
+
+    function markDirty() {
+      dirtyCount += 1;
+      saveButton.disabled = false;
+      saveButton.textContent = `保存修改 (${dirtyCount})`;
+      saveStatus.textContent = `有 ${dirtyCount} 项未保存修改`;
+      saveStatus.classList.add('dirty');
+    }
+
+    saveButton.addEventListener('click', () => {
+      dirtyCount = 0;
+      saveButton.disabled = true;
+      saveButton.textContent = '保存修改';
+      saveStatus.textContent = '已保存';
+      saveStatus.classList.remove('dirty');
+    });
+
+    const customerSlot = document.getElementById('customer-slot');
+    const customerDisplay = document.getElementById('customer-display');
+    customerDisplay.addEventListener('click', () => {
+      const current = customerDisplay.textContent.trim();
+      customerSlot.innerHTML = `<div class="field-surface is-editing"><input class="field-input" id="customer-input" value="${current}" aria-label="客户"></div>`;
+      const input = document.getElementById('customer-input');
+      input.focus();
+      input.select();
+      const finish = (commit) => {
+        if (!document.body.contains(input)) return;
+        const next = commit ? input.value.trim() : current;
+        customerSlot.innerHTML = `<button class="field-surface${next ? '' : ' is-empty'}" id="customer-display" type="button">${next || '点击填写'}</button>`;
+        customerSlot.querySelector('button').addEventListener('click', customerDisplayClickProxy);
+        if (commit && next !== current) markDirty();
+      };
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') finish(true);
+        if (event.key === 'Escape') finish(false);
+      });
+      input.addEventListener('blur', () => finish(true), { once: true });
+    });
+
+    function customerDisplayClickProxy(event) {
+      const button = event.currentTarget;
+      const current = button.textContent.trim();
+      customerSlot.innerHTML = `<div class="field-surface is-editing"><input class="field-input" id="customer-input" value="${current === '点击填写' ? '' : current}" aria-label="客户"></div>`;
+      const input = document.getElementById('customer-input');
+      input.focus();
+      input.select();
+      const finish = (commit) => {
+        if (!document.body.contains(input)) return;
+        const next = commit ? input.value.trim() : current;
+        customerSlot.innerHTML = `<button class="field-surface${next ? '' : ' is-empty'}" type="button">${next || '点击填写'}</button>`;
+        customerSlot.querySelector('button').addEventListener('click', customerDisplayClickProxy);
+        if (commit && next !== current) markDirty();
+      };
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') finish(true);
+        if (event.key === 'Escape') finish(false);
+      });
+      input.addEventListener('blur', () => finish(true), { once: true });
+    }
+
+    const categoryTrigger = document.getElementById('category-trigger');
+    const categoryMenu = document.getElementById('category-menu');
+    categoryTrigger.addEventListener('click', () => {
+      categoryTrigger.classList.toggle('open');
+      categoryTrigger.classList.toggle('is-editing');
+      categoryMenu.classList.toggle('open');
+    });
+
+    categoryMenu.querySelectorAll('.select-option').forEach((option) => {
+      option.addEventListener('click', () => {
+        const changed = categoryTrigger.textContent.trim() !== option.dataset.value;
+        categoryTrigger.textContent = option.dataset.value;
+        categoryMenu.querySelectorAll('.select-option').forEach((item) => item.classList.toggle('selected', item === option));
+        categoryTrigger.classList.remove('open', 'is-editing');
+        categoryMenu.classList.remove('open');
+        if (changed) markDirty();
+      });
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!document.getElementById('category-slot').contains(event.target)) {
+        categoryTrigger.classList.remove('open', 'is-editing');
+        categoryMenu.classList.remove('open');
+      }
+    });
+
+    document.querySelectorAll('.editable-cell').forEach((cell) => {
+      cell.addEventListener('dblclick', () => {
+        if (cell.querySelector('.cell-editor')) return;
+        const original = cell.textContent.trim();
+        const input = document.createElement('input');
+        input.className = 'cell-editor';
+        input.value = original.replace('%', '');
+        cell.textContent = '';
+        cell.appendChild(input);
+        input.focus();
+        input.select();
+        const finish = (commit) => {
+          if (!cell.contains(input)) return;
+          const suffix = cell.dataset.type === 'number' ? '%' : '';
+          cell.textContent = commit ? `${input.value.trim()}${suffix}` : original;
+        };
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') finish(true);
+          if (event.key === 'Escape') finish(false);
+        });
+        input.addEventListener('blur', () => finish(true), { once: true });
+      });
+    });
+  </script>
+</body>
+</html>

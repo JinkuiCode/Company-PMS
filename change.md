@@ -146,3 +146,11 @@
 - 调整内容：登录页移除默认账号提示和预填值，仅保留 OA 门户入口提示；新增无需登录的 `/api/health` 健康接口，启动器改为通过该接口检查前端代理；新数据库不再创建固定 `admin` 账号，只在无用户时读取 `PMS_BOOTSTRAP_ADMIN_USERNAME` 与 `PMS_BOOTSTRAP_ADMIN_PASSWORD` 创建初始管理员，密码至少 12 位且只保存哈希；兼容角色已初始化但用户表为空的恢复场景，确保用户与管理员角色在同一事务内正确关联。
 - 涉及文件：`frontend/src/views/Login.vue`、`frontend/tests/login-security-contract.test.mjs`、`backend/app/core/config.py`、`backend/app/models/init_db.py`、`backend/main.py`、`backend/tests/bootstrap_admin_contract.py`、`backend/tests/project_progress_workbench_contract.py`、`start-pms.command`、`change.md`。
 - 验证结果：登录安全、启动器、样式、标准列表、系统 UI、项目档案抽屉、配置、SQLite 初始化、RBAC、操作日志及初始管理员契约测试通过；`zsh -n start-pms.command` 与 `npm run build` 通过；浏览器确认登录输入框为空，`/api/health` 经 Vite 代理返回 `{"status":"ok"}`。RBAC 测试仍输出既有 `passlib/bcrypt` 版本探测警告，但测试结果通过。
+
+## 2026-09-11 - PMS 统一表单框架设计样稿
+
+- 原因：项目档案抽屉的文本、选择字段在阅读、悬停和编辑时出现框体尺寸变化、文字移位和重复焦点框，暴露出全系统缺少可独立升级的统一表单基础层。
+- 调整内容：新增 PMS 统一表单框架设计规格，明确令牌层、字段原语、标准表单/抽屉行内编辑/AG Grid 三类场景适配器、交互合同、分批迁移、跨平台验收和回滚边界。
+- 调整内容：新增不连接 API、不进入生产路由的独立可交互样稿，可切换详情抽屉、新增表单、表格编辑和状态矩阵，用于在正式改造前确认审美和交互。
+- 涉及文件：`docs/superpowers/specs/2026-09-11-pms-form-system-design.md`、`docs/prototypes/pms-form-system-v1.html`、`change.md`。
+- 验证结果：本机 Edge 人工检查四个样稿场景；使用本机 Edge 内核在 `1366x768` 和 `1600x900` 自动截图，页面无脚本错误；客户字段阅读态和编辑态外容器均为 `240x32px`，位置一致，内部输入元素无 outline、无 box-shadow、无额外 padding。本批未修改正式业务页面，未部署服务器。
