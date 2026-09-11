@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
+import { Lock } from '@element-plus/icons-vue'
+
 interface Props {
   label: string
   required?: boolean
@@ -10,7 +13,7 @@ interface Props {
   longText?: boolean
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   required: false,
   editable: false,
   editing: false,
@@ -21,6 +24,16 @@ withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{ 'edit-request': [] }>()
+const editorRef = ref<HTMLElement>()
+
+watch(() => props.editing, async (editing) => {
+  if (!editing) return
+  await nextTick()
+  const focusTarget = editorRef.value?.querySelector<HTMLElement>(
+    'input:not([type="hidden"]), textarea, [role="combobox"], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )
+  focusTarget?.focus()
+})
 </script>
 
 <template>
@@ -42,11 +55,11 @@ const emit = defineEmits<{ 'edit-request': [] }>()
         :title="readonlyReason"
         :aria-label="readonlyReason"
       >
-        锁
+        <el-icon aria-hidden="true"><Lock /></el-icon>
       </span>
     </div>
 
-    <div v-if="editing" class="pms-inline-field__surface pms-inline-field__editor">
+    <div v-if="editing" ref="editorRef" class="pms-inline-field__surface pms-inline-field__editor">
       <slot name="editor" />
     </div>
     <button

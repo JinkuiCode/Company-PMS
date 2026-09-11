@@ -11,20 +11,15 @@ function functionSource(name) {
 
 assert.match(
   archive,
-  /const archiveQuery = reactive\(\{[\s\S]*?enabled:\s*true/,
+  /const archiveQuery = reactive\(\{[\s\S]*?enabled:\s*'true'/,
   'Project archive list should default to enabled records',
 )
-assert.match(archive, /label:\s*'启用',\s*value:\s*true/, 'Enabled filter should expose the true value')
-assert.match(archive, /label:\s*'已禁用',\s*value:\s*false/, 'Disabled filter should expose the false value')
-assert.match(archive, /label:\s*'全部',\s*value:\s*null/, 'Enabled filter should expose an explicit all value')
+assert.match(archive, /label:\s*'启用',\s*value:\s*'true'/, 'Enabled filter should expose the true protocol value')
+assert.match(archive, /label:\s*'已禁用',\s*value:\s*'false'/, 'Disabled filter should expose the false protocol value')
+assert.match(archive, /label:\s*'全部',\s*value:\s*'all'/, 'Enabled filter should expose an explicit all protocol value')
 assert.match(
   archive,
-  /function archiveEnabledHttpValue[\s\S]*?return 'true'[\s\S]*?return 'false'[\s\S]*?return 'all'/,
-  'Enabled list filter should encode true, false and all explicitly for HTTP',
-)
-assert.match(
-  archive,
-  /\/projects\/archives\/list[\s\S]*?enabled:\s*archiveEnabledHttpValue\(archiveQuery\.enabled\)/,
+  /\/projects\/archives\/list[\s\S]*?enabled:\s*archiveQuery\.enabled/,
   'Project archive list requests should send the explicit enabled filter',
 )
 

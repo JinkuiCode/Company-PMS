@@ -128,48 +128,61 @@
 
         <!-- 新增档案保持集中录入，编辑使用右侧字段级抽屉。 -->
         <el-dialog v-model="dialogVisible" title="新增项目档案" width="560px">
-          <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-            <el-form-item v-if="archiveFieldVisible('project_code')" label="项目编号" prop="project_code" :error="archiveCreateServerErrors.project_code">
-              <el-input v-model="form.project_code" placeholder="请输入项目编号" :disabled="!archiveFieldEditable('project_code')" @input="clearArchiveServerError(archiveCreateServerErrors, 'project_code')" />
+          <el-form ref="formRef" :model="form" :rules="rules" class="archive-create-form" label-position="top">
+            <el-form-item v-if="archiveFieldVisible('project_code')" prop="project_code" class="archive-create-form-item">
+              <PmsFormField field-id="archive-project-code" label="项目编号" :required="archiveFieldRequired('project_code')" :error="archiveCreateServerErrors.project_code">
+                <template #default="{ describedBy, invalid }">
+                  <PmsTextControl id="archive-project-code" v-model="form.project_code" placeholder="请输入项目编号" :disabled="!archiveFieldEditable('project_code')" :error="archiveCreateServerErrors.project_code" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" @update:model-value="clearArchiveServerError(archiveCreateServerErrors, 'project_code')" />
+                </template>
+              </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('project_name')" label="项目名称" prop="project_name" :error="archiveCreateServerErrors.project_name">
-              <el-input v-model="form.project_name" placeholder="请输入项目名称" :disabled="!archiveFieldEditable('project_name')" @input="clearArchiveServerError(archiveCreateServerErrors, 'project_name')" />
+            <el-form-item v-if="archiveFieldVisible('project_name')" prop="project_name" class="archive-create-form-item">
+              <PmsFormField field-id="archive-project-name" label="项目名称" :required="archiveFieldRequired('project_name')" :error="archiveCreateServerErrors.project_name">
+                <template #default="{ describedBy, invalid }">
+                  <PmsTextControl id="archive-project-name" v-model="form.project_name" placeholder="请输入项目名称" :disabled="!archiveFieldEditable('project_name')" :error="archiveCreateServerErrors.project_name" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" @update:model-value="clearArchiveServerError(archiveCreateServerErrors, 'project_name')" />
+                </template>
+              </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('customer')" label="客户" prop="customer">
-              <el-input v-model="form.customer" placeholder="请输入客户名称" :disabled="!archiveFieldEditable('customer')" />
+            <el-form-item v-if="archiveFieldVisible('customer')" prop="customer" class="archive-create-form-item">
+              <PmsFormField field-id="archive-customer" label="客户" :required="archiveFieldRequired('customer')">
+                <PmsTextControl id="archive-customer" v-model="form.customer" placeholder="请输入客户名称" :disabled="!archiveFieldEditable('customer')" />
+              </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('product_category')" label="产品类别" prop="product_category">
-              <el-select v-model="form.product_category" placeholder="请选择产品类别" style="width: 100%;" :disabled="!archiveFieldEditable('product_category')">
-                <el-option v-for="item in filteredProductCategoryOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
-              </el-select>
+            <el-form-item v-if="archiveFieldVisible('product_category')" prop="product_category" class="archive-create-form-item">
+              <PmsFormField field-id="archive-product-category" label="产品类别" :required="archiveFieldRequired('product_category')">
+                <PmsSelectControl id="archive-product-category" v-model="form.product_category" :options="archiveProductCategoryOptions" placeholder="请选择产品类别" :disabled="!archiveFieldEditable('product_category')" />
+              </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('manager_id')" label="负责人" prop="manager_id">
-              <el-select v-model="form.manager_id" placeholder="请选择负责人" clearable style="width: 100%;" :disabled="!archiveFieldEditable('manager_id')">
-                <el-option
-                  v-for="u in userList"
-                  :key="u.id"
-                  :label="u.real_name"
-                  :value="u.id"
-                />
-              </el-select>
+            <el-form-item v-if="archiveFieldVisible('manager_id')" prop="manager_id" class="archive-create-form-item">
+              <PmsFormField field-id="archive-manager" label="负责人" :required="archiveFieldRequired('manager_id')">
+                <PmsSelectControl id="archive-manager" v-model="form.manager_id" :options="archiveUserOptions" placeholder="请选择负责人" clearable filterable :disabled="!archiveFieldEditable('manager_id')" />
+              </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('equipment_series')" label="设备系列" prop="equipment_series">
-              <el-select v-model="form.equipment_series" placeholder="请选择设备系列" clearable style="width: 100%;" :disabled="!archiveFieldEditable('equipment_series')">
-                <el-option v-for="item in dictOptions.equipment_series" :key="item.value" :label="item.label" :value="Number(item.value)" />
-              </el-select>
+            <el-form-item v-if="archiveFieldVisible('equipment_series')" prop="equipment_series" class="archive-create-form-item">
+              <PmsFormField field-id="archive-equipment-series" label="设备系列" :required="archiveFieldRequired('equipment_series')">
+                <PmsSelectControl id="archive-equipment-series" v-model="form.equipment_series" :options="archiveEquipmentSeriesOptions" placeholder="请选择设备系列" clearable filterable :disabled="!archiveFieldEditable('equipment_series')" />
+              </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('serial_no')" label="序列号" prop="serial_no" :error="archiveCreateServerErrors.serial_no">
-              <el-input v-model="form.serial_no" placeholder="请输入序列号" :disabled="!archiveFieldEditable('serial_no')" @input="clearArchiveServerError(archiveCreateServerErrors, 'serial_no')" />
+            <el-form-item v-if="archiveFieldVisible('serial_no')" prop="serial_no" class="archive-create-form-item">
+              <PmsFormField field-id="archive-serial-no" label="序列号" :required="archiveFieldRequired('serial_no')" :error="archiveCreateServerErrors.serial_no">
+                <template #default="{ describedBy, invalid }">
+                  <PmsTextControl id="archive-serial-no" v-model="form.serial_no" placeholder="请输入序列号" :disabled="!archiveFieldEditable('serial_no')" :error="archiveCreateServerErrors.serial_no" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" @update:model-value="clearArchiveServerError(archiveCreateServerErrors, 'serial_no')" />
+                </template>
+              </PmsFormField>
             </el-form-item>
             <el-row :gutter="12">
               <el-col v-if="archiveFieldVisible('plan_start_date')" :span="12">
-                <el-form-item label="计划开始" prop="plan_start_date">
-                  <el-date-picker v-model="form.plan_start_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_start_date')" />
+                <el-form-item prop="plan_start_date" class="archive-create-form-item">
+                  <PmsFormField field-id="archive-plan-start" label="计划开始" :required="archiveFieldRequired('plan_start_date')">
+                    <PmsDateControl id="archive-plan-start" v-model="form.plan_start_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_start_date')" />
+                  </PmsFormField>
                 </el-form-item>
               </el-col>
               <el-col v-if="archiveFieldVisible('plan_end_date')" :span="12">
-                <el-form-item label="计划结束" prop="plan_end_date">
-                  <el-date-picker v-model="form.plan_end_date" type="date" style="width: 100%;" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_end_date')" />
+                <el-form-item prop="plan_end_date" class="archive-create-form-item">
+                  <PmsFormField field-id="archive-plan-end" label="计划结束" :required="archiveFieldRequired('plan_end_date')">
+                    <PmsDateControl id="archive-plan-end" v-model="form.plan_end_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_end_date')" />
+                  </PmsFormField>
                 </el-form-item>
               </el-col>
             </el-row>
@@ -234,113 +247,66 @@
           >
             <h3 class="archive-drawer-section-title">{{ group.label }}</h3>
             <div class="archive-drawer-field-list">
-              <div
+              <el-form-item
                 v-for="field in group.fields"
                 :key="field.key"
-                class="archive-drawer-field-row"
-                :class="{
-                  editing: archiveEditingField === field.key,
-                  'is-long-text': field.value_type === 'long_text',
-                }"
+                :prop="field.key"
+                class="archive-drawer-form-item"
               >
-                <div class="archive-drawer-field-label">
-                  <span>{{ field.label }}</span>
-                  <span v-if="archiveDrawerFieldRequired(field)" class="archive-required-mark" aria-label="必填">*</span>
-                  <el-tooltip
-                    v-if="!archiveDrawerFieldEditable(field)"
-                    :content="archiveDrawerReadonlyReason(field)"
-                    placement="top"
-                  >
-                    <el-icon class="archive-field-lock" aria-hidden="true"><Lock /></el-icon>
-                  </el-tooltip>
-                </div>
-
-                <el-form-item :prop="field.key" :error="archiveDrawerServerErrors[field.key]" class="archive-drawer-form-item">
-                  <template v-if="archiveEditingField === field.key">
-                    <div
-                      class="archive-drawer-field-editor"
-                      :class="{ 'pms-inline-field-editor': field.key === 'product_category' }"
+                <PmsInlineField
+                  :label="field.label"
+                  :required="archiveDrawerFieldRequired(field)"
+                  :editable="archiveDrawerFieldEditable(field)"
+                  :editing="archiveEditingField === field.key"
+                  :empty="archiveDrawerValueEmpty(field)"
+                  :readonly-reason="archiveDrawerReadonlyReason(field)"
+                  :error="archiveDrawerServerErrors[field.key]"
+                  :long-text="field.value_type === 'long_text'"
+                  @edit-request="startArchiveFieldEdit(field)"
+                >
+                  <template #display>{{ formatArchiveDrawerValue(field) }}</template>
+                  <template #editor>
+                    <PmsSelectControl
+                      v-if="['product_category', 'manager_id', 'equipment_series'].includes(field.key)"
+                      v-model="archiveDrawerForm[field.key]"
+                      size="compact"
+                      :options="archiveDrawerSelectOptions(field.key)"
+                      :clearable="field.key !== 'product_category'"
+                      filterable
+                      :placeholder="archiveDrawerSelectPlaceholder(field.key)"
+                      :id="`archive-drawer-${field.key}`"
+                      :aria-label="field.label"
+                      :error="archiveDrawerServerErrors[field.key]"
+                      @change="commitArchiveFieldEdit"
                       @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
-                    >
-                      <el-select
-                        v-if="field.key === 'product_category'"
-                        v-model="archiveDrawerForm[field.key]"
-                        size="small"
-                        filterable
-                        placeholder="选择产品类别"
-                        style="width: 100%;"
-                        @change="commitArchiveFieldEdit"
-                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
-                      >
-                        <el-option v-for="item in filteredProductCategoryOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
-                      </el-select>
-                      <el-select
-                        v-else-if="field.key === 'manager_id'"
-                        v-model="archiveDrawerForm[field.key]"
-                        size="small"
-                        filterable
-                        clearable
-                        placeholder="选择负责人"
-                        style="width: 100%;"
-                        @change="commitArchiveFieldEdit"
-                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
-                      >
-                        <el-option v-for="user in userList" :key="user.id" :label="user.real_name" :value="user.id" />
-                      </el-select>
-                      <el-select
-                        v-else-if="field.key === 'equipment_series'"
-                        v-model="archiveDrawerForm[field.key]"
-                        size="small"
-                        filterable
-                        clearable
-                        placeholder="选择设备系列"
-                        style="width: 100%;"
-                        @change="commitArchiveFieldEdit"
-                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
-                      >
-                        <el-option v-for="item in dictOptions.equipment_series" :key="item.value" :label="item.label" :value="Number(item.value)" />
-                      </el-select>
-                      <el-date-picker
-                        v-else-if="field.value_type === 'date'"
-                        v-model="archiveDrawerForm[field.key]"
-                        type="date"
-                        size="small"
-                        value-format="YYYY-MM-DD"
-                        placeholder="选择日期"
-                        style="width: 100%;"
-                        @change="commitArchiveFieldEdit"
-                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
-                      />
-                      <el-input
-                        v-else
-                        v-model="archiveDrawerForm[field.key]"
-                        size="small"
-                        :placeholder="`输入${field.label}`"
-                        @keydown.enter.exact.prevent="commitArchiveFieldEdit"
-                        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
-                      />
-                    </div>
+                    />
+                    <PmsDateControl
+                      v-else-if="field.value_type === 'date'"
+                      v-model="archiveDrawerForm[field.key]"
+                      size="compact"
+                      type="date"
+                      value-format="YYYY-MM-DD"
+                      placeholder="选择日期"
+                      :id="`archive-drawer-${field.key}`"
+                      :aria-label="field.label"
+                      :error="archiveDrawerServerErrors[field.key]"
+                      @change="commitArchiveFieldEdit"
+                      @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+                    />
+                    <PmsTextControl
+                      v-else
+                      v-model="archiveDrawerForm[field.key]"
+                      size="compact"
+                      :placeholder="`输入${field.label}`"
+                      :id="`archive-drawer-${field.key}`"
+                      :aria-label="field.label"
+                      :error="archiveDrawerServerErrors[field.key]"
+                      @keydown.enter.exact.prevent="commitArchiveFieldEdit"
+                      @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+                    />
                   </template>
-
-                  <button
-                    v-else-if="archiveDrawerFieldEditable(field)"
-                    type="button"
-                    class="archive-drawer-field-value"
-                    :class="{ 'is-empty': archiveDrawerValueEmpty(field) }"
-                    :aria-label="`编辑${field.label}`"
-                    @click="startArchiveFieldEdit(field)"
-                  >
-                    {{ formatArchiveDrawerValue(field) }}
-                  </button>
-                  <div
-                    v-else
-                    class="archive-drawer-field-static"
-                    :class="{ 'is-empty': archiveDrawerValueEmpty(field) }"
-                  >
-                    {{ formatArchiveDrawerValue(field) }}
-                  </div>
-                </el-form-item>
-              </div>
+                </PmsInlineField>
+              </el-form-item>
             </div>
           </section>
         </div>
@@ -376,7 +342,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, defineComponent, h, nextTick, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, ElTooltip, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Delete, Search, Connection, Close, Lock } from '@element-plus/icons-vue'
+import { Plus, Delete, Search, Connection, Close } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
@@ -385,6 +351,14 @@ import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
+import {
+  PmsDateControl,
+  PmsFormField,
+  PmsInlineField,
+  PmsSelectControl,
+  PmsTextControl,
+  type PmsOption,
+} from '@/form-system'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { chineseLocaleText } from '@/utils/agGridLocale'
@@ -525,6 +499,13 @@ const effectiveArchiveFields = ref<EffectiveArchiveField[]>([])
 const effectiveArchiveFieldMap = computed(() => new Map(
   effectiveArchiveFields.value.map(field => [field.field_key, field]),
 ))
+const legacyArchiveRequiredFields = new Set([
+  'project_code',
+  'project_name',
+  'product_category',
+  'plan_start_date',
+  'plan_end_date',
+])
 
 function archiveFieldPolicy(fieldKey: string) {
   return effectiveArchiveFieldMap.value.get(fieldKey)
@@ -537,6 +518,11 @@ function archiveFieldVisible(fieldKey: string) {
 
 function archiveFieldEditable(fieldKey: string) {
   return archiveFieldPolicy(fieldKey)?.editable !== false
+}
+
+function archiveFieldRequired(fieldKey: string) {
+  const field = archiveFieldPolicy(fieldKey)
+  return field ? field.required === true : legacyArchiveRequiredFields.has(fieldKey)
 }
 
 function archiveColumnListAvailable(columnKey: string) {
@@ -721,12 +707,12 @@ const page = ref(1)
 const pageSize = ref(15)
 const filterProductCategory = ref<number | null>(null)
 const archiveQuery = reactive({
-  enabled: true as boolean | null,
+  enabled: 'true' as 'true' | 'false' | 'all',
 })
 const archiveEnabledFilterOptions = [
-  { label: '启用', value: true },
-  { label: '已禁用', value: false },
-  { label: '全部', value: null },
+  { label: '启用', value: 'true' },
+  { label: '已禁用', value: 'false' },
+  { label: '全部', value: 'all' },
 ]
 
 // 字典选项
@@ -738,7 +724,9 @@ const dictLabelMaps = reactive<Record<string, Record<string, string>>>({})
 
 function enumLabel(code: string, value: unknown) {
   if (value === null || value === undefined || value === '') return '-'
-  return dictLabelMaps[code]?.[String(value)] || String(value)
+  const labelMap = dictLabelMaps[code]
+  if (!labelMap) return '-'
+  return labelMap[String(value)] || String(value)
 }
 
 // 用户允许的产品类别
@@ -770,6 +758,36 @@ const filteredProductCategoryOptions = computed(() => {
   if (allowedProductCategoryIds.value === null) return all
   return all.filter(item => allowedProductCategoryIds.value!.includes(Number(item.value)))
 })
+
+const archiveProductCategoryOptions = computed<PmsOption[]>(() => filteredProductCategoryOptions.value.map(item => ({
+  value: Number(item.value),
+  label: String(item.label),
+  disabled: Boolean(item.disabled),
+})))
+
+const archiveEquipmentSeriesOptions = computed<PmsOption[]>(() => (dictOptions.equipment_series || []).map(item => ({
+  value: Number(item.value),
+  label: String(item.label),
+  disabled: Boolean(item.disabled),
+})))
+
+const archiveUserOptions = computed<PmsOption[]>(() => userList.value.map(user => ({
+  value: Number(user.id),
+  label: String(user.real_name || user.username || user.id),
+})))
+
+function archiveDrawerSelectOptions(fieldKey: string): PmsOption[] {
+  if (fieldKey === 'product_category') return archiveProductCategoryOptions.value
+  if (fieldKey === 'manager_id') return archiveUserOptions.value
+  if (fieldKey === 'equipment_series') return archiveEquipmentSeriesOptions.value
+  return []
+}
+
+function archiveDrawerSelectPlaceholder(fieldKey: string) {
+  if (fieldKey === 'product_category') return '选择产品类别'
+  if (fieldKey === 'manager_id') return '选择负责人'
+  return '选择设备系列'
+}
 
 const erpSyncStatusOptions: ListFilterOption[] = [
   { label: '待同步', value: 'pending' },
@@ -836,6 +854,8 @@ async function fetchDictOptions(code: string) {
     const definition = await loadEnumOptions(code)
     dictOptions[code] = definition.items
     dictLabelMaps[code] = definition.label_map
+    await nextTick()
+    agGridRef.value?.api?.refreshCells({ columns: [code], force: true })
   } catch { /* ignore */ }
 }
 
@@ -1105,18 +1125,12 @@ const defaultColDef = {
 }
 
 // ========== 数据加载 ==========
-function archiveEnabledHttpValue(enabled: boolean | null) {
-  if (enabled === true) return 'true'
-  if (enabled === false) return 'false'
-  return 'all'
-}
-
 async function fetchList() {
   const res: any = await request.get('/projects/archives/list', {
     params: {
       page: 1,
       page_size: 1000,
-      enabled: archiveEnabledHttpValue(archiveQuery.enabled),
+      enabled: archiveQuery.enabled,
     },
   })
   rowData.value = res.items
@@ -1704,10 +1718,17 @@ async function handleBatchSync() {
 }
 
 onMounted(async () => {
-  await fetchEffectiveArchiveFields()
-  fetchList(); fetchUsers(); fetchAllowedProductCategories()
+  fetchEffectiveArchiveFields()
+  fetchAllowedProductCategories()
   fetchDictOptions('product_category')
   fetchDictOptions('equipment_series')
+  await fetchList().catch(() => {
+    rowData.value = []
+    total.value = 0
+  })
+  fetchUsers().catch(() => {
+    userList.value = []
+  })
   await resolveArchiveColumnPreferenceOwner()
   restoreSelectedArchiveColumnKeys()
   archiveColumnPreferencesReady.value = true
@@ -1830,39 +1851,6 @@ onMounted(async () => {
   line-height: 1.4;
 }
 
-.archive-drawer-field-row {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  align-items: start;
-  gap: 12px;
-  padding: 7px 0;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
-}
-
-.archive-drawer-field-row.is-long-text {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 3px;
-}
-
-.archive-drawer-field-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 30px;
-  color: var(--pms-text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.archive-required-mark {
-  color: var(--pms-danger);
-}
-
-.archive-field-lock {
-  color: var(--pms-text-muted);
-  font-size: 12px;
-}
-
 .archive-drawer-form-item {
   min-width: 0;
   margin-bottom: 0;
@@ -1877,48 +1865,25 @@ onMounted(async () => {
 
 .archive-drawer-form-item :deep(.el-form-item__error) {
   position: static;
-  padding: 3px 6px 0;
+  padding: 3px 10px 5px 112px;
   font-size: 11px;
 }
 
-.archive-drawer-field-value,
-.archive-drawer-field-static {
+.archive-create-form-item {
+  margin-bottom: 16px;
+}
+
+.archive-create-form-item :deep(.el-form-item__content) {
   display: block;
   width: 100%;
-  min-height: 30px;
-  padding: 5px 7px;
-  border: 1px solid transparent;
-  border-radius: var(--pms-radius-sm);
-  background: transparent;
-  color: var(--pms-text);
-  font-family: var(--pms-font);
-  font-size: 12px;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-  text-align: left;
-  white-space: pre-wrap;
+  min-width: 0;
+  line-height: inherit;
 }
 
-.archive-drawer-field-value {
-  cursor: text;
-}
-
-.archive-drawer-field-value:hover,
-.archive-drawer-field-value:focus-visible {
-  border-color: rgba(79, 70, 229, 0.22);
-  outline: none;
-  background: var(--pms-primary-soft);
-  color: var(--pms-primary);
-}
-
-.archive-drawer-field-value.is-empty,
-.archive-drawer-field-static.is-empty {
-  color: var(--pms-text-muted);
-}
-
-.archive-drawer-field-editor {
-  width: 100%;
-  padding: 1px 0;
+.archive-create-form-item :deep(.el-form-item__error) {
+  position: static;
+  padding-top: 4px;
+  font-size: 11px;
 }
 
 .archive-drawer-savebar {
@@ -1974,10 +1939,6 @@ onMounted(async () => {
 @media (max-width: 1280px) {
   .project-archive-workbench.is-drawer-open {
     grid-template-columns: minmax(0, 1fr) 360px;
-  }
-
-  .archive-drawer-field-row {
-    grid-template-columns: 88px minmax(0, 1fr);
   }
 }
 </style>
