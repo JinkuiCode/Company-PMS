@@ -179,3 +179,13 @@
 - 涉及文件：`frontend/src/form-system/components/PmsInlineField.vue`、`frontend/src/form-system/form-tokens.css`、`frontend/src/views/project/ProjectList.vue`、`frontend/src/views/project/ProjectProgress.vue`、`frontend/tests/form-system-layout-contract.test.mjs`、`frontend/tests/project-progress-workbench-contract.test.mjs`、`frontend/tests/project-sheet-detail-drawer-contract.test.mjs`、`change.md`。
 - 验证结果：前端全部 20 项契约测试退出 `0`，`npm run build` 退出 `0` 并转换 2322 个模块；本机 Edge 验证节点、原计划发货和阶段进度编辑均保留原值且仅显示一层编辑边界，详情抽屉独立滚动，底部统一保存固定，未修改时按钮禁用。独立代码审查提出的编辑态快捷按钮遮挡、无编辑权限缺少只读说明、旧 AG Grid 焦点样式竞争和草稿类型放宽问题均已修正并补充回归断言；项目档案试点相关契约同步通过。
 - 范围说明：本批仅完成开发机项目进度迁移，尚未迁移系统管理表单，未部署服务器、推送 GitHub 或合并 `master`。
+
+## 2026-09-11 - PMS 统一表单框架第三批共享列表控件迁移
+
+- 原因：项目档案与项目进度已经接入统一表单基础层，但标准列表的自定义筛选和列设置仍直接使用 Element Plus 字段控件，跨页面新增列表时仍可能出现尺寸、焦点和字体状态不一致。
+- 调整内容：`PmsListFilters` 的文本、选择、日期和数字筛选统一改用紧凑型 PMS 表单控件，保留原有字段定义、操作符、日期 `YYYY-MM-DD`、区间双值、清空和 `update:filters` 事件协议；各类筛选值宽度保持迁移前数值。
+- 调整内容：`PmsListColumnPicker` 的搜索与勾选统一改用 PMS 文本和复选框控件，保留列搜索、选择数量、全选、恢复默认、列表持久化及 `update:modelValue` 协议；移除嵌套标签并为勾选项补充可访问名称。
+- 调整内容：独立代码审查后将共享筛选控件的固定宽度容器统一为块级元素，并增加契约约束，避免行内 `span` 包裹控件根 `div` 形成无效 HTML。
+- 涉及文件：`frontend/src/components/PmsListFilters.vue`、`frontend/src/components/PmsListColumnPicker.vue`、`frontend/tests/list-standard-contract.test.mjs`、`frontend/tests/archive-filter-contract.test.mjs`、`frontend/tests/form-system-contract.test.mjs`、`change.md`。
+- 验证结果：定向契约测试和生产构建通过；本机 Edge 验证项目档案与项目进度的自定义筛选输入、筛选生效、列搜索、列勾选及恢复默认，公共控件尺寸与原布局一致。完整前端契约与最终构建结果见本批提交前验证。
+- 范围说明：本批仅完成开发机共享列表控件迁移，尚未迁移系统管理表单，未部署服务器、推送 GitHub 或合并 `master`。

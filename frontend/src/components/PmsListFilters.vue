@@ -16,119 +16,118 @@
 
     <div v-if="filters.length" class="pms-list-custom-filters" aria-label="自定义筛选条件">
       <div v-for="filter in filters" :key="filter.id" class="pms-list-custom-filter-row">
-        <el-select
-          :model-value="filter.field"
-          size="small"
-          style="width: 132px;"
-          @update:model-value="handleFieldModelChange(filter.id, $event)"
-        >
-          <el-option
-            v-for="field in fields"
-            :key="field.field"
-            :label="field.label"
-            :value="field.field"
+        <div class="pms-list-filter-control pms-list-filter-control--field">
+          <PmsSelectControl
+            :model-value="filter.field"
+            size="compact"
+            :options="fieldOptions"
+            aria-label="筛选字段"
+            @update:model-value="handleFieldModelChange(filter.id, $event)"
           />
-        </el-select>
-        <el-select
-          :model-value="filter.operator"
-          size="small"
-          style="width: 96px;"
-          @update:model-value="handleOperatorModelChange(filter.id, $event)"
-        >
-          <el-option
-            v-for="operator in getOperators(filter.field)"
-            :key="operator"
-            :label="listFilterOperatorLabels[operator]"
-            :value="operator"
+        </div>
+        <div class="pms-list-filter-control pms-list-filter-control--operator">
+          <PmsSelectControl
+            :model-value="filter.operator"
+            size="compact"
+            :options="operatorOptions(filter.field)"
+            aria-label="筛选条件"
+            @update:model-value="handleOperatorModelChange(filter.id, $event)"
           />
-        </el-select>
+        </div>
         <template v-if="getField(filter.field)?.type === 'select'">
-          <el-select
-            :model-value="filter.value"
-            size="small"
-            clearable
-            filterable
-            placeholder="选择值"
-            style="width: 164px;"
-            @update:model-value="handleValueChange(filter.id, $event)"
-          >
-            <el-option
-              v-for="option in getOptions(filter.field)"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
+          <div class="pms-list-filter-control pms-list-filter-control--select-value">
+            <PmsSelectControl
+              :model-value="filter.value"
+              size="compact"
+              :options="getOptions(filter.field)"
+              clearable
+              filterable
+              placeholder="选择值"
+              aria-label="筛选值"
+              @update:model-value="handleValueChange(filter.id, $event)"
             />
-          </el-select>
+          </div>
         </template>
         <template v-else-if="getField(filter.field)?.type === 'date'">
           <div v-if="filter.operator === 'between'" class="pms-list-filter-range">
-            <el-date-picker
+            <div class="pms-list-filter-control pms-list-filter-control--date-range">
+              <PmsDateControl
+                :model-value="filter.value"
+                type="date"
+                size="compact"
+                value-format="YYYY-MM-DD"
+                placeholder="开始日期"
+                aria-label="筛选开始日期"
+                @update:model-value="handleValueChange(filter.id, $event)"
+              />
+            </div>
+            <span class="pms-list-filter-separator">至</span>
+            <div class="pms-list-filter-control pms-list-filter-control--date-range">
+              <PmsDateControl
+                :model-value="filter.valueEnd"
+                type="date"
+                size="compact"
+                value-format="YYYY-MM-DD"
+                placeholder="结束日期"
+                aria-label="筛选结束日期"
+                @update:model-value="handleValueEndChange(filter.id, $event)"
+              />
+            </div>
+          </div>
+          <div v-else class="pms-list-filter-control pms-list-filter-control--date-value">
+            <PmsDateControl
               :model-value="filter.value"
               type="date"
-              size="small"
+              size="compact"
               value-format="YYYY-MM-DD"
-              placeholder="开始日期"
-              style="width: 136px;"
+              placeholder="选择日期"
+              aria-label="筛选日期"
               @update:model-value="handleValueChange(filter.id, $event)"
             />
-            <span class="pms-list-filter-separator">至</span>
-            <el-date-picker
-              :model-value="filter.valueEnd"
-              type="date"
-              size="small"
-              value-format="YYYY-MM-DD"
-              placeholder="结束日期"
-              style="width: 136px;"
-              @update:model-value="handleValueEndChange(filter.id, $event)"
-            />
           </div>
-          <el-date-picker
-            v-else
-            :model-value="filter.value"
-            type="date"
-            size="small"
-            value-format="YYYY-MM-DD"
-            placeholder="选择日期"
-            style="width: 150px;"
-            @update:model-value="handleValueChange(filter.id, $event)"
-          />
         </template>
         <template v-else-if="getField(filter.field)?.type === 'number'">
           <div v-if="filter.operator === 'between'" class="pms-list-filter-range">
-            <el-input-number
+            <div class="pms-list-filter-control pms-list-filter-control--number-range">
+              <PmsNumberControl
+                :model-value="filter.value as number | null"
+                size="compact"
+                placeholder="最小值"
+                aria-label="筛选最小值"
+                @update:model-value="handleValueChange(filter.id, $event)"
+              />
+            </div>
+            <span class="pms-list-filter-separator">至</span>
+            <div class="pms-list-filter-control pms-list-filter-control--number-range">
+              <PmsNumberControl
+                :model-value="filter.valueEnd as number | null"
+                size="compact"
+                placeholder="最大值"
+                aria-label="筛选最大值"
+                @update:model-value="handleValueEndChange(filter.id, $event)"
+              />
+            </div>
+          </div>
+          <div v-else class="pms-list-filter-control pms-list-filter-control--number-value">
+            <PmsNumberControl
               :model-value="filter.value as number | null"
-              size="small"
-              placeholder="最小值"
-              style="width: 120px;"
+              size="compact"
+              placeholder="输入数值"
+              aria-label="筛选数值"
               @update:model-value="handleValueChange(filter.id, $event)"
             />
-            <span class="pms-list-filter-separator">至</span>
-            <el-input-number
-              :model-value="filter.valueEnd as number | null"
-              size="small"
-              placeholder="最大值"
-              style="width: 120px;"
-              @update:model-value="handleValueEndChange(filter.id, $event)"
-            />
           </div>
-          <el-input-number
-            v-else
-            :model-value="filter.value as number | null"
-            size="small"
-            placeholder="输入数值"
-            style="width: 140px;"
+        </template>
+        <div v-else class="pms-list-filter-control pms-list-filter-control--text-value">
+          <PmsTextControl
+            :model-value="filter.value"
+            size="compact"
+            clearable
+            placeholder="输入筛选值"
+            aria-label="筛选值"
             @update:model-value="handleValueChange(filter.id, $event)"
           />
-        </template>
-        <el-input
-          v-else
-          :model-value="filter.value"
-          size="small"
-          clearable
-          placeholder="输入筛选值"
-          style="width: 180px;"
-          @update:model-value="handleValueChange(filter.id, $event)"
-        />
+        </div>
         <el-button type="danger" size="small" link @click="removeFilter(filter.id)">
           删除
         </el-button>
@@ -138,7 +137,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Filter } from '@element-plus/icons-vue'
+import { PmsDateControl, PmsNumberControl, PmsSelectControl, PmsTextControl, type PmsOption } from '@/form-system'
 import {
   createListFilter,
   defaultListFilterOperators,
@@ -174,6 +175,18 @@ function getOptions(field: string) {
   return getField(field)?.options?.() || []
 }
 
+const fieldOptions = computed<PmsOption[]>(() => props.fields.map(field => ({
+  label: field.label,
+  value: field.field,
+})))
+
+function operatorOptions(field: string): PmsOption[] {
+  return getOperators(field).map(operator => ({
+    label: listFilterOperatorLabels[operator],
+    value: operator,
+  }))
+}
+
 function nextFilterId() {
   return props.filters.reduce((maxId, filter) => Math.max(maxId, filter.id), 0) + 1
 }
@@ -195,11 +208,11 @@ function toListFilterValue(value: unknown): ListFilterValue {
   return null
 }
 
-function handleFieldModelChange(id: number, value: string | number) {
+function handleFieldModelChange(id: number, value: unknown) {
   handleFieldChange(id, String(value))
 }
 
-function handleOperatorModelChange(id: number, value: string | number) {
+function handleOperatorModelChange(id: number, value: unknown) {
   handleOperatorChange(id, value as ListFilterOperator)
 }
 
@@ -268,6 +281,20 @@ function removeFilter(id: number) {
   gap: 8px;
   min-height: 32px;
 }
+
+.pms-list-filter-control {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.pms-list-filter-control--field { width: 132px; }
+.pms-list-filter-control--operator { width: 96px; }
+.pms-list-filter-control--select-value { width: 164px; }
+.pms-list-filter-control--date-range { width: 136px; }
+.pms-list-filter-control--date-value { width: 150px; }
+.pms-list-filter-control--number-range { width: 120px; }
+.pms-list-filter-control--number-value { width: 140px; }
+.pms-list-filter-control--text-value { width: 180px; }
 
 .pms-list-filter-range {
   display: inline-flex;

@@ -8,6 +8,9 @@ assert.match(archive, /archiveFilterFields/, 'Project archive should define conf
 assert.match(archive, /customFilters/, 'Project archive should store user-added custom filters')
 assert.match(listFilters, /添加筛选/, 'Shared list filter component should expose an add-filter control')
 assert.match(listFilters, /清空筛选/, 'Shared list filter component should expose a clear custom filters control')
+assert.match(listFilters, /PmsSelectControl/, 'Archive custom filters should receive shared compact select controls')
+assert.match(listFilters, /PmsDateControl/, 'Archive custom filters should receive shared compact date controls')
+assert.match(listFilters, /value-format="YYYY-MM-DD"/, 'Shared date filters should preserve the archive date protocol')
 assert.match(archive, /useListFilters/, 'Project archive should evaluate custom filters through the shared list filter composable')
 assert.match(archive, /PmsListFilters/, 'Project archive should render custom filters through the shared filter component')
 

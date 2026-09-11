@@ -6,6 +6,8 @@ const entry = read('../src/form-system/index.ts')
 const tokens = read('../src/form-system/form-tokens.css')
 const shell = read('../src/form-system/components/PmsControlShell.vue')
 const main = read('../src/main.ts')
+const listFilters = read('../src/components/PmsListFilters.vue')
+const columnPicker = read('../src/components/PmsListColumnPicker.vue')
 
 assert.match(entry, /export \{ default as PmsControlShell \}/)
 assert.match(entry, /export type \{[\s\S]*PmsControlSize[\s\S]*PmsOption/)
@@ -24,6 +26,8 @@ for (const line of tokens.split('\n').filter((line) => /\.el-(input|select|texta
   )
 }
 assert.match(main, /import '.\/form-system\/form-tokens\.css'/)
+assert.match(listFilters, /from '@\/form-system'/, 'Shared list filters should consume the form-system public entry')
+assert.match(columnPicker, /from '@\/form-system'/, 'Column picker should consume the form-system public entry')
 
 for (const component of [
   'PmsTextControl',

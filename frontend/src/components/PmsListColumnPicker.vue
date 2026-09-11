@@ -19,11 +19,12 @@
 
     <div class="column-picker-panel" :aria-label="ariaLabel">
       <div class="column-picker-toolbar">
-        <el-input
+        <PmsTextControl
           v-model="keyword"
-          size="small"
+          size="compact"
           clearable
           placeholder="搜索字段"
+          aria-label="搜索列字段"
         />
         <span class="column-picker-count">已选 {{ selectedCount }} 项</span>
       </div>
@@ -39,18 +40,18 @@
           class="column-picker-group"
         >
           <header class="column-picker-group-title">{{ group.label }}</header>
-          <label
+          <div
             v-for="field in group.fields"
             :key="field.key"
             class="column-picker-field"
           >
-            <el-checkbox
+            <PmsCheckboxControl
               :model-value="isSelected(field.key)"
-              :label="field.key"
+              :aria-label="`显示${field.label}列`"
               @update:model-value="toggleField(field.key, $event)"
             >
               <span class="column-picker-field-label">{{ field.label }}</span>
-            </el-checkbox>
+            </PmsCheckboxControl>
             <span
               v-if="field.quick_addable"
               class="column-picker-field-hint"
@@ -63,7 +64,7 @@
             >
               长文本
             </span>
-          </label>
+          </div>
         </section>
 
         <div v-if="!visibleGroups.length" class="column-picker-empty">
@@ -77,6 +78,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Setting } from '@element-plus/icons-vue'
+import { PmsCheckboxControl, PmsTextControl } from '@/form-system'
 
 type ColumnPickerField = {
   key: string

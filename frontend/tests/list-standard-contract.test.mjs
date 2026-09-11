@@ -10,12 +10,29 @@ assert.ok(exists('src/composables/useListFilters.ts'), 'useListFilters should ce
 
 const dataList = exists('src/components/PmsDataList.vue') ? read('src/components/PmsDataList.vue') : ''
 const listFilters = exists('src/components/PmsListFilters.vue') ? read('src/components/PmsListFilters.vue') : ''
+const columnPicker = read('src/components/PmsListColumnPicker.vue')
 const filterComposable = exists('src/composables/useListFilters.ts') ? read('src/composables/useListFilters.ts') : ''
 
 assert.match(dataList, /GridHorizontalScrollbar/, 'PmsDataList should own the shared visible grid scrollbar')
 assert.match(dataList, /defineExpose\(\{\s*refreshScrollbar/, 'PmsDataList should expose refreshScrollbar for AG Grid events')
 assert.match(listFilters, /添加筛选/, 'PmsListFilters should render the shared add-filter control')
 assert.match(listFilters, /清空筛选/, 'PmsListFilters should render the shared clear-filter control')
+for (const component of ['PmsTextControl', 'PmsSelectControl', 'PmsDateControl', 'PmsNumberControl']) {
+  assert.match(listFilters, new RegExp(`\\b${component}\\b`), `PmsListFilters should consume ${component}`)
+}
+assert.match(listFilters, /size="compact"/, 'Shared list filters should use compact form controls')
+assert.doesNotMatch(listFilters, /<el-(input|select|date-picker|input-number)\b/, 'Shared list filters should not render raw Element Plus fields')
+assert.doesNotMatch(
+  listFilters,
+  /<span[^>]*pms-list-filter-control[^>]*>[\s\S]*?<Pms(?:Text|Select|Date|Number)Control/,
+  'Shared form controls must use block containers instead of invalid span/div nesting',
+)
+for (const component of ['PmsTextControl', 'PmsCheckboxControl']) {
+  assert.match(columnPicker, new RegExp(`\\b${component}\\b`), `PmsListColumnPicker should consume ${component}`)
+}
+assert.doesNotMatch(columnPicker, /<el-(input|checkbox)\b/, 'Column picker should not render raw Element Plus fields')
+assert.match(columnPicker, /'update:modelValue': \[value: string\[\]\]/, 'Column picker must preserve its model event contract')
+assert.match(listFilters, /'update:filters': \[filters: ListCustomFilter\[\]\]/, 'List filters must preserve their model event contract')
 assert.match(filterComposable, /matchesListFilter/, 'useListFilters should expose a shared filter matcher')
 assert.match(filterComposable, /applyCustomFilters/, 'useListFilters should expose reusable custom filter application')
 
