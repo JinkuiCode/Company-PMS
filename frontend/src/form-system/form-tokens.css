@@ -223,3 +223,179 @@
     transition: none;
   }
 }
+
+.pms-form-field {
+  min-width: 0;
+}
+
+.pms-form-field--span-2 {
+  grid-column: 1 / -1;
+}
+
+.pms-form-field__label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--pms-text-secondary);
+  font-size: var(--pms-font-size-sm);
+  line-height: 20px;
+}
+
+.pms-form-field__required,
+.pms-inline-field__required {
+  margin-left: 4px;
+  color: var(--pms-danger);
+}
+
+.pms-form-field__hint,
+.pms-form-field__error,
+.pms-inline-field__error {
+  margin: 0;
+  font-size: var(--pms-font-size-xs);
+  line-height: 18px;
+}
+
+.pms-form-field__hint {
+  margin-bottom: 5px;
+  color: var(--pms-text-muted);
+}
+
+.pms-form-field__error,
+.pms-inline-field__error {
+  margin-top: 4px;
+  color: var(--pms-danger);
+}
+
+.pms-form-field__control {
+  min-width: 0;
+}
+
+.pms-inline-field {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  min-height: 48px;
+  border-bottom: 1px solid var(--pms-border-soft);
+}
+
+.pms-inline-field__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--pms-text-secondary);
+  font-size: var(--pms-font-size-base);
+  line-height: var(--pms-form-control-line-height);
+  white-space: nowrap;
+}
+
+.pms-inline-field__readonly {
+  color: var(--pms-text-muted);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.pms-inline-field__surface,
+.pms-inline-field__value {
+  width: 100%;
+  min-width: 0;
+  height: var(--pms-form-control-height-compact);
+}
+
+.pms-inline-field__value {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--pms-form-control-padding-x);
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--pms-radius-sm);
+  background: transparent;
+  color: var(--pms-text);
+  font: inherit;
+  line-height: var(--pms-form-control-line-height);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+button.pms-inline-field__value {
+  cursor: text;
+}
+
+.pms-inline-field.is-editable:hover .pms-inline-field__value {
+  background: var(--pms-surface-muted);
+}
+
+.pms-inline-field__value:focus-visible {
+  border-color: var(--pms-form-control-border-focus);
+  outline: none;
+  box-shadow: var(--pms-form-control-focus-ring);
+}
+
+.pms-inline-field__value.is-empty {
+  color: var(--pms-text-muted);
+}
+
+.pms-inline-field__editor {
+  display: flex;
+  align-items: center;
+}
+
+.pms-inline-field__editor > .pms-form-control {
+  height: var(--pms-form-control-height-compact);
+  background: var(--pms-primary-soft);
+}
+
+.pms-inline-field.is-long-text {
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 6px;
+  padding: 10px 0;
+}
+
+.pms-inline-field.is-long-text .pms-inline-field__surface,
+.pms-inline-field.is-long-text .pms-inline-field__value {
+  height: auto;
+  min-height: var(--pms-form-control-height-compact);
+  overflow: visible;
+  text-overflow: initial;
+  white-space: normal;
+}
+
+.pms-inline-field__error {
+  grid-column: 2;
+  width: 100%;
+  padding: 0 var(--pms-form-control-padding-x) 5px;
+}
+
+.pms-form-grid .ag-cell-inline-editing {
+  padding: 0;
+  border: 1px solid var(--pms-form-control-border-focus);
+  background: var(--pms-primary-soft);
+  box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.08);
+}
+
+.pms-form-grid .ag-cell-inline-editing .el-input,
+.pms-form-grid .ag-cell-inline-editing .el-select,
+.pms-form-grid .ag-cell-inline-editing .el-date-editor,
+.pms-form-grid .ag-cell-inline-editing .el-input-number {
+  width: 100%;
+  height: 100%;
+}
+
+.pms-form-grid .ag-cell-inline-editing .el-input__wrapper,
+.pms-form-grid .ag-cell-inline-editing .el-select__wrapper,
+.pms-form-grid .ag-cell-inline-editing .el-date-editor.el-input__wrapper,
+.pms-form-grid .ag-cell-inline-editing .el-input-number .el-input__wrapper {
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--pms-form-control-padding-x);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.pms-form-grid .ag-cell-inline-editing :is(input, textarea, button):focus-visible {
+  outline: none;
+}

@@ -16,7 +16,13 @@ assert.match(tokens, /--pms-form-control-line-height:\s*20px/)
 assert.match(tokens, /\.pms-form-control[\s\S]*box-sizing:\s*border-box/)
 assert.match(tokens, /\.pms-form-control--binary/)
 assert.match(shell, /pms-form-control--\$\{props\.variant\}/)
-assert.doesNotMatch(tokens, /^(?!\s*\.pms-form-control)[^\n]*\.el-(input|select|textarea)/m)
+for (const line of tokens.split('\n').filter((line) => /\.el-(input|select|textarea)/.test(line))) {
+  assert.match(
+    line.trim(),
+    /^\.pms-(form-control|form-grid)\b/,
+    `Element Plus internals must stay under a form-system namespace: ${line}`,
+  )
+}
 assert.match(main, /import '.\/form-system\/form-tokens\.css'/)
 
 for (const component of [

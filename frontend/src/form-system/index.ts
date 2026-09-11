@@ -9,6 +9,9 @@ export { default as PmsSwitchControl } from './components/PmsSwitchControl.vue'
 export { default as PmsCheckboxControl } from './components/PmsCheckboxControl.vue'
 export { default as PmsCheckboxGroupControl } from './components/PmsCheckboxGroupControl.vue'
 export { default as PmsSegmentedControl } from './components/PmsSegmentedControl.vue'
+export { default as PmsFormField } from './components/PmsFormField.vue'
+export { default as PmsInlineField } from './components/PmsInlineField.vue'
+export { PMS_AG_GRID_FORM_CLASS, mergePmsAgCellClass } from './ag-grid'
 export type {
   PmsControlScalar,
   PmsControlSize,
