@@ -4,7 +4,15 @@ import { readFileSync } from 'node:fs'
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
 const projectList = read('src/views/project/ProjectList.vue')
+const projectProgress = read('src/views/project/ProjectProgress.vue')
 const theme = read('src/styles/pms-theme.css')
+const formTokens = read('src/form-system/form-tokens.css')
+
+for (const page of [projectList, projectProgress]) {
+  assert.match(page, /PMS_AG_GRID_FORM_CLASS/, 'Project grids should consume the shared AG Grid form class')
+  assert.match(page, /mergePmsAgCellClass/, 'Editable project columns should consume the shared AG Grid cell adapter')
+  assert.doesNotMatch(page, /\.ag-cell-inline-editing \.ag-cell-edit-wrapper/, 'Project pages must not restyle nested AG Grid editors locally')
+}
 
 assert.match(
   theme,
@@ -178,14 +186,24 @@ assert.match(
   'Centered header styling should cover both ordinary and grouped column labels',
 )
 assert.match(
-  projectList,
-  /:deep\(\.progress-workbench-grid \.ag-cell-inline-editing\) \{[\s\S]*?border:\s*0;[\s\S]*?border-radius:\s*0;[\s\S]*?box-shadow:\s*inset 0 0 0 1px rgba\(79, 70, 229, 0\.42\);/,
-  'Inline editing should keep one full-cell focus boundary instead of an additional card frame',
+  formTokens,
+  /\.pms-form-grid \.ag-cell-inline-editing\s*\{[\s\S]*?border:\s*1px solid var\(--pms-form-control-border-focus\);[\s\S]*?box-shadow:/,
+  'The shared grid adapter should provide one full-cell focus boundary',
+)
+assert.match(
+  formTokens,
+  /\.pms-form-grid \.ag-cell-inline-editing \.ag-cell-edit-wrapper,[\s\S]*?\.ag-picker-field-wrapper,[\s\S]*?border:\s*0 !important;[\s\S]*?border-radius:\s*0 !important;[\s\S]*?box-shadow:\s*none !important;/,
+  'The shared grid adapter should remove nested editor borders',
+)
+assert.match(
+  theme,
+  /\.pms-ag-grid:not\(\.pms-form-grid\) \.ag-cell-inline-editing/,
+  'Legacy grid focus styling should not compete with the shared form-grid adapter',
 )
 assert.match(
   projectList,
-  /:deep\(\.progress-workbench-grid \.ag-cell-inline-editing \.ag-cell-edit-wrapper\),[\s\S]*?:deep\(\.progress-workbench-grid \.ag-cell-inline-editing \.ag-picker-field-wrapper\) \{[\s\S]*?border:\s*0 !important;[\s\S]*?border-radius:\s*0 !important;[\s\S]*?box-shadow:\s*none !important;/,
-  'Editors inside the project progress grid should not render a second nested input border',
+  /\.progress-editable-cell:not\(\.ag-cell-inline-editing\):hover/,
+  'Readonly hover affordances should not override the active shared grid editor',
 )
 assert.doesNotMatch(
   projectList,

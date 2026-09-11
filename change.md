@@ -169,3 +169,13 @@
 - 涉及文件：`frontend/src/form-system/`、`frontend/src/main.ts`、`frontend/src/views/project/ProjectArchive.vue`、`frontend/src/styles/pms-theme.css`、`frontend/tests/form-system-contract.test.mjs`、`frontend/tests/form-system-layout-contract.test.mjs`、`frontend/tests/archive-edit-drawer-contract.test.mjs`、`frontend/tests/archive-filter-contract.test.mjs`、`frontend/tests/archive-lifecycle-contract.test.mjs`、`change.md`。
 - 验证结果：统一表单、布局、项目档案编辑抽屉、筛选、生命周期、生命周期并发、样式、标准列表和系统 UI 一致性共九项契约均退出 `0`；`npm run build` 退出 `0`，转换 2322 个模块。独立临时数据库在本机 Edge 完成新增、字段值点击、自动聚焦、文本编辑、选择下拉、统一保存、枚举标签刷新和抽屉独立滚动验收；`1366x768` 与 `1600x900` 下抽屉均为 `400px`，字段行 `48px`，显示与编辑表面均为 `254x32px`，保存栏保持固定。AG Grid 旧选择 API 仍输出既有弃用提示，留待标准列表基础模块升级批次处理。
 - 范围说明：本批停在项目档案试点验收点，尚未迁移项目进度或系统管理表单，也未部署服务器、推送 GitHub或合并 `master`。
+
+## 2026-09-11 - PMS 统一表单框架第二批项目进度迁移
+
+- 原因：项目档案试点验收通过后，按已批准的分批迁移计划将项目进度详情抽屉和表格内编辑接入同一套表单基础层，避免选择、日期和数字编辑器继续由页面零散覆盖样式。
+- 调整内容：项目进度详情抽屉改用 `PmsInlineField` 与统一文本、选择、日期、数字和长文本控件；保留字段来源说明、进度条、快捷加入列表、草稿计数、底部统一保存及原有字段规则，不改变引用字段只读边界。
+- 调整内容：为共享行内字段增加标签附属说明和紧凑操作插槽，统一处理快捷操作的悬停、键盘聚焦、定位和内容避让；项目页面不再通过绝对定位自行拼装字段来源与快捷按钮。
+- 调整内容：项目进度工作台和任务进度表统一接入 AG Grid 表单适配器；编辑单元格由共享令牌提供唯一焦点边界，内部文本、选择和数字编辑器铺满单元格并移除嵌套边框。列表双击编辑、七阶段字段、自动保存、动态列和权限逻辑保持不变。
+- 涉及文件：`frontend/src/form-system/components/PmsInlineField.vue`、`frontend/src/form-system/form-tokens.css`、`frontend/src/views/project/ProjectList.vue`、`frontend/src/views/project/ProjectProgress.vue`、`frontend/tests/form-system-layout-contract.test.mjs`、`frontend/tests/project-progress-workbench-contract.test.mjs`、`frontend/tests/project-sheet-detail-drawer-contract.test.mjs`、`change.md`。
+- 验证结果：前端全部 20 项契约测试退出 `0`，`npm run build` 退出 `0` 并转换 2322 个模块；本机 Edge 验证节点、原计划发货和阶段进度编辑均保留原值且仅显示一层编辑边界，详情抽屉独立滚动，底部统一保存固定，未修改时按钮禁用。独立代码审查提出的编辑态快捷按钮遮挡、无编辑权限缺少只读说明、旧 AG Grid 焦点样式竞争和草稿类型放宽问题均已修正并补充回归断言；项目档案试点相关契约同步通过。
+- 范围说明：本批仅完成开发机项目进度迁移，尚未迁移系统管理表单，未部署服务器、推送 GitHub 或合并 `master`。

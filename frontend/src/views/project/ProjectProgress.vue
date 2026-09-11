@@ -66,6 +66,7 @@
     <template #grid>
       <ag-grid-vue
         class="ag-theme-alpine wechat-table pms-ag-grid"
+        :class="PMS_AG_GRID_FORM_CLASS"
         :rowData="filteredRowData"
         :columnDefs="columnDefs"
         :defaultColDef="defaultColDef"
@@ -98,6 +99,7 @@ import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type CellValueChangedEvent } from 'ag-grid-community'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
+import { PMS_AG_GRID_FORM_CLASS, mergePmsAgCellClass } from '@/form-system'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { chineseLocaleText } from '@/utils/agGridLocale'
@@ -177,7 +179,7 @@ const filteredRowData = computed(() => {
   return applyCustomFilters(result)
 })
 
-const columnDefs = computed<ColDef[]>(() => [
+const columnDefs = computed<ColDef[]>(() => ([
   { field: 'sort', headerName: '排序', width: 70, editable: () => hasPermission('project:list:edit'), type: 'numericColumn' },
   { field: 'task_name', headerName: '任务名称', width: 260, editable: () => hasPermission('project:list:edit'), pinned: 'left' },
   {
@@ -229,7 +231,7 @@ const columnDefs = computed<ColDef[]>(() => [
       }
     },
   },
-])
+] as ColDef[]).map(definition => definition.editable ? mergePmsAgCellClass(definition) : definition))
 
 const defaultColDef = {
   sortable: true, resizable: true,

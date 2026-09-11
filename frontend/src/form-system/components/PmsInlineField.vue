@@ -45,18 +45,21 @@ watch(() => props.editing, async (editing) => {
       'is-empty': empty,
       'is-error': Boolean(error),
       'is-long-text': longText,
+      'has-actions': Boolean($slots.actions),
     }"
   >
     <div class="pms-inline-field__label">
       <span>{{ label }}<span v-if="required" class="pms-inline-field__required" aria-hidden="true">*</span></span>
-      <span
-        v-if="!editable && readonlyReason"
-        class="pms-inline-field__readonly"
-        :title="readonlyReason"
-        :aria-label="readonlyReason"
-      >
-        <el-icon aria-hidden="true"><Lock /></el-icon>
-      </span>
+      <slot name="label-suffix">
+        <span
+          v-if="!editable && readonlyReason"
+          class="pms-inline-field__readonly"
+          :title="readonlyReason"
+          :aria-label="readonlyReason"
+        >
+          <el-icon aria-hidden="true"><Lock /></el-icon>
+        </span>
+      </slot>
     </div>
 
     <div v-if="editing" ref="editorRef" class="pms-inline-field__surface pms-inline-field__editor">
@@ -82,5 +85,8 @@ watch(() => props.editing, async (editing) => {
     </div>
 
     <p v-if="error" class="pms-inline-field__error" role="alert">{{ error }}</p>
+    <div v-if="$slots.actions" class="pms-inline-field__actions">
+      <slot name="actions" />
+    </div>
   </div>
 </template>

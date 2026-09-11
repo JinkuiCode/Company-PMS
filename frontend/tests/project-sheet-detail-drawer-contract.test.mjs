@@ -5,6 +5,15 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 
 const projectList = read('src/views/project/ProjectList.vue')
 
+for (const component of ['PmsInlineField', 'PmsTextControl', 'PmsSelectControl', 'PmsDateControl', 'PmsNumberControl', 'PmsTextareaControl']) {
+  assert.match(projectList, new RegExp(`\\b${component}\\b`), `Project detail drawer should consume ${component}`)
+}
+assert.match(
+  projectList,
+  /<PmsInlineField[\s\S]*?<template #display>[\s\S]*?<template #editor>/,
+  'Project detail fields should share the approved display/edit geometry contract',
+)
+
 for (const label of [
   '基础信息',
   '阶段进度',
@@ -152,13 +161,33 @@ assert.match(
 )
 assert.match(
   projectList,
-  /\.drawer-field-reason \{[\s\S]*?position: absolute;/,
-  'Readonly source controls should not consume drawer field layout space',
+  /#label-suffix[\s\S]*?class="drawer-field-reason"/,
+  'Readonly source controls should use the shared inline-field label suffix',
+)
+assert.doesNotMatch(
+  projectList,
+  /\.drawer-field-reason \{[\s\S]*?position:\s*absolute;/,
+  'Readonly source controls should not rely on page-local absolute positioning',
 )
 assert.match(
   projectList,
   /aria-pressed/,
   'Quick-add toggle should expose pressed state for assistive technology',
+)
+assert.match(
+  projectList,
+  /v-if="canQuickToggleField\(field\) && drawerEditingField !== field\.key" #actions/,
+  'Quick-add actions should stay hidden while the field editor owns the value surface',
+)
+assert.match(
+  projectList,
+  /field\.editable && !hasPermission\('project:list:edit'\)[\s\S]*?权限限制/,
+  'Editable metadata should expose a readonly reason when runtime permission denies editing',
+)
+assert.match(
+  projectList,
+  /const drawerDraftValue = ref<unknown>/,
+  'Drawer drafts should retain type safety before typed control adapters normalize them',
 )
 assert.doesNotMatch(
   projectList,

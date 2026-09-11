@@ -270,6 +270,7 @@
 }
 
 .pms-inline-field {
+  position: relative;
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
   align-items: center;
@@ -368,6 +369,27 @@ button.pms-inline-field__value {
   padding: 0 var(--pms-form-control-padding-x) 5px;
 }
 
+.pms-inline-field__actions {
+  position: absolute;
+  top: 13px;
+  right: 0;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.pms-inline-field:hover .pms-inline-field__actions,
+.pms-inline-field:focus-within .pms-inline-field__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pms-inline-field.has-actions .pms-inline-field__value {
+  padding-right: 38px;
+}
+
 .pms-form-grid .ag-cell-inline-editing {
   padding: 0;
   border: 1px solid var(--pms-form-control-border-focus);
@@ -375,12 +397,27 @@ button.pms-inline-field__value {
   box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.08);
 }
 
+.pms-form-grid .ag-cell-inline-editing .ag-cell-edit-wrapper,
+.pms-form-grid .ag-cell-inline-editing .ag-cell-editor,
+.pms-form-grid .ag-cell-inline-editing .ag-cell-editor .ag-wrapper,
+.pms-form-grid .ag-cell-inline-editing .ag-picker-field-wrapper,
 .pms-form-grid .ag-cell-inline-editing .el-input,
 .pms-form-grid .ag-cell-inline-editing .el-select,
 .pms-form-grid .ag-cell-inline-editing .el-date-editor,
 .pms-form-grid .ag-cell-inline-editing .el-input-number {
   width: 100%;
   height: 100%;
+}
+
+.pms-form-grid .ag-cell-inline-editing .ag-cell-editor input,
+.pms-form-grid .ag-cell-inline-editing .ag-picker-field-wrapper {
+  width: 100%;
+  min-height: 100%;
+  height: 100%;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent;
+  box-shadow: none !important;
 }
 
 .pms-form-grid .ag-cell-inline-editing .el-input__wrapper,
@@ -390,10 +427,10 @@ button.pms-inline-field__value {
   width: 100%;
   height: 100%;
   padding: 0 var(--pms-form-control-padding-x);
-  border: 0;
-  border-radius: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
   background: transparent;
-  box-shadow: none;
+  box-shadow: none !important;
 }
 
 .pms-form-grid .ag-cell-inline-editing :is(input, textarea, button):focus-visible {

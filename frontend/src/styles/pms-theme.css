@@ -630,8 +630,8 @@ a {
   background: rgba(79, 70, 229, 0.08);
 }
 
-.pms-ag-grid .ag-cell-inline-editing,
-.wechat-table .ag-cell-inline-editing {
+.pms-ag-grid:not(.pms-form-grid) .ag-cell-inline-editing,
+.wechat-table:not(.pms-form-grid) .ag-cell-inline-editing {
   border-radius: var(--pms-radius-sm);
   box-shadow: 0 0 0 1px var(--pms-primary) inset;
 }

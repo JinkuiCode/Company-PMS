@@ -85,6 +85,7 @@
           <ag-grid-vue
             ref="agGridRef"
             class="ag-theme-alpine wechat-table pms-ag-grid progress-workbench-grid"
+            :class="PMS_AG_GRID_FORM_CLASS"
             :rowData="displayedRowData"
             :columnDefs="columnDefs"
             :defaultColDef="defaultColDef"
@@ -353,153 +354,54 @@
             </template>
 
             <div class="drawer-field-list">
-              <div
+              <PmsInlineField
                 v-for="field in group.fields"
                 :key="field.key"
-                class="drawer-field-row"
-                :class="{
-                  editing: drawerEditingField === field.key,
-                  'is-long-text': field.value_type === 'long_text',
-                  'is-progress': field.value_type === 'progress',
-                }"
+                :label="field.label"
+                :required="field.required"
+                :editable="field.editable && hasPermission('project:list:edit')"
+                :editing="drawerEditingField === field.key"
+                :empty="field.value === null || field.value === undefined || field.value === ''"
+                :readonly-reason="drawerFieldReason(field)?.tooltip || ''"
+                :long-text="field.value_type === 'long_text'"
+                @edit-request="startSheetFieldEdit(field)"
               >
-                <div class="drawer-field-header">
-                  <span class="drawer-field-label">{{ field.label }}</span>
-                  <el-tooltip
-                    v-if="drawerFieldReason(field)"
-                    :content="drawerFieldReason(field)!.tooltip"
-                    placement="top"
-                  >
-                    <button
-                      type="button"
-                      class="drawer-field-reason"
-                      :aria-label="`${field.label}：${drawerFieldReason(field)!.tooltip}`"
-                    >
-                      <el-icon aria-hidden="true">
-                        <component :is="drawerFieldReason(field)!.icon" />
-                      </el-icon>
+                <template #label-suffix>
+                  <el-tooltip v-if="drawerFieldReason(field)" :content="drawerFieldReason(field)!.tooltip" placement="top">
+                    <button type="button" class="drawer-field-reason" :aria-label="`${field.label}：${drawerFieldReason(field)!.tooltip}`">
+                      <el-icon aria-hidden="true"><component :is="drawerFieldReason(field)!.icon" /></el-icon>
                     </button>
                   </el-tooltip>
-                </div>
+                </template>
 
-                <div class="drawer-field-content" :class="{ 'has-quick-toggle': canQuickToggleField(field) }">
-                  <template v-if="drawerEditingField === field.key">
-                    <div
-                      class="drawer-field-editor"
-                      @keydown.enter.exact="handleDrawerEditorEnter(field, $event)"
-                      @keydown.esc.stop="cancelDrawerEdit"
-                    >
-                      <el-select
-                        v-if="field.value_type === 'select'"
-                        v-model="drawerDraftValue"
-                        size="small"
-                        filterable
-                        :placeholder="`选择${field.label}`"
-                        style="width: 100%;"
-                      >
-                        <el-option
-                          v-for="option in sheetFieldOptions(field)"
-                          :key="String(option.value)"
-                          :label="option.label"
-                          :value="option.value"
-                        />
-                      </el-select>
-                      <el-input-number
-                        v-else-if="field.value_type === 'number' || field.value_type === 'percent' || field.value_type === 'progress'"
-                        v-model="drawerDraftValue"
-                        size="small"
-                        :min="0"
-                        :max="field.value_type === 'progress' ? 100 : undefined"
-                        :precision="field.value_type === 'progress' ? 0 : 2"
-                        style="width: 100%;"
-                      />
-                      <el-date-picker
-                        v-else-if="field.value_type === 'date' || field.value_type === 'datetime'"
-                        v-model="drawerDraftValue"
-                        type="date"
-                        size="small"
-                        value-format="YYYY-MM-DD"
-                        style="width: 100%;"
-                      />
-                      <el-input
-                        v-else-if="field.value_type === 'long_text'"
-                        v-model="drawerDraftValue"
-                        type="textarea"
-                        size="small"
-                        :rows="4"
-                        :placeholder="`输入${field.label}`"
-                      />
-                      <el-input
-                        v-else
-                        v-model="drawerDraftValue"
-                        size="small"
-                        :placeholder="`输入${field.label}`"
-                      />
-                    </div>
-                  </template>
+                <template #display>
+                  <span v-if="field.value_type === 'progress' && sheetProgressValue(field) !== null" class="drawer-progress-row">
+                    <span class="pms-progress-track">
+                      <span class="pms-progress-bar" :class="progressToneClass(sheetProgressValue(field) ?? 0)" :style="{ width: `${sheetProgressValue(field)}%` }"></span>
+                    </span>
+                    <span class="drawer-progress-value">{{ sheetProgressValue(field) }}%</span>
+                  </span>
+                  <span v-else :class="field.value_type === 'progress' ? 'drawer-field-empty' : 'drawer-field-text'">{{ formatSheetFieldValue(field) }}</span>
+                </template>
 
-                  <template v-else>
-                    <button
-                      v-if="field.editable && hasPermission('project:list:edit')"
-                      type="button"
-                      class="drawer-field-value-button"
-                      :aria-label="`编辑${field.label}`"
-                      @click="startSheetFieldEdit(field)"
-                    >
-                      <template v-if="field.value_type === 'progress' && sheetProgressValue(field) !== null">
-                        <span class="drawer-progress-row">
-                          <span class="pms-progress-track">
-                            <span
-                              class="pms-progress-bar"
-                              :class="progressToneClass(sheetProgressValue(field) ?? 0)"
-                              :style="{ width: `${sheetProgressValue(field)}%` }"
-                            ></span>
-                          </span>
-                          <span class="drawer-progress-value">{{ sheetProgressValue(field) }}%</span>
-                        </span>
-                      </template>
-                      <span v-else :class="field.value_type === 'progress' ? 'drawer-field-empty' : 'drawer-field-text'">{{ formatSheetFieldValue(field) }}</span>
+                <template #editor>
+                  <div class="drawer-field-editor" @keydown.enter.exact="handleDrawerEditorEnter(field, $event)" @keydown.esc.stop="cancelDrawerEdit">
+                    <PmsSelectControl v-if="field.value_type === 'select'" v-model="drawerControlDraft" size="compact" :options="sheetFieldOptions(field)" filterable :aria-label="field.label" :placeholder="`选择${field.label}`" />
+                    <PmsNumberControl v-else-if="field.value_type === 'number' || field.value_type === 'percent' || field.value_type === 'progress'" v-model="drawerNumberDraft" size="compact" :min="0" :max="field.value_type === 'progress' ? 100 : undefined" :precision="field.value_type === 'progress' ? 0 : 2" :aria-label="field.label" />
+                    <PmsDateControl v-else-if="field.value_type === 'date' || field.value_type === 'datetime'" v-model="drawerControlDraft" size="compact" type="date" value-format="YYYY-MM-DD" :aria-label="field.label" />
+                    <PmsTextareaControl v-else-if="field.value_type === 'long_text'" v-model="drawerTextareaDraft" size="compact" :rows="4" :aria-label="field.label" :placeholder="`输入${field.label}`" />
+                    <PmsTextControl v-else v-model="drawerTextDraft" size="compact" :aria-label="field.label" :placeholder="`输入${field.label}`" />
+                  </div>
+                </template>
+
+                <template v-if="canQuickToggleField(field) && drawerEditingField !== field.key" #actions>
+                  <el-tooltip :content="isSheetFieldSelected(field.key) ? '移出列表' : '加入列表'" placement="top">
+                    <button type="button" class="drawer-quick-toggle" :aria-label="isSheetFieldSelected(field.key) ? `将${field.label}移出列表` : `将${field.label}加入列表`" :aria-pressed="isSheetFieldSelected(field.key)" @click="toggleSheetFieldSelection(field.key)">
+                      <el-icon aria-hidden="true"><component :is="isSheetFieldSelected(field.key) ? Minus : Plus" /></el-icon>
                     </button>
-                    <div
-                      v-else
-                      class="drawer-field-value-static"
-                      :aria-label="`${field.label}当前不可改`"
-                    >
-                      <template v-if="field.value_type === 'progress' && sheetProgressValue(field) !== null">
-                        <span class="drawer-progress-row">
-                          <span class="pms-progress-track">
-                            <span
-                              class="pms-progress-bar"
-                              :class="progressToneClass(sheetProgressValue(field) ?? 0)"
-                              :style="{ width: `${sheetProgressValue(field)}%` }"
-                            ></span>
-                          </span>
-                          <span class="drawer-progress-value">{{ sheetProgressValue(field) }}%</span>
-                        </span>
-                      </template>
-                      <span v-else :class="field.value_type === 'progress' ? 'drawer-field-empty' : 'drawer-field-text'">{{ formatSheetFieldValue(field) }}</span>
-                    </div>
-
-                    <el-tooltip
-                      v-if="canQuickToggleField(field)"
-                      :content="isSheetFieldSelected(field.key) ? '移出列表' : '加入列表'"
-                      placement="top"
-                    >
-                      <button
-                        type="button"
-                        class="drawer-quick-toggle"
-                        :aria-label="isSheetFieldSelected(field.key) ? `将${field.label}移出列表` : `将${field.label}加入列表`"
-                        :aria-pressed="isSheetFieldSelected(field.key)"
-                        @click="toggleSheetFieldSelection(field.key)"
-                      >
-                        <el-icon aria-hidden="true">
-                          <component :is="isSheetFieldSelected(field.key) ? Minus : Plus" />
-                        </el-icon>
-                      </button>
-                    </el-tooltip>
-                  </template>
-                </div>
-              </div>
+                  </el-tooltip>
+                </template>
+              </PmsInlineField>
             </div>
           </el-collapse-item>
         </el-collapse>
@@ -553,6 +455,17 @@ import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
+import {
+  PMS_AG_GRID_FORM_CLASS,
+  PmsDateControl,
+  PmsInlineField,
+  PmsNumberControl,
+  PmsSelectControl,
+  PmsTextControl,
+  PmsTextareaControl,
+  mergePmsAgCellClass,
+} from '@/form-system'
+import type { PmsControlValue } from '@/form-system'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { loadEnumOptions, type EnumDefinition } from '@/composables/useEnumOptions'
 import { useAuthStore } from '@/stores/auth'
@@ -731,6 +644,29 @@ const drawerOpenGroups = ref<string[]>([...drawerDefaultExpandedGroupKeys])
 const drawerEditingField = ref<string | null>(null)
 const drawerEditingFieldData = ref<ProjectSheetField | null>(null)
 const drawerDraftValue = ref<unknown>(null)
+const drawerControlDraft = computed<PmsControlValue>({
+  get: () => {
+    const value = drawerDraftValue.value
+    if (value == null || ['string', 'number', 'boolean'].includes(typeof value) || value instanceof Date) {
+      return value as PmsControlValue
+    }
+    if (Array.isArray(value)) return value as PmsControlValue
+    return null
+  },
+  set: value => { drawerDraftValue.value = value },
+})
+const drawerNumberDraft = computed<number | null>({
+  get: () => drawerDraftValue.value == null || drawerDraftValue.value === '' ? null : Number(drawerDraftValue.value),
+  set: value => { drawerDraftValue.value = value },
+})
+const drawerTextDraft = computed<string | number | null>({
+  get: () => typeof drawerDraftValue.value === 'string' || typeof drawerDraftValue.value === 'number' ? drawerDraftValue.value : null,
+  set: value => { drawerDraftValue.value = value },
+})
+const drawerTextareaDraft = computed<string | null>({
+  get: () => drawerDraftValue.value == null ? null : String(drawerDraftValue.value),
+  set: value => { drawerDraftValue.value = value },
+})
 const drawerPendingChanges = ref<Record<string, DrawerPendingChange>>({})
 const drawerSaving = ref(false)
 const sheetDetailGroups = ref<ProjectSheetGroup[]>([])
@@ -1234,6 +1170,9 @@ function isReferenceSheetField(field: ProjectSheetFieldMeta) {
 }
 
 function drawerFieldReason(field: ProjectSheetFieldMeta) {
+  if (field.editable && !hasPermission('project:list:edit')) {
+    return { icon: Lock, tooltip: '权限限制，当前不可改' }
+  }
   if (field.computed || field.source_type === 'computed') {
     return { icon: DataAnalysis, tooltip: '计算结果' }
   }
@@ -1293,7 +1232,18 @@ function dynamicColumnDefs(): Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>
 
 const actionColumnWidth = computed(() => hasPermission('project:list:delete') ? 88 : 60)
 
-const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>(() => [
+function applyPmsGridEditorClasses(definitions: Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>): Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>> {
+  return definitions.map((definition) => {
+    if ('children' in definition && Array.isArray(definition.children)) {
+      return { ...definition, children: applyPmsGridEditorClasses(definition.children) } as ColGroupDef<ProjectRow>
+    }
+    const column = definition as ColDef<ProjectRow>
+    return column.editable ? mergePmsAgCellClass(column) : column
+  })
+}
+
+const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>(() => {
+  const definitions: Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>> = [
   { field: 'project_code', headerName: '项目号', width: 112, pinned: 'left', filter: false, hide: !isProgressPolicyVisible('project_code') },
   {
     field: 'project_name',
@@ -1334,7 +1284,7 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
   {
     headerName: '项目进度',
     marryChildren: true,
-    children: [
+    children: ([
       { field: 'design_progress', headerName: '设计进度', width: 112, hide: !isProgressPolicyVisible('design_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('design_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('design_progress') },
       { field: 'order_progress', headerName: '下单进度', width: 112, hide: !isProgressPolicyVisible('order_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('order_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('order_progress') },
       { field: 'kit_progress', headerName: '齐套进度', width: 112, hide: !isProgressPolicyVisible('kit_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('kit_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('kit_progress') },
@@ -1342,12 +1292,12 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
       { field: 'dryer_progress', headerName: 'dryer进度', width: 112, hide: !isProgressPolicyVisible('dryer_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('dryer_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('dryer_progress') },
       { field: 'assembly_progress', headerName: '组装进度', width: 112, hide: !isProgressPolicyVisible('assembly_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('assembly_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('assembly_progress') },
       { field: 'test_progress', headerName: '测试进度', width: 112, hide: !isProgressPolicyVisible('test_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('test_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('test_progress') },
-    ].filter(column => column.hide !== true),
+    ] satisfies ColDef<ProjectRow>[]).filter(column => column.hide !== true),
   },
   {
     headerName: '成员 / 配置',
     marryChildren: true,
-    children: [
+    children: ([
       {
         field: 'pm_name',
         headerName: '负责人',
@@ -1367,7 +1317,7 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
         cellEditorParams: () => ({ values: deptNames.value }),
       },
       { field: 'budget', headerName: '预算(万)', width: 110, hide: !isProgressPolicyVisible('budget'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('budget'), type: 'numericColumn' },
-    ].filter(column => column.hide !== true),
+    ] satisfies ColDef<ProjectRow>[]).filter(column => column.hide !== true),
   },
   ...dynamicColumnDefs(),
   {
@@ -1396,7 +1346,9 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
       }
     },
   },
-])
+  ]
+  return applyPmsGridEditorClasses(definitions)
+})
 
 const defaultColDef: ColDef = {
   sortable: true,
@@ -2059,38 +2011,16 @@ onMounted(async () => {
   cursor: text;
 }
 
-:deep(.progress-editable-cell:hover) {
+:deep(.progress-editable-cell:not(.ag-cell-inline-editing):hover) {
   background: #f8fbff;
 }
 
-:deep(.progress-editable-cell.ag-cell-focus) {
+:deep(.progress-editable-cell.ag-cell-focus:not(.ag-cell-inline-editing)) {
   box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.22);
 }
 
 :deep(.progress-workbench-grid .progress-row-active .ag-cell) {
   background: #f8faff;
-}
-
-:deep(.progress-workbench-grid .ag-cell-inline-editing) {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.42);
-  background: #f8fbff;
-}
-
-:deep(.progress-workbench-grid .ag-cell-inline-editing .ag-cell-edit-wrapper),
-:deep(.progress-workbench-grid .ag-cell-inline-editing .ag-cell-editor),
-:deep(.progress-workbench-grid .ag-cell-inline-editing .ag-cell-editor .ag-wrapper),
-:deep(.progress-workbench-grid .ag-cell-inline-editing .ag-cell-editor input),
-:deep(.progress-workbench-grid .ag-cell-inline-editing .ag-picker-field-wrapper) {
-  width: 100%;
-  min-height: 100%;
-  height: 100%;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  background: transparent !important;
 }
 
 :deep(.progress-list-header-center .ag-header-cell-label),
@@ -2283,49 +2213,10 @@ onMounted(async () => {
 
 .drawer-field-list {
   display: grid;
-  gap: 10px;
-}
-
-.drawer-field-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
-}
-
-.drawer-field-row.is-long-text {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-}
-
-.drawer-field-row.is-progress {
-  align-items: center;
-}
-
-.drawer-field-header {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  color: var(--pms-text-muted);
-}
-
-.drawer-field-row.is-long-text .drawer-field-header {
-  min-height: auto;
-}
-
-.drawer-field-label {
-  padding-right: 20px;
-  font-size: 12px;
-  line-height: 1.5;
+  gap: 0;
 }
 
 .drawer-field-reason {
-  position: absolute;
-  top: 50%;
-  right: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2338,7 +2229,6 @@ onMounted(async () => {
   color: var(--pms-text-muted);
   font-size: 13px;
   cursor: help;
-  transform: translateY(-50%);
 }
 
 .drawer-field-reason:hover,
@@ -2346,40 +2236,6 @@ onMounted(async () => {
   color: var(--pms-primary);
   background: var(--pms-primary-soft);
   outline: none;
-}
-
-.drawer-field-content {
-  position: relative;
-  min-width: 0;
-}
-
-.drawer-field-content.has-quick-toggle .drawer-field-value-button,
-.drawer-field-content.has-quick-toggle .drawer-field-value-static {
-  padding-right: 28px;
-}
-
-.drawer-field-value-button,
-.drawer-field-value-static {
-  display: block;
-  width: 100%;
-  min-height: 28px;
-  padding: 4px 0;
-  border: 0;
-  background: transparent;
-  color: var(--pms-text);
-  font-size: 12px;
-  line-height: 1.6;
-  text-align: left;
-}
-
-.drawer-field-value-button {
-  cursor: pointer;
-}
-
-.drawer-field-value-button:hover,
-.drawer-field-value-button:focus-visible {
-  outline: none;
-  color: var(--pms-primary);
 }
 
 .drawer-field-text {
@@ -2397,12 +2253,8 @@ onMounted(async () => {
   line-height: 1.6;
 }
 
-.drawer-field-row:not(.is-long-text) .drawer-field-text {
-  white-space: normal;
-}
-
 .drawer-field-editor {
-  padding: 2px 0;
+  width: 100%;
 }
 
 .drawer-progress-row {
@@ -2410,6 +2262,7 @@ onMounted(async () => {
   grid-template-columns: minmax(0, 1fr) 42px;
   align-items: center;
   gap: 8px;
+  width: 100%;
 }
 
 .drawer-progress-value {
@@ -2419,9 +2272,6 @@ onMounted(async () => {
 }
 
 .drawer-quick-toggle {
-  position: absolute;
-  top: 2px;
-  right: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2433,14 +2283,7 @@ onMounted(async () => {
   background: var(--pms-surface);
   color: var(--pms-primary);
   box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.16);
-  opacity: 0;
-  transition: opacity 0.16s ease, background-color 0.16s ease;
-}
-
-.drawer-field-row:hover .drawer-quick-toggle,
-.drawer-field-row:focus-within .drawer-quick-toggle,
-.drawer-quick-toggle:focus-visible {
-  opacity: 1;
+  transition: background-color 0.16s ease;
 }
 
 .drawer-quick-toggle:hover,
