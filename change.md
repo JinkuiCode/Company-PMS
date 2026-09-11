@@ -238,3 +238,10 @@
 - 部署校验：服务器源码 HEAD 为 `61dd08c` 且工作区无未提交修改；发布包 SHA-256 为 `8d5418ad8975aaf156ad09ce3abc665e0feb7a16edf3226dcc7787e0371d5bea`，服务器首页引用 `assets/index-Co2-yT2i.css`，旧焦点样式资源已不再由新入口引用；`/api/health` 返回业务内容 `{"status":"ok"}`。
 - 浏览器验证：使用 Edge 新标签访问服务器构建，客户字段显示态与编辑态外框均为 `254x32px`；产品类别聚焦时最外层保留单边框，外层、Element Plus 包装层和真实输入均无焦点阴影，输入内边距为 `0`，未再出现文字位移。办公 Windows 的 OA 门户会话仍需用户刷新后完成最终视觉验收。
 - 范围说明：代码已推送到 `codex/pms-server-sync-20260910` 功能分支并部署服务器；本次未合并 `master`。
+
+## 2026-09-11 - OA 正式 PMS 地址统一
+
+- 原因：PMS 正式服务器的表单修复已经生效，但 OA 菜单仍通过 `pms_sso.jsp` 跳转到旧开发地址 `10.10.91.60:5174`，导致 OA 内看到的并非 `10.10.1.228` 当前版本，清除浏览器缓存也无法生效。
+- 调整内容：OA JSP 跳转地址改为 `http://10.10.1.228/sso/start`；后端默认 `PMS_FRONTEND_URL` 与 `PMS_CALLBACK_URL` 同步改为正式服务器标准 HTTP 地址。认证签名格式、密钥、用户映射和 OA 接口地址保持不变。
+- 涉及文件：`OA对接/pms_sso.jsp`、`backend/app/core/config.py`、`backend/tests/sso_deployment_contract.py`、`change.md`。
+- 验证结果：新增 SSO 部署契约退出 `0`，确认 JSP 与后端默认地址均指向 `10.10.1.228` 且目标配置不再包含旧地址；Python 源码语法检查退出 `0`。开发机未安装后端依赖，既有 `config_contract.py` 留待依赖齐全的 PMS 服务器补跑；OA 服务器 JSP 部署后仍需从办公 Windows 完成实际菜单跳转验收。

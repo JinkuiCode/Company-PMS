@@ -32,7 +32,7 @@
     String sign = sb.toString();
 
     // 4. 302 重定向到 PMS 前端 SSO 免密登录页
-    String pmsUrl = "http://10.10.91.60:5174/sso/start?sso_login_id="
+    String pmsUrl = "http://10.10.1.228/sso/start?sso_login_id="
         + java.net.URLEncoder.encode(loginId, "UTF-8")
         + "&ts=" + timestamp
         + "&sign=" + sign;
