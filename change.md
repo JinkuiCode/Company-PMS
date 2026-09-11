@@ -230,3 +230,11 @@
 - 涉及文件：`frontend/src/form-system/form-tokens.css`、`frontend/tests/form-system-contract.test.mjs`、`frontend/tests/form-system-layout-contract.test.mjs`、`change.md`。
 - 验证结果：两项新增断言先针对旧外扩焦点环按预期失败，实施后通过；前端全部 22 项契约测试通过。`npm run build` 退出 `0`，`vue-tsc` 类型检查通过，Vite 转换 2322 个模块并完成生产构建。开发机 Edge 在独立最新端口检查聚焦控件，外层、Element Plus 包装层与真实输入的 `box-shadow` 均为 `none`，内部输入无边框和轮廓，控件高度保持 `36px`。
 - 范围说明：本批仅完成开发工作树修正和开发机验证，尚未部署服务器、推送 GitHub 或合并 `master`；办公 Windows 的 OA 嵌入场景需在部署该构建后进行最终验收。
+
+## 2026-09-11 - OA 表单焦点修复服务器部署
+
+- 原因：开发机修正通过后，需要让 `10.10.1.228` 的运行版本与已验证代码一致，并为办公 Windows 的 OA 嵌入验收提供真实服务器版本。
+- 调整内容：将提交 `61dd08c` 快进同步到服务器 `C:\PMS`，部署同一提交构建的前端静态文件；替换前将旧 `dist` 完整备份到 `C:\backup\PMS-dist-20260911-143013`。
+- 部署校验：服务器源码 HEAD 为 `61dd08c` 且工作区无未提交修改；发布包 SHA-256 为 `8d5418ad8975aaf156ad09ce3abc665e0feb7a16edf3226dcc7787e0371d5bea`，服务器首页引用 `assets/index-Co2-yT2i.css`，旧焦点样式资源已不再由新入口引用；`/api/health` 返回业务内容 `{"status":"ok"}`。
+- 浏览器验证：使用 Edge 新标签访问服务器构建，客户字段显示态与编辑态外框均为 `254x32px`；产品类别聚焦时最外层保留单边框，外层、Element Plus 包装层和真实输入均无焦点阴影，输入内边距为 `0`，未再出现文字位移。办公 Windows 的 OA 门户会话仍需用户刷新后完成最终视觉验收。
+- 范围说明：代码已推送到 `codex/pms-server-sync-20260910` 功能分支并部署服务器；本次未合并 `master`。
