@@ -33,6 +33,13 @@ PMS 面向企业内部高频使用，界面以项目档案和项目进度为基�
 - 图标优先使用 Element Plus 图标。数据库动态菜单使用的图标名称，必须同步注册到 `AppLayout.vue` 的 `iconMap`。
 - 禁止使用 emoji 充当业务图标。
 
+## 统一表单系统
+
+- 业务页面必须从 `@/form-system` 导入基础字段组件，不得直接使用 Element Plus 的 input、select、date、number、textarea、tree-select、switch 或 checkbox。
+- 普通表单使用 `PmsFormField`，抽屉行内编辑使用 `PmsInlineField`，AG Grid 编辑使用 `PMS_AG_GRID_FORM_CLASS` 和 `mergePmsAgCellClass()`。
+- 业务页面不得覆盖 Element Plus 控件内部 DOM 类名；第三方兼容修复只能放在 `form-system/form-tokens.css`。
+- 新增字段必须同时验证默认、悬停、编辑、焦点、错误、禁用和只读状态。
+
 ## 颜色与实现约束
 
 - 颜色、边框、圆角、字号和阴影统一取自 `frontend/src/styles/pms-theme.css`。

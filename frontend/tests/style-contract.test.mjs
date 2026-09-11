@@ -10,6 +10,7 @@ const layout = read('src/layout/AppLayout.vue')
 const archive = read('src/views/project/ProjectArchive.vue')
 const projectList = read('src/views/project/ProjectList.vue')
 const progress = read('src/views/project/ProjectProgress.vue')
+const theme = read('src/styles/pms-theme.css')
 const pmsDataList = read('src/components/PmsDataList.vue')
 const pmsListFilters = read('src/components/PmsListFilters.vue')
 const useListFilters = read('src/composables/useListFilters.ts')
@@ -19,6 +20,11 @@ const startScriptUrl = new URL('../../start-pms.command', import.meta.url)
 const startScript = existsSync(startScriptUrl) ? readRoot('start-pms.command') : ''
 
 assert.match(main, /styles\/pms-theme\.css/, 'main.ts should import the PMS theme stylesheet')
+assert.doesNotMatch(
+  theme,
+  /(^|\n)\.el-(input__wrapper|select__wrapper|textarea__inner)/,
+  'Global theme must not override form-control internals outside the form system',
+)
 
 assert.match(login, /login-shell/, 'Login page should use the single-card PMS login shell')
 assert.doesNotMatch(login, /linear-gradient/, 'Login page should not use the old gradient background')

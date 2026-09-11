@@ -210,3 +210,14 @@
 - 涉及文件：`frontend/src/views/system/DataDictionaryList.vue`、`frontend/src/views/system/OperationLogList.vue`、`frontend/src/views/system/FieldList.vue`、`frontend/src/views/Login.vue`、`frontend/src/views/SsoStart.vue`、`frontend/src/views/TokenGenerator.vue`、`frontend/tests/data-dictionary-contract.test.mjs`、`frontend/tests/login-security-contract.test.mjs`、`frontend/tests/system-ui-consistency-contract.test.mjs`、`change.md`。
 - 验证结果：统一表单、统一布局、数据字典、登录安全、系统 UI 一致性和样式契约均退出 `0`；`npm run build` 退出 `0`，转换 2322 个模块。开发机新版本使用独立 `5176` 端口验收：登录字段均为 `36px` 外框且只有单层焦点反馈，用户名与密码原生输入分别带 `username`、`current-password` 自动完成语义且值为空；OA 登录页保留两个空凭据输入、统一记住登录控件及原入口。已登录页面因浏览器会话按端口隔离，未复制敏感会话令牌，查询页由契约与生产构建验证。
 - 范围说明：本批仅完成开发工作树内的查询、兼容与认证页面迁移，未部署服务器、推送 GitHub 或合并 `master`。
+
+## 2026-09-11 - PMS 统一表单框架最终收口
+
+- 原因：分批迁移完成后需要建立永久采用门禁，清理全局主题中遗留的 Element Plus 内部控件覆盖，并补齐项目页面中遗漏的基础筛选和新增项目表单，防止后续开发重新产生双框、尺寸变化和跨平台文字移位。
+- 调整内容：新增统一表单采用契约，递归检查业务 Vue 页面，禁止在 `form-system` 外直接使用输入、选择、树形选择、日期、数字、开关、复选和分段控件；全局样式契约同时禁止 `pms-theme.css` 覆盖输入控件内部 DOM。
+- 调整内容：项目档案、项目进度和任务进度的基础筛选统一改用紧凑型 PMS 控件；新增项目弹窗统一改用 `PmsFormField` 及文本、选择、树形选择、日期、数字和长文本控件，保留字段规则、动态必填、权限和接口协议。
+- 调整内容：新增项目的部门和项目经理初始值由数值哨兵 `0` 改为真正空值，避免未选择时在统一选择控件中显示 `0`；移除全局主题对 Element Plus 输入内部边框、悬停和焦点的旧覆盖，第三方兼容规则统一收口到表单系统令牌层。
+- 调整内容：更新 UI 标准，明确业务页面的统一表单导入路径、标准表单/抽屉/AG Grid 三类适配边界，以及新增字段必须覆盖的状态验收要求。
+- 涉及文件：`frontend/src/views/project/ProjectArchive.vue`、`frontend/src/views/project/ProjectList.vue`、`frontend/src/views/project/ProjectProgress.vue`、`frontend/src/styles/pms-theme.css`、`frontend/tests/form-system-adoption-contract.test.mjs`、`frontend/tests/style-contract.test.mjs`、`frontend/tests/project-progress-workbench-contract.test.mjs`、`docs/PMS-UI-STANDARD.md`、`change.md`。
+- 验证结果：统一表单、布局、采用门禁、样式、标准列表、系统 UI、项目档案筛选/抽屉/生命周期、项目进度工作台/详情/列设置、数据字典、枚举、字段规则和登录安全共 17 项前端契约测试全部退出 `0`；`npm run build` 退出 `0`，转换 2322 个模块。本机 Edge 验证项目档案和项目进度基础筛选、新增项目弹窗、部门树形选择和日期选择器，无重复内框、裁切或未选择项显示 `0` 的问题。
+- 范围说明：统一表单框架在开发机完成并通过本阶段验收；尚未部署服务器、推送 GitHub 或合并 `master`，Windows 缩放环境仍需在部署前做最终验收。

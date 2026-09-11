@@ -423,25 +423,6 @@ a {
   --el-button-hover-border-color: #b91c1c;
 }
 
-.el-input__wrapper,
-.el-select__wrapper,
-.el-textarea__inner {
-  border-radius: var(--pms-radius-sm);
-  box-shadow: 0 0 0 1px var(--pms-border) inset;
-}
-
-.el-input__wrapper:hover,
-.el-select__wrapper:hover,
-.el-textarea__inner:hover {
-  box-shadow: 0 0 0 1px #cbd5e1 inset;
-}
-
-.el-input__wrapper.is-focus,
-.el-select__wrapper.is-focused,
-.el-textarea__inner:focus {
-  box-shadow: 0 0 0 1px var(--pms-primary) inset;
-}
-
 .el-card {
   border-color: var(--pms-border-soft);
   border-radius: var(--pms-radius);

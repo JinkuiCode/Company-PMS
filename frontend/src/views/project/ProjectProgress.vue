@@ -33,33 +33,15 @@
         :fields="taskFilterFields"
         :active-count="activeCustomFilterCount"
       >
-        <el-input
-          v-model="filterKeyword"
-          placeholder="搜索任务名称"
-          size="small"
-          clearable
-          style="width: 200px;"
-          :prefix-icon="Search"
-        />
-        <el-select
-          v-model="filterAssignee"
-          placeholder="全部负责人"
-          size="small"
-          clearable
-          filterable
-          style="width: 150px;"
-        >
-          <el-option v-for="name in userOptions" :key="name" :label="name" :value="name" />
-        </el-select>
-        <el-select
-          v-model="filterStatus"
-          placeholder="全部状态"
-          size="small"
-          clearable
-          style="width: 130px;"
-        >
-          <el-option v-for="item in taskStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
+        <div class="task-base-filter task-base-filter--keyword">
+          <PmsTextControl v-model="filterKeyword" placeholder="搜索任务名称" size="compact" clearable :prefix-icon="Search" aria-label="搜索任务名称" />
+        </div>
+        <div class="task-base-filter task-base-filter--assignee">
+          <PmsSelectControl v-model="filterAssignee" :options="assigneeFilterOptions" placeholder="全部负责人" size="compact" clearable filterable aria-label="负责人筛选" />
+        </div>
+        <div class="task-base-filter task-base-filter--status">
+          <PmsSelectControl v-model="filterStatus" :options="taskStatusOptions" placeholder="全部状态" size="compact" clearable aria-label="任务状态筛选" />
+        </div>
       </PmsListFilters>
     </template>
 
@@ -99,7 +81,12 @@ import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type CellValueChangedEvent } from 'ag-grid-community'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
-import { PMS_AG_GRID_FORM_CLASS, mergePmsAgCellClass } from '@/form-system'
+import {
+  PMS_AG_GRID_FORM_CLASS,
+  PmsSelectControl,
+  PmsTextControl,
+  mergePmsAgCellClass,
+} from '@/form-system'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { chineseLocaleText } from '@/utils/agGridLocale'
@@ -313,6 +300,14 @@ onMounted(() => { fetchTasks(); fetchUsers(); loadTaskStatusOptions() })
 .project-progress-page {
   min-height: 100%;
 }
+
+.task-base-filter {
+  flex: 0 0 auto;
+}
+
+.task-base-filter--keyword { width: 200px; }
+.task-base-filter--assignee { width: 150px; }
+.task-base-filter--status { width: 130px; }
 
 .page-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .header-left { display: flex; align-items: center; gap: 12px; }

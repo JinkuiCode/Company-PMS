@@ -28,56 +28,18 @@
             :fields="projectListFilterFieldsForView"
             :active-count="activeCustomFilterCount"
           >
-            <el-input
-              v-if="isProgressPolicyVisible('project_code') || isProgressPolicyVisible('project_name')"
-              v-model="filterKeyword"
-              placeholder="搜索项目号 / 项目名"
-              size="small"
-              clearable
-              style="width: 210px;"
-              :prefix-icon="Search"
-            />
-            <el-select
-              v-if="isProgressPolicyVisible('product_category')"
-              v-model="filterProductCategory"
-              placeholder="产品类别"
-              size="small"
-              clearable
-              style="width: 128px;"
-            >
-              <el-option
-                v-for="item in filteredProductCategoryOptions"
-                :key="item.value"
-                :label="item.label"
-                :value="Number(item.value)"
-              />
-            </el-select>
-            <el-select
-              v-if="isProgressPolicyVisible('node_status')"
-              v-model="filterStatus"
-              placeholder="节点"
-              size="small"
-              clearable
-              style="width: 116px;"
-            >
-              <el-option
-                v-for="item in projectStatusOptions"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
-              />
-            </el-select>
-            <el-tree-select
-              v-if="isProgressPolicyVisible('dept_id')"
-              v-model="filterDeptId"
-              :data="deptList"
-              :props="{ label: 'dept_name', value: 'id', children: 'children' }"
-              check-strictly
-              clearable
-              placeholder="负责人部门"
-              size="small"
-              style="width: 148px;"
-            />
+            <div v-if="isProgressPolicyVisible('project_code') || isProgressPolicyVisible('project_name')" class="progress-base-filter progress-base-filter--keyword">
+              <PmsTextControl v-model="filterKeyword" placeholder="搜索项目号 / 项目名" size="compact" clearable :prefix-icon="Search" aria-label="搜索项目进度" />
+            </div>
+            <div v-if="isProgressPolicyVisible('product_category')" class="progress-base-filter progress-base-filter--category">
+              <PmsSelectControl v-model="filterProductCategory" :options="progressProductCategoryOptions" placeholder="产品类别" size="compact" clearable aria-label="产品类别筛选" />
+            </div>
+            <div v-if="isProgressPolicyVisible('node_status')" class="progress-base-filter progress-base-filter--status">
+              <PmsSelectControl v-model="filterStatus" :options="projectStatusSelectOptions" placeholder="节点" size="compact" clearable aria-label="节点筛选" />
+            </div>
+            <div v-if="isProgressPolicyVisible('dept_id')" class="progress-base-filter progress-base-filter--dept">
+              <PmsTreeSelectControl v-model="filterDeptId" :data="deptList" :props="{ label: 'dept_name', value: 'id', children: 'children' }" check-strictly clearable placeholder="负责人部门" size="compact" aria-label="负责人部门筛选" />
+            </div>
           </PmsListFilters>
         </template>
 
@@ -125,158 +87,81 @@
         </template>
 
         <el-dialog v-model="dialogVisible" title="新增项目" width="620px" class="project-create-dialog">
-          <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
-            <el-form-item v-if="isProgressPolicyVisible('archive_id')" label="项目档案" prop="archive_id">
-              <el-select
-                v-model="form.archive_id"
-                filterable
-                placeholder="请选择项目档案（自动带出编号和名称）"
-                style="width: 100%;"
-                @change="onArchiveChange"
-              >
-                <el-option
-                  v-for="a in archiveList"
-                  :key="a.id"
-                  :label="`${a.project_code} - ${a.project_name}`"
-                  :value="a.id"
-                />
-              </el-select>
+          <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="pms-standard-dialog-form project-create-form">
+            <el-form-item v-if="isProgressPolicyVisible('archive_id')" prop="archive_id">
+              <PmsFormField field-id="project-archive" label="项目档案" required>
+                <PmsSelectControl id="project-archive" v-model="form.archive_id" :options="projectArchiveOptions" filterable placeholder="请选择项目档案（自动带出编号和名称）" aria-label="项目档案" @change="onArchiveChange" />
+              </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="isProgressPolicyVisible('project_code')" label="项目编号">
-              <el-input v-model="form.project_code" disabled placeholder="由档案自动带出" />
+            <el-form-item v-if="isProgressPolicyVisible('project_code')">
+              <PmsFormField field-id="project-code" label="项目编号">
+                <PmsTextControl id="project-code" v-model="form.project_code" disabled placeholder="由档案自动带出" aria-label="项目编号" />
+              </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="isProgressPolicyVisible('project_name')" label="项目名称">
-              <el-input v-model="form.project_name" disabled placeholder="由档案自动带出" />
+            <el-form-item v-if="isProgressPolicyVisible('project_name')">
+              <PmsFormField field-id="project-name" label="项目名称">
+                <PmsTextControl id="project-name" v-model="form.project_name" disabled placeholder="由档案自动带出" aria-label="项目名称" />
+              </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="isProgressPolicyVisible('dept_id')" label="所属部门" prop="dept_id">
-              <el-tree-select
-                v-model="form.dept_id"
-                style="width: 100%;"
-                :data="deptList"
-                :props="{ label: 'dept_name', value: 'id', children: 'children' }"
-                check-strictly
-                :disabled="!isProgressPolicyEditable('dept_id')"
-              />
+            <el-form-item v-if="isProgressPolicyVisible('dept_id')" prop="dept_id">
+              <PmsFormField field-id="project-dept" label="所属部门" :required="isProgressPolicyRequired('dept_id')">
+                <PmsTreeSelectControl id="project-dept" v-model="form.dept_id" :data="deptList" :props="{ label: 'dept_name', value: 'id', children: 'children' }" check-strictly :disabled="!isProgressPolicyEditable('dept_id')" aria-label="所属部门" />
+              </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="isProgressPolicyVisible('pm_id')" label="项目经理" prop="pm_id">
-              <el-select v-model="form.pm_id" style="width: 100%;" :disabled="!isProgressPolicyEditable('pm_id')">
-                <el-option
-                  v-for="u in userList"
-                  :key="u.id"
-                  :label="u.real_name"
-                  :value="u.id"
-                />
-              </el-select>
+            <el-form-item v-if="isProgressPolicyVisible('pm_id')" prop="pm_id">
+              <PmsFormField field-id="project-manager" label="项目经理" :required="isProgressPolicyRequired('pm_id')">
+                <PmsSelectControl id="project-manager" v-model="form.pm_id" :options="projectManagerOptions" :disabled="!isProgressPolicyEditable('pm_id')" aria-label="项目经理" />
+              </PmsFormField>
             </el-form-item>
             <el-row :gutter="12">
               <el-col v-if="isProgressPolicyVisible('project_start_date')" :span="12">
-                <el-form-item label="开始日期" prop="start_date">
-                  <el-date-picker
-                    v-model="form.start_date"
-                    type="date"
-                    style="width: 100%;"
-                    value-format="YYYY-MM-DD"
-                    placeholder="选择日期"
-                    :disabled="!isProgressPolicyEditable('project_start_date')"
-                  />
+                <el-form-item prop="start_date">
+                  <PmsFormField field-id="project-start-date" label="开始日期" :required="isProgressPolicyRequired('project_start_date')">
+                    <PmsDateControl id="project-start-date" v-model="form.start_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!isProgressPolicyEditable('project_start_date')" aria-label="开始日期" />
+                  </PmsFormField>
                 </el-form-item>
               </el-col>
               <el-col v-if="isProgressPolicyVisible('original_planned_ship_date')" :span="12">
-                <el-form-item label="结束日期" prop="end_date">
-                  <el-date-picker
-                    v-model="form.end_date"
-                    type="date"
-                    style="width: 100%;"
-                    value-format="YYYY-MM-DD"
-                    placeholder="选择日期"
-                    :disabled="!isProgressPolicyEditable('original_planned_ship_date')"
-                  />
+                <el-form-item prop="end_date">
+                  <PmsFormField field-id="project-end-date" label="结束日期" :required="isProgressPolicyRequired('original_planned_ship_date')">
+                    <PmsDateControl id="project-end-date" v-model="form.end_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!isProgressPolicyEditable('original_planned_ship_date')" aria-label="结束日期" />
+                  </PmsFormField>
                 </el-form-item>
               </el-col>
             </el-row>
-            <el-form-item v-if="isProgressPolicyVisible('budget')" label="预算(万)" prop="budget">
-              <el-input-number
-                v-model="form.budget"
-                :min="0"
-                :precision="2"
-                style="width: 100%;"
-                placeholder="请输入预算"
-                :disabled="!isProgressPolicyEditable('budget')"
-              />
+            <el-form-item v-if="isProgressPolicyVisible('budget')" prop="budget">
+              <PmsFormField field-id="project-budget" label="预算(万)" :required="isProgressPolicyRequired('budget')">
+                <PmsNumberControl id="project-budget" v-model="form.budget" :min="0" :precision="2" placeholder="请输入预算" :disabled="!isProgressPolicyEditable('budget')" aria-label="预算" />
+              </PmsFormField>
             </el-form-item>
             <template v-if="dynamicRequiredFields.length || dynamicRequiredProjectFields.length">
               <el-divider content-position="left">业务必填信息</el-divider>
               <el-form-item
                 v-for="field in dynamicRequiredProjectFields"
                 :key="field.field_key"
-                :label="field.label"
                 :prop="`project_values.${field.field_key}`"
                 :rules="[{ required: true, message: `请填写${field.label}`, trigger: ['blur', 'change'] }]"
               >
-                <el-input-number
-                  v-if="['number', 'percent', 'progress'].includes(field.value_type)"
-                  v-model="form.project_values[field.field_key]"
-                  :min="field.value_type === 'progress' ? 0 : undefined"
-                  :max="field.value_type === 'progress' ? 100 : undefined"
-                  style="width: 100%"
-                />
-                <el-date-picker
-                  v-else-if="field.value_type === 'date' || field.value_type === 'datetime'"
-                  v-model="form.project_values[field.field_key]"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  style="width: 100%"
-                />
-                <el-input
-                  v-else
-                  v-model="form.project_values[field.field_key]"
-                  :type="field.value_type === 'long_text' ? 'textarea' : 'text'"
-                  :rows="field.value_type === 'long_text' ? 3 : undefined"
-                  :placeholder="`请输入${field.label}`"
-                />
+                <PmsFormField :field-id="`project-required-${field.field_key}`" :label="field.label" required>
+                  <PmsNumberControl v-if="['number', 'percent', 'progress'].includes(field.value_type)" :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" :min="field.value_type === 'progress' ? 0 : undefined" :max="field.value_type === 'progress' ? 100 : undefined" :aria-label="field.label" />
+                  <PmsDateControl v-else-if="field.value_type === 'date' || field.value_type === 'datetime'" :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" type="date" value-format="YYYY-MM-DD" :aria-label="field.label" />
+                  <PmsTextareaControl v-else-if="field.value_type === 'long_text'" :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" :rows="3" :placeholder="`请输入${field.label}`" :aria-label="field.label" />
+                  <PmsTextControl v-else :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" :placeholder="`请输入${field.label}`" :aria-label="field.label" />
+                </PmsFormField>
               </el-form-item>
               <el-form-item
                 v-for="field in dynamicRequiredFields"
                 :key="field.key"
-                :label="field.label"
                 :prop="`sheet_values.${field.key}`"
                 :rules="[{ required: true, message: `请填写${field.label}`, trigger: ['blur', 'change'] }]"
               >
-                <el-select
-                  v-if="field.value_type === 'select'"
-                  v-model="form.sheet_values[field.key]"
-                  filterable
-                  style="width: 100%"
-                  :placeholder="`请选择${field.label}`"
-                >
-                  <el-option
-                    v-for="option in sheetFieldFilterOptions(field)"
-                    :key="String(option.value)"
-                    :label="option.label"
-                    :value="option.value"
-                  />
-                </el-select>
-                <el-input-number
-                  v-else-if="['number', 'percent', 'progress'].includes(field.value_type)"
-                  v-model="form.sheet_values[field.key]"
-                  :min="field.value_type === 'progress' ? 0 : undefined"
-                  :max="field.value_type === 'progress' ? 100 : undefined"
-                  style="width: 100%"
-                />
-                <el-date-picker
-                  v-else-if="field.value_type === 'date' || field.value_type === 'datetime'"
-                  v-model="form.sheet_values[field.key]"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  style="width: 100%"
-                />
-                <el-input
-                  v-else
-                  v-model="form.sheet_values[field.key]"
-                  :type="field.value_type === 'long_text' ? 'textarea' : 'text'"
-                  :rows="field.value_type === 'long_text' ? 3 : undefined"
-                  :placeholder="`请输入${field.label}`"
-                />
+                <PmsFormField :field-id="`sheet-required-${field.key}`" :label="field.label" required>
+                  <PmsSelectControl v-if="field.value_type === 'select'" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :options="sheetFieldFilterOptions(field)" filterable :placeholder="`请选择${field.label}`" :aria-label="field.label" />
+                  <PmsNumberControl v-else-if="['number', 'percent', 'progress'].includes(field.value_type)" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :min="field.value_type === 'progress' ? 0 : undefined" :max="field.value_type === 'progress' ? 100 : undefined" :aria-label="field.label" />
+                  <PmsDateControl v-else-if="field.value_type === 'date' || field.value_type === 'datetime'" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" type="date" value-format="YYYY-MM-DD" :aria-label="field.label" />
+                  <PmsTextareaControl v-else-if="field.value_type === 'long_text'" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :rows="3" :placeholder="`请输入${field.label}`" :aria-label="field.label" />
+                  <PmsTextControl v-else :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :placeholder="`请输入${field.label}`" :aria-label="field.label" />
+                </PmsFormField>
               </el-form-item>
             </template>
           </el-form>
@@ -458,12 +343,15 @@ import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
   PMS_AG_GRID_FORM_CLASS,
   PmsDateControl,
+  PmsFormField,
   PmsInlineField,
   PmsNumberControl,
   PmsSelectControl,
   PmsTextControl,
   PmsTextareaControl,
+  PmsTreeSelectControl,
   mergePmsAgCellClass,
+  type PmsOption,
 } from '@/form-system'
 import type { PmsControlValue } from '@/form-system'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
@@ -695,6 +583,26 @@ const filteredProductCategoryOptions = computed(() => {
   return productCategoryOptions.value.filter(item => allowedProductCategories.value!.includes(Number(item.value)))
 })
 
+const progressProductCategoryOptions = computed<PmsOption[]>(() => filteredProductCategoryOptions.value.map(item => ({
+  label: item.label,
+  value: Number(item.value),
+})))
+
+const projectStatusSelectOptions = computed<PmsOption[]>(() => projectStatusOptions.map(item => ({
+  label: item.label,
+  value: item.value,
+})))
+
+const projectArchiveOptions = computed<PmsOption[]>(() => archiveList.value.map(item => ({
+  label: `${item.project_code} - ${item.project_name}`,
+  value: Number(item.id),
+})))
+
+const projectManagerOptions = computed<PmsOption[]>(() => userList.value.map(item => ({
+  label: String(item.real_name || item.username || item.id),
+  value: Number(item.id),
+})))
+
 const deptNameOptions = computed(() => deptFlatList.value.map((dept: any) => ({
   label: dept.dept_name,
   value: dept.dept_name,
@@ -857,8 +765,8 @@ const form = reactive({
   archive_id: null as number | null,
   project_code: '',
   project_name: '',
-  dept_id: 0,
-  pm_id: 0,
+  dept_id: null as number | null,
+  pm_id: null as number | null,
   status: 1,
   start_date: '',
   end_date: '',
@@ -1040,6 +948,10 @@ function isProgressPolicyVisible(fieldKey: string) {
 
 function isProgressPolicyEditable(fieldKey: string) {
   return progressPolicy(fieldKey)?.editable !== false
+}
+
+function isProgressPolicyRequired(fieldKey: string) {
+  return progressPolicy(fieldKey)?.required === true
 }
 
 function escapeHtml(value: unknown) {
@@ -1899,8 +1811,8 @@ function openCreateDialog() {
     archive_id: null,
     project_code: '',
     project_name: '',
-    dept_id: 0,
-    pm_id: 0,
+    dept_id: null,
+    pm_id: null,
     status: 1,
     start_date: '',
     end_date: '',
@@ -2001,6 +1913,15 @@ onMounted(async () => {
   min-width: 0;
   min-height: 0;
 }
+
+.progress-base-filter {
+  flex: 0 0 auto;
+}
+
+.progress-base-filter--keyword { width: 210px; }
+.progress-base-filter--category { width: 128px; }
+.progress-base-filter--status { width: 116px; }
+.progress-base-filter--dept { width: 148px; }
 
 :deep(.proj-name-cell) {
   color: var(--pms-text);

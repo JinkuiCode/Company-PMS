@@ -260,6 +260,13 @@ assert.doesNotMatch(
   /\{ field: 'task_count', label: '任务数'/,
   'The legacy related-task count should not remain a custom filter in the current progress workbench',
 )
+assert.match(projectList, /dept_id:\s*null as number \| null/, 'New projects should start with an empty department selection')
+assert.match(projectList, /pm_id:\s*null as number \| null/, 'New projects should start with an empty project manager selection')
+assert.doesNotMatch(
+  projectList.match(/function openCreateDialog\(\)[\s\S]*?dialogVisible\.value = true\n}/)?.[0] || '',
+  /(dept_id|pm_id):\s*0/,
+  'Opening the create dialog must not expose numeric sentinel values as selected labels',
+)
 
 const savedTextFunction = projectList.match(/function setSavedText\([\s\S]*?\n}\n\nasync function openProjectDrawer/)
 assert.ok(savedTextFunction, 'Project progress workbench should keep auto-save feedback in a dedicated helper')

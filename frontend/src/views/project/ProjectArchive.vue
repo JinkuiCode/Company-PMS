@@ -53,39 +53,15 @@
         :fields="archiveFilterFields"
         :active-count="activeCustomFilterCount"
       >
-        <el-input
-          v-if="archiveFieldVisible('project_code') || archiveFieldVisible('project_name')"
-          v-model="searchKeyword"
-          placeholder="搜索编号、名称、客户或序列号"
-          size="small"
-          clearable
-          style="width: 200px;"
-          :prefix-icon="Search"
-        />
-        <el-select
-          v-model="archiveQuery.enabled"
-          aria-label="启用状态"
-          size="small"
-          style="width: 112px;"
-          @change="handleArchiveEnabledFilterChange"
-        >
-          <el-option
-            v-for="item in archiveEnabledFilterOptions"
-            :key="String(item.value)"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
-        <el-select
-          v-if="archiveFieldVisible('product_category')"
-          v-model="filterProductCategory"
-          placeholder="全部产品类别"
-          size="small"
-          clearable
-          style="width: 140px;"
-        >
-          <el-option v-for="item in filteredProductCategoryOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
-        </el-select>
+        <div v-if="archiveFieldVisible('project_code') || archiveFieldVisible('project_name')" class="archive-base-filter archive-base-filter--keyword">
+          <PmsTextControl v-model="searchKeyword" placeholder="搜索编号、名称、客户或序列号" size="compact" clearable :prefix-icon="Search" aria-label="搜索项目档案" />
+        </div>
+        <div class="archive-base-filter archive-base-filter--enabled">
+          <PmsSelectControl v-model="archiveQuery.enabled" :options="archiveEnabledFilterOptions" size="compact" aria-label="启用状态" @change="handleArchiveEnabledFilterChange" />
+        </div>
+        <div v-if="archiveFieldVisible('product_category')" class="archive-base-filter archive-base-filter--category">
+          <PmsSelectControl v-model="filterProductCategory" :options="archiveProductCategoryOptions" placeholder="全部产品类别" size="compact" clearable aria-label="产品类别筛选" />
+        </div>
       </PmsListFilters>
     </template>
 
@@ -1761,6 +1737,14 @@ onMounted(async () => {
   height: 100%;
   min-height: 100%;
 }
+
+.archive-base-filter {
+  flex: 0 0 auto;
+}
+
+.archive-base-filter--keyword { width: 200px; }
+.archive-base-filter--enabled { width: 112px; }
+.archive-base-filter--category { width: 140px; }
 
 .archive-edit-drawer {
   display: flex;
