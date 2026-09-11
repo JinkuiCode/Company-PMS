@@ -90,6 +90,130 @@
   pointer-events: none;
 }
 
+.pms-form-control .el-input,
+.pms-form-control .el-select,
+.pms-form-control .el-date-editor,
+.pms-form-control .el-input-number,
+.pms-form-control .el-tree-select {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+}
+
+.pms-form-control .el-input__wrapper,
+.pms-form-control .el-select__wrapper,
+.pms-form-control .el-date-editor.el-input__wrapper,
+.pms-form-control .el-input-number .el-input__wrapper {
+  width: 100%;
+  min-height: 100%;
+  padding-inline: var(--pms-form-control-padding-x);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+
+.pms-form-control .el-input__wrapper:hover,
+.pms-form-control .el-select__wrapper:hover,
+.pms-form-control .el-input__wrapper.is-focus,
+.pms-form-control .el-select__wrapper.is-focused,
+.pms-form-control .el-date-editor.el-input__wrapper:hover,
+.pms-form-control .el-date-editor.el-input__wrapper.is-focus {
+  box-shadow: none;
+}
+
+.pms-form-control .el-input__inner,
+.pms-form-control .el-select__selected-item,
+.pms-form-control .el-select__placeholder,
+.pms-form-control .el-range-input {
+  height: var(--pms-form-control-line-height);
+  color: inherit;
+  font-family: var(--pms-font);
+  font-size: var(--pms-font-size-base);
+  line-height: var(--pms-form-control-line-height);
+}
+
+.pms-form-control .el-select__input {
+  height: var(--pms-form-control-line-height);
+  margin-left: 0;
+  padding: 0;
+  color: inherit;
+  font-family: var(--pms-font);
+  font-size: var(--pms-font-size-base);
+  line-height: var(--pms-form-control-line-height);
+}
+
+.pms-form-control .el-select__selection {
+  min-width: 0;
+  min-height: var(--pms-form-control-line-height);
+  gap: 0;
+}
+
+.pms-form-control .el-input__inner::placeholder,
+.pms-form-control .el-select__placeholder.is-transparent,
+.pms-form-control .el-textarea__inner::placeholder {
+  color: var(--pms-text-muted);
+}
+
+.pms-form-control .el-input-number .el-input__inner {
+  text-align: left;
+}
+
+.pms-form-control .el-input-number__increase,
+.pms-form-control .el-input-number__decrease {
+  border-color: var(--pms-border-soft);
+  background: transparent;
+}
+
+.pms-form-control--textarea {
+  height: auto;
+  min-height: 86px;
+  align-items: stretch;
+}
+
+.pms-form-control .el-textarea,
+.pms-form-control .el-textarea__inner {
+  width: 100%;
+  min-height: inherit;
+}
+
+.pms-form-control .el-textarea__inner {
+  padding: 8px var(--pms-form-control-padding-x);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font-family: var(--pms-font);
+  font-size: var(--pms-font-size-base);
+  line-height: var(--pms-form-control-line-height);
+}
+
+.pms-form-control .el-textarea__inner:hover,
+.pms-form-control .el-textarea__inner:focus {
+  box-shadow: none;
+}
+
+.pms-form-control :is(input, textarea, button):focus-visible {
+  outline: none;
+  outline-offset: 0;
+}
+
+.pms-form-control.is-disabled :is(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner),
+.pms-form-control.is-readonly :is(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.pms-form-control.is-loading:not(.pms-form-control--binary) :is(.el-input__wrapper, .el-select__wrapper) {
+  padding-right: calc(var(--pms-form-control-padding-x) + 20px);
+}
+
+.pms-form-control--binary .pms-form-control__loading {
+  position: static;
+  margin-left: 8px;
+}
+
 @keyframes pms-form-control-spin {
   to { transform: rotate(360deg); }
 }
