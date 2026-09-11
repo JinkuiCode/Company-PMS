@@ -1,0 +1,101 @@
+:root {
+  --pms-form-control-height-compact: 32px;
+  --pms-form-control-height-regular: 36px;
+  --pms-form-control-padding-x: 10px;
+  --pms-form-control-line-height: 20px;
+  --pms-form-control-border: var(--pms-border);
+  --pms-form-control-border-hover: #c7cfdb;
+  --pms-form-control-border-focus: rgba(79, 70, 229, 0.58);
+  --pms-form-control-focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.08);
+  --pms-form-control-error-border: rgba(220, 38, 38, 0.58);
+  --pms-form-control-error-ring: 0 0 0 3px rgba(220, 38, 38, 0.07);
+  --pms-form-control-disabled-bg: #f5f7fa;
+}
+
+.pms-form-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--pms-form-control-border);
+  border-radius: var(--pms-radius-sm);
+  background: var(--pms-surface);
+  color: var(--pms-text);
+  font-family: var(--pms-font);
+  font-size: var(--pms-font-size-base);
+  line-height: var(--pms-form-control-line-height);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+.pms-form-control--compact {
+  height: var(--pms-form-control-height-compact);
+}
+
+.pms-form-control--regular {
+  height: var(--pms-form-control-height-regular);
+}
+
+.pms-form-control--field:hover:not(.is-disabled, .is-readonly) {
+  border-color: var(--pms-form-control-border-hover);
+}
+
+.pms-form-control--field:focus-within:not(.is-disabled, .is-readonly) {
+  z-index: 1;
+  border-color: var(--pms-form-control-border-focus);
+  box-shadow: var(--pms-form-control-focus-ring);
+}
+
+.pms-form-control.is-error {
+  border-color: var(--pms-form-control-error-border);
+  box-shadow: var(--pms-form-control-error-ring);
+}
+
+.pms-form-control.is-disabled {
+  background: var(--pms-form-control-disabled-bg);
+  color: var(--pms-text-muted);
+  cursor: not-allowed;
+}
+
+.pms-form-control.is-readonly {
+  border-color: transparent;
+  background: transparent;
+}
+
+.pms-form-control--binary {
+  width: fit-content;
+  height: auto;
+  min-height: 20px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.pms-form-control--binary:focus-within:not(.is-disabled) {
+  outline: 2px solid rgba(79, 70, 229, 0.32);
+  outline-offset: 2px;
+}
+
+.pms-form-control__loading {
+  position: absolute;
+  right: var(--pms-form-control-padding-x);
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--pms-border);
+  border-top-color: var(--pms-primary);
+  border-radius: 50%;
+  animation: pms-form-control-spin 700ms linear infinite;
+  pointer-events: none;
+}
+
+@keyframes pms-form-control-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pms-form-control {
+    transition: none;
+  }
+}

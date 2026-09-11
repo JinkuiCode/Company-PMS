@@ -3,6 +3,7 @@ import ElementPlus from 'element-plus'
 import '@fontsource-variable/noto-sans-sc/wght.css'
 import 'element-plus/dist/index.css'
 import './styles/pms-theme.css'
+import './form-system/form-tokens.css'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { createPinia } from 'pinia'
 
