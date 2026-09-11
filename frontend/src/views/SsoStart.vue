@@ -23,29 +23,35 @@
           @submit.prevent="handleLogin"
         >
           <el-form-item prop="loginid">
-            <el-input
+            <PmsTextControl
               v-model="form.loginid"
+              size="regular"
+              name="username"
+              autocomplete="username"
               placeholder="PMS 账号"
               :prefix-icon="User"
-              size="large"
+              aria-label="PMS 账号"
               clearable
             />
           </el-form-item>
           <el-form-item prop="password">
-            <el-input
+            <PmsTextControl
               v-model="form.password"
+              size="regular"
               type="password"
+              name="password"
+              autocomplete="current-password"
               placeholder="PMS 密码"
               :prefix-icon="Lock"
-              size="large"
+              aria-label="PMS 密码"
               show-password
               @keyup.enter="handleLogin"
             />
           </el-form-item>
           <el-form-item>
-            <el-checkbox v-model="form.rememberMe" size="small">
+            <PmsCheckboxControl v-model="form.rememberMe" size="compact" aria-label="记住我">
               记住我（半年内免密登录）
-            </el-checkbox>
+            </PmsCheckboxControl>
           </el-form-item>
           <el-form-item>
             <el-button
@@ -78,6 +84,7 @@ import { User, Lock, Connection } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { oaPasswordLogin, ssoLogin } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { PmsCheckboxControl, PmsTextControl } from '@/form-system'
 
 const router = useRouter()
 const route = useRoute()

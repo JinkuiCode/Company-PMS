@@ -7,6 +7,8 @@ const view = readFileSync(resolve(root, 'src/views/system/DataDictionaryList.vue
 const router = readFileSync(resolve(root, 'src/router/index.ts'), 'utf8')
 
 assert.match(view, /PmsDataList/)
+assert.match(view, /from ['"]@\/form-system['"]/, 'Data dictionary filters should use the shared PMS form system')
+assert.doesNotMatch(view, /<el-(input|select|checkbox)\b/, 'Data dictionary should not render raw Element Plus filters')
 assert.match(view, /\/field-catalog/)
 assert.match(view, /仅枚举字段/)
 assert.match(view, /@keyup\.enter="handleFilterChange"/)

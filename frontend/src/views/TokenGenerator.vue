@@ -27,13 +27,13 @@
     <!-- 测试 SSO -->
     <el-card shadow="hover" class="test-card">
       <template #header><span class="card-title">测试 SSO 登录（测试账号：A000645）</span></template>
-      <el-form :model="testForm" label-width="110px" style="max-width:500px;">
-        <el-form-item label="OA 登录名">
-          <el-input v-model="testForm.loginid" placeholder="OA 登录名" />
-        </el-form-item>
-        <el-form-item label="姓名（可选）">
-          <el-input v-model="testForm.username" placeholder="用户姓名" />
-        </el-form-item>
+      <el-form :model="testForm" label-position="top" class="pms-standard-dialog-form token-form">
+        <PmsFormField field-id="token-test-loginid" label="OA 登录名">
+          <PmsTextControl id="token-test-loginid" v-model="testForm.loginid" placeholder="OA 登录名" aria-label="OA 登录名" />
+        </PmsFormField>
+        <PmsFormField field-id="token-test-username" label="姓名（可选）">
+          <PmsTextControl id="token-test-username" v-model="testForm.username" placeholder="用户姓名" aria-label="用户姓名" />
+        </PmsFormField>
         <el-form-item>
           <el-button type="success" @click="testSSO">模拟 OA 跳转登录</el-button>
         </el-form-item>
@@ -47,16 +47,16 @@
     <!-- HMAC 签名链接 -->
     <el-card shadow="hover" class="form-card">
       <template #header><span class="card-title">HMAC 签名链接（更安全，一次性链接）</span></template>
-      <el-form :model="form" label-width="110px" style="max-width:500px;">
-        <el-form-item label="登录名">
-          <el-input v-model="form.loginid" placeholder="OA 用户登录名" />
-        </el-form-item>
-        <el-form-item label="用户姓名">
-          <el-input v-model="form.username" placeholder="显示名称" />
-        </el-form-item>
-        <el-form-item label="部门">
-          <el-input v-model="form.dept" placeholder="所属部门（可选）" />
-        </el-form-item>
+      <el-form :model="form" label-position="top" class="pms-standard-dialog-form token-form">
+        <PmsFormField field-id="token-loginid" label="登录名">
+          <PmsTextControl id="token-loginid" v-model="form.loginid" placeholder="OA 用户登录名" aria-label="登录名" />
+        </PmsFormField>
+        <PmsFormField field-id="token-username" label="用户姓名">
+          <PmsTextControl id="token-username" v-model="form.username" placeholder="显示名称" aria-label="用户姓名" />
+        </PmsFormField>
+        <PmsFormField field-id="token-dept" label="部门">
+          <PmsTextControl id="token-dept" v-model="form.dept" placeholder="所属部门（可选）" aria-label="部门" />
+        </PmsFormField>
         <el-form-item>
           <el-button type="primary" @click="generate">生成带签名的 SSO 链接</el-button>
         </el-form-item>
@@ -88,6 +88,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { PmsFormField, PmsTextControl } from '@/form-system'
 import request from '@/utils/request'
 
 const form = reactive({ loginid: '', username: '', dept: '' })
@@ -155,6 +156,7 @@ function openHmacUrl() {
 .alt-card { margin-bottom: 16px; }
 .test-card { margin-bottom: 16px; }
 .form-card { margin-bottom: 16px; }
+.token-form { max-width: 500px; }
 
 .config-table { width: 100%; border-collapse: collapse; margin: 12px 0; }
 .config-table td { padding: 8px 12px; border: 1px solid #ebeef5; }

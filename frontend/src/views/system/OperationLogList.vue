@@ -15,56 +15,21 @@
         :fields="customFilterFields"
         :active-count="activeCustomFilterCount"
       >
-        <el-date-picker
-          v-model="baseFilters.timeRange"
-          type="daterange"
-          size="small"
-          value-format="YYYY-MM-DD"
-          start-placeholder="开始时间"
-          end-placeholder="结束时间"
-          style="width: 228px;"
-          @change="handleBaseFilterChange"
-        />
-        <el-select
-          v-model="baseFilters.module"
-          size="small"
-          clearable
-          placeholder="全部模块"
-          style="width: 132px;"
-          @change="handleBaseFilterChange"
-        >
-          <el-option v-for="item in moduleOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select
-          v-model="baseFilters.action"
-          size="small"
-          clearable
-          placeholder="全部动作"
-          style="width: 132px;"
-          @change="handleBaseFilterChange"
-        >
-          <el-option v-for="item in actionOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select
-          v-model="baseFilters.status"
-          size="small"
-          clearable
-          placeholder="全部状态"
-          style="width: 116px;"
-          @change="handleBaseFilterChange"
-        >
-          <el-option label="成功" value="success" />
-          <el-option label="失败" value="failed" />
-        </el-select>
-        <el-input
-          v-model="baseFilters.keyword"
-          size="small"
-          clearable
-          placeholder="关键词 / 对象 / 操作者"
-          style="width: 220px;"
-          @change="handleBaseFilterChange"
-          @clear="handleBaseFilterChange"
-        />
+        <div class="operation-log-filter operation-log-filter--date">
+          <PmsDateControl v-model="baseFilters.timeRange" type="daterange" size="compact" value-format="YYYY-MM-DD" start-placeholder="开始时间" end-placeholder="结束时间" aria-label="日志时间范围" @change="handleBaseFilterChange" />
+        </div>
+        <div class="operation-log-filter operation-log-filter--module">
+          <PmsSelectControl v-model="baseFilters.module" :options="moduleOptions" size="compact" clearable placeholder="全部模块" aria-label="日志模块" @change="handleBaseFilterChange" />
+        </div>
+        <div class="operation-log-filter operation-log-filter--action">
+          <PmsSelectControl v-model="baseFilters.action" :options="actionOptions" size="compact" clearable placeholder="全部动作" aria-label="日志动作" @change="handleBaseFilterChange" />
+        </div>
+        <div class="operation-log-filter operation-log-filter--status">
+          <PmsSelectControl v-model="baseFilters.status" :options="statusOptions" size="compact" clearable placeholder="全部状态" aria-label="日志状态" @change="handleBaseFilterChange" />
+        </div>
+        <div class="operation-log-filter operation-log-filter--keyword">
+          <PmsTextControl v-model="baseFilters.keyword" size="compact" clearable placeholder="关键词 / 对象 / 操作者" aria-label="日志关键词" @change="handleBaseFilterChange" @clear="handleBaseFilterChange" />
+        </div>
       </PmsListFilters>
     </template>
 
@@ -196,6 +161,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
+import { PmsDateControl, PmsSelectControl, PmsTextControl, type PmsOption } from '@/form-system'
 import {
   useListFilters,
   type ListFilterField,
@@ -259,6 +225,11 @@ const actionOptions: ListFilterOption[] = [
   { label: 'SSO 登录', value: 'sso_login' },
   { label: 'ERP 同步', value: 'sync' },
   { label: '批量同步', value: 'batch_sync' },
+]
+
+const statusOptions: PmsOption[] = [
+  { label: '成功', value: 'success' },
+  { label: '失败', value: 'failed' },
 ]
 
 const customFilterFields: ListFilterField[] = [
@@ -399,6 +370,16 @@ onMounted(fetchLogs)
   color: var(--pms-text-secondary);
   font-size: 12px;
 }
+
+.operation-log-filter {
+  flex: 0 0 auto;
+}
+
+.operation-log-filter--date { width: 228px; }
+.operation-log-filter--module,
+.operation-log-filter--action { width: 132px; }
+.operation-log-filter--status { width: 116px; }
+.operation-log-filter--keyword { width: 220px; }
 
 .operation-log-table {
   width: 100%;

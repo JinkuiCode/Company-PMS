@@ -1,12 +1,14 @@
 <template>
-  <div class="field-page">
+  <div class="field-page pms-system-page">
     <!-- 左侧：按页面分组的字典分类 -->
     <div class="field-list-panel">
       <div class="panel-header">
         <span>字段管理</span>
         <el-button v-if="hasPermission('system:dict:add')" type="primary" size="small" @click="openDictDialog()">新增分类</el-button>
       </div>
-      <el-input v-model="searchText" placeholder="搜索字段..." clearable size="small" style="padding: 8px 12px;" />
+      <div class="field-search">
+        <PmsTextControl v-model="searchText" placeholder="搜索字段..." clearable size="compact" aria-label="搜索字段" />
+      </div>
       <div class="field-list-wrap">
         <template v-for="(group, pageName) in groupedDicts" :key="pageName">
           <div class="group-title">{{ pageName }}</div>
@@ -69,30 +71,46 @@
 
     <!-- 字典分类弹窗 -->
     <el-dialog v-model="dictDialogVisible" :title="isDictEdit ? '编辑字段分类' : '新增字段分类'" width="520px">
-      <el-form ref="dictFormRef" :model="dictForm" :rules="dictRules" label-width="90px">
-        <el-form-item label="字段编码" prop="dict_code">
-          <el-input v-model="dictForm.dict_code" :disabled="isDictEdit" placeholder="如: equipment_series" />
+      <el-form ref="dictFormRef" :model="dictForm" :rules="dictRules" label-position="top" class="pms-standard-dialog-form">
+        <el-form-item prop="dict_code">
+          <PmsFormField field-id="field-dict-code" label="字段编码" required>
+            <PmsTextControl id="field-dict-code" v-model="dictForm.dict_code" :disabled="isDictEdit" placeholder="如: equipment_series" aria-label="字段编码" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="字段名称" prop="dict_name">
-          <el-input v-model="dictForm.dict_name" />
+        <el-form-item prop="dict_name">
+          <PmsFormField field-id="field-dict-name" label="字段名称" required>
+            <PmsTextControl id="field-dict-name" v-model="dictForm.dict_name" aria-label="字段名称" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="所属页面">
-          <el-input v-model="dictForm.page_name" placeholder="如: 项目档案" />
+        <el-form-item>
+          <PmsFormField field-id="field-page-name" label="所属页面">
+            <PmsTextControl id="field-page-name" v-model="dictForm.page_name" placeholder="如: 项目档案" aria-label="所属页面" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="数据库表">
-          <el-input v-model="dictForm.table_name" placeholder="如: pms_project_archive" />
+        <el-form-item>
+          <PmsFormField field-id="field-table-name" label="数据库表">
+            <PmsTextControl id="field-table-name" v-model="dictForm.table_name" placeholder="如: pms_project_archive" aria-label="数据库表" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="字段名">
-          <el-input v-model="dictForm.field_name" placeholder="如: equipment_series" />
+        <el-form-item>
+          <PmsFormField field-id="field-column-name" label="字段名">
+            <PmsTextControl id="field-column-name" v-model="dictForm.field_name" placeholder="如: equipment_series" aria-label="字段名" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="dictForm.description" type="textarea" :rows="2" />
+        <el-form-item>
+          <PmsFormField field-id="field-description" label="描述">
+            <PmsTextareaControl id="field-description" v-model="dictForm.description" :rows="2" aria-label="字段描述" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="dictForm.sort" :min="0" />
+        <el-form-item>
+          <PmsFormField field-id="field-sort" label="排序">
+            <PmsNumberControl id="field-sort" v-model="dictForm.sort" :min="0" aria-label="字段排序" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="dictForm.status" :active-value="1" :inactive-value="0" />
+        <el-form-item>
+          <PmsFormField field-id="field-status" label="状态">
+            <PmsSwitchControl id="field-status" :model-value="dictForm.status === 1" aria-label="字段状态" @update:model-value="dictForm.status = $event ? 1 : 0" />
+          </PmsFormField>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -103,18 +121,26 @@
 
     <!-- 枚举值弹窗 -->
     <el-dialog v-model="itemDialogVisible" :title="isItemEdit ? '编辑枚举值' : '新增枚举值'" width="440px">
-      <el-form ref="itemFormRef" :model="itemForm" :rules="itemRules" label-width="80px">
-        <el-form-item label="存储值" prop="item_value">
-          <el-input v-model="itemForm.item_value" placeholder="实际存储的值" />
+      <el-form ref="itemFormRef" :model="itemForm" :rules="itemRules" label-position="top" class="pms-standard-dialog-form">
+        <el-form-item prop="item_value">
+          <PmsFormField field-id="field-item-value" label="存储值" required>
+            <PmsTextControl id="field-item-value" v-model="itemForm.item_value" placeholder="实际存储的值" aria-label="枚举存储值" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="显示文本" prop="item_label">
-          <el-input v-model="itemForm.item_label" placeholder="前端显示的文字" />
+        <el-form-item prop="item_label">
+          <PmsFormField field-id="field-item-label" label="显示文本" required>
+            <PmsTextControl id="field-item-label" v-model="itemForm.item_label" placeholder="前端显示的文字" aria-label="枚举显示文本" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="itemForm.sort" :min="0" />
+        <el-form-item>
+          <PmsFormField field-id="field-item-sort" label="排序">
+            <PmsNumberControl id="field-item-sort" v-model="itemForm.sort" :min="0" aria-label="枚举排序" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="itemForm.status" :active-value="1" :inactive-value="0" />
+        <el-form-item>
+          <PmsFormField field-id="field-item-status" label="状态">
+            <PmsSwitchControl id="field-item-status" :model-value="itemForm.status === 1" aria-label="枚举状态" @update:model-value="itemForm.status = $event ? 1 : 0" />
+          </PmsFormField>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -130,6 +156,13 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
+import {
+  PmsFormField,
+  PmsNumberControl,
+  PmsSwitchControl,
+  PmsTextareaControl,
+  PmsTextControl,
+} from '@/form-system'
 
 const authStore = useAuthStore()
 const hasPermission = authStore.hasPermission
@@ -276,6 +309,8 @@ onMounted(() => fetchDicts())
 
 <style scoped>
 .field-page { display: flex; gap: 16px; height: 100%; }
+
+.field-search { padding: 8px 12px; }
 
 .field-list-panel {
   width: 280px; flex-shrink: 0; background: #fff;

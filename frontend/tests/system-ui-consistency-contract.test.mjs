@@ -75,6 +75,23 @@ for (const [name, path] of [
 }
 
 for (const [name, path] of [
+  ['DataDictionaryList.vue', 'src/views/system/DataDictionaryList.vue'],
+  ['OperationLogList.vue', 'src/views/system/OperationLogList.vue'],
+  ['FieldList.vue', 'src/views/system/FieldList.vue'],
+  ['Login.vue', 'src/views/Login.vue'],
+  ['SsoStart.vue', 'src/views/SsoStart.vue'],
+  ['TokenGenerator.vue', 'src/views/TokenGenerator.vue'],
+]) {
+  const source = read(path)
+  assert.match(source, /from ['"]@\/form-system['"]/, `${name} should consume the shared PMS form system`)
+  assert.doesNotMatch(
+    source,
+    /<el-(input|input-number|select|date-picker|tree-select|switch|checkbox|checkbox-group|segmented)\b/,
+    `${name} should not render raw Element Plus form controls`,
+  )
+}
+
+for (const [name, path] of [
   ['Dashboard.vue', 'src/views/Dashboard.vue'],
   ['UserList.vue', 'src/views/system/UserList.vue'],
   ['RoleList.vue', 'src/views/system/RoleList.vue'],

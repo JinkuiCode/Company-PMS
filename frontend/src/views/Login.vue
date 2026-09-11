@@ -4,16 +4,20 @@
       <div class="login-brand">PMS</div>
       <h1 class="login-title">项目管理系统</h1>
       <p class="login-subtitle">项目档案与进度协同管理</p>
-      <el-form ref="formRef" :model="form" :rules="rules" size="large" @keyup.enter="handleLogin">
+      <el-form ref="formRef" :model="form" :rules="rules" class="login-form" @keyup.enter="handleLogin">
         <el-form-item prop="username">
-          <el-input v-model="form.username" placeholder="请输入用户名" :prefix-icon="User" />
+          <PmsTextControl v-model="form.username" size="regular" name="username" autocomplete="username" placeholder="请输入用户名" :prefix-icon="User" aria-label="用户名" />
         </el-form-item>
         <el-form-item prop="password">
-          <el-input
+          <PmsTextControl
             v-model="form.password"
+            size="regular"
             type="password"
+            name="password"
+            autocomplete="current-password"
             placeholder="请输入密码"
             :prefix-icon="Lock"
+            aria-label="密码"
             show-password
           />
         </el-form-item>
@@ -36,6 +40,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { PmsTextControl } from '@/form-system'
 
 const router = useRouter()
 const authStore = useAuthStore()

@@ -17,54 +17,54 @@
 
     <template #filters>
       <div class="pms-filter-bar catalog-filters">
-        <el-input
+        <div class="catalog-filter catalog-filter--keyword">
+          <PmsTextControl
           v-model="filters.keyword"
           clearable
-          size="small"
+          size="compact"
           placeholder="搜索字段名称、编码或说明"
-          style="width: 244px"
+          aria-label="搜索字段名称、编码或说明"
           @change="handleFilterChange"
           @clear="handleFilterChange"
           @keyup.enter="handleFilterChange"
-        />
-        <el-select
-          v-model="filters.module"
-          clearable
-          size="small"
-          placeholder="全部模块"
-          style="width: 156px"
-          @change="handleFilterChange"
-        >
-          <el-option
-            v-for="item in moduleOptions"
-            :key="item.value"
-            :label="`${item.label} (${item.count})`"
-            :value="item.value"
           />
-        </el-select>
-        <el-select
+        </div>
+        <div class="catalog-filter catalog-filter--module">
+          <PmsSelectControl
+          v-model="filters.module"
+          :options="moduleSelectOptions"
+          clearable
+          size="compact"
+          placeholder="全部模块"
+          aria-label="模块"
+          @change="handleFilterChange"
+          />
+        </div>
+        <div class="catalog-filter catalog-filter--type">
+          <PmsSelectControl
           v-model="filters.valueType"
+          :options="valueTypeOptions"
           clearable
-          size="small"
+          size="compact"
           placeholder="全部类型"
-          style="width: 126px"
+          aria-label="字段类型"
           @change="handleFilterChange"
-        >
-          <el-option v-for="item in valueTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select
+          />
+        </div>
+        <div class="catalog-filter catalog-filter--source">
+          <PmsSelectControl
           v-model="filters.sourceType"
+          :options="sourceTypeOptions"
           clearable
-          size="small"
+          size="compact"
           placeholder="全部来源"
-          style="width: 142px"
+          aria-label="字段来源"
           @change="handleFilterChange"
-        >
-          <el-option v-for="item in sourceTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-checkbox v-model="filters.enumOnly" size="small" @change="handleFilterChange">
+          />
+        </div>
+        <PmsCheckboxControl v-model="filters.enumOnly" size="compact" aria-label="仅枚举字段" @change="handleFilterChange">
           仅枚举字段
-        </el-checkbox>
+        </PmsCheckboxControl>
       </div>
     </template>
 
@@ -102,13 +102,14 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import { AllCommunityModule, ModuleRegistry, type ColDef } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
+import { PmsCheckboxControl, PmsSelectControl, PmsTextControl, type PmsOption } from '@/form-system'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import request from '@/utils/request'
 
@@ -140,6 +141,10 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(30)
 const moduleOptions = ref<ModuleOption[]>([])
+const moduleSelectOptions = computed<PmsOption[]>(() => moduleOptions.value.map(item => ({
+  label: `${item.label} (${item.count})`,
+  value: item.value,
+})))
 const filters = reactive({ keyword: '', module: '', valueType: '', sourceType: '', enumOnly: false })
 
 const valueTypeOptions = [
@@ -278,6 +283,15 @@ onMounted(fetchCatalog)
   gap: 8px;
   padding-bottom: 10px;
 }
+
+.catalog-filter {
+  flex: 0 0 auto;
+}
+
+.catalog-filter--keyword { width: 244px; }
+.catalog-filter--module { width: 156px; }
+.catalog-filter--type { width: 126px; }
+.catalog-filter--source { width: 142px; }
 
 :deep(.catalog-code) {
   color: var(--pms-text-secondary);

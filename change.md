@@ -200,3 +200,13 @@
 - 涉及文件：`frontend/src/form-system/form-tokens.css`、`frontend/src/views/system/UserList.vue`、`frontend/src/views/system/RoleList.vue`、`frontend/src/views/system/MenuList.vue`、`frontend/src/views/system/EnumList.vue`、`frontend/src/views/system/FieldPolicyList.vue`、`frontend/tests/form-system-layout-contract.test.mjs`、`frontend/tests/system-ui-consistency-contract.test.mjs`、`frontend/tests/enum-management-contract.test.mjs`、`frontend/tests/field-policy-contract.test.mjs`、`change.md`。
 - 验证结果：统一表单、统一表单布局、系统 UI 一致性、枚举管理、字段规则和样式契约均退出 `0`；`npm run build` 退出 `0`，转换 2322 个模块。开发机 Edge 完成用户新增/编辑、角色新增、可配置枚举新增和字段规则模块切换的只读交互验收，所有业务输入均位于统一控件内，未提交或修改业务数据。
 - 范围说明：本批仅完成开发机系统管理写表单迁移，尚未迁移认证页面，未部署服务器、推送 GitHub 或合并 `master`。
+
+## 2026-09-11 - PMS 统一表单框架第五批查询与认证页面迁移
+
+- 原因：数据字典、操作日志、旧字段维护页、登录、OA 登录和 SSO 令牌工具仍直接使用 Element Plus 字段控件，尚未完整纳入统一尺寸、焦点、字体和可访问性标准。
+- 调整内容：数据字典与操作日志的日期、文本、选择和枚举筛选统一改用紧凑型 PMS 表单控件，保留原查询参数、自定义筛选和日志中文差异展示协议；旧字段维护页的搜索及存量弹窗同步迁移，避免兼容路由重新暴露旧控件。
+- 调整内容：本地登录与 OA 登录页面改用常规尺寸 PMS 文本和复选框控件，保留空凭据初始值、回车登录、记住登录和既有认证接口，并将 `name`、`autocomplete` 和可访问名称正确传递至原生输入元素。
+- 调整内容：SSO 令牌工具的测试及 HMAC 表单改用统一字段与文本控件，保留测试账号、链接格式、权限边界和 `/sso/generate-url` 接口，不提交或记录任何凭据与令牌。
+- 涉及文件：`frontend/src/views/system/DataDictionaryList.vue`、`frontend/src/views/system/OperationLogList.vue`、`frontend/src/views/system/FieldList.vue`、`frontend/src/views/Login.vue`、`frontend/src/views/SsoStart.vue`、`frontend/src/views/TokenGenerator.vue`、`frontend/tests/data-dictionary-contract.test.mjs`、`frontend/tests/login-security-contract.test.mjs`、`frontend/tests/system-ui-consistency-contract.test.mjs`、`change.md`。
+- 验证结果：统一表单、统一布局、数据字典、登录安全、系统 UI 一致性和样式契约均退出 `0`；`npm run build` 退出 `0`，转换 2322 个模块。开发机新版本使用独立 `5176` 端口验收：登录字段均为 `36px` 外框且只有单层焦点反馈，用户名与密码原生输入分别带 `username`、`current-password` 自动完成语义且值为空；OA 登录页保留两个空凭据输入、统一记住登录控件及原入口。已登录页面因浏览器会话按端口隔离，未复制敏感会话令牌，查询页由契约与生产构建验证。
+- 范围说明：本批仅完成开发工作树内的查询、兼容与认证页面迁移，未部署服务器、推送 GitHub 或合并 `master`。
