@@ -221,3 +221,12 @@
 - 涉及文件：`frontend/src/views/project/ProjectArchive.vue`、`frontend/src/views/project/ProjectList.vue`、`frontend/src/views/project/ProjectProgress.vue`、`frontend/src/styles/pms-theme.css`、`frontend/tests/form-system-adoption-contract.test.mjs`、`frontend/tests/style-contract.test.mjs`、`frontend/tests/project-progress-workbench-contract.test.mjs`、`docs/PMS-UI-STANDARD.md`、`change.md`。
 - 验证结果：统一表单、布局、采用门禁、样式、标准列表、系统 UI、项目档案筛选/抽屉/生命周期、项目进度工作台/详情/列设置、数据字典、枚举、字段规则和登录安全共 17 项前端契约测试全部退出 `0`；`npm run build` 退出 `0`，转换 2322 个模块。本机 Edge 验证项目档案和项目进度基础筛选、新增项目弹窗、部门树形选择和日期选择器，无重复内框、裁切或未选择项显示 `0` 的问题。
 - 范围说明：统一表单框架在开发机完成并通过本阶段验收；尚未部署服务器、推送 GitHub 或合并 `master`，Windows 缩放环境仍需在部署前做最终验收。
+
+## 2026-09-11 - OA 嵌入环境表单焦点重影修正
+
+- 原因：PMS 直连页面在 macOS 和 Windows 显示正常，但从泛微 OA 门户嵌入进入时，统一控件原有的 `1px` 聚焦边框与 `3px` 半透明外扩焦点环在门户缩放和图层合成下被强化，表现为选择框双边界；行内字段显示面与编辑面部分盒模型依赖全局继承，也会放大跨容器渲染差异。
+- 调整内容：统一表单控件的焦点和错误状态取消外扩阴影，仅由最外层控件绘制单层状态边框；Element Plus 内部包装层与真实输入继续保持无边框、无阴影和无焦点轮廓。行内字段显示面与编辑面显式统一 `border-box`、固定高度、全宽和零容器内边距，避免文本、选择字段在悬停与编辑间改变尺寸或文字起点。
+- 调整内容：新增统一表单契约，禁止重新引入向控件外部扩张的焦点环，并锁定行内显示面和编辑面的盒模型规则；业务页面未增加 OA 专用 CSS 分支。
+- 涉及文件：`frontend/src/form-system/form-tokens.css`、`frontend/tests/form-system-contract.test.mjs`、`frontend/tests/form-system-layout-contract.test.mjs`、`change.md`。
+- 验证结果：两项新增断言先针对旧外扩焦点环按预期失败，实施后通过；前端全部 22 项契约测试通过。`npm run build` 退出 `0`，`vue-tsc` 类型检查通过，Vite 转换 2322 个模块并完成生产构建。开发机 Edge 在独立最新端口检查聚焦控件，外层、Element Plus 包装层与真实输入的 `box-shadow` 均为 `none`，内部输入无边框和轮廓，控件高度保持 `36px`。
+- 范围说明：本批仅完成开发工作树修正和开发机验证，尚未部署服务器、推送 GitHub 或合并 `master`；办公 Windows 的 OA 嵌入场景需在部署该构建后进行最终验收。

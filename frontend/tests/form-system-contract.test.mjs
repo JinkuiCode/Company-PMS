@@ -58,5 +58,15 @@ assert.match(segmented, /options:\s*PmsOption\[\]/)
 assert.match(tokens, /\.pms-form-control \.el-input__wrapper[\s\S]*box-shadow:\s*none/)
 assert.match(tokens, /\.pms-form-control \.el-select__input[\s\S]*margin-left:\s*0/)
 assert.match(tokens, /\.pms-form-control :is\(input, textarea, button\):focus-visible[\s\S]*outline:\s*none/)
+assert.match(
+  tokens,
+  /\.pms-form-control--field:focus-within:not\(\.is-disabled, \.is-readonly\)\s*\{[^}]*box-shadow:\s*none;/,
+  'Focused controls must use one border owner without an outer focus halo',
+)
+assert.doesNotMatch(
+  tokens,
+  /--pms-form-control-focus-ring:\s*0\s+0\s+0\s+[1-9][\d.]*px/,
+  'Form focus tokens must not expand outside the control in embedded or scaled containers',
+)
 
 console.log('form system contract passed')

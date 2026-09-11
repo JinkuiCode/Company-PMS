@@ -6,9 +6,7 @@
   --pms-form-control-border: var(--pms-border);
   --pms-form-control-border-hover: #c7cfdb;
   --pms-form-control-border-focus: rgba(79, 70, 229, 0.58);
-  --pms-form-control-focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.08);
   --pms-form-control-error-border: rgba(220, 38, 38, 0.58);
-  --pms-form-control-error-ring: 0 0 0 3px rgba(220, 38, 38, 0.07);
   --pms-form-control-disabled-bg: #f5f7fa;
 }
 
@@ -44,12 +42,12 @@
 .pms-form-control--field:focus-within:not(.is-disabled, .is-readonly) {
   z-index: 1;
   border-color: var(--pms-form-control-border-focus);
-  box-shadow: var(--pms-form-control-focus-ring);
+  box-shadow: none;
 }
 
 .pms-form-control.is-error {
   border-color: var(--pms-form-control-error-border);
-  box-shadow: var(--pms-form-control-error-ring);
+  box-shadow: none;
 }
 
 .pms-form-control.is-disabled {
@@ -310,6 +308,7 @@
 .pms-inline-field__value {
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
   height: var(--pms-form-control-height-compact);
 }
 
@@ -341,7 +340,7 @@ button.pms-inline-field__value {
 .pms-inline-field__value:focus-visible {
   border-color: var(--pms-form-control-border-focus);
   outline: none;
-  box-shadow: var(--pms-form-control-focus-ring);
+  box-shadow: none;
 }
 
 .pms-inline-field__value.is-empty {
@@ -351,6 +350,8 @@ button.pms-inline-field__value {
 .pms-inline-field__editor {
   display: flex;
   align-items: center;
+  width: 100%;
+  padding: 0;
 }
 
 .pms-inline-field__editor > .pms-form-control {

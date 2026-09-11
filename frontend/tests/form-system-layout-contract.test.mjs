@@ -26,6 +26,16 @@ assert.match(entry, /export \{ default as PmsFormField \}/)
 assert.match(entry, /export \{ default as PmsInlineField \}/)
 assert.match(entry, /PMS_AG_GRID_FORM_CLASS/)
 assert.match(tokens, /\.pms-inline-field__surface[\s\S]*height:\s*var\(--pms-form-control-height-compact\)/)
+assert.match(
+  tokens,
+  /\.pms-inline-field__surface,[\s\S]*?\.pms-inline-field__value\s*\{[^}]*box-sizing:\s*border-box;[^}]*height:\s*var\(--pms-form-control-height-compact\)/,
+  'Inline display and editor surfaces must share the same explicit box model and height',
+)
+assert.match(
+  tokens,
+  /\.pms-inline-field__editor\s*\{[^}]*width:\s*100%;[^}]*padding:\s*0;/,
+  'Inline editor containers must not add a second inset around shared controls',
+)
 assert.match(tokens, /\.pms-form-grid \.ag-cell-inline-editing[\s\S]*box-shadow:/)
 assert.match(tokens, /\.pms-form-grid \.ag-cell-inline-editing[\s\S]*\.el-input__wrapper/)
 assert.match(tokens, /\.pms-form-grid \.ag-cell-inline-editing \.ag-cell-edit-wrapper/)
