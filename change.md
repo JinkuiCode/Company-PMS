@@ -245,3 +245,10 @@
 - 调整内容：OA JSP 跳转地址改为 `http://10.10.1.228/sso/start`；后端默认 `PMS_FRONTEND_URL` 与 `PMS_CALLBACK_URL` 同步改为正式服务器标准 HTTP 地址。认证签名格式、密钥、用户映射和 OA 接口地址保持不变。
 - 涉及文件：`OA对接/pms_sso.jsp`、`backend/app/core/config.py`、`backend/tests/sso_deployment_contract.py`、`change.md`。
 - 验证结果：新增 SSO 部署契约退出 `0`，确认 JSP 与后端默认地址均指向 `10.10.1.228` 且目标配置不再包含旧地址；Python 源码语法检查退出 `0`。开发机未安装后端依赖，既有 `config_contract.py` 留待依赖齐全的 PMS 服务器补跑；OA 服务器 JSP 部署后仍需从办公 Windows 完成实际菜单跳转验收。
+
+## 2026-09-11 - 记录 OA 单点登录 JSP 部署路径
+
+- 原因：用户完成 OA 服务器 SSO 文件更新并确认问题解决，需要将实际部署位置纳入项目文档。
+- 调整内容：新增 OA 单点登录部署说明，记录 OA Web 服务器、JSP 物理路径、Web 路径、项目源文件、正式 PMS 地址、替换步骤和敏感配置保护要求。
+- 涉及文件：`docs/OA单点登录部署说明.md`、`change.md`。
+- 验证结果：根据用户提供的 OA 服务器截图核对，`pms_sso.jsp` 位于 `E:\Weaver\ecology\jsp\pms_sso.jsp`；用户已确认更新成功且旧地址问题解决。本次未修改程序代码、服务配置或服务器文件。
