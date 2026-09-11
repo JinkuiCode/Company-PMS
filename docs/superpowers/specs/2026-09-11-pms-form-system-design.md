@@ -15,7 +15,7 @@ PMS 建立一个仓库内部的、可独立升级的表单基础模块，统一�
 
 ### 包含
 
-- 文本、选择、日期、数字、长文本等基础字段。
+- 文本、选择、树形选择、日期、数字、长文本、开关、单项/多项勾选和分段选择等现有基础字段。
 - 默认、悬停、编辑、焦点、错误、禁用、只读和加载状态。
 - 标签、必填标记、帮助、错误、只读原因和保存状态。
 - 新增/编辑表单、详情抽屉、表格单元格三类容器。
@@ -51,12 +51,17 @@ PMS 建立一个仓库内部的、可独立升级的表单基础模块，统一�
 
 ### 字段原语组件
 
-- `PmsTextField`
-- `PmsSelectField`
-- `PmsDateField`
-- `PmsNumberField`
-- `PmsTextareaField`
-- `PmsFieldMessage`
+- `PmsControlShell`
+- `PmsTextControl`
+- `PmsSelectControl`
+- `PmsTreeSelectControl`
+- `PmsDateControl`
+- `PmsNumberControl`
+- `PmsTextareaControl`
+- `PmsSwitchControl`
+- `PmsCheckboxControl`
+- `PmsCheckboxGroupControl`
+- `PmsSegmentedControl`
 
 原语组件统一 `modelValue`、`disabled`、`readonly`、`required`、`loading`、`error`、`placeholder` 和可访问性属性。它们包装 Element Plus，业务页面不直接依赖 Element Plus 内部 DOM 类名。
 
@@ -64,7 +69,7 @@ PMS 建立一个仓库内部的、可独立升级的表单基础模块，统一�
 
 - `PmsFormField`：标准新增/编辑表单，标签在上，可组合分组和错误导航。
 - `PmsInlineField`：详情抽屉行内阅读与编辑，展示/编辑共用同一容器几何尺寸。
-- `PmsGridEditorAdapter`：为 AG Grid 提供整格编辑器和值归一化，保留现有自动保存。
+- `PMS_AG_GRID_FORM_CLASS` 与 `mergePmsAgCellClass()`：为 AG Grid 提供整格编辑命名空间和值呈现适配，保留现有编辑器、值归一化和自动保存。
 
 三种场景共享原语、令牌和状态定义，但不共用一个巨型容器。
 
