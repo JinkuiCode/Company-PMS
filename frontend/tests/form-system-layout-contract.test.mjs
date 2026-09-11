@@ -29,5 +29,10 @@ assert.match(tokens, /\.pms-inline-field__surface[\s\S]*height:\s*var\(--pms-for
 assert.match(tokens, /\.pms-form-grid \.ag-cell-inline-editing[\s\S]*box-shadow:/)
 assert.match(tokens, /\.pms-form-grid \.ag-cell-inline-editing[\s\S]*\.el-input__wrapper/)
 assert.match(tokens, /\.pms-form-grid \.ag-cell-inline-editing \.ag-cell-edit-wrapper/)
+assert.match(
+  tokens,
+  /\.pms-standard-dialog-form \.el-form-item__content\s*\{[^}]*display:\s*block;[^}]*width:\s*100%;[^}]*\}/,
+  'Standard dialog content should use a stable full-width block layout',
+)
 
 console.log('form system layout contract passed')

@@ -47,50 +47,65 @@
         <!-- 基础信息 -->
         <div class="form-section">
           <div class="section-title">基础信息</div>
-          <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
+          <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="pms-standard-dialog-form">
             <el-row :gutter="16">
               <el-col :span="12">
-                <el-form-item label="角色名称" prop="role_name">
-                  <el-input v-model="form.role_name" />
+                <el-form-item prop="role_name">
+                  <PmsFormField field-id="role-name" label="角色名称" required>
+                    <PmsTextControl id="role-name" v-model="form.role_name" aria-label="角色名称" />
+                  </PmsFormField>
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="角色编码" prop="role_code">
-                  <el-input v-model="form.role_code" :disabled="isEdit" />
+                <el-form-item prop="role_code">
+                  <PmsFormField field-id="role-code" label="角色编码" required>
+                    <PmsTextControl id="role-code" v-model="form.role_code" :disabled="isEdit" aria-label="角色编码" />
+                  </PmsFormField>
                 </el-form-item>
               </el-col>
             </el-row>
             <el-row :gutter="16">
               <el-col :span="12">
-                <el-form-item label="数据权限">
-                  <el-select v-model="form.data_scope" style="width: 100%;">
-                    <el-option label="仅本人" :value="1" />
-                    <el-option label="本部门" :value="2" />
-                    <el-option label="本部门及子部门" :value="3" />
-                    <el-option label="全部数据" :value="4" />
-                  </el-select>
+                <el-form-item>
+                  <PmsFormField field-id="role-data-scope" label="数据权限">
+                    <PmsSelectControl
+                      id="role-data-scope"
+                      :model-value="form.data_scope"
+                      :options="dataScopeOptions"
+                      aria-label="数据权限"
+                      @update:model-value="form.data_scope = Number($event)"
+                    />
+                  </PmsFormField>
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="状态">
-                  <el-switch v-model="form.status" :active-value="1" :inactive-value="0" />
+                <el-form-item>
+                  <PmsFormField field-id="role-status" label="状态">
+                    <PmsSwitchControl
+                      id="role-status"
+                      :model-value="form.status === 1"
+                      aria-label="角色状态"
+                      @update:model-value="form.status = $event ? 1 : 0"
+                    />
+                  </PmsFormField>
                 </el-form-item>
               </el-col>
             </el-row>
-            <el-form-item label="产品类别">
-              <el-checkbox-group v-model="selectedProductCategories">
-                <el-checkbox
-                  v-for="pl in visibleProductCategories"
-                  :key="pl.value"
-                  :label="pl.label"
-                  :value="pl.value"
-                  :disabled="pl.status === 0"
+            <el-form-item>
+              <PmsFormField field-id="role-product-categories" label="产品类别" hint="不选 = 不限制（全部产品类别）">
+                <PmsCheckboxGroupControl
+                  id="role-product-categories"
+                  :model-value="selectedProductCategories"
+                  :options="productCategoryCheckboxOptions"
+                  aria-label="产品类别范围"
+                  @update:model-value="selectedProductCategories = $event.map(String)"
                 />
-              </el-checkbox-group>
-              <div class="form-help">不选 = 不限制（全部产品类别）</div>
+              </PmsFormField>
             </el-form-item>
-            <el-form-item label="备注">
-              <el-input v-model="form.remark" type="textarea" :rows="2" />
+            <el-form-item>
+              <PmsFormField field-id="role-remark" label="备注">
+                <PmsTextareaControl id="role-remark" v-model="form.remark" :rows="2" aria-label="角色备注" />
+              </PmsFormField>
             </el-form-item>
           </el-form>
         </div>
@@ -99,9 +114,16 @@
         <div class="perm-section">
           <div class="section-title">
             权限配置
-            <el-checkbox v-model="checkAll" :indeterminate="isIndeterminate" @change="handleCheckAll" size="small" style="margin-left:auto">
+            <PmsCheckboxControl
+              class="permission-check-all"
+              :model-value="checkAll"
+              :indeterminate="isIndeterminate"
+              size="compact"
+              aria-label="全选权限"
+              @update:model-value="handleCheckAll"
+            >
               全选
-            </el-checkbox>
+            </PmsCheckboxControl>
           </div>
           <div class="perm-tree-wrap">
             <el-tree
@@ -142,6 +164,16 @@ import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import { loadEnumOptions, type EnumOption } from '@/composables/useEnumOptions'
 import { Document, FolderOpened, Key } from '@element-plus/icons-vue'
+import {
+  PmsCheckboxControl,
+  PmsCheckboxGroupControl,
+  PmsFormField,
+  PmsSelectControl,
+  PmsSwitchControl,
+  PmsTextareaControl,
+  PmsTextControl,
+  type PmsOption,
+} from '@/form-system'
 
 const authStore = useAuthStore()
 const hasPermission = authStore.hasPermission
@@ -162,6 +194,17 @@ const visibleProductCategories = computed(() => {
   })
   return Array.from(byValue.values()).filter(item => item.status !== 0 || selectedProductCategories.value.includes(item.value))
 })
+const productCategoryCheckboxOptions = computed<PmsOption[]>(() => visibleProductCategories.value.map(item => ({
+  value: item.value,
+  label: item.label,
+  disabled: item.status === 0,
+})))
+const dataScopeOptions: PmsOption[] = [
+  { label: '仅本人', value: 1 },
+  { label: '本部门', value: 2 },
+  { label: '本部门及子部门', value: 3 },
+  { label: '全部数据', value: 4 },
+]
 
 function productCategoryLabel(value: string) {
   return productCategoryOptions.value.find(item => item.value === value)?.label || value
@@ -407,7 +450,7 @@ onMounted(() => { fetchList(); loadProductCategories() })
 .perm-type-C { font-weight: 500; }
 .perm-type-B { color: var(--pms-text-secondary); font-size: var(--pms-font-size-sm); }
 .perm-node-icon { color: var(--pms-text-muted); font-size: 14px; }
-.form-help { margin-top: 4px; color: var(--pms-text-muted); font-size: var(--pms-font-size-sm); }
+.permission-check-all { margin-left: auto; }
 
 /* 按钮权限横排显示 */
 .perm-tree-wrap :deep(.inline-buttons) {

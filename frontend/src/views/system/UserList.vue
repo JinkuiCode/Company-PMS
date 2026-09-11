@@ -92,26 +92,41 @@
 
     <!-- 部门新增/编辑弹窗 -->
     <el-dialog v-model="deptDialogVisible" :title="isDeptEdit ? '编辑部门' : '新增部门'" width="460px">
-      <el-form ref="deptFormRef" :model="deptForm" :rules="deptRules" label-width="80px">
-        <el-form-item label="上级部门">
-          <el-tree-select
-            v-model="deptForm.parent_id"
-            :data="deptSelectData"
-            :props="{ label: 'dept_name', value: 'id', children: 'children' }"
-            placeholder="无（顶级部门）"
-            check-strictly
-            clearable
-            style="width: 100%;"
-          />
+      <el-form ref="deptFormRef" :model="deptForm" :rules="deptRules" label-position="top" class="pms-standard-dialog-form">
+        <el-form-item>
+          <PmsFormField field-id="dept-parent" label="上级部门">
+            <PmsTreeSelectControl
+              id="dept-parent"
+              :model-value="deptForm.parent_id"
+              :data="deptSelectData"
+              :props="{ label: 'dept_name', value: 'id', children: 'children' }"
+              placeholder="无（顶级部门）"
+              aria-label="上级部门"
+              check-strictly
+              clearable
+              @update:model-value="deptForm.parent_id = Number($event || 0)"
+            />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="部门名称" prop="dept_name">
-          <el-input v-model="deptForm.dept_name" />
+        <el-form-item prop="dept_name">
+          <PmsFormField field-id="dept-name" label="部门名称" required>
+            <PmsTextControl id="dept-name" v-model="deptForm.dept_name" aria-label="部门名称" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="deptForm.sort" :min="0" />
+        <el-form-item>
+          <PmsFormField field-id="dept-sort" label="排序">
+            <PmsNumberControl id="dept-sort" v-model="deptForm.sort" :min="0" aria-label="部门排序" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="deptForm.status" :active-value="1" :inactive-value="0" />
+        <el-form-item>
+          <PmsFormField field-id="dept-status" label="状态">
+            <PmsSwitchControl
+              id="dept-status"
+              :model-value="deptForm.status === 1"
+              aria-label="部门状态"
+              @update:model-value="deptForm.status = $event ? 1 : 0"
+            />
+          </PmsFormField>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -122,33 +137,63 @@
 
     <!-- 用户新增/编辑弹窗 -->
     <el-dialog v-model="userDialogVisible" :title="isUserEdit ? '编辑用户' : '新增用户'" width="520px">
-      <el-form ref="userFormRef" :model="userForm" :rules="userRules" label-width="80px">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="userForm.username" :disabled="isUserEdit" />
+      <el-form ref="userFormRef" :model="userForm" :rules="userRules" label-position="top" class="pms-standard-dialog-form">
+        <el-form-item prop="username">
+          <PmsFormField field-id="user-username" label="用户名" required>
+            <PmsTextControl id="user-username" v-model="userForm.username" :disabled="isUserEdit" aria-label="用户名" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="真实姓名" prop="real_name">
-          <el-input v-model="userForm.real_name" />
+        <el-form-item prop="real_name">
+          <PmsFormField field-id="user-real-name" label="真实姓名" required>
+            <PmsTextControl id="user-real-name" v-model="userForm.real_name" aria-label="真实姓名" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="密码" :prop="isUserEdit ? '' : 'password'">
-          <el-input v-model="userForm.password" type="password" :placeholder="isUserEdit ? '不填则不修改' : '请输入密码'" />
+        <el-form-item :prop="isUserEdit ? '' : 'password'">
+          <PmsFormField field-id="user-password" label="密码" :required="!isUserEdit">
+            <PmsTextControl id="user-password" v-model="userForm.password" type="password" :placeholder="isUserEdit ? '不填则不修改' : '请输入密码'" aria-label="密码" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="手机号">
-          <el-input v-model="userForm.mobile" />
+        <el-form-item>
+          <PmsFormField field-id="user-mobile" label="手机号">
+            <PmsTextControl id="user-mobile" v-model="userForm.mobile" aria-label="手机号" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="部门">
-          <el-tree-select
-            v-model="userForm.dept_id" style="width: 100%;" clearable
-            :data="deptSelectData" :props="{ label: 'dept_name', value: 'id', children: 'children' }"
-            check-strictly
-          />
+        <el-form-item>
+          <PmsFormField field-id="user-dept" label="部门">
+            <PmsTreeSelectControl
+              id="user-dept"
+              :model-value="userForm.dept_id"
+              :data="deptSelectData"
+              :props="{ label: 'dept_name', value: 'id', children: 'children' }"
+              clearable
+              check-strictly
+              aria-label="部门"
+              @update:model-value="userForm.dept_id = $event == null || $event === '' ? null : Number($event)"
+            />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="userForm.status" :active-value="1" :inactive-value="0" />
+        <el-form-item>
+          <PmsFormField field-id="user-status" label="状态">
+            <PmsSwitchControl
+              id="user-status"
+              :model-value="userForm.status === 1"
+              aria-label="用户状态"
+              @update:model-value="userForm.status = $event ? 1 : 0"
+            />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="userForm.role_ids" multiple placeholder="请选择角色" style="width: 100%;">
-            <el-option v-for="r in roleList" :key="r.id" :label="r.role_name" :value="r.id" />
-          </el-select>
+        <el-form-item>
+          <PmsFormField field-id="user-roles" label="角色">
+            <PmsSelectControl
+              id="user-roles"
+              :model-value="userForm.role_ids"
+              :options="roleOptions"
+              multiple
+              placeholder="请选择角色"
+              aria-label="角色"
+              @update:model-value="userForm.role_ids = Array.isArray($event) ? $event.map(Number) : []"
+            />
+          </PmsFormField>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -160,12 +205,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { OfficeBuilding } from '@element-plus/icons-vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
+import {
+  PmsFormField,
+  PmsNumberControl,
+  PmsSelectControl,
+  PmsSwitchControl,
+  PmsTextControl,
+  PmsTreeSelectControl,
+  type PmsOption,
+} from '@/form-system'
 
 const authStore = useAuthStore()
 const hasPermission = authStore.hasPermission
@@ -323,6 +377,11 @@ async function handleDeleteDept(id: number) {
 // ==================== 用户列表 ====================
 const userList = ref([])
 const roleList = ref<any[]>([])
+const roleOptions = computed<PmsOption[]>(() => roleList.value.map(role => ({
+  value: Number(role.id),
+  label: String(role.role_name),
+  disabled: role.status === 0,
+})))
 const loading = ref(false)
 const page = ref(1)
 const pageSize = ref(15)

@@ -39,6 +39,7 @@ const activePages = [
   ['EnumList.vue', 'src/views/system/EnumList.vue'],
   ['OperationLogList.vue', 'src/views/system/OperationLogList.vue'],
   ['FieldPolicyList.vue', 'src/views/system/FieldPolicyList.vue'],
+  ['MenuList.vue', 'src/views/system/MenuList.vue'],
 ]
 
 for (const [name, path] of activePages) {
@@ -55,6 +56,22 @@ for (const [name, path] of activePages) {
     `${name} should not keep the legacy Element Plus palette`,
   )
   assert.doesNotMatch(source, /📂|📄/, `${name} should use the established icon library instead of emoji`)
+}
+
+for (const [name, path] of [
+  ['UserList.vue', 'src/views/system/UserList.vue'],
+  ['RoleList.vue', 'src/views/system/RoleList.vue'],
+  ['MenuList.vue', 'src/views/system/MenuList.vue'],
+  ['EnumList.vue', 'src/views/system/EnumList.vue'],
+  ['FieldPolicyList.vue', 'src/views/system/FieldPolicyList.vue'],
+]) {
+  const source = read(path)
+  assert.match(source, /from ['"]@\/form-system['"]/, `${name} should consume the shared PMS form system`)
+  assert.doesNotMatch(
+    source,
+    /<el-(input|input-number|select|tree-select|switch|checkbox|checkbox-group|segmented)\b/,
+    `${name} should not render raw Element Plus form controls`,
+  )
 }
 
 for (const [name, path] of [

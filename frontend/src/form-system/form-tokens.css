@@ -228,6 +228,17 @@
   min-width: 0;
 }
 
+.pms-standard-dialog-form .el-form-item__content {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  line-height: inherit;
+}
+
+.pms-standard-dialog-form .pms-form-field {
+  width: 100%;
+}
+
 .pms-form-field--span-2 {
   grid-column: 1 / -1;
 }

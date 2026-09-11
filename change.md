@@ -189,3 +189,14 @@
 - 涉及文件：`frontend/src/components/PmsListFilters.vue`、`frontend/src/components/PmsListColumnPicker.vue`、`frontend/tests/list-standard-contract.test.mjs`、`frontend/tests/archive-filter-contract.test.mjs`、`frontend/tests/form-system-contract.test.mjs`、`change.md`。
 - 验证结果：定向契约测试和生产构建通过；本机 Edge 验证项目档案与项目进度的自定义筛选输入、筛选生效、列搜索、列勾选及恢复默认，公共控件尺寸与原布局一致。完整前端契约与最终构建结果见本批提交前验证。
 - 范围说明：本批仅完成开发机共享列表控件迁移，尚未迁移系统管理表单，未部署服务器、推送 GitHub 或合并 `master`。
+
+## 2026-09-11 - PMS 统一表单框架第四批系统管理表单迁移
+
+- 原因：用户、角色、旧数据字典、枚举和字段规则页面仍直接使用 Element Plus 字段控件，弹窗字段在公共 flex 容器中还会按内容宽度收缩，无法继承统一表单框架已经确认的尺寸、焦点和跨平台视觉标准。
+- 调整内容：用户与部门维护统一改用文本、数字、树形选择、开关和多选适配器；角色维护统一改用文本、选择、开关、复选框组和长文本适配器，同时保留权限树本身的原生树形勾选交互。
+- 调整内容：枚举维护统一接入数字流水只读展示、文本、数字和开关适配器；字段规则的模块切换、搜索、来源筛选及四类策略开关统一接入紧凑控件；旧数据字典维护页面同步移除原始字段控件旁路。
+- 调整内容：公共弹窗表单将 Element Plus 的字段内容 flex 容器统一改为全宽块级布局，避免自定义字段按内容收缩。浏览器实测用户弹窗字段由 `162px` 恢复为 `448px`；角色双列字段为 `296px`、跨列字段为 `608px`。
+- 兼容边界：角色权限、数据范围 `1-4`、产品类别范围、用户和部门数值 ID、状态 `0/1`、枚举存储值、字段规则 `updated_at` 并发检查及服务端结构化错误协议均保持不变。
+- 涉及文件：`frontend/src/form-system/form-tokens.css`、`frontend/src/views/system/UserList.vue`、`frontend/src/views/system/RoleList.vue`、`frontend/src/views/system/MenuList.vue`、`frontend/src/views/system/EnumList.vue`、`frontend/src/views/system/FieldPolicyList.vue`、`frontend/tests/form-system-layout-contract.test.mjs`、`frontend/tests/system-ui-consistency-contract.test.mjs`、`frontend/tests/enum-management-contract.test.mjs`、`frontend/tests/field-policy-contract.test.mjs`、`change.md`。
+- 验证结果：统一表单、统一表单布局、系统 UI 一致性、枚举管理、字段规则和样式契约均退出 `0`；`npm run build` 退出 `0`，转换 2322 个模块。开发机 Edge 完成用户新增/编辑、角色新增、可配置枚举新增和字段规则模块切换的只读交互验收，所有业务输入均位于统一控件内，未提交或修改业务数据。
+- 范围说明：本批仅完成开发机系统管理写表单迁移，尚未迁移认证页面，未部署服务器、推送 GitHub 或合并 `master`。

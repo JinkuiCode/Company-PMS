@@ -1,12 +1,14 @@
 <template>
-  <div class="dict-page">
+  <div class="dict-page pms-system-page">
     <!-- 左侧：字典分类列表 -->
     <div class="dict-list-panel">
       <div class="panel-header">
         <span>数据字典</span>
         <el-button v-if="hasPermission('system:dict:add')" type="primary" size="small" @click="openDictDialog()">新增分类</el-button>
       </div>
-      <el-input v-model="searchText" placeholder="搜索分类..." clearable size="small" style="padding: 8px 12px;" />
+      <div class="dict-search">
+        <PmsTextControl v-model="searchText" placeholder="搜索分类..." clearable size="compact" aria-label="搜索分类" />
+      </div>
       <div class="dict-list-wrap">
         <div
           v-for="d in filteredDicts" :key="d.id"
@@ -84,27 +86,41 @@
 
     <!-- 字典分类弹窗 -->
     <el-dialog v-model="dictDialogVisible" :title="isDictEdit ? '编辑字典分类' : '新增字典分类'" width="520px">
-      <el-form ref="dictFormRef" :model="dictForm" :rules="dictRules" label-width="90px">
-        <el-form-item label="字典编码" prop="dict_code">
-          <el-input v-model="dictForm.dict_code" :disabled="isDictEdit" placeholder="如: project_archive" />
+      <el-form ref="dictFormRef" :model="dictForm" :rules="dictRules" label-position="top" class="pms-standard-dialog-form">
+        <el-form-item prop="dict_code">
+          <PmsFormField field-id="dict-code" label="字典编码" required>
+            <PmsTextControl id="dict-code" v-model="dictForm.dict_code" :disabled="isDictEdit" placeholder="如: project_archive" aria-label="字典编码" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="表单名称" prop="dict_name">
-          <el-input v-model="dictForm.dict_name" placeholder="如: 项目档案" />
+        <el-form-item prop="dict_name">
+          <PmsFormField field-id="dict-name" label="表单名称" required>
+            <PmsTextControl id="dict-name" v-model="dictForm.dict_name" placeholder="如: 项目档案" aria-label="表单名称" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="数据库表">
-          <el-input v-model="dictForm.table_name" placeholder="如: pms_project_archive" />
+        <el-form-item>
+          <PmsFormField field-id="dict-table-name" label="数据库表">
+            <PmsTextControl id="dict-table-name" v-model="dictForm.table_name" placeholder="如: pms_project_archive" aria-label="数据库表" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="前端页面">
-          <el-input v-model="dictForm.page_name" placeholder="如: 项目档案" />
+        <el-form-item>
+          <PmsFormField field-id="dict-page-name" label="前端页面">
+            <PmsTextControl id="dict-page-name" v-model="dictForm.page_name" placeholder="如: 项目档案" aria-label="前端页面" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="dictForm.description" type="textarea" :rows="2" />
+        <el-form-item>
+          <PmsFormField field-id="dict-description" label="描述">
+            <PmsTextareaControl id="dict-description" v-model="dictForm.description" :rows="2" aria-label="字典描述" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="dictForm.sort" :min="0" />
+        <el-form-item>
+          <PmsFormField field-id="dict-sort" label="排序">
+            <PmsNumberControl id="dict-sort" v-model="dictForm.sort" :min="0" aria-label="字典排序" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="dictForm.status" :active-value="1" :inactive-value="0" />
+        <el-form-item>
+          <PmsFormField field-id="dict-status" label="状态">
+            <PmsSwitchControl id="dict-status" :model-value="dictForm.status === 1" aria-label="字典状态" @update:model-value="dictForm.status = $event ? 1 : 0" />
+          </PmsFormField>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -115,31 +131,36 @@
 
     <!-- 字段弹窗 -->
     <el-dialog v-model="itemDialogVisible" :title="isItemEdit ? '编辑字段' : '新增字段'" width="480px">
-      <el-form ref="itemFormRef" :model="itemForm" :rules="itemRules" label-width="90px">
-        <el-form-item label="表单字段名" prop="item_label">
-          <el-input v-model="itemForm.item_label" placeholder="前端显示的字段名，如：项目编号" />
+      <el-form ref="itemFormRef" :model="itemForm" :rules="itemRules" label-position="top" class="pms-standard-dialog-form">
+        <el-form-item prop="item_label">
+          <PmsFormField field-id="dict-item-label" label="表单字段名" required>
+            <PmsTextControl id="dict-item-label" v-model="itemForm.item_label" placeholder="前端显示的字段名，如：项目编号" aria-label="表单字段名" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="数据库列名" prop="item_value">
-          <el-input v-model="itemForm.item_value" placeholder="数据库字段名，如：project_code" />
+        <el-form-item prop="item_value">
+          <PmsFormField field-id="dict-item-value" label="数据库列名" required>
+            <PmsTextControl id="dict-item-value" v-model="itemForm.item_value" placeholder="数据库字段名，如：project_code" aria-label="数据库列名" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="字段类型">
-          <el-select v-model="itemForm.field_type" placeholder="选择字段类型" style="width:100%">
-            <el-option label="文本" value="text" />
-            <el-option label="数字" value="number" />
-            <el-option label="日期" value="date" />
-            <el-option label="枚举" value="enum" />
-            <el-option label="下拉选择" value="select" />
-            <el-option label="关联外键" value="relation" />
-          </el-select>
+        <el-form-item>
+          <PmsFormField field-id="dict-item-type" label="字段类型">
+            <PmsSelectControl id="dict-item-type" v-model="itemForm.field_type" :options="fieldTypeOptions" placeholder="选择字段类型" aria-label="字段类型" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="说明">
-          <el-input v-model="itemForm.description" type="textarea" :rows="2" placeholder="枚举值说明、外键引用等" />
+        <el-form-item>
+          <PmsFormField field-id="dict-item-description" label="说明">
+            <PmsTextareaControl id="dict-item-description" v-model="itemForm.description" :rows="2" placeholder="枚举值说明、外键引用等" aria-label="字段说明" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="itemForm.sort" :min="0" />
+        <el-form-item>
+          <PmsFormField field-id="dict-item-sort" label="排序">
+            <PmsNumberControl id="dict-item-sort" v-model="itemForm.sort" :min="0" aria-label="字段排序" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="itemForm.status" :active-value="1" :inactive-value="0" />
+        <el-form-item>
+          <PmsFormField field-id="dict-item-status" label="状态">
+            <PmsSwitchControl id="dict-item-status" :model-value="itemForm.status === 1" aria-label="字段状态" @update:model-value="itemForm.status = $event ? 1 : 0" />
+          </PmsFormField>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -155,9 +176,26 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
+import {
+  PmsFormField,
+  PmsNumberControl,
+  PmsSelectControl,
+  PmsSwitchControl,
+  PmsTextareaControl,
+  PmsTextControl,
+  type PmsOption,
+} from '@/form-system'
 
 const authStore = useAuthStore()
 const hasPermission = authStore.hasPermission
+const fieldTypeOptions: PmsOption[] = [
+  { label: '文本', value: 'text' },
+  { label: '数字', value: 'number' },
+  { label: '日期', value: 'date' },
+  { label: '枚举', value: 'enum' },
+  { label: '下拉选择', value: 'select' },
+  { label: '关联外键', value: 'relation' },
+]
 
 // ==================== 字典分类 ====================
 const dictList = ref<any[]>([])
@@ -317,31 +355,32 @@ onMounted(() => fetchDicts())
 .dict-page { display: flex; gap: 16px; height: 100%; }
 
 .dict-list-panel {
-  width: 300px; flex-shrink: 0; background: #fff;
-  border-radius: 4px; border: 1px solid #ebeef5;
+  width: 300px; flex-shrink: 0; background: var(--pms-surface);
+  border-radius: var(--pms-radius-sm); border: 1px solid var(--pms-border);
   display: flex; flex-direction: column; overflow: hidden;
 }
 .panel-header {
   padding: 14px 16px; font-size: 15px; font-weight: 600;
-  border-bottom: 1px solid #ebeef5; color: #303133;
+  border-bottom: 1px solid var(--pms-border); color: var(--pms-text);
   display: flex; justify-content: space-between; align-items: center;
 }
+.dict-search { padding: 8px 12px; }
 .dict-list-wrap { flex: 1; overflow-y: auto; }
 .dict-item {
-  padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f5f5f5;
+  padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--pms-border-soft);
   transition: background 0.15s;
 }
-.dict-item:hover { background: #f5f7fa; }
-.dict-item.active { background: #ecf5ff; border-left: 3px solid #409EFF; }
-.dict-item-name { font-size: 14px; font-weight: 500; color: #303133; }
-.dict-item-meta { font-size: 12px; color: #909399; margin-top: 4px; display: flex; gap: 8px; align-items: center; }
-.meta-table { font-family: monospace; color: #606266; }
-.empty-tip { padding: 40px 0; text-align: center; color: #909399; font-size: 13px; }
+.dict-item:hover { background: var(--pms-surface-muted); }
+.dict-item.active { background: var(--pms-primary-soft); border-left: 3px solid var(--pms-primary); }
+.dict-item-name { font-size: 14px; font-weight: 500; color: var(--pms-text); }
+.dict-item-meta { font-size: 12px; color: var(--pms-text-muted); margin-top: 4px; display: flex; gap: 8px; align-items: center; }
+.meta-table { font-family: var(--pms-font-mono); color: var(--pms-text-secondary); }
+.empty-tip { padding: 40px 0; text-align: center; color: var(--pms-text-muted); font-size: 13px; }
 
 .dict-items-panel { flex: 1; min-width: 0; }
 .items-header { display: flex; justify-content: space-between; align-items: center; }
-.meta-text { font-size: 12px; color: #909399; margin-left: 12px; font-family: monospace; }
-.empty-state { display: flex; align-items: center; justify-content: center; height: 400px; background: #fff; border-radius: 4px; border: 1px solid #ebeef5; }
+.meta-text { font-size: 12px; color: var(--pms-text-muted); margin-left: 12px; font-family: var(--pms-font-mono); }
+.empty-state { display: flex; align-items: center; justify-content: center; height: 400px; background: var(--pms-surface); border-radius: var(--pms-radius-sm); border: 1px solid var(--pms-border); }
 
-code { background: #f5f7fa; padding: 2px 6px; border-radius: 3px; font-size: 12px; color: #606266; }
+code { background: var(--pms-surface-muted); padding: 2px 6px; border-radius: 3px; font-size: 12px; color: var(--pms-text-secondary); }
 </style>

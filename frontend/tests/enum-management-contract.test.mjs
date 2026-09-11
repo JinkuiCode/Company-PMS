@@ -20,6 +20,10 @@ assert.match(enumView, /loadEnumOptions\(selectedDict\.value\.dict_code, true\)/
 assert.match(enumView, /系统自动分配/)
 assert.doesNotMatch(enumView, /v-model="itemForm\.item_value"/)
 assert.doesNotMatch(enumView, /validateItemValue|产品类别存储值不能包含逗号/)
+assert.match(enumView, /PmsTextControl/)
+assert.match(enumView, /PmsNumberControl/)
+assert.match(enumView, /PmsSwitchControl/)
+assert.doesNotMatch(enumView, /<el-(input|input-number|switch)\b/)
 
 assert.match(router, /path:\s*['"]system\/enum['"]/)
 assert.match(router, /EnumList\.vue/)

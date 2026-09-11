@@ -1,10 +1,11 @@
 <template>
   <PmsDataList :show-scrollbar="false" class="pms-system-page field-policy-page">
     <template #toolbar-left>
-      <el-segmented
+      <PmsSegmentedControl
         v-model="moduleCode"
-        size="small"
+        size="compact"
         :options="moduleOptions"
+        aria-label="字段规则模块"
         @change="fetchPolicies"
       />
       <span class="field-policy-count">{{ filteredRows.length }} 个字段</span>
@@ -26,19 +27,15 @@
 
     <template #filters>
       <div class="pms-filter-bar field-policy-filters">
-        <el-input
-          v-model="filters.keyword"
-          size="small"
-          clearable
-          placeholder="搜索字段名称或编码"
-          style="width: 230px"
-        />
-        <el-select v-model="filters.group" size="small" clearable placeholder="全部分组" style="width: 144px">
-          <el-option v-for="group in groupOptions" :key="group.key" :label="group.label" :value="group.key" />
-        </el-select>
-        <el-select v-model="filters.source" size="small" clearable placeholder="全部来源" style="width: 132px">
-          <el-option v-for="item in sourceOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
+        <div class="field-policy-filter field-policy-filter--keyword">
+          <PmsTextControl v-model="filters.keyword" size="compact" clearable placeholder="搜索字段名称或编码" aria-label="搜索字段名称或编码" />
+        </div>
+        <div class="field-policy-filter field-policy-filter--group">
+          <PmsSelectControl v-model="filters.group" size="compact" :options="groupSelectOptions" clearable placeholder="全部分组" aria-label="字段分组" />
+        </div>
+        <div class="field-policy-filter field-policy-filter--source">
+          <PmsSelectControl v-model="filters.source" size="compact" :options="sourceOptions" clearable placeholder="全部来源" aria-label="字段来源" />
+        </div>
         <el-button size="small" text @click="resetFilters">清空筛选</el-button>
       </div>
     </template>
@@ -65,40 +62,44 @@
         </el-table-column>
         <el-table-column label="业务显示" width="104" align="center">
           <template #default="{ row }">
-            <el-switch
+            <PmsSwitchControl
               v-model="row.visible"
-              size="small"
+              size="compact"
               :disabled="!canEdit || row.visible_locked || row.required"
+              :aria-label="`${row.label}业务显示`"
               @change="handleVisibleChange(row)"
             />
           </template>
         </el-table-column>
         <el-table-column label="允许编辑" width="104" align="center">
           <template #default="{ row }">
-            <el-switch
+            <PmsSwitchControl
               v-model="row.editable"
-              size="small"
+              size="compact"
               :disabled="!canEdit || row.editable_locked || !row.editable_cap || row.required"
+              :aria-label="`${row.label}允许编辑`"
               @change="handleEditableChange(row)"
             />
           </template>
         </el-table-column>
         <el-table-column label="必填" width="88" align="center">
           <template #default="{ row }">
-            <el-switch
+            <PmsSwitchControl
               v-model="row.required"
-              size="small"
+              size="compact"
               :disabled="!canEdit || row.required_locked || !row.required_cap || !row.visible || !row.editable"
+              :aria-label="`${row.label}必填`"
               @change="handleRequiredChange(row)"
             />
           </template>
         </el-table-column>
         <el-table-column label="列表可选" width="104" align="center">
           <template #default="{ row }">
-            <el-switch
+            <PmsSwitchControl
               v-model="row.list_available"
-              size="small"
+              size="compact"
               :disabled="!canEdit || row.list_available_locked || !row.list_available_cap || !row.visible"
+              :aria-label="`${row.label}列表可选`"
               @change="markDirty(row)"
             />
           </template>
@@ -117,6 +118,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import PmsDataList from '@/components/PmsDataList.vue'
 import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'
+import { PmsSegmentedControl, PmsSelectControl, PmsSwitchControl, PmsTextControl, type PmsOption } from '@/form-system'
 
 type FieldPolicy = {
   field_key: string
@@ -150,11 +152,11 @@ type FieldPolicyResponse = {
 const authStore = useAuthStore()
 const canEdit = computed(() => authStore.hasPermission('system:field-policy:edit'))
 const moduleCode = ref('project_archive')
-const moduleOptions = [
+const moduleOptions: PmsOption[] = [
   { label: '项目档案', value: 'project_archive' },
   { label: '项目进度', value: 'project_progress' },
 ]
-const sourceOptions = [
+const sourceOptions: PmsOption[] = [
   { label: '人工维护', value: 'detail' },
   { label: '项目主表', value: 'project' },
   { label: '档案引用', value: 'archive' },
@@ -167,6 +169,10 @@ const loading = ref(false)
 const saving = ref(false)
 const rows = ref<FieldPolicy[]>([])
 const groupOptions = ref<Array<{ key: string; label: string }>>([])
+const groupSelectOptions = computed<PmsOption[]>(() => groupOptions.value.map(group => ({
+  label: group.label,
+  value: group.key,
+})))
 const dirtyKeys = reactive(new Set<string>())
 const filters = reactive({ keyword: '', group: '', source: '' })
 
@@ -291,6 +297,14 @@ onMounted(fetchPolicies)
   gap: 8px;
   margin-bottom: 10px;
 }
+
+.field-policy-filter {
+  flex: 0 0 auto;
+}
+
+.field-policy-filter--keyword { width: 230px; }
+.field-policy-filter--group { width: 144px; }
+.field-policy-filter--source { width: 132px; }
 
 .field-policy-table :deep(.el-switch) {
   height: 24px;

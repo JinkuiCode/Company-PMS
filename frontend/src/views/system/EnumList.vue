@@ -6,7 +6,7 @@
           <strong>枚举管理</strong>
           <span>{{ filteredDicts.length }} 项</span>
         </div>
-        <el-input v-model="searchText" size="small" clearable placeholder="搜索枚举" />
+        <PmsTextControl v-model="searchText" size="compact" clearable placeholder="搜索枚举" aria-label="搜索枚举" />
       </div>
       <div class="enum-master-list">
         <button
@@ -107,21 +107,34 @@
     </section>
 
     <el-dialog v-model="itemDialogVisible" :title="isItemEdit ? '编辑枚举值' : '新增枚举值'" width="440px">
-      <el-form ref="itemFormRef" :model="itemForm" :rules="itemRules" label-width="84px">
-        <el-form-item label="存储值">
-          <div class="enum-generated-value">
-            <code v-if="isItemEdit" class="pms-code">{{ itemForm.item_value }}</code>
-            <span v-else>保存后由系统自动分配数字流水</span>
-          </div>
+      <el-form ref="itemFormRef" :model="itemForm" :rules="itemRules" label-position="top" class="pms-standard-dialog-form">
+        <el-form-item>
+          <PmsFormField field-id="enum-storage-value" label="存储值">
+            <div id="enum-storage-value" class="enum-generated-value">
+              <code v-if="isItemEdit" class="pms-code">{{ itemForm.item_value }}</code>
+              <span v-else>保存后由系统自动分配数字流水</span>
+            </div>
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="显示名称" prop="item_label">
-          <el-input v-model="itemForm.item_label" placeholder="页面展示文字" />
+        <el-form-item prop="item_label">
+          <PmsFormField field-id="enum-item-label" label="显示名称" required>
+            <PmsTextControl id="enum-item-label" v-model="itemForm.item_label" placeholder="页面展示文字" aria-label="显示名称" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="itemForm.sort" :min="0" controls-position="right" />
+        <el-form-item>
+          <PmsFormField field-id="enum-item-sort" label="排序">
+            <PmsNumberControl id="enum-item-sort" v-model="itemForm.sort" :min="0" controls-position="right" aria-label="枚举排序" />
+          </PmsFormField>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="itemForm.status" :active-value="1" :inactive-value="0" />
+        <el-form-item>
+          <PmsFormField field-id="enum-item-status" label="状态">
+            <PmsSwitchControl
+              id="enum-item-status"
+              :model-value="itemForm.status === 1"
+              aria-label="枚举状态"
+              @update:model-value="itemForm.status = $event ? 1 : 0"
+            />
+          </PmsFormField>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -138,6 +151,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'
+import { PmsFormField, PmsNumberControl, PmsSwitchControl, PmsTextControl } from '@/form-system'
 
 type EnumDefinition = {
   id: number
