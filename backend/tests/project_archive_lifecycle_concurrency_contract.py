@@ -1127,6 +1127,7 @@ def test_erp_ambiguous_network_outcome_stays_pending_and_blocks_delete():
 
     from app.core.database import SessionLocal
     from app.models.project import PmsProjectArchive
+    from app.services import kingdee as kingdee_service
     from app.services.kingdee import KingdeeClient, sync_project_archive_to_erp
     from app.services.project import delete_archive
 
@@ -1137,7 +1138,9 @@ def test_erp_ambiguous_network_outcome_stays_pending_and_blocks_delete():
             "ERP save response timed out",
             request=httpx.Request("POST", "https://kingdee.invalid/save"),
         )
-        with patch.object(KingdeeClient, "login", return_value=True), patch.object(
+        with patch.object(kingdee_service.settings, "K3_READ_ONLY", False), patch.object(
+            KingdeeClient, "login", return_value=True
+        ), patch.object(
             KingdeeClient,
             "query_assistant_data",
             return_value=None,
@@ -1168,6 +1171,7 @@ def test_real_kingdee_clear_business_rejection_remains_failed():
 
     from app.core.database import SessionLocal
     from app.models.project import PmsProjectArchive
+    from app.services import kingdee as kingdee_service
     from app.services.kingdee import KingdeeClient, sync_project_archive_to_erp
 
     archive_id = _create_archive("ERP-CLEAR-REJECTION")
@@ -1185,7 +1189,9 @@ def test_real_kingdee_clear_business_rejection_remains_failed():
     )
     db = SessionLocal()
     try:
-        with patch.object(KingdeeClient, "login", return_value=True), patch.object(
+        with patch.object(kingdee_service.settings, "K3_READ_ONLY", False), patch.object(
+            KingdeeClient, "login", return_value=True
+        ), patch.object(
             KingdeeClient,
             "query_assistant_data",
             return_value=None,

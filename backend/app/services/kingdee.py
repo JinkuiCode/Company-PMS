@@ -1,6 +1,6 @@
 """
 金蝶云星空 ERP 对接服务层
-使用 Session 认证模式（账号密码登录）
+支持官方 SDK 应用签名；密码会话仅用于显式回退。
 """
 import json
 import logging
@@ -33,23 +33,82 @@ class KingdeeClient:
         self.acct_id = settings.K3_ACCT_ID
         self.username = settings.K3_USERNAME
         self.password = settings.K3_PASSWORD
+        self.auth_mode = settings.K3_AUTH_MODE
+        self.read_only = settings.K3_READ_ONLY
+        self.app_id = settings.K3_APP_ID
+        self.app_secret = settings.K3_APP_SECRET
+        self.lcid = settings.K3_LCID
+        self.org_num = settings.K3_ORG_NUM
+        self._sensitive_values = {value for value in (self.password, self.app_secret) if value}
+        self.sdk = None
         self.client = httpx.Client(timeout=30.0, verify=False)  # 内网环境禁用证书验证
+
+    def _post(self, url: str, *, json: dict):
+        """官方 SDK 生成每次请求的签名；沿用现有 HTTP 传输，不自动重试。"""
+        if self.auth_mode == "app":
+            if self.sdk is None:
+                if not all((self.acct_id, self.username, self.app_id, self.app_secret)):
+                    raise ValueError("金蝶应用配置不完整")
+                from k3cloud_webapi_sdk.main import K3CloudApiSdk
+                self.sdk = K3CloudApiSdk()
+                self.sdk.InitConfig(
+                    self.acct_id, self.username, self.app_id, self.app_secret,
+                    server_url=self.base_url, lcid=self.lcid, org_num=self.org_num,
+                )
+            headers = self.sdk.BuildHeader(url)
+            self._sensitive_values.update(
+                value for key, value in headers.items() if "signature" in key.lower() and value
+            )
+            return self.client.post(url, json=json, headers=headers)
+        if self.auth_mode != "password":
+            raise ValueError("金蝶认证模式无效")
+        return self.client.post(url, json=json)
+
+    def _redact_message(self, message) -> str:
+        if not isinstance(message, str):
+            return "金蝶返回错误信息格式异常"
+        for value in sorted(self._sensitive_values, key=len, reverse=True):
+            message = message.replace(value, "[已脱敏]")
+        return message
+
+    @staticmethod
+    def _query_rows(result, min_columns: int) -> list:
+        """查询业务错误可能也返回 HTTP 200，不能将错误当作不存在。"""
+        if not isinstance(result, list) or any(
+            not isinstance(row, list) or len(row) < min_columns
+            or any(isinstance(value, (dict, list)) for value in row)
+            for row in result
+        ):
+            raise RuntimeError("金蝶查询未成功，请检查应用授权、账套及用户查询权限")
+        return result
 
     def login(self) -> bool:
         """
-        登录金蝶获取 Session
-        返回 True 表示登录成功，False 表示失败
+        应用模式通过真实的签名只读查询验证授权；密码模式登录获取会话。
+        不因应用认证失败自动退回密码模式。
         """
         try:
+            if self.auth_mode == "app":
+                url = f"{self.base_url}/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.ExecuteBillQuery.common.kdsvc"
+                response = self._post(url, json={"data": json.dumps({
+                    "FormId": "BOS_ASSISTANTDATA_DETAIL", "FieldKeys": "FEntryID",
+                    "FilterString": "1=0", "TopRowCount": 1, "StartRow": 0, "Limit": 1,
+                })})
+                response.raise_for_status()
+                self._query_rows(response.json(), 1)
+                logger.info("金蝶应用授权只读验证成功")
+                return True
+            if self.auth_mode != "password" or not all((self.acct_id, self.username, self.password)):
+                return False
             url = f"{self.base_url}/Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc"
             payload = {
                 "acctID": self.acct_id,
                 "username": self.username,
                 "password": self.password,
-                "lcid": 2052
+                "lcid": self.lcid
             }
 
-            response = self.client.post(url, json=payload)
+            response = self._post(url, json=payload)
             response.raise_for_status()
 
             result = response.json()
@@ -63,7 +122,8 @@ class KingdeeClient:
                 return False
 
         except Exception as e:
-            logger.error(f"金蝶登录异常: {str(e)}")
+            # 服务端错误或第三方异常可能含凭据/签名，不输出其原文。
+            logger.error("金蝶认证失败（%s），请检查认证模式、应用授权与连接配置", type(e).__name__)
             return False
 
     def query_assistant_data(self, form_id: str, category_code: str, project_code: str) -> Optional[dict]:
@@ -88,11 +148,10 @@ class KingdeeClient:
                 "Limit": 1,
             }, ensure_ascii=False)
 
-            response = self.client.post(url, json={"data": data_content})
+            response = self._post(url, json={"data": data_content})
             response.raise_for_status()
 
-            result = response.json()
-            logger.info(f"查询辅助资料返回: {json.dumps(result, ensure_ascii=False)[:300]}")
+            result = self._query_rows(response.json(), 3)
 
             # ExecuteBillQuery 返回二维数组 [[FEntryID, FNumber, FDataValue], ...]
             if result and isinstance(result, list) and len(result) > 0:
@@ -107,8 +166,8 @@ class KingdeeClient:
             return None
 
         except Exception as e:
-            logger.error(f"查询辅助资料异常: {str(e)}")
-            return None
+            logger.error("查询辅助资料失败（%s）", type(e).__name__)
+            raise RuntimeError("金蝶辅助资料查询失败，本次同步已停止；请检查授权及连接") from e
 
     def save_assistant_data(self, form_id: str, category_code: str, project_code: str,
                             project_name: str, description: str = "",
@@ -123,6 +182,8 @@ class KingdeeClient:
         :param entry_id: 记录内码（FEntryID），有值时为更新，空时为新建
         :return: 包含 success 和 message 的结果字典
         """
+        if self.read_only:
+            return {"success": False, "message": "金蝶当前为只读验证模式，未发送保存请求"}
         request_started = False
         try:
             url = f"{self.base_url}/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.Save.common.kdsvc"
@@ -157,14 +218,12 @@ class KingdeeClient:
             }
 
             logger.info(f"金蝶Save请求 - formid: {form_id}")
-            logger.info(f"金蝶Save请求 - data: {data_str[:300]}")
 
             request_started = True
-            response = self.client.post(url, json=payload)
+            response = self._post(url, json=payload)
             response.raise_for_status()
 
             result = response.json()
-            logger.info(f"金蝶Save返回: {json.dumps(result, ensure_ascii=False)[:500]}")
 
             result_data = result.get("Result") if isinstance(result, dict) else None
             status = (
@@ -173,7 +232,7 @@ class KingdeeClient:
                 else None
             )
             if not isinstance(status, dict) or "IsSuccess" not in status:
-                raise KingdeeSaveOutcomeAmbiguous(f"金蝶保存返回格式异常: {result}")
+                raise KingdeeSaveOutcomeAmbiguous("金蝶保存返回格式异常，需核对金蝶实际保存结果")
 
             is_success = status["IsSuccess"]
             if is_success is True:
@@ -192,23 +251,23 @@ class KingdeeClient:
                 )
                 return {
                     "success": False,
-                    "message": f"保存失败: {error_msg}",
+                    "message": f"保存失败: {self._redact_message(error_msg)}",
                 }
             raise KingdeeSaveOutcomeAmbiguous(
-                f"金蝶保存返回未知成功标记: {is_success!r}"
+                "金蝶保存返回未知成功标记，需核对金蝶实际保存结果"
             )
 
         except KingdeeSaveOutcomeAmbiguous:
             raise
         except Exception as e:
-            logger.error(f"保存辅助资料异常: {str(e)}")
+            logger.error("保存辅助资料异常（%s）", type(e).__name__)
             if request_started:
                 raise KingdeeSaveOutcomeAmbiguous(
-                    f"金蝶保存结果不确定: {e}"
+                    "金蝶保存结果不确定，请先核对金蝶实际资料，勿直接重试"
                 ) from e
             return {
                 "success": False,
-                "message": f"保存异常: {str(e)}"
+                "message": "金蝶保存准备失败，请检查配置"
             }
 
     def close(self):
@@ -559,13 +618,15 @@ def test_erp_connection() -> dict:
     测试金蝶 ERP 连接
     :return: 包含 success 和 message 的结果字典
     """
-    client = KingdeeClient()
+    client: KingdeeClient | None = None
     try:
+        client = KingdeeClient()
         if client.login():
             return {"success": True, "message": "金蝶连接测试成功"}
         else:
-            return {"success": False, "message": "金蝶登录失败，请检查账号密码"}
-    except Exception as e:
-        return {"success": False, "message": f"连接异常: {str(e)}"}
+            return {"success": False, "message": "金蝶认证失败，请检查认证模式、应用授权、账套及用户权限"}
+    except Exception:
+        return {"success": False, "message": "金蝶连接异常，请检查认证与连接配置"}
     finally:
-        client.close()
+        if client is not None:
+            client.close()

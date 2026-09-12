@@ -1,5 +1,7 @@
 from pathlib import Path
+from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -75,11 +77,17 @@ class Settings(BaseSettings):
     OA_CHECK_USER_PWD_URL: str = "http://10.10.1.149:8081/ssologin/checkUserPassword"  # OA 密码验证 REST 端点
     OA_HRM_SERVICE_URL: str = "http://10.10.1.149:8081/services/HrmService"  # OA 人力资源 WebService（checkUser SOAP）
 
-    # 金蝶云星空 ERP 对接（Session 认证模式）
+    # 金蝶云星空 ERP：app 为官方 SDK 签名；password 仅显式回退。
+    K3_AUTH_MODE: Literal["app", "password"] = "password"
+    K3_READ_ONLY: bool = True  # 默认关闭业务写入；仅在获批写入窗口显式设为 false
+    K3_APP_ID: str = ""
+    K3_APP_SECRET: str = Field(default="", repr=False)
+    K3_LCID: int = 2052
+    K3_ORG_NUM: int = 0
     K3_URL: str = "http://10.10.1.248/k3cloud"  # 金蝶服务器地址（内网用 http 避免证书问题）
     K3_ACCT_ID: str = "6938df0b584a60"          # 账套 ID
     K3_USERNAME: str = "I0001"                   # 金蝶登录账号
-    K3_PASSWORD: str = "Jsydadmin123."           # 金蝶登录密码
+    K3_PASSWORD: str = Field(default="", repr=False)
 
 
 settings = Settings()

@@ -252,3 +252,11 @@
 - 调整内容：新增 OA 单点登录部署说明，记录 OA Web 服务器、JSP 物理路径、Web 路径、项目源文件、正式 PMS 地址、替换步骤和敏感配置保护要求。
 - 涉及文件：`docs/OA单点登录部署说明.md`、`change.md`。
 - 验证结果：根据用户提供的 OA 服务器截图核对，`pms_sso.jsp` 位于 `E:\Weaver\ecology\jsp\pms_sso.jsp`；用户已确认更新成功且旧地址问题解决。本次未修改程序代码、服务配置或服务器文件。
+
+## 2026-09-12 - 金蝶应用认证迁入最新开发基线
+
+- 原因：原金蝶应用认证改动所在根目录比分支最新 `master` 落后 17 个提交，并混有多批未提交内容；用户确认改为只在开发机继续，需要在不覆盖统一表单和 SSO 更新的前提下完成本地收口。
+- 调整内容：从 `master` 提交 `0d588cc` 建立 `codex/kingdee-app-auth` 隔离工作树，仅迁入金蝶官方 SDK 应用签名认证、只读保护、配置模板、诊断脚本、专项测试、固定 SDK 包和对接文档；保留最新 OA 正式地址，不迁移旧 UI 样例和重复登录改动。受保护的 `.env.local` 未复制。
+- 安全补强：`K3_READ_ONLY` 代码默认值由 `false` 改为 `true`，只有在另行批准的写入窗口显式配置 `false` 才开放保存请求；专项契约已覆盖该默认关闭行为。
+- 涉及文件：`backend/app/core/config.py`、`backend/app/services/kingdee.py`、`backend/requirements.txt`、`backend/.env.kingdee.example`、`backend/scripts/check_kingdee_connection.py`、`backend/tests/kingdee_app_auth_contract.py`、`backend/tests/project_archive_lifecycle_concurrency_contract.py`、`backend/vendor/`、`docs/金蝶第三方应用对接SOP.md`、`docs/金蝶云星空接口对接方案.md`、金蝶设计与实施计划、`change.md`。
+- 验证结果：最新 `master` 基线的前端登录、统一表单、样式、标准列表、系统 UI 和生产构建通过；迁移完成后 `backend/tests` 全部 18 个契约测试通过，其中金蝶应用认证 13 项模拟契约覆盖默认只读和连接构造异常脱敏。未访问金蝶、未发送 Save、未连接或修改服务器。SDK SHA-256 与记录值 `b8e40f96ac143028dbb5fb732ec7e6c513628603070aabf3e53678a34e308056` 一致。
