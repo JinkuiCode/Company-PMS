@@ -260,3 +260,13 @@
 - 安全补强：`K3_READ_ONLY` 代码默认值由 `false` 改为 `true`，只有在另行批准的写入窗口显式配置 `false` 才开放保存请求；专项契约已覆盖该默认关闭行为。
 - 涉及文件：`backend/app/core/config.py`、`backend/app/services/kingdee.py`、`backend/requirements.txt`、`backend/.env.kingdee.example`、`backend/scripts/check_kingdee_connection.py`、`backend/tests/kingdee_app_auth_contract.py`、`backend/tests/project_archive_lifecycle_concurrency_contract.py`、`backend/vendor/`、`docs/金蝶第三方应用对接SOP.md`、`docs/金蝶云星空接口对接方案.md`、金蝶设计与实施计划、`change.md`。
 - 验证结果：最新 `master` 基线的前端登录、统一表单、样式、标准列表、系统 UI 和生产构建通过；迁移完成后 `backend/tests` 全部 18 个契约测试通过，其中金蝶应用认证 13 项模拟契约覆盖默认只读和连接构造异常脱敏。未访问金蝶、未发送 Save、未连接或修改服务器。SDK SHA-256 与记录值 `b8e40f96ac143028dbb5fb732ec7e6c513628603070aabf3e53678a34e308056` 一致。
+
+## 2026-09-14 - 本地登录账号同步与正式登录失败提示修复
+
+- 原因：本地只有 admin，服务器启用账号为 ael；普通登录页未处理统一拦截器留给页面处理的登录 401，导致点击后没有错误提示。
+- 调整内容：备份本地 SQLite 后，将本地用户 id=1 登录名改为 ael、同步服务器 ael 的密码校验值，保留用户 ID、角色与业务数据关系，撤销该本地用户旧记住登录令牌，并记录脱敏操作日志。服务器密码未重置；凭据经一次性加密传输，临时文件已移除。
+- 调整内容：登录页面仅处理 /auth/login 的 401，显示服务端文字或“用户名或密码错误”；其他错误仍由统一拦截器提示，避免 /auth/me 401 重复提示。新增实际登录处理器回归测试。
+- 涉及文件：frontend/src/views/Login.vue、frontend/tests/login-feedback-contract.test.mjs、docs/releases/PMS登录修复发布记录-20260914.md、change.md；本地受保护运行数据库 .runtime/data/pms-dev.db。
+- 验证结果：登录反馈用例按 TDD 先失败后通过，登录安全、样式、标准列表、系统 UI 契约及生产构建均退出 0；独立复查通过。本地与正式浏览器实测错误凭据均显示一次“用户名或密码错误”；本地密码校验值与服务器一致、角色关系不变。真实密码成功登录需用户自行输入验证，不记录密码。
+- 发布结果：正式服务器 10.10.1.228 前端已部署；旧版备份 C:\backup\PMS-login-feedback-20260914-084550；首页及发布文件 SHA-256 验证通过，/api/health 返回 200/ok。保留旧静态资源供已打开页面使用；未部署后端或配置、未重启后端、未写金蝶业务数据。
+- 版本范围：正式服务器 HEAD 保持 8108a7e，登录修复以可回退补丁发布。开发修复位于 codex/pms-release-readiness；尚未合并 master 或推送 GitHub。本地修复预览端口 5176 代理现有 8000 后端；默认 5174 仍为 master 页面。

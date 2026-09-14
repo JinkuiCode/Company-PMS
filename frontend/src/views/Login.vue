@@ -38,6 +38,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { isAxiosError } from 'axios'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { PmsTextControl } from '@/form-system'
@@ -66,8 +67,12 @@ async function handleLogin() {
     await authStore.login(form.username, form.password)
     ElMessage.success('登录成功')
     router.push('/dashboard')
-  } catch {
-    // 错误已在 request 拦截器中处理
+  } catch (error: unknown) {
+    // 登录 401 由页面负责提示；其他错误继续由统一拦截器处理。
+    if (isAxiosError(error) && error.config?.url === '/auth/login' && error.response?.status === 401) {
+      const detail = error.response.data?.detail
+      ElMessage.error(typeof detail === 'string' && detail.trim() ? detail : '用户名或密码错误')
+    }
   } finally {
     loading.value = false
   }
