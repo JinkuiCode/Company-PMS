@@ -405,3 +405,11 @@
 - 调整：Mac 退出临时后端，根目录标准启动器接管；服务器保留旧分支及补丁备份，切换 master 并部署 e752c13 确定版本包；统一服务器源码行尾格式和 Git 索引，保留原数据库、凭据、OA 配置和生产同步开关。SOP 更新至 5.2。
 - 涉及：服务器 C:\PMS 源码及 frontend/dist、本地启动状态；docs/金蝶第三方应用对接SOP.md、docs/releases/PMS三端版本统一记录-20260914.md、原主分支交接记录、change.md。
 - 验证：Mac 数据库备份 integrity_check、SQL Server COPY_ONLY/CHECKSUM 备份及 VERIFYONLY 通过；包内 221 项和服务器部署文件 219 项校验通过；服务健康、用户登录、项目档案/进度读取、OA 免密入口及两环境金蝶只读查询通过，生产样本保持 C。本次未执行业务保存。
+
+## 2026-09-14 安全配置与 Windows 运维模块
+
+- 原因：源码仍包含数据库、JWT、OA/SSO 等环境敏感默认值，服务器开机启动、健康检查和日志轮转尚无可重复执行的标准模块。
+- 调整：移除敏感及公司环境默认值，OA JSP 改为从 Java 运行环境读取共享密钥，两个旧 Windows 批处理改为标准运维入口；新增开发/生产运行模式和启动前配置校验；本地启动器使用项目根目录受保护配置并按需生成本机 JWT 密钥；新增 Windows 启停、进程归属校验、健康检查、日志轮转、计划任务注册及部署前备份模块，默认不自动重启。
+- 调整：发布包纳入安全配置模板和 Windows 运维模块；服务器发布说明补充配置检查、计划任务与重启验收边界。
+- 涉及文件：`.gitignore`、`backend/app/core/config.py`、`backend/main.py`、`backend/scripts/check_runtime_config.py`、`backend/scripts/prepare_local_config.py`、`backend/.env.example`、`OA对接/pms_sso.jsp`、`start-pms.command`、`pms-auto-start.bat`、`start-services.bat`、`ops/windows/`、`build-server-release.command`、相关契约测试、`docs/PMS服务器发布与回退说明.md`、`docs/PMS安全配置与Windows运维实施说明.md`、`change.md`。
+- 验证：全部后端契约脚本、全部前端契约脚本和前端生产构建通过；安全配置检查确认生产模式缺项会返回失败，当前业务源码中已知敏感明文扫描为 0。正式服务器配置迁移、计划任务安装、重启验收和密钥轮换尚未执行，需连接服务器后的独立维护窗口。

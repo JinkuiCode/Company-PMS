@@ -6,6 +6,8 @@
 
 本说明是通用发布步骤，不代表任一候选包已经部署。现场状态以 SOP 和本次批准范围为准：2026-09-14 已开放生产金蝶日常同步（K3_READ_ONLY=false）；后续维护不能因旧版只读验收文字而长期关闭已批准的日常同步。
 
+发布包同时包含 `ops/windows` 运维模块。模块存在不代表计划任务已经安装；正式服务器安装、重启验收和数据库恢复演练仍需单独维护窗口。
+
 ## 制作确定版本的候选包
 
 先审查并提交部署相关源码、前端完整目录、发布脚本和本说明。运行 `./build-server-release.command --output-dir release`，也支持绝对路径。工具拒绝未提交的构建输入，不再支持 `--skip-build`。
@@ -22,6 +24,7 @@
 4. 数据库类型、连接方式和数据文件或实例位置。
 5. Nginx 实际配置、静态文件目录、监听端口和反向代理目标。
 6. 最近一次可用备份及可用磁盘空间。
+7. `PMS-Startup`、`PMS-Health`、`PMS-Log-Rotation` 三项计划任务是否存在、最近结果及实际脚本路径。
 
 历史记录显示后端曾位于 `C:\PMS\backend`，Nginx 曾位于 `C:\nginx` 并通过 80 端口提供服务。这些只是上次检查结果，必须以重新连接后的现场核对为准。
 
@@ -58,9 +61,11 @@ Get-FileHash .\pms-server-*.zip -Algorithm SHA256
 2. 确认没有正在执行的 ERP 同步任务，再停止明确识别出的 PMS 后端服务。
 3. 使用发布包中的 `backend/app`、`backend/main.py`、`backend/scripts`、`backend/vendor` 和 `backend/requirements.txt` 更新程序文件。
 4. 保留服务器原有 `.env.local`、数据库、日志和运行时目录，不使用模板文件覆盖真实配置。
+   发布前先补充 `PMS_ENV=production` 和 `DEBUG=false`，使用 `backend/scripts/check_runtime_config.py` 只核对缺失项名称。不得把配置值输出到终端记录。
 5. 使用服务器实际运行的 Python 环境安装或核对固定依赖。
 6. 将 `frontend/dist` 作为一个完整目录切换，避免新旧资源混用。
-7. 按原服务管理方式启动后端；仅在确认 Nginx 配置和进程后执行必要的重载。
+7. 更新 `ops/windows` 运维脚本，但保留服务器现场的 `pms-operations.json`，不得用示例配置覆盖。
+8. 按原服务管理方式启动后端；仅在确认 Nginx 配置和进程后执行必要的重载。
 
 不得把开发机数据库、测试账号配置或 `.env.kingdee.example` 当作服务器真实配置。
 
@@ -75,6 +80,7 @@ Get-FileHash .\pms-server-*.zip -Algorithm SHA256
 5. 项目档案文本、选择、日期字段在 Windows 直连和 OA 嵌入环境无双框、文字移位或尺寸跳动。
 6. 先做不写业务数据的金蝶连接查询。连接工具自身 read_only=true 不代表服务写入开关。核对并恢复现场已批准的服务写入状态；如需额外样本保存，另明确样本及范围，不擅自批量同步。
 7. 操作日志没有异常写入或敏感内容。
+8. 在已批准窗口安装 `ops/windows` 计划任务后，验证开机启动、五分钟健康检查和每日日志轮转；首版保持 `autoRestart=false`。
 
 任何关键验收失败，都停止继续扩大使用范围，并保留现场日志和版本信息。
 

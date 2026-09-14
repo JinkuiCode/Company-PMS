@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -5,23 +6,39 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_CONFIG_FILE = Path(__file__).resolve().parents[2] / ".env.local"
+
+
+class RuntimeConfigurationError(RuntimeError):
+    def __init__(self, issues: list[str]):
+        self.issues = tuple(issues)
+        super().__init__("PMS runtime configuration is invalid: " + ", ".join(issues))
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[2] / ".env.local",
+        env_file=None,
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
-    APP_NAME: str = "PMS 项目管理系统"
-    DEBUG: bool = True
+    def __init__(self, **values):
+        if "_env_file" not in values:
+            values["_env_file"] = os.environ.get("PMS_CONFIG_FILE", DEFAULT_CONFIG_FILE)
+        super().__init__(**values)
 
-    # 数据库（MSSQL 2017）
-    DB_HOST: str = "10.10.1.149"
+    PMS_ENV: Literal["development", "production"] = "development"
+    APP_NAME: str = "PMS 项目管理系统"
+    DEBUG: bool = False
+
+    # Safe local defaults never target company infrastructure.
+    DB_HOST: str = ""
     DB_PORT: int = 1433
-    DB_USER: str = "sa-jinky"
-    DB_PASSWORD: str = "Qwerty1234."
+    DB_USER: str = ""
+    DB_PASSWORD: str = Field(default="", repr=False)
     DB_NAME: str = "PMS"
-    DB_DIALECT: str = "pyodbc"  # 本机缺少 unixODBC 时可设为 "pymssql"
-    DB_DRIVER: str = "ODBC Driver 17 for SQL Server"  # 服务器装18就改为 "ODBC Driver 18 for SQL Server"
+    DB_DIALECT: Literal["sqlite", "pyodbc", "pymssql"] = "sqlite"
+    DB_DRIVER: str = "ODBC Driver 17 for SQL Server"
     SQLITE_DB_PATH: str = "data/pms-dev.db"
 
     @property
@@ -34,60 +51,112 @@ class Settings(BaseSettings):
             return (
                 f"mssql+pymssql://{self.DB_USER}:{self.DB_PASSWORD}"
                 f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-                f"?charset=utf8"
+                "?charset=utf8"
             )
         driver = self.DB_DRIVER.replace(" ", "+")
         return (
             f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
             f"?driver={driver}"
-            f"&TrustServerCertificate=yes"
-            f"&charset=utf8"
+            "&TrustServerCertificate=yes"
+            "&charset=utf8"
         )
 
-    # JWT
-    SECRET_KEY: str = "pms-dev-secret-key-change-in-production"
+    # JWT and local bootstrap credentials.
+    SECRET_KEY: str = Field(default="", repr=False)
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 小时
-
-    # 仅用于无用户的新数据库；必须由部署环境显式提供，不设置固定默认凭据。
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     PMS_BOOTSTRAP_ADMIN_USERNAME: str = ""
-    PMS_BOOTSTRAP_ADMIN_PASSWORD: str = ""
+    PMS_BOOTSTRAP_ADMIN_PASSWORD: str = Field(default="", repr=False)
+    REMEMBER_TOKEN_EXPIRE_DAYS: int = 180
 
-    # 免密登录 Remember Me
-    REMEMBER_TOKEN_EXPIRE_DAYS: int = 180  # 默认半年，可调整为 365（一年）
+    # Weaver OA SSO. Production values belong in protected configuration only.
+    SSO_ENABLED: bool = False
+    SSO_SECRET_KEY: str = Field(default="", repr=False)
+    SSO_AUTO_CREATE_USER: bool = True
+    SSO_TOKEN_EXPIRE_SECONDS: int = 300
+    SSO_OA_DOMAIN: str = ""
+    OA_BASE_URL: str = ""
+    OA_APP_ID: str = ""
+    OA_APP_SECRET: str = Field(default="", repr=False)
+    OA_GET_TOKEN_URL: str = ""
+    OA_CHECK_TOKEN_URL: str = ""
+    OA_LOGIN_URL: str = ""
+    PMS_CALLBACK_URL: str = "http://127.0.0.1:5174/sso/callback"
+    PMS_FRONTEND_URL: str = "http://127.0.0.1:5174"
+    OA_SERVICE_VALIDATE_URL: str = ""
+    OA_CHECK_USER_PWD_URL: str = ""
+    OA_HRM_SERVICE_URL: str = ""
 
-    # 泛微 OA SSO 单点登录
-    SSO_ENABLED: bool = True
-    SSO_SECRET_KEY: str = "weaver-sso-secret-32byte-key!!"  # 与泛微约定，32字节用于 AES-256
-    SSO_AUTO_CREATE_USER: bool = True  # SSO 用户首次登录自动创建账号
-    SSO_TOKEN_EXPIRE_SECONDS: int = 300  # token 有效期 5 分钟
-    SSO_OA_DOMAIN: str = "oa.aelsystem.cn"  # OA 域名，用于 Referer 校验（空字符串跳过校验）
-
-    # OA 统一认证中心配置
-    OA_BASE_URL: str = "http://10.10.1.149:8081"
-    OA_APP_ID: str = "ssss"  # 认证应用标识（TODO: 切回 PMS 应用 1b26f14a-...）
-    OA_APP_SECRET: str = "yjcust"  # 认证应用密钥
-    OA_GET_TOKEN_URL: str = "http://10.10.1.149:8081/ssologin/getToken"
-    OA_CHECK_TOKEN_URL: str = "http://10.10.1.149:8081/ssologin/checkToken"
-    OA_LOGIN_URL: str = "http://10.10.1.149:8081/login/login.jsp"
-    PMS_CALLBACK_URL: str = "http://10.10.1.228/sso/callback"
-    PMS_FRONTEND_URL: str = "http://10.10.1.228"
-    OA_SERVICE_VALIDATE_URL: str = "http://10.10.1.149:8081/sso/serviceValidate"  # CAS ticket 验证端点
-    OA_CHECK_USER_PWD_URL: str = "http://10.10.1.149:8081/ssologin/checkUserPassword"  # OA 密码验证 REST 端点
-    OA_HRM_SERVICE_URL: str = "http://10.10.1.149:8081/services/HrmService"  # OA 人力资源 WebService（checkUser SOAP）
-
-    # 金蝶云星空 ERP：app 为官方 SDK 签名；password 仅显式回退。
+    # Kingdee K3Cloud. Business writes remain disabled by default.
     K3_AUTH_MODE: Literal["app", "password"] = "password"
-    K3_READ_ONLY: bool = True  # 默认关闭业务写入；仅在获批写入窗口显式设为 false
+    K3_READ_ONLY: bool = True
     K3_APP_ID: str = ""
     K3_APP_SECRET: str = Field(default="", repr=False)
     K3_LCID: int = 2052
     K3_ORG_NUM: int = 0
-    K3_URL: str = "http://10.10.1.248/k3cloud"  # 金蝶服务器地址（内网用 http 避免证书问题）
-    K3_ACCT_ID: str = "6938df0b584a60"          # 账套 ID
-    K3_USERNAME: str = "I0001"                   # 金蝶登录账号
+    K3_URL: str = ""
+    K3_ACCT_ID: str = ""
+    K3_USERNAME: str = ""
     K3_PASSWORD: str = Field(default="", repr=False)
+
+
+def _missing(settings: Settings, names: tuple[str, ...]) -> list[str]:
+    return [name for name in names if not str(getattr(settings, name, "")).strip()]
+
+
+def validate_runtime_config(settings: Settings) -> None:
+    issues: list[str] = []
+    external_services = settings.DB_DIALECT != "sqlite" or settings.SSO_ENABLED or bool(settings.K3_URL.strip())
+    if settings.PMS_ENV == "production" or external_services:
+        secret_key = settings.SECRET_KEY.strip()
+        if len(secret_key) < 32 or "change-in-production" in secret_key.lower():
+            issues.append("SECRET_KEY")
+
+    if settings.DB_DIALECT != "sqlite":
+        issues.extend(_missing(settings, ("DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME")))
+
+    if settings.SSO_ENABLED:
+        issues.extend(
+            _missing(
+                settings,
+                (
+                    "SSO_SECRET_KEY",
+                    "SSO_OA_DOMAIN",
+                    "OA_APP_ID",
+                    "OA_APP_SECRET",
+                    "OA_LOGIN_URL",
+                    "PMS_CALLBACK_URL",
+                    "PMS_FRONTEND_URL",
+                ),
+            )
+        )
+
+    if settings.K3_URL.strip():
+        if settings.K3_AUTH_MODE == "app":
+            issues.extend(_missing(settings, ("K3_APP_ID", "K3_APP_SECRET", "K3_ACCT_ID", "K3_USERNAME")))
+        else:
+            issues.extend(_missing(settings, ("K3_ACCT_ID", "K3_USERNAME", "K3_PASSWORD")))
+
+    if settings.PMS_ENV == "production":
+        if settings.DEBUG:
+            issues.append("DEBUG")
+        if settings.DB_DIALECT == "sqlite":
+            issues.append("DB_DIALECT")
+        if not settings.K3_URL.strip():
+            issues.append("K3_URL")
+        if settings.K3_AUTH_MODE == "app" and not settings.K3_URL.strip():
+            issues.extend(
+                _missing(
+                    settings,
+                    ("K3_APP_ID", "K3_APP_SECRET", "K3_ACCT_ID", "K3_USERNAME"),
+                )
+            )
+        elif settings.K3_AUTH_MODE == "password" and not settings.K3_URL.strip():
+            issues.extend(_missing(settings, ("K3_ACCT_ID", "K3_USERNAME", "K3_PASSWORD")))
+
+    if issues:
+        raise RuntimeConfigurationError(list(dict.fromkeys(issues)))
 
 
 settings = Settings()

@@ -17,7 +17,14 @@
     long timestamp = System.currentTimeMillis() / 1000; // 秒级时间戳
 
     // 3. 生成 HMAC-SHA256 签名（双方约定密钥，与 PMS 后端 SSO_SECRET_KEY 一致）
-    String secretKey = "weaver-sso-secret-32byte-key!!";
+    String secretKey = System.getProperty("PMS_SSO_SECRET");
+    if (secretKey == null || secretKey.trim().isEmpty()) {
+        secretKey = System.getenv("PMS_SSO_SECRET");
+    }
+    if (secretKey == null || secretKey.trim().isEmpty()) {
+        response.sendError(503, "PMS SSO is not configured");
+        return;
+    }
     // 签名格式与 PMS 后端 _make_sign 一致: loginid|username|dept|ts（无 username/dept 时填空字符串）
     String signData = loginId + "|||" + timestamp;
     Mac mac = Mac.getInstance("HmacSHA256");

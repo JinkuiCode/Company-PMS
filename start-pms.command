@@ -75,6 +75,7 @@ SOURCE_DIR="$(resolve_source_dir)" || exit 1
 BACKEND_DIR="$SOURCE_DIR/backend"
 FRONTEND_DIR="$SOURCE_DIR/frontend"
 BACKEND_DEPS="${PMS_BACKEND_DEPS:-$BACKEND_DIR/.venv-deps312}"
+PMS_CONFIG_FILE="${PMS_CONFIG_FILE:-$LAUNCHER_ROOT/backend/.env.local}"
 
 if [[ "$SQLITE_DB_PATH" != /* ]]; then
   SQLITE_DB_PATH="$LAUNCHER_ROOT/$SQLITE_DB_PATH"
@@ -459,6 +460,13 @@ if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
   exit 1
 fi
 
+PMS_CONFIG_FILE="$PMS_CONFIG_FILE" \
+  PYTHONPATH="$BACKEND_DEPS${PYTHONPATH:+:$PYTHONPATH}" \
+  "$PYTHON_BIN" "$BACKEND_DIR/scripts/prepare_local_config.py" >/dev/null || {
+  log "Failed to prepare protected local configuration: $PMS_CONFIG_FILE"
+  exit 1
+}
+
 acquire_start_lock || exit 1
 persist_source_state || {
   log "Failed to persist the active PMS source configuration."
@@ -491,6 +499,7 @@ start_backend() {
     cd "$BACKEND_DIR" || exit 1
     nohup env \
       PYTHONPATH="$BACKEND_DEPS${PYTHONPATH:+:$PYTHONPATH}" \
+      PMS_CONFIG_FILE="$PMS_CONFIG_FILE" \
       DB_DIALECT=sqlite \
       SQLITE_DB_PATH="$SQLITE_DB_PATH" \
       PMS_SOURCE_DIR="$SOURCE_DIR" \

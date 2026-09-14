@@ -46,7 +46,9 @@ DEPLOYMENT_PATHS=(
   backend/requirements.txt
   backend/scripts
   backend/vendor
+  backend/.env.example
   backend/.env.kingdee.example
+  ops/windows
   frontend
   build-server-release.command
   docs/PMS服务器发布与回退说明.md
@@ -90,7 +92,9 @@ git archive --format=tar "$COMMIT" \
   backend/requirements.txt \
   backend/scripts \
   backend/vendor \
+  backend/.env.example \
   backend/.env.kingdee.example \
+  ops/windows \
   | tar -xf - -C "$BUNDLE_DIR"
 cp -R "$BUILD_SOURCE/frontend/dist" "$BUNDLE_DIR/frontend/dist"
 git show "$COMMIT:docs/PMS服务器发布与回退说明.md" > "$BUNDLE_DIR/SERVER-DEPLOYMENT.md"
@@ -101,6 +105,7 @@ git show "$COMMIT:docs/PMS服务器发布与回退说明.md" > "$BUNDLE_DIR/SERV
   printf 'Build time (UTC): %s\n' "$BUILD_DATE"
   printf 'Frontend: rebuilt from Git commit %s\n' "$COMMIT"
   printf 'Backend: source and pinned requirements included\n'
+  printf 'Windows operations: startup, health, log rotation, and backup scripts included\n'
   printf 'ERP write mode: preserve the approved server configuration; pause writes only for the agreed maintenance window\n'
   printf 'Protected configuration: excluded\n'
   printf 'Database and runtime data: excluded\n'
@@ -109,7 +114,7 @@ git show "$COMMIT:docs/PMS服务器发布与回退说明.md" > "$BUNDLE_DIR/SERV
 
 (
   cd "$BUNDLE_DIR"
-  find backend frontend RELEASE-MANIFEST.txt SERVER-DEPLOYMENT.md -type f -print \
+  find backend frontend ops RELEASE-MANIFEST.txt SERVER-DEPLOYMENT.md -type f -print \
     | LC_ALL=C sort \
     | while IFS= read -r file_path; do
         shasum -a 256 "$file_path"

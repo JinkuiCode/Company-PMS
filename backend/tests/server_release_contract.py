@@ -12,7 +12,7 @@ class ReleaseContract(unittest.TestCase):
         npm=self.bin/'npm';npm.write_text('#!/bin/sh\nset -eu\nmkdir -p dist\ncat index.html src/main.js > dist/index.html\n')
         npm.chmod(0o755);self.env['PATH']=str(self.bin)+os.pathsep+self.env['PATH']
         self.git('init','-q');self.git('config','user.name','Release fixture');self.git('config','user.email','fixture@example.invalid')
-        files={'backend/app/core/config.py':'fixture config','backend/main.py':'fixture main','backend/requirements.txt':'fixture deps','backend/scripts/check.py':'fixture check','backend/vendor/k3cloud_webapi_sdk-3.0.0-py3-none-any.whl':'fixture wheel','backend/.env.kingdee.example':'K3_READ_ONLY=true','frontend/index.html':'ENTRY_A\n','frontend/src/main.js':'SOURCE_A\n','frontend/tsconfig.json':'{}','frontend/package.json':'{}','frontend/public/a.txt':'public','docs/PMS服务器发布与回退说明.md':'部署前只读核对与回退','frontend/package-lock.json':'{}'}
+        files={'backend/app/core/config.py':'fixture config','backend/main.py':'fixture main','backend/requirements.txt':'fixture deps','backend/scripts/check.py':'fixture check','backend/vendor/k3cloud_webapi_sdk-3.0.0-py3-none-any.whl':'fixture wheel','backend/.env.kingdee.example':'K3_READ_ONLY=true','backend/.env.example':'PMS_ENV=production','frontend/index.html':'ENTRY_A\n','frontend/src/main.js':'SOURCE_A\n','frontend/tsconfig.json':'{}','frontend/package.json':'{}','frontend/public/a.txt':'public','ops/windows/Start-Pms.ps1':'fixture ops','docs/PMS服务器发布与回退说明.md':'部署前只读核对与回退','frontend/package-lock.json':'{}'}
         for name,value in files.items():
             p=self.root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(value)
         shutil.copy2(ROOT/'build-server-release.command',self.root/'build-server-release.command')
@@ -34,7 +34,7 @@ class ReleaseContract(unittest.TestCase):
         archive=next((self.root/'release').glob('*.zip'));self.assertEqual(archive.with_suffix('.zip.sha256').read_text().split()[0],hashlib.sha256(archive.read_bytes()).hexdigest())
         with zipfile.ZipFile(archive) as z:
             names=z.namelist();prefix=names[0].split('/')[0]+'/'
-            for name in ['backend/main.py','backend/requirements.txt','backend/app/core/config.py','frontend/dist/index.html','RELEASE-MANIFEST.txt','SERVER-DEPLOYMENT.md','SHA256SUMS']:
+            for name in ['backend/main.py','backend/requirements.txt','backend/app/core/config.py','backend/.env.example','frontend/dist/index.html','ops/windows/Start-Pms.ps1','RELEASE-MANIFEST.txt','SERVER-DEPLOYMENT.md','SHA256SUMS']:
                 self.assertIn(prefix+name,names)
             for name in names:self.assertTrue({'.env.local','.git','data','node_modules','tests','__pycache__'}.isdisjoint(Path(name).parts))
             self.assertIn(self.git('rev-parse','HEAD'),z.read(prefix+'RELEASE-MANIFEST.txt').decode())

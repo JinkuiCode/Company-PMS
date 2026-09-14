@@ -1,0 +1,15 @@
+{
+  "installRoot": "C:\\PMS",
+  "pythonExe": "C:\\PMS\\backend\\.venv\\Scripts\\python.exe",
+  "nginxRoot": "C:\\nginx",
+  "nginxExe": "C:\\nginx\\nginx.exe",
+  "nginxConfig": "conf\\nginx.conf",
+  "protectedConfig": "C:\\PMS\\backend\\.env.local",
+  "dataRoot": "C:\\ProgramData\\PMS",
+  "backendPort": 8000,
+  "webPort": 80,
+  "maxLogSizeMb": 25,
+  "logRetentionDays": 30,
+  "autoRestart": false,
+  "restartAfterFailures": 2
+}

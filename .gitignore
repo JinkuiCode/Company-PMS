@@ -23,6 +23,7 @@ Thumbs.db
 # Env
 .env
 .env.local
+ops/windows/pms-operations.json
 
 # MySQL
 mysql/

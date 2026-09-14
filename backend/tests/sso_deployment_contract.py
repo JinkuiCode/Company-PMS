@@ -14,19 +14,27 @@ def test_oa_jsp_redirects_to_production_pms() -> None:
     assert LEGACY_ORIGIN not in jsp
 
 
-def test_backend_sso_defaults_match_production_pms() -> None:
+def test_backend_sso_addresses_require_protected_production_configuration() -> None:
     config = (ROOT / "backend" / "app" / "core" / "config.py").read_text(encoding="utf-8")
+    template = (ROOT / "backend" / ".env.example").read_text(encoding="utf-8")
 
-    assert f'PMS_CALLBACK_URL: str = "{PMS_ORIGIN}/sso/callback"' in config
-    assert f'PMS_FRONTEND_URL: str = "{PMS_ORIGIN}"' in config
-    sso_defaults = "\n".join(
-        line for line in config.splitlines()
-        if "PMS_CALLBACK_URL" in line or "PMS_FRONTEND_URL" in line
-    )
-    assert LEGACY_ORIGIN not in sso_defaults
+    assert 'PMS_CALLBACK_URL: str = "http://127.0.0.1:5174/sso/callback"' in config
+    assert 'PMS_FRONTEND_URL: str = "http://127.0.0.1:5174"' in config
+    assert "PMS_CALLBACK_URL=" in template
+    assert "PMS_FRONTEND_URL=" in template
+    assert PMS_ORIGIN not in config
+    assert LEGACY_ORIGIN not in config
+
+
+def test_oa_jsp_reads_shared_secret_from_protected_runtime() -> None:
+    jsp = (ROOT / "OA对接" / "pms_sso.jsp").read_text(encoding="utf-8")
+    assert 'System.getProperty("PMS_SSO_SECRET")' in jsp
+    assert 'System.getenv("PMS_SSO_SECRET")' in jsp
+    assert 'String secretKey = "' not in jsp
 
 
 if __name__ == "__main__":
     test_oa_jsp_redirects_to_production_pms()
-    test_backend_sso_defaults_match_production_pms()
+    test_backend_sso_addresses_require_protected_production_configuration()
+    test_oa_jsp_reads_shared_secret_from_protected_runtime()
     print("SSO deployment contract passed")

@@ -3,7 +3,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.core.config import settings, validate_runtime_config
 from app.core.database import get_db
 from app.api import auth, users, roles, menus, depts, projects, sso, erp, dicts, operation_logs, field_catalog, field_policies
 from app.services.authorization import get_current_user_context, require_permission
@@ -14,6 +14,7 @@ from app.models.rbac import SysRole, SysRoleMenu, SysMenu, SysUserRole
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理：启动时初始化数据库"""
+    validate_runtime_config(settings)
     init_db()
     print(f"   {settings.APP_NAME} 启动成功")
     yield
