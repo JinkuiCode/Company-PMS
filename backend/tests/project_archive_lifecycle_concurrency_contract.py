@@ -117,7 +117,10 @@ class _SuccessfulKingdeeClient:
         return None
 
     def save_assistant_data(self, **_kwargs):
-        return {"success": True, "message": "ok"}
+        return {"success": True, "message": "ok", "data": {"Id": "test-entry"}}
+
+    def ensure_assistant_data_audited(self, *_args, **_kwargs):
+        return {"success": True, "message": "已审核"}
 
     def close(self):
         return None

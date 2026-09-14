@@ -47,5 +47,8 @@ backend/.venv311/
 # Test results
 test-results/
 
+# Local server release bundles
+/release/
+
 # Qoder
 .qoder/

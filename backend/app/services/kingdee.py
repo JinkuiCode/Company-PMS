@@ -64,6 +64,18 @@ class KingdeeClient:
             raise ValueError("金蝶认证模式无效")
         return self.client.post(url, json=json)
 
+    def _business_error_message(self, message) -> str:
+        """Translate explicit record locks into a manual recovery instruction."""
+        text = self._redact_message(message)
+        operation_conflict = all(word in text for word in ("使用业务单据", "业务操作", "冲突", "请稍候"))
+        record_occupied = "占用" in text and any(word in text for word in ("单据", "资料", "表单"))
+        if operation_conflict or record_occupied:
+            return (
+                "金蝶当前单据被占用。请在金蝶端退出当前单据后，再次点击 PMS 的“同步”。"
+                f"如由其他用户占用，请联系该用户退出。金蝶返回：{text}"
+            )
+        return text
+
     def _redact_message(self, message) -> str:
         if not isinstance(message, str):
             return "金蝶返回错误信息格式异常"
@@ -126,7 +138,8 @@ class KingdeeClient:
             logger.error("金蝶认证失败（%s），请检查认证模式、应用授权与连接配置", type(e).__name__)
             return False
 
-    def query_assistant_data(self, form_id: str, category_code: str, project_code: str) -> Optional[dict]:
+    def query_assistant_data(self, form_id: str, category_code: str, project_code: str,
+                             *, include_status: bool = False) -> Optional[dict]:
         """
         查询辅助资料是否存在，返回含 FEntryID 的字典（用于更新时传内码）
         :param form_id: 表单ID，如 BOS_ASSISTANTDATA_DETAIL
@@ -138,20 +151,24 @@ class KingdeeClient:
             url = f"{self.base_url}/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.ExecuteBillQuery.common.kdsvc"
 
             # 该金蝶实例的 ExecuteBillQuery 需要把参数包装为 data JSON 字符串字段
-            filter_string = f"FNumber = '{project_code}'"
+            category_literal = category_code.replace("'", "''")
+            project_literal = project_code.replace("'", "''")
+            filter_string = f"FId.FNumber = '{category_literal}' AND FNumber = '{project_literal}'"
             data_content = json.dumps({
                 "FormId": form_id,
-                "FieldKeys": "FEntryID,FNumber,FDataValue",
+                "FieldKeys": "FEntryID,FNumber,FDataValue" + (",FDocumentStatus" if include_status else ""),
                 "FilterString": filter_string,
-                "TopRowCount": 1,
+                "TopRowCount": 2,
                 "StartRow": 0,
-                "Limit": 1,
+                "Limit": 2,
             }, ensure_ascii=False)
 
             response = self._post(url, json={"data": data_content})
             response.raise_for_status()
 
-            result = self._query_rows(response.json(), 3)
+            result = self._query_rows(response.json(), 4 if include_status else 3)
+            if len(result) > 1:
+                raise RuntimeError("金蝶同类别项目编号存在重复记录，已停止同步")
 
             # ExecuteBillQuery 返回二维数组 [[FEntryID, FNumber, FDataValue], ...]
             if result and isinstance(result, list) and len(result) > 0:
@@ -160,7 +177,8 @@ class KingdeeClient:
                     return {
                         "FEntryID": row[0],   # 内码（用于更新）
                         "FNumber": row[1],    # 编码
-                        "FDataValue": row[2] if len(row) > 2 else ""
+                        "FDataValue": row[2] if len(row) > 2 else "",
+                        **({"FDocumentStatus": row[3]} if include_status else {})
                     }
 
             return None
@@ -251,7 +269,7 @@ class KingdeeClient:
                 )
                 return {
                     "success": False,
-                    "message": f"保存失败: {self._redact_message(error_msg)}",
+                    "message": f"保存失败: {self._business_error_message(error_msg)}",
                 }
             raise KingdeeSaveOutcomeAmbiguous(
                 "金蝶保存返回未知成功标记，需核对金蝶实际保存结果"
@@ -269,6 +287,72 @@ class KingdeeClient:
                 "success": False,
                 "message": "金蝶保存准备失败，请检查配置"
             }
+
+    def _operate_assistant_data(self, operation: str, form_id: str, entry_id: str) -> dict:
+        """Only Submit/Audit are permitted; never automatically undo approval."""
+        if self.read_only:
+            return {"success": False, "message": "金蝶当前为只读模式，未发送提交或审核请求"}
+        if operation not in {"Submit", "Audit"} or not str(entry_id).strip():
+            return {"success": False, "message": "金蝶操作或资料内码无效，已停止"}
+        label = "提交" if operation == "Submit" else "审核"
+        payload = {"formid": form_id, "data": json.dumps({"Ids": str(entry_id), "Numbers": []})}
+        try:
+            response = self._post(
+                f"{self.base_url}/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.{operation}.common.kdsvc",
+                json=payload,
+            )
+            response.raise_for_status()
+            result = response.json()
+            body = result.get("Result") if isinstance(result, dict) else None
+            status = body.get("ResponseStatus") if isinstance(body, dict) else None
+            if not isinstance(status, dict) or type(status.get("IsSuccess")) is not bool:
+                raise KingdeeSaveOutcomeAmbiguous(f"金蝶{label}返回格式异常，请先回查状态，勿直接重试")
+            if status["IsSuccess"]:
+                return {"success": True}
+            errors = status.get("Errors", [])
+            first = errors[0] if isinstance(errors, list) and errors else None
+            message = first.get("Message", "未知错误") if isinstance(first, dict) else "未知错误"
+            return {"success": False, "message": f"保存已完成，但金蝶{label}失败：{self._business_error_message(message)}"}
+        except KingdeeSaveOutcomeAmbiguous:
+            raise
+        except Exception:
+            raise KingdeeSaveOutcomeAmbiguous(f"金蝶{label}结果不确定，请先回查实际状态，勿直接重试") from None
+
+    def ensure_assistant_data_audited(self, form_id: str, category_code: str,
+                                     project_code: str, project_name: str,
+                                     *, expected_entry_id: str) -> dict:
+        """Complete only missing transitions and verify persisted status, identity and name."""
+        if self.read_only:
+            return {"success": False, "message": "金蝶当前为只读模式，未发送提交或审核请求"}
+        row = self.query_assistant_data(form_id, category_code, project_code, include_status=True)
+        if not row or not row.get("FEntryID") or row["FNumber"] != project_code or row["FDataValue"] != project_name:
+            return {"success": False, "message": "金蝶保存后资料核对不一致，未继续提交审核"}
+        entry_id = str(row["FEntryID"])
+        if not expected_entry_id or entry_id != str(expected_entry_id):
+            raise KingdeeSaveOutcomeAmbiguous("金蝶保存与审核资料内码不一致，已停止，请人工核对")
+        for operation, from_states, to_states in (
+            ("Submit", {"Z", "A", "D"}, {"B", "C"}),
+            ("Audit", {"B"}, {"C"}),
+        ):
+            state = row.get("FDocumentStatus")
+            if state == "C":
+                return {"success": True, "message": "金蝶资料已审核", "entry_id": entry_id}
+            if state not in from_states:
+                if operation == "Submit" and state == "B":
+                    continue
+                return {"success": False, "message": "金蝶资料状态不支持自动提交审核，请人工核对"}
+            outcome = self._operate_assistant_data(operation, form_id, entry_id)
+            if not outcome["success"]:
+                return outcome
+            try:
+                row = self.query_assistant_data(form_id, category_code, project_code, include_status=True)
+            except Exception:
+                raise KingdeeSaveOutcomeAmbiguous("金蝶提交或审核后回查失败，请先核对实际状态，勿直接重试") from None
+            if not row or str(row.get("FEntryID")) != entry_id or row["FNumber"] != project_code or row["FDataValue"] != project_name:
+                raise KingdeeSaveOutcomeAmbiguous("金蝶提交或审核后资料身份发生变化，已停止，请人工核对")
+            if row.get("FDocumentStatus") not in to_states:
+                return {"success": False, "message": "金蝶接口返回成功，但实际提交或审核状态未生效，请人工核对"}
+        return {"success": True, "message": "金蝶资料已审核", "entry_id": entry_id}
 
     def close(self):
         """关闭 HTTP 客户端"""
@@ -381,6 +465,19 @@ def sync_project_archive_to_erp(
             entry_id=entry_id
         )
 
+        # 保存不等于审核完成；失败继续由原同步与操作日志统一记录。
+        if save_result["success"]:
+            saved_data = save_result.get("data")
+            saved_id = saved_data.get("Id") if isinstance(saved_data, dict) else None
+            if type(saved_id) not in (str, int) or not str(saved_id).strip() or str(saved_id) == "0":
+                raise KingdeeSaveOutcomeAmbiguous("金蝶保存成功但未返回有效内码，请回查资料，勿直接重试")
+            if entry_id and str(saved_id) != entry_id:
+                raise KingdeeSaveOutcomeAmbiguous("金蝶保存返回的内码与目标不一致，请人工核对")
+            save_result = client.ensure_assistant_data_audited(
+                form_id, category_code, archive.project_code, archive.project_name,
+                expected_entry_id=str(saved_id),
+            )
+
         # 4. 更新同步状态
         if save_result["success"]:
             archive.erp_synced = 1
@@ -415,7 +512,7 @@ def sync_project_archive_to_erp(
                 db.rollback()
                 raise
 
-            return {"success": True, "message": f"同步成功（{action}）"}
+            return {"success": True, "message": f"同步成功，金蝶已审核（{action}）"}
         else:
             archive.erp_sync_status = "failed"
             archive.erp_error_msg = save_result["message"]
@@ -564,9 +661,14 @@ def batch_sync_project_archives(
             failed_count += 1
             errors.append(f"ID {archive_id}: {result['message']}")
 
+    occupancy_errors = [error for error in errors if "金蝶当前单据被占用。" in error]
+    message = f"批量同步完成：成功 {success_count}，失败 {failed_count}"
+    if occupancy_errors:
+        message += "；" + "；".join(occupancy_errors)
+
     result = {
         "success": True,
-        "message": f"批量同步完成：成功 {success_count}，失败 {failed_count}",
+        "message": message,
         "success_count": success_count,
         "failed_count": failed_count,
         "errors": errors
