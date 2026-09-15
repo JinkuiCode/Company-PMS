@@ -420,3 +420,10 @@
 - 调整：配置检查脚本根据自身绝对路径加入后端根目录后再加载应用配置；新增独立进程契约，主动清除外部 `PYTHONPATH`，确保测试覆盖 Windows 运维脚本的真实调用方式。
 - 涉及文件：`backend/scripts/check_runtime_config.py`、`backend/tests/runtime_security_contract.py`、`change.md`。
 - 验证：新增契约先复现 `ModuleNotFoundError`，修复后运行时安全契约和 Windows 运维契约均通过。服务器旧生产服务保持运行，尚未部署本修复或重启服务。
+
+## 2026-09-15 PMS 数据库迁移连接兼容修复
+
+- 原因：PMS 数据库从 `10.10.1.149` 还原到 `10.10.1.230` 后，ODBC Driver 18 使用默认强制加密，在目标 SQL Server 登录前 TLS 握手阶段被断开；同机只读预检使用非加密连接可以正常访问目标库。
+- 调整：PMS 的 `pyodbc` 连接串显式设置 `Encrypt=no`，同时保留 `TrustServerCertificate=yes`，消除不同 SQL Server TLS 配置导致的驱动默认行为漂移。
+- 涉及文件：`backend/app/core/config.py`、`backend/tests/config_contract.py`。
+- 验证：配置契约新增 ODBC 加密参数断言，先失败后修复；待完成后端契约回归及服务器目标库切换验收。

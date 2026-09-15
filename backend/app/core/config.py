@@ -58,6 +58,7 @@ class Settings(BaseSettings):
             f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
             f"?driver={driver}"
+            "&Encrypt=no"
             "&TrustServerCertificate=yes"
             "&charset=utf8"
         )
