@@ -426,4 +426,7 @@
 - 原因：PMS 数据库从 `10.10.1.149` 还原到 `10.10.1.230` 后，ODBC Driver 18 使用默认强制加密，在目标 SQL Server 登录前 TLS 握手阶段被断开；同机只读预检使用非加密连接可以正常访问目标库。
 - 调整：PMS 的 `pyodbc` 连接串显式设置 `Encrypt=no`，同时保留 `TrustServerCertificate=yes`，消除不同 SQL Server TLS 配置导致的驱动默认行为漂移。
 - 涉及文件：`backend/app/core/config.py`、`backend/tests/config_contract.py`。
-- 验证：配置契约新增 ODBC 加密参数断言，先失败后修复；待完成后端契约回归及服务器目标库切换验收。
+- 验证：配置契约新增 ODBC 加密参数断言，先失败后修复；运行时安全契约和 Windows 运维契约通过。生产切换工具最初误用 `/health`，而实际健康地址为 `/api/health`，造成目标启动和回退均被误判超时；修正后切换成功。
+- 发布：服务器 `10.10.1.228` 已备份原配置并切换到 `10.10.1.230 / PMS`，使用独立运行账号 `pms_app_runtime`；后端新进程 PID 5816。服务器内部直连返回 PMS 数据库和 17 张表，启动日志确认应用完成启动；外部主页与 `/api/health` 均为 HTTP 200，匿名 `/api/auth/me` 为预期 HTTP 403。未执行 ERP 同步或其他业务写入。
+- 待验收：启动日志仍有被程序捕获的既存 `bcrypt` 版本兼容警告，当前不影响服务健康；需由用户通过 OA 或现有账号完成一次登录和项目档案、项目进度只读验收。
+- 回退：切换前环境配置备份位于 `C:\ProgramData\PMS-security-rollout-20260915\env-before-db-cutover-20260915-153420.bak`；原数据库 `10.10.1.149` 未改动，可按该备份恢复。
