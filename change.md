@@ -413,3 +413,10 @@
 - 调整：发布包纳入安全配置模板和 Windows 运维模块；服务器发布说明补充配置检查、计划任务与重启验收边界。
 - 涉及文件：`.gitignore`、`backend/app/core/config.py`、`backend/main.py`、`backend/scripts/check_runtime_config.py`、`backend/scripts/prepare_local_config.py`、`backend/.env.example`、`OA对接/pms_sso.jsp`、`start-pms.command`、`pms-auto-start.bat`、`start-services.bat`、`ops/windows/`、`build-server-release.command`、相关契约测试、`docs/PMS服务器发布与回退说明.md`、`docs/PMS安全配置与Windows运维实施说明.md`、`change.md`。
 - 验证：全部后端契约脚本、全部前端契约脚本和前端生产构建通过；安全配置检查确认生产模式缺项会返回失败，当前业务源码中已知敏感明文扫描为 0。正式服务器配置迁移、计划任务安装、重启验收和密钥轮换尚未执行，需连接服务器后的独立维护窗口。
+
+## 2026-09-15 Windows 生产配置预检脚本修复
+
+- 原因：服务器部署前使用新版 Windows 运维入口执行生产配置预检时，`check_runtime_config.py` 作为独立脚本运行无法定位同级 `app` 包，导致运维启动流程在停止旧服务前即失败。
+- 调整：配置检查脚本根据自身绝对路径加入后端根目录后再加载应用配置；新增独立进程契约，主动清除外部 `PYTHONPATH`，确保测试覆盖 Windows 运维脚本的真实调用方式。
+- 涉及文件：`backend/scripts/check_runtime_config.py`、`backend/tests/runtime_security_contract.py`、`change.md`。
+- 验证：新增契约先复现 `ModuleNotFoundError`，修复后运行时安全契约和 Windows 运维契约均通过。服务器旧生产服务保持运行，尚未部署本修复或重启服务。

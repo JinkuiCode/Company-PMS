@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import RuntimeConfigurationError, settings, validate_runtime_config
 

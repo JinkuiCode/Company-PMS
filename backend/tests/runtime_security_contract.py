@@ -1,4 +1,5 @@
 import os
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -147,6 +148,31 @@ def test_local_config_preparation_is_private_idempotent_and_quiet(tmp_path: Path
     assert config_path.read_text(encoding="utf-8") == content
 
 
+def test_runtime_config_checker_runs_as_standalone_script(tmp_path: Path) -> None:
+    config_path = tmp_path / ".env.local"
+    config_path.write_text(
+        "PMS_ENV=development\n"
+        "DB_DIALECT=sqlite\n"
+        "SECRET_KEY=standalone-check-secret-with-at-least-32-characters\n",
+        encoding="utf-8",
+    )
+    script = Path(__file__).resolve().parents[1] / "scripts" / "check_runtime_config.py"
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env["PMS_CONFIG_FILE"] = str(config_path)
+    result = subprocess.run(
+        [sys.executable, str(script), "--expect", "development"],
+        cwd=script.parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload == {"valid": True, "environment": "development", "issues": []}
+
+
 if __name__ == "__main__":
     test_sensitive_defaults_are_empty_and_hidden()
     test_safe_development_defaults_do_not_target_company_services()
@@ -158,4 +184,6 @@ if __name__ == "__main__":
     test_external_service_configuration_cannot_bypass_secret_checks()
     with tempfile.TemporaryDirectory() as tmp:
         test_local_config_preparation_is_private_idempotent_and_quiet(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        test_runtime_config_checker_runs_as_standalone_script(Path(tmp))
     print("runtime security contract passed")
