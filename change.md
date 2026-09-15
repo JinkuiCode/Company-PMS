@@ -431,3 +431,10 @@
 - 验收：用户已通过 OA 完成登录，并确认项目档案、项目进度读取正常。启动日志仍有被程序捕获的既存 `bcrypt` 版本兼容警告，但未影响本次登录和业务只读验收，后续可作为独立依赖维护项处理。
 - 安全例外：`10.10.1.230` 由信息安全管理员维护，当前无法进入服务器配置 SQL Server TLS。用户已知悉 `Encrypt=no` 会使数据库查询及返回数据不使用 TLS，并明确同意先合并当前内网兼容方案；后续由信息安全管理员为 SQL Server 配置专用证书后，恢复 `Encrypt=yes`、启用证书校验并重新完成连接与业务验收。
 - 回退：切换前环境配置备份位于 `C:\ProgramData\PMS-security-rollout-20260915\env-before-db-cutover-20260915-153420.bak`；原数据库 `10.10.1.149` 未改动，可按该备份恢复。
+
+## 2026-09-15 - 调整 PMS 到金蝶销售项目字段映射
+
+- 原因：业务确认金蝶销售项目需要按“PMS 编码到金蝶编码、PMS 编码到金蝶名称、PMS 名称到金蝶备注”维护，旧实现把 PMS 名称写入了金蝶名称。
+- 调整内容：金蝶保存时将 `project_code` 同时写入 `FNumber`、`FDataValue`，将 `project_name` 写入 `FDescription`；查询及自动提交审核回查同步校验编码、名称和备注。历史资料仍按 `FNumber` 定位，更新不改变金蝶内码和编码。
+- 涉及文件：`backend/app/services/kingdee.py`、`backend/tests/kingdee_app_auth_contract.py`、`backend/tests/kingdee_auto_audit_contract.py`、`backend/tests/kingdee_query_scope_contract.py`、`docs/金蝶第三方应用对接SOP.md`、`docs/金蝶云星空接口对接方案.md`、`change.md`。
+- 验证结果：新增映射契约先在旧实现失败，修改后认证/保存、自动审核、查询范围和占用提示专项测试通过；未对生产金蝶执行保存、提交或审核，未部署生产服务器。

@@ -154,9 +154,12 @@ class KingdeeClient:
             category_literal = category_code.replace("'", "''")
             project_literal = project_code.replace("'", "''")
             filter_string = f"FId.FNumber = '{category_literal}' AND FNumber = '{project_literal}'"
+            field_keys = "FEntryID,FNumber,FDataValue,FDescription"
+            if include_status:
+                field_keys += ",FDocumentStatus"
             data_content = json.dumps({
                 "FormId": form_id,
-                "FieldKeys": "FEntryID,FNumber,FDataValue" + (",FDocumentStatus" if include_status else ""),
+                "FieldKeys": field_keys,
                 "FilterString": filter_string,
                 "TopRowCount": 2,
                 "StartRow": 0,
@@ -166,11 +169,11 @@ class KingdeeClient:
             response = self._post(url, json={"data": data_content})
             response.raise_for_status()
 
-            result = self._query_rows(response.json(), 4 if include_status else 3)
+            result = self._query_rows(response.json(), 5 if include_status else 4)
             if len(result) > 1:
                 raise RuntimeError("金蝶同类别项目编号存在重复记录，已停止同步")
 
-            # ExecuteBillQuery 返回二维数组 [[FEntryID, FNumber, FDataValue], ...]
+            # ExecuteBillQuery 返回二维数组，字段顺序与 FieldKeys 一致。
             if result and isinstance(result, list) and len(result) > 0:
                 row = result[0]
                 if isinstance(row, list) and len(row) >= 2:
@@ -178,7 +181,8 @@ class KingdeeClient:
                         "FEntryID": row[0],   # 内码（用于更新）
                         "FNumber": row[1],    # 编码
                         "FDataValue": row[2] if len(row) > 2 else "",
-                        **({"FDocumentStatus": row[3]} if include_status else {})
+                        "FDescription": row[3] if len(row) > 3 else "",
+                        **({"FDocumentStatus": row[4]} if include_status else {})
                     }
 
             return None
@@ -188,15 +192,13 @@ class KingdeeClient:
             raise RuntimeError("金蝶辅助资料查询失败，本次同步已停止；请检查授权及连接") from e
 
     def save_assistant_data(self, form_id: str, category_code: str, project_code: str,
-                            project_name: str, description: str = "",
-                            entry_id: str = "") -> dict:
+                            project_name: str, entry_id: str = "") -> dict:
         """
         保存辅助资料（创建或更新）
         :param form_id: 表单ID
         :param category_code: 类别编码
         :param project_code: 项目编号
-        :param project_name: 项目名称
-        :param description: 描述
+        :param project_name: 项目名称，写入金蝶备注
         :param entry_id: 记录内码（FEntryID），有值时为更新，空时为新建
         :return: 包含 success 和 message 的结果字典
         """
@@ -213,8 +215,8 @@ class KingdeeClient:
                 "FEntryID": entry_id,
                 "FId": {"FNumber": category_code},  # 类别：销售项目
                 "FNumber": project_code,
-                "FDataValue": project_name,
-                "FDescription": description
+                "FDataValue": project_code,
+                "FDescription": project_name
             }
 
             # 金蝶要求 data 必须是 JSON 字符串，不是对象
@@ -321,11 +323,17 @@ class KingdeeClient:
     def ensure_assistant_data_audited(self, form_id: str, category_code: str,
                                      project_code: str, project_name: str,
                                      *, expected_entry_id: str) -> dict:
-        """Complete only missing transitions and verify persisted status, identity and name."""
+        """Complete only missing transitions and verify persisted status and field mapping."""
         if self.read_only:
             return {"success": False, "message": "金蝶当前为只读模式，未发送提交或审核请求"}
         row = self.query_assistant_data(form_id, category_code, project_code, include_status=True)
-        if not row or not row.get("FEntryID") or row["FNumber"] != project_code or row["FDataValue"] != project_name:
+        if (
+            not row
+            or not row.get("FEntryID")
+            or row["FNumber"] != project_code
+            or row["FDataValue"] != project_code
+            or row["FDescription"] != project_name
+        ):
             return {"success": False, "message": "金蝶保存后资料核对不一致，未继续提交审核"}
         entry_id = str(row["FEntryID"])
         if not expected_entry_id or entry_id != str(expected_entry_id):
@@ -348,7 +356,13 @@ class KingdeeClient:
                 row = self.query_assistant_data(form_id, category_code, project_code, include_status=True)
             except Exception:
                 raise KingdeeSaveOutcomeAmbiguous("金蝶提交或审核后回查失败，请先核对实际状态，勿直接重试") from None
-            if not row or str(row.get("FEntryID")) != entry_id or row["FNumber"] != project_code or row["FDataValue"] != project_name:
+            if (
+                not row
+                or str(row.get("FEntryID")) != entry_id
+                or row["FNumber"] != project_code
+                or row["FDataValue"] != project_code
+                or row["FDescription"] != project_name
+            ):
                 raise KingdeeSaveOutcomeAmbiguous("金蝶提交或审核后资料身份发生变化，已停止，请人工核对")
             if row.get("FDocumentStatus") not in to_states:
                 return {"success": False, "message": "金蝶接口返回成功，但实际提交或审核状态未生效，请人工核对"}
@@ -461,7 +475,6 @@ def sync_project_archive_to_erp(
             category_code=category_code,
             project_code=archive.project_code,
             project_name=archive.project_name,
-            description=f"PMS 项目档案同步",
             entry_id=entry_id
         )
 

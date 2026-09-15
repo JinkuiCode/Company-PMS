@@ -127,12 +127,17 @@ def test_signed_query_and_save_preserve_payload_and_never_retry():
         seen.append(req)
         assert req.headers["X-Kd-Signature"]
         if "ExecuteBillQuery" in str(req.url):
-            return httpx.Response(200, json=[[42, "TEST", "测试"]])
+            query = json.loads(json.loads(req.content)["data"])
+            assert query["FieldKeys"] == "FEntryID,FNumber,FDataValue,FDescription"
+            return httpx.Response(200, json=[[42, "TEST", "TEST", "测试"]])
         body = json.loads(req.content)
         assert body["formid"] == "BOS_ASSISTANTDATA_DETAIL"
         data = json.loads(body["data"])
         assert data["Model"]["FEntryID"] == "42"
         assert data["Model"]["FId"]["FNumber"] == "xsxm"
+        assert data["Model"]["FNumber"] == "TEST"
+        assert data["Model"]["FDataValue"] == "TEST"
+        assert data["Model"]["FDescription"] == "测试"
         assert data["NeedUpDateFields"] == ["FDataValue", "FDescription"]
         raise httpx.ReadTimeout("uncertain response")
     with client_with(handle) as client:

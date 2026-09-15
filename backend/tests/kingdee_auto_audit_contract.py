@@ -13,9 +13,9 @@ class FakeERP:
         op=str(req.url).split('DynamicFormService.')[1].split('.')[0];self.calls.append(op)
         body=json.loads(req.content);data=json.loads(body['data'])
         if op=='ExecuteBillQuery':
-            assert data['FieldKeys']=='FEntryID,FNumber,FDataValue,FDocumentStatus'
+            assert data['FieldKeys']=='FEntryID,FNumber,FDataValue,FDescription,FDocumentStatus'
             assert "FId.FNumber = 'xsxm' AND FNumber = 'TEST'"==data['FilterString']
-            return httpx.Response(200,json=[[self.entry,'TEST','样本',self.state]])
+            return httpx.Response(200,json=[[self.entry,'TEST','TEST','样本',self.state]])
         assert op in ['Submit','Audit']
         assert body['formid']=='BOS_ASSISTANTDATA_DETAIL' and data['Ids']=='42'
         if self.fail==op:return httpx.Response(200,json={'Result':{'ResponseStatus':{'IsSuccess':False,'Errors':[{'Message':'无操作权限 test-app-secret'}]}}})
@@ -79,6 +79,8 @@ class AutoAuditContract(unittest.TestCase):
             self.assertEqual(r['success'],expected_success)
             if expected_success:
                 self.assertEqual(a.erp_sync_status,'success');self.assertEqual(c.ensure_assistant_data_audited.call_args.kwargs['expected_entry_id'],'42')
+                self.assertEqual(c.save_assistant_data.call_args.kwargs['project_name'],'样本')
+                self.assertNotIn('description',c.save_assistant_data.call_args.kwargs)
             else:
                 self.assertEqual(a.erp_sync_status,'pending');c.ensure_assistant_data_audited.assert_not_called()
     def test_only_saved_cannot_mark_sync_success(self):
