@@ -445,3 +445,12 @@
 - 调整：相对 Nginx 配置路径统一基于 `nginxRoot` 解析，绝对路径保持原行为。
 - 涉及文件：`ops/windows/Export-PmsOperationsBackup.ps1`、`backend/tests/windows_operations_contract.py`、`change.md`。
 - 验证：新增相对路径契约先失败后通过；Windows 运维契约和发布包构建需在当前提交上重新验证。
+
+## 2026-09-16 PMS 正式服务器版本更新与运维任务启用
+
+- 原因：将已合并的金蝶项目字段映射和 Windows 运维备份修复部署到正式 PMS 服务器，并补齐开机启动、健康检查和日志轮转任务。
+- 调整：服务器 `10.10.1.228` 的 `C:\PMS` 从 `c3b8521` 快进到 `a8daf45`；部署同一提交构建的前端文件；注册 `PMS-Startup`、`PMS-Health`、`PMS-Log-Rotation` 三项计划任务，健康检查仍保持 `autoRestart=false`，不自动重启服务。
+- 备份：部署前运行标准运维备份，备份保存在 `C:\ProgramData\PMS-release-20260916\backups`；发布包和离线 Git bundle 保存在 `C:\ProgramData\PMS-release-20260916`。
+- 验证：服务器仓库为 `master@a8daf45` 且工作区干净；前端 160 个目录、160 个文件镜像复制成功且无失败；主页和 `/api/health` 返回 HTTP 200，匿名 `/api/auth/me` 返回预期 HTTP 403；三项计划任务均为 `Ready`。
+- 安全盘点：只读确认生产运行账号 `pms_app_runtime` 当前属于 `db_owner`，另有显式 `CONNECT`；本次未修改数据库权限。后续需先拆分数据库结构升级账号与日常运行账号，再收紧运行权限，避免影响当前自动建表和字段升级流程。
+- 业务边界：本次未执行金蝶保存、提交、审核或其他业务写入，未重启 Windows 或 SQL Server 服务。
