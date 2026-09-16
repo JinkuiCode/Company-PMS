@@ -4,18 +4,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app.core.config import settings, validate_runtime_config
-from app.core.database import get_db
+from app.core.database import engine, get_db
 from app.api import auth, users, roles, menus, depts, projects, sso, erp, dicts, operation_logs, field_catalog, field_policies
 from app.services.authorization import get_current_user_context, require_permission
 from app.models.init_db import init_db
+from app.services.database_revision import check_database_ready
 from app.models.rbac import SysRole, SysRoleMenu, SysMenu, SysUserRole
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理：启动时初始化数据库"""
+    """Production startup is read-only; upgrades require a separate command."""
     validate_runtime_config(settings)
-    init_db()
+    if settings.PMS_ENV == "production":
+        check_database_ready(engine)
+    else:
+        init_db()
     print(f"   {settings.APP_NAME} 启动成功")
     yield
 

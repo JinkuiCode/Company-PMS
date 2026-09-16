@@ -12,6 +12,7 @@ from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectAr
 from app.models.dict import SysDict, SysDictItem  # noqa: F401
 from app.models.operation_log import SysOperationLog  # noqa: F401
 from app.models.field_policy import SysBusinessFieldPolicy  # noqa: F401
+from app.models.database_revision import PmsDatabaseRevision  # noqa: F401
 
 
 def _init_dict_data(db):

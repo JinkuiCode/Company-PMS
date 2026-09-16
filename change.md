@@ -454,3 +454,11 @@
 - 验证：服务器仓库为 `master@a8daf45` 且工作区干净；前端 160 个目录、160 个文件镜像复制成功且无失败；主页和 `/api/health` 返回 HTTP 200，匿名 `/api/auth/me` 返回预期 HTTP 403；三项计划任务均为 `Ready`。
 - 安全盘点：只读确认生产运行账号 `pms_app_runtime` 当前属于 `db_owner`，另有显式 `CONNECT`；本次未修改数据库权限。后续需先拆分数据库结构升级账号与日常运行账号，再收紧运行权限，避免影响当前自动建表和字段升级流程。
 - 业务边界：本次未执行金蝶保存、提交、审核或其他业务写入，未重启 Windows 或 SQL Server 服务。
+
+## 2026-09-16 数据库升级与日常运行权限拆分（开发机）
+
+- 原因：正式 PMS 运行账号仍有 `db_owner`，因为后端生产启动会自动建表并运行升级；需先拆分升级和日常启动，再安全收紧数据库权限。
+- 调整：新增数据库版本表及就绪检查；生产启动只读检查版本，独立 `upgrade_database.py` 在受控发布时运行原初始化和迁移，失败保持未就绪；开发模式仍自动初始化。更新运维说明和项目开发规则，明确备份、升级、运行身份分离及版本提升要求。
+- 涉及文件：`backend/app/models/database_revision.py`、`backend/app/services/database_revision.py`、`backend/app/models/init_db.py`、`backend/scripts/upgrade_database.py`、`backend/main.py`、`backend/tests/database_upgrade_contract.py`、`ops/windows/README.md`、`docs/PMS服务器发布与回退说明.md`、`docs/superpowers/plans/2026-09-16-db-permission-split.md`、`AGENTS.md`、`change.md`。
+- 验证：Python 3.11 临时环境运行全部 25 项后端契约均通过；新增测试覆盖重复升级、缺失/旧版本、失败升级以及生产启动不调用初始化；`git diff --check` 通过。
+- 边界：仅在开发机功能分支实现，尚未推送、合并、部署；未更改正式数据库、账号权限或 PMS 服务。生产迁移及收权须在备份和单独批准的维护窗口完成。
