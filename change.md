@@ -438,3 +438,10 @@
 - 调整内容：金蝶保存时将 `project_code` 同时写入 `FNumber`、`FDataValue`，将 `project_name` 写入 `FDescription`；查询及自动提交审核回查同步校验编码、名称和备注。历史资料仍按 `FNumber` 定位，更新不改变金蝶内码和编码。
 - 涉及文件：`backend/app/services/kingdee.py`、`backend/tests/kingdee_app_auth_contract.py`、`backend/tests/kingdee_auto_audit_contract.py`、`backend/tests/kingdee_query_scope_contract.py`、`docs/金蝶第三方应用对接SOP.md`、`docs/金蝶云星空接口对接方案.md`、`change.md`。
 - 验证结果：新增映射契约先在旧实现失败，修改后认证/保存、自动审核、查询范围和占用提示专项测试通过；未对生产金蝶执行保存、提交或审核，未部署生产服务器。
+
+## 2026-09-16 Windows 运维备份路径修复
+
+- 原因：正式服务器执行发布前备份时，Nginx 配置使用相对路径 `conf\\nginx.conf`，旧脚本按当前目录查找而失败。
+- 调整：相对 Nginx 配置路径统一基于 `nginxRoot` 解析，绝对路径保持原行为。
+- 涉及文件：`ops/windows/Export-PmsOperationsBackup.ps1`、`backend/tests/windows_operations_contract.py`、`change.md`。
+- 验证：新增相对路径契约先失败后通过；Windows 运维契约和发布包构建需在当前提交上重新验证。

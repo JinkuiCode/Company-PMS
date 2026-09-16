@@ -61,6 +61,13 @@ def test_task_schedule_covers_startup_health_and_log_rotation() -> None:
     assert "Rotate-PmsLogs.ps1" in installer
 
 
+def test_backup_resolves_relative_nginx_config_from_nginx_root() -> None:
+    backup = read("Export-PmsOperationsBackup.ps1")
+    assert "[System.IO.Path]::IsPathRooted" in backup
+    assert "Join-Path $config.nginxRoot $config.nginxConfig" in backup
+    assert "Copy-Item -LiteralPath $nginxConfigPath" in backup
+
+
 def test_legacy_windows_launchers_delegate_without_embedded_credentials() -> None:
     combined = "\n".join(
         (ROOT / name).read_text(encoding="utf-8")
@@ -77,5 +84,6 @@ if __name__ == "__main__":
     test_health_monitor_does_not_auto_restart_by_default()
     test_scripts_never_embed_or_print_application_secrets()
     test_task_schedule_covers_startup_health_and_log_rotation()
+    test_backup_resolves_relative_nginx_config_from_nginx_root()
     test_legacy_windows_launchers_delegate_without_embedded_credentials()
     print("windows operations contract passed")

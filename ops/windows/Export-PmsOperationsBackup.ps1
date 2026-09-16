@@ -15,7 +15,12 @@ $programDestination = "$destination\program"
 New-Item -ItemType Directory -Path $programDestination -Force | Out-Null
 & robocopy $config.installRoot $programDestination /E /R:1 /W:1 /XD ".git" ".runtime" "data" "logs" /XF ".env.local" | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "Program backup failed with robocopy code $LASTEXITCODE." }
-Copy-Item -LiteralPath $config.nginxConfig -Destination "$destination\nginx.conf"
+$nginxConfigPath = if ([System.IO.Path]::IsPathRooted($config.nginxConfig)) {
+    $config.nginxConfig
+} else {
+    Join-Path $config.nginxRoot $config.nginxConfig
+}
+Copy-Item -LiteralPath $nginxConfigPath -Destination "$destination\nginx.conf"
 Copy-Item -LiteralPath $config.protectedConfig -Destination "$destination\protected-config.env"
 icacls "$destination\protected-config.env" /inheritance:r /grant:r "SYSTEM:F" "Administrators:F" | Out-Null
 
