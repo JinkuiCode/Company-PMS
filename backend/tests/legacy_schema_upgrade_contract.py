@@ -198,7 +198,7 @@ def test_legacy_business_fields_are_upgraded_before_orm_queries():
             if row[2] == 1
         }
         assert "ux_pms_project_archive_project_code_key" in unique_indexes
-        assert "ux_pms_project_archive_project_name_key" in unique_indexes
+        assert "ux_pms_project_archive_project_name_key" not in unique_indexes
         assert "ux_pms_project_archive_serial_no_key" in unique_indexes
     finally:
         conn.close()

@@ -179,11 +179,12 @@ def get_archive_delete_guards(db: Session, archive_ids: list[int]) -> dict[int, 
         .all()
     )
     archive_sync_states = {
-        archive_id: (erp_synced, erp_sync_status)
-        for archive_id, erp_synced, erp_sync_status in db.query(
+        archive_id: (erp_synced, erp_sync_status, data_origin)
+        for archive_id, erp_synced, erp_sync_status, data_origin in db.query(
             PmsProjectArchive.id,
             PmsProjectArchive.erp_synced,
             PmsProjectArchive.erp_sync_status,
+            PmsProjectArchive.data_origin,
         )
         .filter(PmsProjectArchive.id.in_(unique_ids))
         .all()
@@ -192,7 +193,7 @@ def get_archive_delete_guards(db: Session, archive_ids: list[int]) -> dict[int, 
     guards: dict[int, dict[str, Any]] = {}
     for archive_id in unique_ids:
         blockers: list[dict[str, Any]] = []
-        erp_synced, erp_sync_status = archive_sync_states.get(archive_id, (0, None))
+        erp_synced, erp_sync_status, data_origin = archive_sync_states.get(archive_id, (0, None, None))
         if project_count := project_counts.get(archive_id, 0):
             blockers.append({
                 "type": "business_reference",
@@ -201,12 +202,12 @@ def get_archive_delete_guards(db: Session, archive_ids: list[int]) -> dict[int, 
                 "count": project_count,
             })
         sync_count = sync_counts.get(archive_id, 0)
-        if sync_count or erp_synced == 1:
+        if sync_count or erp_synced == 1 or data_origin == "kingdee_initial":
             blockers.append({
                 "type": "external_sync",
                 "source": "kingdee",
                 "label": "金蝶 ERP",
-                "count": max(sync_count, int(erp_synced == 1)),
+                "count": max(sync_count, int(erp_synced == 1), int(data_origin == "kingdee_initial")),
             })
         if erp_sync_status == "pending":
             blockers.append({

@@ -19,6 +19,14 @@
 
 健康检查默认只记日志并返回失败，不自动重启。确认现场稳定后，才可在配置中启用 `autoRestart`。健康记录保存在 `C:\ProgramData\PMS\logs\health.log`。
 
+## 服务器文件位置
+
+- `C:\PMS` 是正式运行目录，不将发布临时包或历史副本混放在其正常源码和配置目录中。
+- 一次性发布材料、旧代码副本和核对报告统一放在 `C:\PMS\.runtime` 的专用子目录；历史发布目录为 `release-history\日期`，期初数据核对材料为 `initial-import\日期`。`.runtime` 不入 Git，也不包含在常规程序备份中，清理前应另行核实是否需要独立备份。
+- `C:\nginx` 是独立运行组件；`C:\backup` 和 `C:\ProgramData\PMS*` 现有备份及受保护运行资料按各自运维策略保留。本规则不授权移动这些目录，也不授权移动或删除运行中的 `C:\PMS` 文件。
+- 2026-09-17 的根目录整理记录见 `C:\PMS\.runtime\release-history\20260917\move-manifest.csv`，8 项均已归档。`PMS - 副本` 含未纳入版本管理的内容，仅移至历史目录，未删除；确认独有资料无保留价值前不得删除。`Archive-PmsRootArtifacts.ps1` 可先不带参数预检，确认后再以 `-Apply` 续跑；不强制关闭占用进程。
+- 金蝶期初异常中文清单在 `C:\PMS\.runtime\initial-import\20260917\kingdee-initial-anomalies-zh.csv`，同目录有中文说明及原始报告副本。含真实业务项目数据，仅留服务器本地，不纳入仓库或聊天附件。
+
 ## 数据库备份与恢复
 
 程序脚本不会保存数据库口令。SQL Server 备份应继续使用服务器既有受控方式执行 `COPY_ONLY` 和 `CHECKSUM`，并运行 `RESTORE VERIFYONLY WITH CHECKSUM`。恢复演练只能恢复到独立测试数据库，不得覆盖正式 `PMS` 数据库；正式恢复必须另开维护窗口。

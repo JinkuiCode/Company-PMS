@@ -28,9 +28,11 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     from app.services.project_archive_semantic_migration import upgrade_project_archive_semantics
     from app.services.project_archive_lifecycle_migration import upgrade_project_archive_lifecycle
+    from app.services.project_archive_initial_migration import upgrade_project_archive_initial
 
     upgrade_project_archive_semantics(engine)
     upgrade_project_archive_lifecycle(engine)
+    upgrade_project_archive_initial(engine)
 
     db = SessionLocal()
     try:

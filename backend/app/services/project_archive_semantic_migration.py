@@ -376,10 +376,6 @@ def _ensure_unique_indexes(connection) -> None:
             "CREATE UNIQUE INDEX ux_pms_project_archive_project_code_key "
             "ON pms_project_archive (project_code_key)"
         ),
-        "ux_pms_project_archive_project_name_key": (
-            "CREATE UNIQUE INDEX ux_pms_project_archive_project_name_key "
-            "ON pms_project_archive (project_name_key)"
-        ),
         "ux_pms_project_archive_serial_no_key": (
             "CREATE UNIQUE INDEX ux_pms_project_archive_serial_no_key "
             "ON pms_project_archive (serial_no_key) WHERE serial_no_key IS NOT NULL"

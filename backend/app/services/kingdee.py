@@ -25,6 +25,10 @@ class KingdeeSaveOutcomeAmbiguous(RuntimeError):
     """保存请求已开始，但无法可靠确认金蝶是否落库。"""
 
 
+class KingdeeDuplicateProjectCode(RuntimeError):
+    """The target category contains multiple entries with the same code."""
+
+
 class KingdeeClient:
     """金蝶云星空 WebAPI 客户端"""
 
@@ -171,7 +175,7 @@ class KingdeeClient:
 
             result = self._query_rows(response.json(), 5 if include_status else 4)
             if len(result) > 1:
-                raise RuntimeError("金蝶同类别项目编号存在重复记录，已停止同步")
+                raise KingdeeDuplicateProjectCode("金蝶同类别项目编号存在重复记录，已停止同步")
 
             # ExecuteBillQuery 返回二维数组，字段顺序与 FieldKeys 一致。
             if result and isinstance(result, list) and len(result) > 0:
@@ -187,6 +191,8 @@ class KingdeeClient:
 
             return None
 
+        except KingdeeDuplicateProjectCode:
+            raise
         except Exception as e:
             logger.error("查询辅助资料失败（%s）", type(e).__name__)
             raise RuntimeError("金蝶辅助资料查询失败，本次同步已停止；请检查授权及连接") from e

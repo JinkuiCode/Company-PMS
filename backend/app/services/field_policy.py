@@ -75,6 +75,7 @@ ARCHIVE_FIELDS = [
     _registry_field("serial_no", "序列号", "basic"),
     _registry_field("plan_start_date", "计划开始", "plan", value_type="date"),
     _registry_field("plan_end_date", "计划结束", "plan", value_type="date"),
+    _registry_field("data_origin", "档案来源", "system", source_type="system", editable=False),
     _registry_field("erp_sync_status", "同步状态", "erp", source_type="system", editable=False),
     _registry_field("erp_sync_time", "最后同步时间", "erp", value_type="datetime", source_type="system", editable=False),
     _registry_field("erp_sync_by_name", "最后同步人", "erp", source_type="system", editable=False),

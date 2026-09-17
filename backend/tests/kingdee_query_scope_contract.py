@@ -34,7 +34,7 @@ class QueryScopeContract(unittest.TestCase):
         self.assertEqual(row['FEntryID'], 22)
 
     def test_duplicate_in_same_category_stops(self):
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegex(RuntimeError, '金蝶同类别项目编号存在重复记录，已停止同步'):
             self.query_rows('xsxm', 'TEST', [('xsxm', 11, 'TEST', 'TEST', '重复一'), ('xsxm', 22, 'TEST', 'TEST', '重复二')])
 
 if __name__ == '__main__':

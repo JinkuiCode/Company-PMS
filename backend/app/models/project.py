@@ -14,8 +14,12 @@ class PmsProjectArchive(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_code: Mapped[str] = mapped_column(NVARCHAR(32), unique=True, nullable=False, comment="项目编号")
     project_code_key: Mapped[str] = mapped_column(NVARCHAR(32), nullable=False, comment="项目编号唯一键")
-    project_name: Mapped[str] = mapped_column(NVARCHAR(128), nullable=False, comment="项目名称")
-    project_name_key: Mapped[str] = mapped_column(NVARCHAR(128), nullable=False, comment="项目名称唯一键")
+    project_name: Mapped[str | None] = mapped_column(NVARCHAR(128), nullable=True, comment="项目名称")
+    project_name_key: Mapped[str | None] = mapped_column(NVARCHAR(128), nullable=True, comment="项目名称兼容键")
+    data_origin: Mapped[str] = mapped_column(
+        NVARCHAR(32), nullable=False, default="pms", server_default=text("'pms'"),
+        comment="档案来源: pms/kingdee_initial",
+    )
     customer: Mapped[str | None] = mapped_column(NVARCHAR(128), default=None, comment="客户")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1未启动 2进行中 3已完结 4暂停")
     is_enabled: Mapped[int] = mapped_column(
@@ -46,7 +50,6 @@ class PmsProjectArchive(Base):
     __table_args__ = (
         Index("idx_project_archive_enabled", "is_enabled"),
         Index("ux_pms_project_archive_project_code_key", "project_code_key", unique=True),
-        Index("ux_pms_project_archive_project_name_key", "project_name_key", unique=True),
         Index(
             "ux_pms_project_archive_serial_no_key",
             "serial_no_key",
@@ -106,7 +109,7 @@ def _clean_identity(value: str | None) -> str:
 @event.listens_for(PmsProjectArchive, "before_update")
 def _populate_archive_identity_keys(_mapper, _connection, target: PmsProjectArchive) -> None:
     target.project_code = _clean_identity(target.project_code)
-    target.project_name = _clean_identity(target.project_name)
+    target.project_name = _clean_identity(target.project_name) or None
     target.serial_no = _clean_identity(target.serial_no) or None
     target.customer = _clean_identity(target.customer) or None
     target.project_code_key = target.project_code.casefold()

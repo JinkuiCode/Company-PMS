@@ -157,10 +157,12 @@ def test_archive_uniqueness_and_linked_project_synchronization():
             ArchiveCreate(project_code="arch-001", project_name="另一个名称"),
             "project_code",
         )
-        expect_conflict(
+        same_name_id = create_archive(
+            db,
             ArchiveCreate(project_code="ARCH-002", project_name=" 唯一项目一 "),
-            "project_name",
-        )
+            user_id=user.id,
+        )["id"]
+        assert db.get(PmsProjectArchive, same_name_id).project_name == first.project_name
         expect_conflict(
             ArchiveCreate(project_code="ARCH-003", project_name="唯一项目三", serial_no="sn-001"),
             "serial_no",

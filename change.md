@@ -462,3 +462,39 @@
 - 涉及文件：`backend/app/models/database_revision.py`、`backend/app/services/database_revision.py`、`backend/app/models/init_db.py`、`backend/scripts/upgrade_database.py`、`backend/main.py`、`backend/tests/database_upgrade_contract.py`、`ops/windows/README.md`、`docs/PMS服务器发布与回退说明.md`、`docs/superpowers/plans/2026-09-16-db-permission-split.md`、`AGENTS.md`、`change.md`。
 - 验证：Python 3.11 临时环境运行全部 25 项后端契约均通过；新增测试覆盖重复升级、缺失/旧版本、失败升级以及生产启动不调用初始化；`git diff --check` 通过。
 - 边界：仅在开发机功能分支实现，尚未推送、合并、部署；未更改正式数据库、账号权限或 PMS 服务。生产迁移及收权须在备份和单独批准的维护窗口完成。
+
+## 2026-09-17 金蝶销售项目档案期初导入准备（开发机）
+
+- 原因：金蝶历史项目档案需要进入 PMS，但历史备注大量为空，不能将金蝶名称或编码冒充 PMS 项目名称；冲突记录也不能静默覆盖。
+- 调整：新增只读预检及受控导入脚本；仅将金蝶编码映射为 PMS 项目编号、备注映射为 PMS 项目名称，空备注保留空值。新增只读 `data_origin` 来源标识，期初记录显示“金蝶期初”，并以来源阻止删除，不伪造 PMS 已同步标志、时间或人员。后续编辑、ERP 同步和建立项目进度均要求先补齐名称。新增档案名称仍必填。版本化数据库升级允许期初名称为空，并保持非空名称唯一。
+- 涉及文件：`backend/app/models/project.py`、`backend/app/models/init_db.py`、`backend/app/schemas/project.py`、`backend/app/services/database_revision.py`、`backend/app/services/field_policy.py`、`backend/app/services/project.py`、`backend/app/services/project_archive_lifecycle.py`、`backend/app/services/project_archive_initial_migration.py`、`backend/app/services/kingdee_initial_archive.py`、`backend/scripts/import_kingdee_initial_archives.py`、`backend/tests/kingdee_initial_archive_contract.py`、`frontend/src/views/project/ProjectArchive.vue`、`frontend/tests/kingdee-initial-archive-contract.test.mjs`、`docs/superpowers/plans/2026-09-17-kingdee-initial-archive.md`、`change.md`。
+- 验证：期初映射、空名称、冲突隔离、来源删除保护和 SQLite 旧库升级专项契约通过；项目档案生命周期、数据库升级、字段目录、操作日志、项目更新等后端契约及前端标准列表/风格/系统 UI/档案筛选契约通过，前端构建通过。
+- 边界：仅开发机代码和服务器只读异常预检。异常明细留存 PMS 服务器本地 `C:\ProgramData\PMS-release-20260916\kingdee-initial-archive-anomalies-20260917.txt`，未写入仓库。尚未执行生产备份、数据库结构升级、期初导入、部署、推送或合并；正式操作需备份验证和另行批准。
+
+## 2026-09-17 期初异常清单整理与服务器历史目录归档
+
+- 原因：期初异常原始报告只有英文问题码，不便核对；多批发布临时目录散落在正式服务器 C 盘根目录。
+- 调整：在服务器本地生成含“序号、问题分类、关联项目编码或重复值、原始记录详情、处理建议、导入处理”六列的中文 CSV 和说明，保留原始报告副本。将 8 个未被 PMS 服务引用的历史目录移入 `C:\PMS\.runtime\release-history\20260917`。`C:\PMS - 副本` 含未入版本管理的内容；确认文件占用者是闲置 PowerShell 后正常退出该终端，再移动副本，未删除任何文件。
+- 涉及文件：`ops/windows/Format-KingdeeInitialAnomalies.ps1`、`ops/windows/Archive-PmsRootArtifacts.ps1`、`ops/windows/README.md`、`change.md`；服务器本地 `C:\PMS\.runtime\initial-import\20260917`、`C:\PMS\.runtime\release-history\20260917`。业务数据未进入仓库。
+- 验证：中文 CSV 与原报告均为 133 条，CSV 六列；8 个已归档目录共 18804 个文件，移动后逐项核对文件数和字节数，清单为 8 项 `Archived`、0 项待处理。服务器 `/api/health` 返回 HTTP 200，三个 PMS 计划任务仍存在。未改数据库、服务配置、正式源码或金蝶业务数据；未执行期初导入。
+
+## 2026-09-17 金蝶重复项目编码提示修复（开发机）
+
+- 原因：日常同步在金蝶同类别、同项目编码返回多条时虽会停止保存，但专门的重复原因被通用查询异常覆盖，页面只显示授权或连接错误。
+- 调整：重复编码使用独立异常并原样传至同步结果；其他查询异常仍走现有脱敏提示。不改变查询范围、禁用状态处理或金蝶写入流程。
+- 涉及文件：`backend/app/services/kingdee.py`、`backend/tests/kingdee_query_scope_contract.py`、`change.md`。
+- 验证：重复提示契约先失败后通过；金蝶应用认证、自动审核和期初导入契约通过。服务器只读核验新视图销售项目 937 条、空编码 0 条、重复编码 0 组；`A-202629` 在视图和金蝶只读 API 均返回 1 条。另以 `FForbidStatus=B` 查询到禁用样本，并确认仅按该样本编码查询时 API 仍返回禁用记录；视图过滤不等于日常同步过滤。未执行期初导入或金蝶保存，代码尚未部署。
+
+## 2026-09-17 金蝶期初视图调整后的只读异常复核
+
+- 原因：金蝶来源视图已过滤禁用记录，原异常清单及其重复编码结论不再适用于当前来源数据。
+- 调整：在 PMS 服务器 `C:\PMS\.runtime\initial-import\20260917\kingdee-initial-current-diagnostic-20260917.csv` 重新生成带中文问题标题和分类的诊断清单，未覆盖旧报告；只读检查目标 PMS 数据库的升级前置状态。
+- 涉及文件：服务器本地上述诊断 CSV、`change.md`。没有改动服务器程序、数据库结构或业务记录。
+- 验证：来源销售项目 937 条；按当前预检规则可作为候选 830 条，其中 643 条备注为空且按已确认规则允许期初留空；阻断异常 107 条，包含拟用名称重复 106 条（19 组）及与 PMS 现有编码冲突 1 条；项目编码重复、空编码或超长、现有名称冲突均为 0。CSV 重新读取为 107 行。当前 PMS 数据库没有 `data_origin` 列，也没有数据库版本表；正式导入仍须人工备份、升级、重新生成正式预检指纹并另行批准。
+
+## 2026-09-17 项目档案同名放行及期初规则调整（开发机）
+
+- 原因：业务确认项目名称可重复，项目档案以项目编码识别；旧预检将 106 条同名来源误列为异常，档案接口与数据库旧唯一索引也会阻止合法同名档案。
+- 调整：取消档案名称唯一校验及模型索引，保持项目编码和序列号的原有唯一约束；SQLite/MSSQL 升级均移除旧名称唯一索引且不再重建，数据库版本提升为 `2026-09-17-02`。金蝶期初预检只隔离无效编码/长度、来源重复编码和 PMS 已有编码；不同编码同名允许，空备注不填充金蝶名称。重新生成服务器只读诊断文件 `C:\PMS\.runtime\initial-import\20260917\kingdee-initial-code-only-diagnostic-20260917.csv`，旧报告保留。
+- 涉及文件：`backend/app/models/project.py`、`backend/app/services/project.py`、`backend/app/services/project_archive_initial_migration.py`、`backend/app/services/project_archive_semantic_migration.py`、`backend/app/services/kingdee_initial_archive.py`、`backend/app/services/database_revision.py`、`backend/scripts/import_kingdee_initial_archives.py`、`backend/tests/kingdee_initial_archive_contract.py`、`backend/tests/legacy_schema_upgrade_contract.py`、`backend/tests/project_archive_semantic_contract.py`、`docs/superpowers/plans/2026-09-17-kingdee-initial-archive.md`、`change.md`；服务器只读诊断 CSV。
+- 验证：同名预检、接口校验和旧 SQLite 唯一索引迁移测试先失败后通过；SQL Server 升级路径断言仅删除旧名称索引；全部 26 项后端契约、前端档案筛选/风格/标准列表/系统 UI/金蝶期初契约和 `npm run build` 通过。新视图 937 条，候选 936 条（其中空名称 643 条），只剩测试编码冲突 1 条，CSV 重新读取为 1 行。服务器正式库仍有名称唯一索引；`msdb` 最近可见完整备份为 2026-09-15 13:41，未记录备份校验和，不能作为本次升级/导入的已验证备份。未部署、升级或导入。

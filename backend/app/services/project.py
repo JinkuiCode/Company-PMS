@@ -672,6 +672,7 @@ def create_project(
             action_label="建立项目进度",
             reject_pending=False,
         )
+        _require_archive_name(archive.project_name)
         values["project_code"] = archive.project_code
         values["project_name"] = archive.project_name
         values["product_category"] = archive.product_category
@@ -996,7 +997,6 @@ def get_progress_logs(db: Session, task_id: int) -> list[dict]:
 # ==================== 项目档案 ====================
 ARCHIVE_UNIQUE_FIELDS = {
     "project_code": ("project_code_key", "项目编号", True),
-    "project_name": ("project_name_key", "项目名称", False),
     "serial_no": ("serial_no_key", "序列号", True),
 }
 
@@ -1016,6 +1016,15 @@ def _normalize_archive_values(values: dict[str, Any]) -> dict[str, Any]:
             })
         normalized[field_key] = cleaned or None
     return normalized
+
+
+def _require_archive_name(project_name: str | None) -> None:
+    if not project_name or not project_name.strip():
+        raise HTTPException(status_code=422, detail={
+            "code": "ARCHIVE_FIELD_REQUIRED",
+            "field_key": "project_name",
+            "message": "请先补全项目名称",
+        })
 
 
 def _ensure_archive_unique_values(
@@ -1077,6 +1086,7 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
         syncer = db.query(SysUser).filter(SysUser.id == a.erp_sync_by).first() if a.erp_sync_by else None
         items.append(ArchiveResponse(
             id=a.id, project_code=a.project_code, project_name=a.project_name,
+            data_origin=a.data_origin,
             status=a.status, manager_id=a.manager_id, customer=a.customer,
             equipment_series=a.equipment_series, serial_no=a.serial_no,
             product_category=a.product_category,
@@ -1184,6 +1194,7 @@ def update_archive(
 
     update_data = _normalize_archive_values(data.model_dump(exclude_unset=True))
     try:
+        _require_archive_name(update_data.get("project_name", archive.project_name))
         _ensure_archive_unique_values(db, update_data, exclude_archive_id=archive.id)
         if "status" in update_data:
             validate_enum_value(db, "archive_status", update_data["status"], current_value=archive.status)
@@ -1265,6 +1276,7 @@ def update_archive(
 
 def validate_archive_for_business_operation(db: Session, archive: PmsProjectArchive) -> None:
     """ERP 等后续业务操作前复用档案必填规则。"""
+    _require_archive_name(archive.project_name)
     policies = get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)["items"]
     current_values = {
         item["field_key"]: _jsonable(getattr(archive, item["field_key"], None))
@@ -1333,6 +1345,7 @@ def delete_archive(
             db.query(PmsProjectArchive)
             .filter(
                 PmsProjectArchive.id == archive_id,
+                PmsProjectArchive.data_origin != "kingdee_initial",
                 or_(
                     PmsProjectArchive.erp_synced.is_(None),
                     PmsProjectArchive.erp_synced != 1,
@@ -1477,6 +1490,7 @@ def batch_delete_archives(
             db.query(PmsProjectArchive)
             .filter(
                 PmsProjectArchive.id.in_(archive_id_set),
+                PmsProjectArchive.data_origin != "kingdee_initial",
                 or_(
                     PmsProjectArchive.erp_synced.is_(None),
                     PmsProjectArchive.erp_synced != 1,

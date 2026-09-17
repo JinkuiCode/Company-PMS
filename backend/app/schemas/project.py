@@ -50,7 +50,8 @@ class ArchiveBatchEnabledUpdate(ArchiveEnabledUpdate):
 class ArchiveResponse(BaseModel):
     id: int
     project_code: str
-    project_name: str
+    project_name: str | None
+    data_origin: str = "pms"
     status: int
     manager_id: int | None = None
     customer: str | None = None
@@ -80,7 +81,7 @@ class ArchiveOption(BaseModel):
     """下拉选项（精简版）"""
     id: int
     project_code: str
-    project_name: str
+    project_name: str | None
     model_config = {"from_attributes": True}
 
 

@@ -180,7 +180,7 @@
         <div class="archive-drawer-title-row">
           <div class="archive-drawer-identity">
             <div class="archive-drawer-title-line">
-              <div class="archive-drawer-title">{{ selectedArchive.project_name || '-' }}</div>
+              <div class="archive-drawer-title">{{ selectedArchive.project_name || '待补全名称' }}</div>
               <span v-if="selectedArchive.is_enabled !== 1" class="pms-status pms-status-neutral">
                 <span class="pms-status-dot"></span>已禁用
               </span>
@@ -403,6 +403,7 @@ const ARCHIVE_COLUMN_GROUP_DEFINITIONS = [
     key: 'audit',
     label: '维护信息',
     fields: [
+      { key: 'data_origin', label: '档案来源', value_type: 'text', list_available: true, quick_addable: false },
       { key: 'created_by_name', label: '创建人', value_type: 'text', list_available: true, quick_addable: false },
       { key: 'updated_by_name', label: '最后编辑人', value_type: 'text', list_available: true, quick_addable: false },
       { key: 'updated_at', label: '最后编辑时间', value_type: 'datetime', list_available: true, quick_addable: false },
@@ -459,6 +460,7 @@ const ARCHIVE_DRAWER_GROUP_DEFINITIONS: Array<{
     key: 'system',
     label: '维护信息',
     fields: [
+      { key: 'data_origin', label: '档案来源', value_type: 'text', source_type: 'system' },
       { key: 'created_by_name', label: '创建人', value_type: 'text', source_type: 'system' },
       { key: 'created_at', label: '创建时间', value_type: 'datetime', source_type: 'system' },
       { key: 'updated_by_name', label: '最后编辑人', value_type: 'text', source_type: 'system' },
@@ -767,6 +769,7 @@ function archiveDrawerSelectPlaceholder(fieldKey: string) {
 
 const erpSyncStatusOptions: ListFilterOption[] = [
   { label: '待同步', value: 'pending' },
+  { label: '金蝶历史档案', value: 'historical' },
   { label: '已同步', value: 'success' },
   { label: '失败', value: 'failed' },
 ]
@@ -1029,7 +1032,11 @@ const columnDefs = computed<ColDef[]>(() => [
     ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false } as ColDef]
     : []),
   { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left', hide: !archiveColumnListAvailable('project_code') },
-  { colId: 'project_name', field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160, hide: !archiveColumnListAvailable('project_name') },
+  {
+    colId: 'project_name', field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160,
+    hide: !archiveColumnListAvailable('project_name'),
+    valueFormatter: (params: any) => params.value || '待补全名称',
+  },
   { ...archiveColumnVisibility('customer'), field: 'customer', headerName: '客户', width: 150, minWidth: 120 },
   {
     ...archiveColumnVisibility('product_category'), field: 'product_category', headerName: '产品类别', width: 110, minWidth: 100,
@@ -1058,6 +1065,10 @@ const columnDefs = computed<ColDef[]>(() => [
     valueFormatter: (params: any) => params.value ? params.value.substring(0, 10) : '-',
   },
   { ...archiveColumnVisibility('created_by_name'), field: 'created_by_name', headerName: '创建人', width: 110, minWidth: 96 },
+  {
+    ...archiveColumnVisibility('data_origin'), field: 'data_origin', headerName: '档案来源', width: 122, minWidth: 112,
+    valueFormatter: (params: any) => ({ kingdee_initial: '金蝶期初', pms: 'PMS新建' } as Record<string, string>)[params.value] || '-',
+  },
   { ...archiveColumnVisibility('updated_by_name'), field: 'updated_by_name', headerName: '最后编辑人', width: 120, minWidth: 110 },
   {
     ...archiveColumnVisibility('updated_at'), field: 'updated_at', headerName: '最后编辑时间', width: 170, minWidth: 160,
@@ -1078,6 +1089,7 @@ const columnDefs = computed<ColDef[]>(() => [
     cellRenderer: (params: any) => {
       const v = params.value
       if (!v || v === 'pending') return '<span class="pms-status pms-status-warning"><span class="pms-status-dot"></span>待同步</span>'
+      if (v === 'historical') return '<span class="pms-status pms-status-neutral"><span class="pms-status-dot"></span>金蝶历史档案</span>'
       if (v === 'success') return '<span class="pms-status pms-status-success"><span class="pms-status-dot"></span>已同步</span>'
       if (v === 'failed') {
         const title = escapeHtml(params.data.erp_error_msg || '')
@@ -1184,6 +1196,7 @@ function archiveDrawerValues(row: any) {
   return {
     project_code: row.project_code || '',
     project_name: row.project_name || '',
+    data_origin: row.data_origin || 'pms',
     customer: row.customer || '',
     manager_id: row.manager_id ?? null,
     equipment_series: row.equipment_series ?? null,
@@ -1296,8 +1309,11 @@ function formatArchiveDateTime(value: unknown) {
 
 function formatArchiveDrawerValue(field: ArchiveDrawerField) {
   const value = archiveDrawerCurrentValue(field)
+  if (field.key === 'data_origin') {
+    return ({ kingdee_initial: '金蝶期初', pms: 'PMS新建' } as Record<string, string>)[String(value)] || '-'
+  }
   if (field.key === 'erp_sync_status') {
-    return ({ pending: '待同步', success: '已同步', failed: '同步失败' } as Record<string, string>)[String(value || 'pending')] || String(value)
+    return ({ pending: '待同步', historical: '金蝶历史档案', success: '已同步', failed: '同步失败' } as Record<string, string>)[String(value || 'pending')] || String(value)
   }
   if (archiveDrawerValueEmpty(field)) return archiveDrawerFieldEditable(field) ? '点击填写' : '-'
   if (field.key === 'product_category') return enumLabel('product_category', value)
