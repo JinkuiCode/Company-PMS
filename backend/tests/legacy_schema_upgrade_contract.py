@@ -236,6 +236,23 @@ def test_legacy_business_fields_are_upgraded_before_orm_queries():
         conn.close()
 
 
+def test_reupgrade_preserves_initial_blank_and_duplicate_names():
+    from app.models.init_db import init_db
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("INSERT INTO pms_project_archive (project_code, project_code_key, project_name, data_origin, status, erp_synced) VALUES ('INITIAL-BLANK', 'initial-blank', NULL, 'kingdee_initial', 1, 0)")
+        conn.execute("INSERT INTO pms_project_archive (project_code, project_code_key, project_name, project_name_key, data_origin, status, erp_synced) VALUES ('INITIAL-SAME', 'initial-same', '旧档案', '旧档案', 'kingdee_initial', 1, 0)")
+        conn.commit()
+    finally:
+        conn.close()
+    init_db()
+    init_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        assert conn.execute("SELECT project_name, project_name_key FROM pms_project_archive WHERE project_code='INITIAL-BLANK'").fetchone() == (None, None)
+        assert conn.execute("SELECT COUNT(*) FROM pms_project_archive WHERE project_name='旧档案'").fetchone()[0] == 2
+
+
 if __name__ == "__main__":
     test_legacy_business_fields_are_upgraded_before_orm_queries()
+    test_reupgrade_preserves_initial_blank_and_duplicate_names()
     print("legacy schema upgrade contract passed")

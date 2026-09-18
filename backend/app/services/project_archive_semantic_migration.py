@@ -300,26 +300,25 @@ def _migrate_detail_archive_fields(
 
 
 def _normalize_archive_identity_rows(connection) -> None:
-    rows = list(connection.execute(text("""
-        SELECT id, project_code, project_name, serial_no
+    origin = "data_origin" if "data_origin" in _column_names(connection, "pms_project_archive") else "'pms' AS data_origin"
+    rows = list(connection.execute(text(f"""
+        SELECT id, project_code, project_name, serial_no, {origin}
         FROM pms_project_archive
         ORDER BY id
     """)).mappings())
     seen: dict[str, dict[str, int]] = {
         "project_code": {},
-        "project_name": {},
         "serial_no": {},
     }
     normalized_rows: list[dict[str, Any]] = []
     for row in rows:
         project_code = str(row["project_code"] or "").strip()
-        project_name = str(row["project_name"] or "").strip()
+        project_name = str(row["project_name"]).strip() if row["project_name"] is not None else None
         serial_no = str(row["serial_no"] or "").strip() or None
-        if not project_code or not project_name:
+        if not project_code or (not project_name and row["data_origin"] != "kingdee_initial"):
             raise RuntimeError(f"档案 {row['id']} 的项目编号或项目名称为空，无法迁移")
         keys = {
             "project_code": project_code.casefold(),
-            "project_name": project_name,
             "serial_no": serial_no.casefold() if serial_no else None,
         }
         for field_key, key in keys.items():
@@ -336,7 +335,7 @@ def _normalize_archive_identity_rows(connection) -> None:
             "project_name": project_name,
             "serial_no": serial_no,
             "project_code_key": keys["project_code"],
-            "project_name_key": keys["project_name"],
+            "project_name_key": project_name or None,
             "serial_no_key": keys["serial_no"],
         })
     for row in normalized_rows:
