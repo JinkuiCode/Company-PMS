@@ -638,7 +638,7 @@ def test_batch_archive_routes_enforce_permissions_and_static_order():
     from fastapi.testclient import TestClient
 
     from app.core.database import Base, SessionLocal, engine
-    from app.core.security import create_access_token
+    from app.core.security import user_access_token
     from app.models.project import PmsProjectArchive
     from app.models.rbac import SysMenu, SysRole, SysRoleMenu, SysUserRole
     from app.models.user import SysUser
@@ -678,7 +678,7 @@ def test_batch_archive_routes_enforce_permissions_and_static_order():
             SysRoleMenu(role_id=role.id, menu_id=toggle_menu.id),
         ])
         db.commit()
-        token = create_access_token(subject=user.id)
+        token = user_access_token(user, "oa")
         archive_id = archive.id
     finally:
         db.close()

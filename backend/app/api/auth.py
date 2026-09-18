@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.schemas.user import LoginRequest, AutoLoginRequest, SsoLoginRequest, TokenResponse, UserInfo
+from app.schemas.user import LoginRequest, AutoLoginRequest, SsoLoginRequest, TokenResponse, UserInfo, ChangePasswordRequest
 from app.services import auth as auth_service
-from app.services.authorization import get_current_user_context, get_current_user_id
+from app.services.authorization import get_current_user_context, get_me_context, get_password_session
 from app.services.operation_log import record_operation_log
 from fastapi import HTTPException
 
@@ -57,10 +57,11 @@ def sso_login(req: SsoLoginRequest, request: Request, db: Session = Depends(get_
 @router.post("/logout", summary="退出登录")
 def logout(
     request: Request,
-    user_id: int = Depends(get_current_user_id),
+    session: dict = Depends(get_password_session),
     db: Session = Depends(get_db),
 ):
     """退出登录，清除当前用户所有免密令牌"""
+    user_id = session["user_id"]
     auth_service.invalidate_user_tokens(db, user_id)
     record_operation_log(
         db,
@@ -78,10 +79,19 @@ def logout(
 
 @router.get("/me", response_model=UserInfo, summary="获取当前用户信息")
 def get_me(
-    scope_ctx: dict = Depends(get_current_user_context),
+    scope_ctx: dict = Depends(get_me_context),
     db: Session = Depends(get_db),
 ):
     return auth_service.get_current_user(db, scope_ctx["user_id"], authorization_context=scope_ctx)
+
+
+@router.post("/change-password", response_model=TokenResponse)
+def change_password(data: ChangePasswordRequest, request: Request,
+                    session=Depends(get_password_session), db: Session = Depends(get_db)):
+    if session["auth_method"] != "password":
+        raise HTTPException(403, "请使用密码登录后修改密码；OA-only 账号请联系管理员重置")
+    return auth_service.change_password(db, session["user_id"], data, request,
+                                        authenticated_version=session["credential_version"])
 
 
 @router.get("/product-categories", summary="获取当前用户允许的产品类别")

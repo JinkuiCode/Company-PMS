@@ -2,7 +2,6 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, Request
 
-from app.core.security import hash_password
 from app.models.user import SysUser, RememberToken
 from app.models.rbac import SysRole, SysMenu, SysDept, SysUserRole, SysRoleMenu
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
@@ -134,7 +133,7 @@ def get_user_list(db: Session, page: int = 1, page_size: int = 15, dept_id: int 
         ]
         items.append(UserResponse(
             id=u.id, username=u.username, real_name=u.real_name,
-            dept_id=u.dept_id, mobile=u.mobile, status=u.status,
+            dept_id=u.dept_id, mobile=u.mobile, status=u.status, email=u.email,
             role_ids=role_ids, role_names=role_names,
             created_at=u.created_at, updated_at=u.updated_at,
         ))
@@ -153,36 +152,45 @@ def get_user_options(db: Session) -> list[dict]:
 def create_user(db: Session, data: UserCreate, operator_id: int | None = None, request: Request | None = None):
     """创建用户，可同时分配角色"""
     if db.query(SysUser).filter(SysUser.username == data.username).first():
-        raise HTTPException(status_code=400, detail="用户名已存在")
+        raise HTTPException(status_code=409, detail="账号已存在")
+
+    from app.services.parameter import initial_password_hash
+    from sqlalchemy.exc import IntegrityError
+    password_hash = initial_password_hash(db)
+    validate_user_roles(db, data.role_ids)
 
     user = SysUser(
         username=data.username,
         real_name=data.real_name,
-        password_hash=hash_password(data.password),
+        password_hash=password_hash,
+        email=data.email,
+        local_login_enabled=True,
+        must_change_password=True,
         dept_id=data.dept_id,
         mobile=data.mobile,
         status=data.status,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "账号已存在")
 
     # 分配角色
     for role_id in data.role_ids:
         db.add(SysUserRole(user_id=user.id, role_id=role_id))
-    record_operation_log(
-        db,
-        module="系统管理",
-        action="create",
-        entity_type="sys_user",
-        entity_id=user.id,
-        entity_name=user.real_name,
-        operator_id=operator_id,
-        request=request,
-        summary=f"创建用户：{user.real_name}",
-        after_data=serialize_model(user, extra={"role_ids": data.role_ids}),
-    )
-    db.commit()
+    try:
+        record_operation_log(
+            db, module="系统管理", action="create", entity_type="sys_user", entity_id=user.id,
+            entity_name=user.real_name, operator_id=operator_id, request=request,
+            summary=f"创建用户：{user.real_name}",
+            after_data=serialize_model(user, extra={"role_ids": data.role_ids}),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"msg": "创建成功", "id": user.id}
 
 
@@ -192,53 +200,87 @@ def update_user(db: Session, user_id: int, data: UserUpdate, operator_id: int | 
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    should_invalidate = False
+    should_invalidate = data.status == 0
     before_role_ids = [ur.role_id for ur in db.query(SysUserRole).filter(SysUserRole.user_id == user_id).all()]
     before = serialize_model(user, extra={"role_ids": before_role_ids})
 
-    update_data = data.model_dump(exclude_unset=True, exclude={"role_ids", "password"})
-
-    # 密码变更：哈希后写入，并标记失效免密令牌
-    if data.password is not None:
-        user.password_hash = hash_password(data.password)
-        should_invalidate = True
-
-    # 账号禁用：标记失效免密令牌
-    if data.status is not None:
-        if data.status == 0 and user.status == 1:
-            should_invalidate = True
-
-    for key, val in update_data.items():
-        setattr(user, key, val)
-
-    if should_invalidate:
-        db.query(RememberToken).filter(RememberToken.user_id == user_id).delete()
-
-    # 重新分配角色
+    update_data = data.model_dump(exclude_unset=True, exclude={"role_ids"})
     if data.role_ids is not None:
-        db.query(SysUserRole).filter(SysUserRole.user_id == user_id).delete()
-        for role_id in data.role_ids:
-            db.add(SysUserRole(user_id=user_id, role_id=role_id))
+        validate_user_roles(db, data.role_ids, retained_ids=before_role_ids)
 
-    db.flush()
-    ensure_recovery_administrator_exists(db)
+    try:
+        for key, val in update_data.items():
+            if should_invalidate and key == "status":
+                continue
+            setattr(user, key, val)
 
-    after_role_ids = data.role_ids if data.role_ids is not None else before_role_ids
-    record_operation_log(
-        db,
-        module="系统管理",
-        action="update",
-        entity_type="sys_user",
-        entity_id=user.id,
-        entity_name=user.real_name,
-        operator_id=operator_id,
-        request=request,
-        summary=f"更新用户：{user.real_name}",
-        before_data=before,
-        after_data=serialize_model(user, extra={"role_ids": after_role_ids}),
-    )
-    db.commit()
+        if should_invalidate:
+            from sqlalchemy import update
+            # An explicit disable must write even when the cached status is 0.
+            result = db.execute(update(SysUser).where(SysUser.id == user_id).values(
+                status=0, credential_version=SysUser.credential_version + 1,
+            ).execution_options(synchronize_session=False))
+            if result.rowcount != 1:
+                raise HTTPException(404, "用户不存在")
+            db.expire(user, ["status", "credential_version"])
+            db.query(RememberToken).filter(RememberToken.user_id == user_id).delete()
+
+        # 重新分配角色
+        if data.role_ids is not None:
+            db.query(SysUserRole).filter(SysUserRole.user_id == user_id).delete()
+            for role_id in data.role_ids:
+                db.add(SysUserRole(user_id=user_id, role_id=role_id))
+
+        db.flush()
+        ensure_recovery_administrator_exists(db)
+
+        after_role_ids = data.role_ids if data.role_ids is not None else before_role_ids
+        record_operation_log(
+            db,
+            module="系统管理",
+            action="update",
+            entity_type="sys_user",
+            entity_id=user.id,
+            entity_name=user.real_name,
+            operator_id=operator_id,
+            request=request,
+            summary=f"更新用户：{user.real_name}",
+            before_data=before,
+            after_data=serialize_model(user, extra={"role_ids": after_role_ids}),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"msg": "更新成功"}
+
+
+def validate_user_roles(db, role_ids, *, retained_ids=()):
+    roles = db.query(SysRole).filter(SysRole.id.in_(role_ids)).all()
+    if (len(set(role_ids)) != len(role_ids) or len(roles) != len(role_ids)
+            or any(role.status != 1 and role.id not in retained_ids for role in roles)):
+        raise HTTPException(422, "角色不存在、已禁用或重复")
+
+
+def reset_user_password(db, user_id, operator_id=None, request=None):
+    from app.services.parameter import initial_password_hash
+    from sqlalchemy import update
+    user = db.get(SysUser, user_id)
+    if not user:
+        raise HTTPException(404, "用户不存在")
+    configured_hash = initial_password_hash(db)
+    try:
+        db.execute(update(SysUser).where(SysUser.id == user_id).values(password_hash=configured_hash,
+                   must_change_password=True, local_login_enabled=True, credential_version=SysUser.credential_version + 1))
+        db.query(RememberToken).filter_by(user_id=user_id).delete()
+        record_operation_log(db, module="系统管理", action="reset_password", entity_type="sys_user",
+                             entity_id=user_id, entity_name=user.real_name, operator_id=operator_id,
+                             request=request, summary="重置用户密码", after_data={"credentials_changed": True})
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"message": "密码已重置，用户下次密码登录须修改密码"}
 
 
 def delete_user(db: Session, user_id: int, operator_id: int | None = None, request: Request | None = None):

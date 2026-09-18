@@ -97,7 +97,7 @@ def test_operation_log_sanitizes_sensitive_fields_and_diffs_values():
         {"real_name": {"before": "张三", "after": "李四"}},
         entity_type="sys_user",
     )
-    assert user_items[0]["field_label"] == "真实姓名"
+    assert user_items[0]["field_label"] == "员工姓名"
 
     policy_items = build_operation_log_diff_items(
         {

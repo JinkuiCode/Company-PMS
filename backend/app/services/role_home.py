@@ -14,6 +14,7 @@ PAGE_PERMISSIONS = {
     "/system/enum": "system:enum:view",
     "/system/operation-log": "system:operation-log:view",
     "/system/field-policy": "system:field-policy:view",
+    "/system/parameter": "system:parameter:view",
 }
 
 

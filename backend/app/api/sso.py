@@ -43,7 +43,7 @@ def sso_oa_password_login(req: SsoOaPasswordLoginRequest, request: Request, db: 
     """PMS 账号密码验证，成功后签发 JWT。勾选记住我时额外生成长期免密令牌并种 Cookie。"""
     try:
         result = sso_service.sso_login_by_password(
-            db, req.loginid, req.password, req.remember_me,
+            db, req.loginid, req.password, req.remember_me, request=request,
         )
         record_operation_log(
             db,
@@ -269,9 +269,7 @@ async def sso_oa_callback(
     tkt = ticket or token
     service_url = settings.PMS_CALLBACK_URL
 
-    logger.info(
-        f"SSO 回调: ticket={tkt}, loginid={loginid}, username={username}"
-    )
+    logger.info("SSO 回调: has_ticket=%s", bool(tkt))
 
     result = await sso_service.handle_oa_callback(
         db, ticket=tkt, loginid=loginid, service_url=service_url

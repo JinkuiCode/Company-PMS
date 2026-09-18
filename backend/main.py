@@ -1,11 +1,15 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings, validate_runtime_config
 from app.core.database import engine, get_db
 from app.api import auth, users, roles, menus, depts, projects, sso, erp, dicts, operation_logs, field_catalog, field_policies
+from app.api import parameters
 from app.services.authorization import get_current_user_context, require_permission
 from app.models.init_db import init_db
 from app.services.database_revision import check_database_ready
@@ -26,6 +30,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.APP_NAME, version="0.1.0", lifespan=lifespan)
 
+
+@app.exception_handler(RequestValidationError)
+async def private_validation_error(request, exc):
+    if request.url.path.startswith(("/api/auth/", "/api/sso/", "/api/parameters", "/api/users")):
+        return JSONResponse(status_code=422, content={"detail": [
+            {key: error[key] for key in ("type", "loc", "msg") if key in error}
+            for error in exc.errors()
+        ]})
+    return await request_validation_exception_handler(request, exc)
+
 # CORS 中间件（开发阶段允许所有来源）
 app.add_middleware(
     CORSMiddleware,
@@ -37,6 +51,7 @@ app.add_middleware(
 
 # 注册路由
 app.include_router(auth.router)
+app.include_router(parameters.router)
 app.include_router(users.router)
 app.include_router(roles.router)
 app.include_router(menus.router)

@@ -1,5 +1,10 @@
-from pydantic import BaseModel, Field
+from typing import Annotated
+from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator
 from datetime import datetime
+
+EmployeeText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+MobileText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=20)]
+Mailbox = Annotated[EmailStr, Field(max_length=254)]
 
 
 class LoginRequest(BaseModel):
@@ -20,12 +25,15 @@ class SsoLoginRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
+    must_change_password: bool = False
     access_token: str
     token_type: str = "bearer"
     remember_token: str | None = None  # 勾选记住我时返回长期令牌
 
 
 class UserInfo(BaseModel):
+    email: EmailStr | None = None
+    must_change_password: bool = False
     id: int
     username: str
     real_name: str
@@ -42,25 +50,35 @@ class UserInfo(BaseModel):
 
 # ========== 用户管理 CRUD ==========
 class UserCreate(BaseModel):
-    username: str = Field(..., max_length=64)
-    real_name: str = Field(..., max_length=64)
-    password: str = Field(..., max_length=32)
+    model_config = {"extra": "forbid"}
+    username: EmployeeText = Field(..., title="账号（工号）")
+    real_name: EmployeeText = Field(..., title="员工姓名")
+    email: Mailbox | None = None
     dept_id: int | None = None
-    mobile: str | None = None
-    status: int = 1
+    mobile: MobileText | None = None
+    status: int = Field(default=1, ge=0, le=1, strict=True)
     role_ids: list[int] = []
 
 
 class UserUpdate(BaseModel):
-    real_name: str | None = None
-    password: str | None = None  # 重置密码，变更后所有免密令牌失效
+    model_config = {"extra": "forbid"}
+    real_name: EmployeeText | None = None
+    email: Mailbox | None = None
     dept_id: int | None = None
-    mobile: str | None = None
-    status: int | None = None
+    mobile: MobileText | None = None
+    status: int | None = Field(default=None, ge=0, le=1, strict=True)
     role_ids: list[int] | None = None
+
+    @field_validator("real_name", "status", mode="before")
+    @classmethod
+    def reject_explicit_null(cls, value):
+        if value is None:
+            raise ValueError("该字段不可为空")
+        return value
 
 
 class UserResponse(BaseModel):
+    email: EmailStr | None = None
     id: int
     username: str
     real_name: str
@@ -77,3 +95,9 @@ class UserResponse(BaseModel):
 class UserListResponse(BaseModel):
     total: int
     items: list[UserResponse]
+
+
+class ChangePasswordRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    new_password: str = Field(min_length=8, max_length=64)
+    confirm_password: str = Field(min_length=8, max_length=64)

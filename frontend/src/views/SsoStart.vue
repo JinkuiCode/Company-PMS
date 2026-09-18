@@ -122,6 +122,8 @@ async function tryOaSsoLogin(): Promise<boolean> {
     localStorage.setItem('access_token', res.access_token)
     if (res.remember_token) {
       localStorage.setItem('pms_remember_token', res.remember_token)
+    } else if (res.must_change_password) {
+      localStorage.removeItem('pms_remember_token')
     }
     await authStore.fetchUser()
     // 清除 URL 中的 SSO 参数，防止重复用过期参数请求

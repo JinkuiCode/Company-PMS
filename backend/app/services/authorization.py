@@ -19,8 +19,12 @@ AuthorizationContext = dict[str, Any]
 
 def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
 ) -> int:
-    """只从 JWT 解析身份；权限始终在后续步骤实时查询数据库。"""
+    return authenticate_session(credentials, db, allow_change=False)["user_id"]
+
+
+def authenticate_session(credentials, db, *, allow_change=False):
     try:
         payload = jwt.decode(
             credentials.credentials,
@@ -30,9 +34,39 @@ def get_current_user_id(
         subject = payload.get("sub")
         if subject is None:
             raise HTTPException(status_code=401, detail="令牌无效")
-        return int(subject)
+        user = db.get(SysUser, int(subject))
+        if not user:
+            raise HTTPException(401, "用户不存在")
+        if user.status != 1:
+            raise HTTPException(403, "账号已被禁用，请联系管理员")
+        version = payload.get("credential_version")
+        method = payload.get("auth_method")
+        scope = payload.get("scope")
+        # Pre-upgrade tokens cannot prove OA provenance. Fail closed instead of
+        # letting an unversioned token bypass reset or local enrollment.
+        if version != user.credential_version or method not in {"password", "oa"} or scope not in {"full", "change_password"}:
+            raise HTTPException(401, "登录凭据已失效，请重新登录")
+        if method == "password" and not user.local_login_enabled:
+            raise HTTPException(401, "本地登录已停用")
+        limited = scope == "change_password" or (method == "password" and user.must_change_password)
+        if limited and not allow_change:
+            raise HTTPException(403, "请先修改密码")
+        return {"user_id": user.id, "auth_method": method, "must_change_password": limited,
+                "credential_version": version}
     except (JWTError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="令牌无效或已过期") from exc
+
+
+def get_password_session(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    return authenticate_session(credentials, db, allow_change=True)
+
+
+def get_me_context(session=Depends(get_password_session), db: Session = Depends(get_db)):
+    context = build_authorization_context(db, session["user_id"])
+    context.update(session)
+    if session["must_change_password"]:
+        context.update(permissions=[], role_codes=[], data_scope=1, product_category_ids=[])
+    return context
 
 
 def build_authorization_context(db: Session, user_id: int) -> AuthorizationContext:

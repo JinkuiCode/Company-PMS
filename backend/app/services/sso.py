@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from fastapi import HTTPException
 
 from app.core.config import settings
-from app.core.security import hash_password, create_access_token
+from app.core.security import hash_password, user_access_token
 from app.models.user import SysUser
 from app.models.rbac import SysDept, SysRole, SysUserRole
 
@@ -81,8 +81,8 @@ def find_or_create_user(db: Session, loginid: str, username: str, dept_name: str
     if user:
         if user.status != 1:
             raise HTTPException(status_code=403, detail="账号已被禁用，请联系管理员")
-        # 已有用户：更新真实姓名
-        if user.real_name != username:
+        # 只带工号的重定向不是姓名来源，不能覆盖已维护的员工姓名。
+        if username and username != loginid and user.real_name != username:
             user.real_name = username
             db.commit()
         return user
@@ -106,7 +106,9 @@ def find_or_create_user(db: Session, loginid: str, username: str, dept_name: str
     user = SysUser(
         username=loginid,
         real_name=username,
-        password_hash=hash_password("sso_placeholder"),  # SSO 用户不通过密码登录
+        password_hash=hash_password(os.urandom(32).hex()),
+        local_login_enabled=False,
+        must_change_password=False,
         dept_id=dept_id,
         status=1,
     )
@@ -134,7 +136,7 @@ def sso_login(db: Session, encrypted_token: str) -> dict:
 
     user = find_or_create_user(db, loginid, username, dept_name)
 
-    access_token = create_access_token(subject=str(user.id))
+    access_token = user_access_token(user, "oa")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -181,7 +183,7 @@ def sso_login_by_params(
 
     user = find_or_create_user(db, loginid, username, dept_name)
 
-    access_token = create_access_token(subject=str(user.id))
+    access_token = user_access_token(user, "oa")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -198,40 +200,15 @@ def sso_login_by_oa_redirect(db: Session, loginid: str, ts: int, sign: str) -> d
 
     # 3. 查找或创建用户 → 签发 JWT
     user = find_or_create_user(db, loginid, loginid, "")
-    access_token = create_access_token(subject=str(user.id))
+    access_token = user_access_token(user, "oa")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-def sso_login_by_password(db: Session, username: str, password: str, remember_me: bool = False) -> dict:
+def sso_login_by_password(db: Session, username: str, password: str, remember_me: bool = False, request=None) -> dict:
     """PMS 账号密码登录（OA 菜单跳转入口）：验证 PMS 本地密码 → 签发 JWT → 可选记住我"""
-    from app.core.security import verify_password
-    user = db.query(SysUser).filter(SysUser.username == username).first()
-    if not user or not verify_password(password, user.password_hash):
-        raise HTTPException(status_code=401, detail="账号或密码错误")
-    if user.status == 0:
-        raise HTTPException(status_code=403, detail="账号已被禁用，请联系管理员")
-
-    access_token = create_access_token(subject=str(user.id))
-    result: dict = {"access_token": access_token, "token_type": "bearer"}
-
-    if remember_me:
-        from datetime import datetime, timedelta
-        from app.models.user import RememberToken
-        from app.core.security import generate_remember_token, hash_remember_token
-        from app.core.config import settings as app_settings
-
-        raw_token = generate_remember_token()
-        expires_at = datetime.utcnow() + timedelta(days=app_settings.REMEMBER_TOKEN_EXPIRE_DAYS)
-        record = RememberToken(
-            user_id=user.id,
-            token_hash=hash_remember_token(raw_token),
-            expires_at=expires_at,
-        )
-        db.add(record)
-        db.commit()
-        result["remember_token"] = raw_token
-
-    return result
+    from app.services.auth import login
+    from app.schemas.user import LoginRequest
+    return login(db, LoginRequest(username=username, password=password, remember_me=remember_me), request).model_dump()
 
 
 async def sso_login_by_loginid(
@@ -247,7 +224,7 @@ async def sso_login_by_loginid(
         dept_name,
     )
 
-    access_token = create_access_token(subject=str(user.id))
+    access_token = user_access_token(user, "oa")
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -270,7 +247,7 @@ async def oa_verify_password(loginid: str, password: str) -> bool:
                 "password": password,
             })
             text = resp.text.strip()
-            logger.info(f"OA checkUserPassword(REST): loginid={loginid}, status={resp.status_code}, body={text[:200]}")
+            logger.info("OA checkUserPassword(REST): status=%s", resp.status_code)
             if resp.status_code == 200:
                 if text == "true" or text.lower() == "true":
                     return True
@@ -282,7 +259,7 @@ async def oa_verify_password(loginid: str, password: str) -> bool:
                 except Exception:
                     pass
     except Exception as e:
-        logger.warning(f"OA checkUserPassword REST 失败，尝试 SOAP: {e}")
+        logger.warning("OA checkUserPassword REST 失败，尝试 SOAP (%s)", type(e).__name__)
 
     # 方式2: SOAP WebService
     try:
@@ -297,7 +274,7 @@ async def oa_verify_password(loginid: str, password: str) -> bool:
                 },
             )
             text = resp.text
-            logger.info(f"OA checkUser(SOAP): loginid={loginid}, status={resp.status_code}, body={text[:300]}")
+            logger.info("OA checkUser(SOAP): status=%s", resp.status_code)
             if resp.status_code == 200:
                 # 解析 SOAP 响应，查找 "true"
                 import re
@@ -308,7 +285,7 @@ async def oa_verify_password(loginid: str, password: str) -> bool:
                 if re.search(r'>\s*true\s*<', text, re.IGNORECASE):
                     return True
     except Exception as e:
-        logger.error(f"OA checkUser SOAP 失败: {e}")
+        logger.error("OA checkUser SOAP 失败 (%s)", type(e).__name__)
 
     return False
 
@@ -340,9 +317,9 @@ async def oa_get_token(loginid: str) -> str:
             "loginid": loginid,
         })
         text = resp.text.strip()
-        logger.info(f"OA getToken(loginid={loginid}): status={resp.status_code}, body={text[:200]}")
+        logger.info("OA getToken: status=%s", resp.status_code)
         if resp.status_code != 200 or text.startswith("Token获取失败"):
-            raise HTTPException(status_code=401, detail=f"OA getToken 失败: {text}")
+            raise HTTPException(status_code=401, detail="OA getToken 失败，请联系管理员")
         return text
 
 
@@ -354,7 +331,7 @@ async def oa_check_token(token: str) -> dict:
             "token": token,
         })
         text = resp.text.strip()
-        logger.info(f"OA checkToken: status={resp.status_code}, body={text[:200]}")
+        logger.info("OA checkToken: status=%s", resp.status_code)
         return {"valid": text == "true", "raw": text, "status_code": resp.status_code}
 
 
@@ -366,7 +343,7 @@ async def oa_validate_cas_ticket(ticket: str, service_url: str) -> dict:
             "service": service_url,
         })
         text = resp.text.strip()
-        logger.info(f"OA serviceValidate: status={resp.status_code}, body={text[:500]}")
+        logger.info("OA serviceValidate: status=%s", resp.status_code)
         return {"status_code": resp.status_code, "raw": text}
 
 
@@ -420,7 +397,7 @@ async def handle_oa_callback(db: Session, ticket: str, loginid: str = "", servic
         raise HTTPException(status_code=400, detail="缺少 OA 用户标识（loginid）")
 
     user = find_or_create_user(db, loginid, username, "")
-    access_token = create_access_token(subject=str(user.id))
+    access_token = user_access_token(user, "oa")
     return {"access_token": access_token, "token_type": "bearer"}
 
 

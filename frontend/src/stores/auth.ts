@@ -10,6 +10,7 @@ export const useAuthStore = defineStore('auth', () => {
     const res = await loginApi({ username, password, remember_me: false })
     token.value = res.access_token
     localStorage.setItem('access_token', res.access_token)
+    localStorage.removeItem('pms_remember_token')
     await fetchUser()
   }
 

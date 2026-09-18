@@ -28,6 +28,7 @@ SENSITIVE_KEYWORDS = (
 MASK_VALUE = "***"
 
 ENTITY_CATALOG_MODULES = {
+    "sys_parameter": "parameter",
     "sys_user": "user",
     "sys_role": "role",
     "sys_menu": "permission_menu",
@@ -39,6 +40,8 @@ ENTITY_CATALOG_MODULES = {
 }
 
 FIELD_LABEL_OVERRIDES = {
+    "configured": "已配置",
+    "credentials_changed": "凭据已变更",
     "archive_id": "项目档案",
     "created_at": "创建时间",
     "created_by": "创建人",

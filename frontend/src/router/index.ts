@@ -4,6 +4,12 @@ import { rememberLoginDestination, consumeLoginDestination, chooseLoginDestinati
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/change-password',
+    name: 'ChangePassword',
+    component: () => import('@/views/ChangePassword.vue'),
+    meta: { title: '设置登录密码' },
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login.vue'),
@@ -54,6 +60,12 @@ const routes: RouteRecordRaw[] = [
         name: 'RoleList',
         component: () => import('@/views/system/RoleList.vue'),
         meta: { title: '角色管理', permission: 'system:role:view' },
+      },
+      {
+        path: 'system/parameter',
+        name: 'ParameterList',
+        component: () => import('@/views/system/ParameterList.vue'),
+        meta: { title: '参数设置', permission: 'system:parameter:view' },
       },
       {
         path: 'system/dict',
@@ -148,6 +160,10 @@ router.beforeEach(async (to) => {
       rememberLoginDestination(to.fullPath)
       return '/login'
     }
+    if (authStore.user?.must_change_password) {
+      return to.path === '/change-password' ? true : '/change-password'
+    }
+    if (to.path === '/change-password') return '/'
     if (to.path === '/') {
       const canAccess = (path: string) => {
         const target = router.resolve(path)

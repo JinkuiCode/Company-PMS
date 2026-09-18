@@ -49,6 +49,20 @@ def update_user(
     return rbac_service.update_user(db, user_id, data, operator_id=scope_ctx["user_id"], request=request)
 
 
+@router.get("/oa-options")
+def oa_options(keyword: str = Query("", max_length=100), page: int = Query(1, ge=1),
+               page_size: int = Query(20, ge=1, le=100), db: Session = Depends(get_db),
+               context=Depends(require_permission("system:user:add"))):
+    from app.services.oa_user_options import get_oa_options
+    return get_oa_options(db, keyword, page, page_size)
+
+
+@router.post("/{user_id}/reset-password")
+def reset_password(user_id: int, request: Request, db: Session = Depends(get_db),
+                   context=Depends(require_permission("system:user:reset-password"))):
+    return rbac_service.reset_user_password(db, user_id, context["user_id"], request)
+
+
 @router.delete("/{user_id}", summary="删除用户")
 def delete_user(
     user_id: int,

@@ -144,7 +144,7 @@ def test_archive_list_enabled_filter_has_explicit_http_tri_state():
     from fastapi.testclient import TestClient
 
     from app.core.database import SessionLocal
-    from app.core.security import create_access_token
+    from app.core.security import user_access_token
     from app.models.project import PmsProjectArchive
     from app.models.rbac import SysMenu, SysRole, SysRoleMenu, SysUserRole
     from app.models.user import SysUser
@@ -192,7 +192,7 @@ def test_archive_list_enabled_filter_has_explicit_http_tri_state():
             SysRoleMenu(role_id=role.id, menu_id=view_menu.id),
         ])
         db.commit()
-        token = create_access_token(subject=user.id)
+        token = user_access_token(user, "oa")
         expected_enabled_id = enabled_archive.id
         expected_disabled_id = disabled_archive.id
     finally:

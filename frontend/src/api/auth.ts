@@ -16,6 +16,7 @@ export interface TokenResult {
   access_token: string
   token_type: string
   remember_token: string | null
+  must_change_password: boolean
 }
 
 export interface UserInfo {
@@ -25,6 +26,8 @@ export interface UserInfo {
   dept_id: number | null
   mobile: string | null
   status: number
+  email?: string | null
+  must_change_password?: boolean
   role_codes: string[]
   home_path?: string
   permissions: string[]
@@ -38,6 +41,10 @@ export function login(params: LoginParams): Promise<TokenResult> {
 
 export function getUserInfo(): Promise<UserInfo> {
   return request.get('/auth/me') as any
+}
+
+export function changePassword(data: { new_password: string; confirm_password: string }): Promise<TokenResult> {
+  return request.post('/auth/change-password', data) as any
 }
 
 /** PMS 账号密码登录（OA 菜单跳转入口） */

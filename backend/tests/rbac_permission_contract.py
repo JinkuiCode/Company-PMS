@@ -375,7 +375,7 @@ def test_same_jwt_observes_permission_revoke_and_restore_immediately():
     from fastapi.testclient import TestClient
 
     from app.core.database import SessionLocal
-    from app.core.security import create_access_token
+    from app.core.security import user_access_token
     from app.models.rbac import SysMenu, SysRole, SysRoleMenu
     from app.models.user import SysUser
     from main import app
@@ -389,7 +389,7 @@ def test_same_jwt_observes_permission_revoke_and_restore_immediately():
         db.commit()
         role_id = role.id
         delete_menu_id = delete_menu.id
-        token = create_access_token(subject=admin.id)
+        token = user_access_token(admin, "oa")
     finally:
         db.close()
 

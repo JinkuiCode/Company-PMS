@@ -55,8 +55,9 @@
 
         <el-table class="pms-dense-table" height="100%" :data="userList" v-loading="loading" border stripe size="small">
           <el-table-column prop="id" label="ID" width="70" />
-          <el-table-column prop="username" label="用户名" width="110" />
-          <el-table-column prop="real_name" label="真实姓名" width="100" />
+          <el-table-column prop="username" label="账号（工号）" width="120" />
+          <el-table-column prop="real_name" label="员工姓名" width="100" />
+          <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip />
           <el-table-column prop="mobile" label="手机号" width="125" />
           <el-table-column prop="dept_name" label="部门" width="110">
             <template #default="{ row }">{{ deptMap[row.dept_id] || '-' }}</template>
@@ -73,7 +74,7 @@
           </el-table-column>
           <el-table-column label="操作" width="130" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="hasPermission('system:user:edit')" link type="primary" size="small" @click="openUserDialog(row)">编辑</el-button>
+              <el-button v-if="hasPermission('system:user:edit') || hasPermission('system:user:reset-password')" link type="primary" size="small" @click="openUserDialog(row)">{{ hasPermission('system:user:edit') ? '编辑' : '查看' }}</el-button>
               <el-button v-if="hasPermission('system:user:delete')" link type="danger" size="small" @click="handleDeleteUser(row.id)">删除</el-button>
             </template>
           </el-table-column>
@@ -135,72 +136,7 @@
       </template>
     </el-dialog>
 
-    <!-- 用户新增/编辑弹窗 -->
-    <el-dialog v-model="userDialogVisible" :title="isUserEdit ? '编辑用户' : '新增用户'" width="520px">
-      <el-form ref="userFormRef" :model="userForm" :rules="userRules" label-position="top" class="pms-standard-dialog-form">
-        <el-form-item prop="username">
-          <PmsFormField field-id="user-username" label="用户名" required>
-            <PmsTextControl id="user-username" v-model="userForm.username" :disabled="isUserEdit" aria-label="用户名" />
-          </PmsFormField>
-        </el-form-item>
-        <el-form-item prop="real_name">
-          <PmsFormField field-id="user-real-name" label="真实姓名" required>
-            <PmsTextControl id="user-real-name" v-model="userForm.real_name" aria-label="真实姓名" />
-          </PmsFormField>
-        </el-form-item>
-        <el-form-item :prop="isUserEdit ? '' : 'password'">
-          <PmsFormField field-id="user-password" label="密码" :required="!isUserEdit">
-            <PmsTextControl id="user-password" v-model="userForm.password" type="password" :placeholder="isUserEdit ? '不填则不修改' : '请输入密码'" aria-label="密码" />
-          </PmsFormField>
-        </el-form-item>
-        <el-form-item>
-          <PmsFormField field-id="user-mobile" label="手机号">
-            <PmsTextControl id="user-mobile" v-model="userForm.mobile" aria-label="手机号" />
-          </PmsFormField>
-        </el-form-item>
-        <el-form-item>
-          <PmsFormField field-id="user-dept" label="部门">
-            <PmsTreeSelectControl
-              id="user-dept"
-              :model-value="userForm.dept_id"
-              :data="deptSelectData"
-              :props="{ label: 'dept_name', value: 'id', children: 'children' }"
-              clearable
-              check-strictly
-              aria-label="部门"
-              @update:model-value="userForm.dept_id = $event == null || $event === '' ? null : Number($event)"
-            />
-          </PmsFormField>
-        </el-form-item>
-        <el-form-item>
-          <PmsFormField field-id="user-status" label="状态">
-            <PmsSwitchControl
-              id="user-status"
-              :model-value="userForm.status === 1"
-              aria-label="用户状态"
-              @update:model-value="userForm.status = $event ? 1 : 0"
-            />
-          </PmsFormField>
-        </el-form-item>
-        <el-form-item>
-          <PmsFormField field-id="user-roles" label="角色">
-            <PmsSelectControl
-              id="user-roles"
-              :model-value="userForm.role_ids"
-              :options="roleOptions"
-              multiple
-              placeholder="请选择角色"
-              aria-label="角色"
-              @update:model-value="userForm.role_ids = Array.isArray($event) ? $event.map(Number) : []"
-            />
-          </PmsFormField>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="userDialogVisible = false">取消</el-button>
-        <el-button v-if="isUserEdit ? hasPermission('system:user:edit') : hasPermission('system:user:add')" type="primary" @click="handleUserSubmit">保存</el-button>
-      </template>
-    </el-dialog>
+    <UserFormDrawer v-model="userDialogVisible" :user="editingUser" :departments="deptSelectData" :roles="roleOptions" :default-dept="selectedDeptId" @saved="handleUserSaved" />
   </div>
 </template>
 
@@ -209,13 +145,13 @@ import { computed, ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { OfficeBuilding } from '@element-plus/icons-vue'
 import CustomPagination from '@/components/CustomPagination.vue'
+import UserFormDrawer from './UserFormDrawer.vue'
 import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import {
   PmsFormField,
   PmsNumberControl,
-  PmsSelectControl,
   PmsSwitchControl,
   PmsTextControl,
   PmsTreeSelectControl,
@@ -390,17 +326,7 @@ const total = ref(0)
 
 // 用户弹窗
 const userDialogVisible = ref(false)
-const isUserEdit = ref(false)
-const userFormRef = ref<FormInstance>()
-const userForm = reactive({
-  id: 0, username: '', real_name: '', password: '', mobile: '',
-  dept_id: null as number | null, status: 1, role_ids: [] as number[],
-})
-const userRules: FormRules = {
-  username: [{ required: true, message: '请输入用户名' }],
-  real_name: [{ required: true, message: '请输入真实姓名' }],
-  password: [{ required: true, message: '请输入密码' }],
-}
+const editingUser = ref<any>(null)
 
 let listRequestSerial = 0
 async function fetchUserList() {
@@ -436,57 +362,14 @@ async function fetchRoles() {
 }
 
 function openUserDialog(row?: any) {
-  if (row ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
-  isUserEdit.value = !!row
-  userFormRef.value?.resetFields()
-  if (row) {
-    Object.assign(userForm, {
-      id: row.id, username: row.username, real_name: row.real_name,
-      mobile: row.mobile, dept_id: row.dept_id, status: row.status,
-      role_ids: row.role_ids || [],
-    })
-    userForm.password = ''
-  } else {
-    Object.assign(userForm, {
-      id: 0, username: '', real_name: '', password: '', mobile: '',
-      dept_id: selectedDeptId.value, status: 1, role_ids: [],
-    })
-  }
+  if (row ? !authStore.hasAnyPermission('system:user:edit', 'system:user:reset-password') : !hasPermission('system:user:add')) return
+  editingUser.value = row || null
   userDialogVisible.value = true
 }
 
-async function handleUserSubmit() {
-  if (isUserEdit.value ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
-  const valid = await userFormRef.value?.validate().catch(() => false)
-  if (!valid) return
-  if (isUserEdit.value) {
-    await request.put(`/users/${userForm.id}`, {
-      real_name: userForm.real_name, mobile: userForm.mobile,
-      dept_id: userForm.dept_id, status: userForm.status,
-      role_ids: userForm.role_ids,
-      ...(userForm.password ? { password: userForm.password } : {}),
-    })
-    ElMessage.success('更新成功')
-  } else {
-    await request.post('/users', userForm)
-    ElMessage.success('创建成功')
-  }
-  if (isUserEdit.value && userForm.id === authStore.user?.id) {
-    try {
-      await authStore.fetchUser()
-    } catch {
-      authStore.logout()
-      window.location.href = '/login'
-      return
-    }
-    if (!hasPermission('system:user:view')) {
-      userDialogVisible.value = false
-      window.location.href = '/403'
-      return
-    }
-  }
-  userDialogVisible.value = false
-  if (hasPermission('system:user:view')) fetchUserList()
+function handleUserSaved() {
+  if (!hasPermission('system:user:view')) { window.location.href = '/'; return }
+  void fetchUserList()
 }
 
 async function handleDeleteUser(id: number) {

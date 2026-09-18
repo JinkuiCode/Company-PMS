@@ -26,6 +26,7 @@
 - 系统管理等非标准列表页面使用 `.pms-system-page`、`.pms-surface-section` 和 `.pms-dense-table`；颜色、字号、边框、圆角和状态样式优先复用全局 token，禁止重新引入 Element Plus 旧默认色。
 - 动态菜单使用的新图标名称必须同步注册到 `frontend/src/layout/AppLayout.vue` 的 `iconMap`，业务图标不得使用 emoji。
 - 完整前端实现规范见 `docs/PMS-UI-STANDARD.md`。
+- 新增/编辑业务表单采用已确认的“用户 B”侧边抽屉布局，复用 `frontend/src/form-system/components/PmsFormDrawer.vue` 和统一字段控件；头部、内容滚动和底部操作各自固定职责。现有页面按批准批次迁移，不将列表单元格编辑或详情行内编辑强行改为抽屉表单。
 - 旧版 UI 诉求可参考 `UI要求/UI风格.md`；本次未另行批准具体差异时，以本规范、现有 `pms-theme.css` 和已落地组件为实现基线。新的已确认设计与现状不同，应在方案中明确差异并获得批准；该差异已明确获批时直接执行，不因现有代码不同而再次确认或保留旧行为。
 - 本项目已经确定的字体、色彩、状态样式和组件规则优先于通用 UI 技能预设。skills 只补充未确定事项，不重复询问已确定的字体、主色或浅色主题。
 

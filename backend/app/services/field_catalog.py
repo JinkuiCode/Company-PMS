@@ -14,6 +14,7 @@ from app.models.operation_log import SysOperationLog
 from app.models.project import PmsProject, PmsProjectArchive, PmsTask
 from app.models.rbac import SysDept, SysRole
 from app.models.user import SysUser
+from app.models.parameter import SysParameter
 from app.schemas.operation_log import OperationLogResponse
 from app.schemas.project import (
     ArchiveCreate,
@@ -42,6 +43,14 @@ from app.services.project_sheet_fields import (
 
 
 MODULE_CONFIGS = (
+    {
+        "key": "parameter",
+        "label": "参数设置",
+        "group": "参数字段",
+        "model": SysParameter,
+        "schemas": (),
+        "editable_schemas": (),
+    },
     {
         "key": "user",
         "label": "用户管理",

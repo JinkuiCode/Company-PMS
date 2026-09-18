@@ -13,6 +13,8 @@ from app.models.dict import SysDict, SysDictItem  # noqa: F401
 from app.models.operation_log import SysOperationLog  # noqa: F401
 from app.models.field_policy import SysBusinessFieldPolicy  # noqa: F401
 from app.models.database_revision import PmsDatabaseRevision  # noqa: F401
+from app.models.parameter import SysParameter  # noqa: F401
+from app.services.user_security_migration import upgrade_user_security, initialize_user_security
 
 
 def _init_dict_data(db):
@@ -26,6 +28,7 @@ def init_db():
     """创建所有表，并插入默认数据"""
     is_fresh_database = not inspect(engine).has_table("sys_role")
     Base.metadata.create_all(bind=engine)
+    upgrade_user_security(engine)
     from app.services.project_archive_semantic_migration import upgrade_project_archive_semantics
     from app.services.project_archive_lifecycle_migration import upgrade_project_archive_lifecycle
     from app.services.project_archive_initial_migration import upgrade_project_archive_initial
@@ -264,6 +267,8 @@ def init_db():
                     if key != "id":
                         setattr(existing, key, value)
         db.commit()
+
+        initialize_user_security(db, grant_existing_admin=not admin_role_created)
 
         # 4.5 创建缺失的默认角色模板。仅角色首次创建时写入模板权限。
         from app.services.role_templates import ROLE_TEMPLATES, permission_ids_for_template
