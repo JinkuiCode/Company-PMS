@@ -17,9 +17,11 @@
           <PmsListColumnPicker
             v-model="selectedSheetFieldKeys"
             :groups="columnPickerGroups"
+            :column-definitions="columnDefs"
             :default-keys="defaultSelectedSheetFieldKeys"
             aria-label="项目进度列设置"
             :get-grid-api="() => gridApi"
+            :field-column-id="sheetColumnId"
             @layout-changed="handleGridStructureChanged"
             @restore-defaults="restoreProgressColumnDefaults"
           />

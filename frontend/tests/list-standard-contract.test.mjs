@@ -28,7 +28,7 @@ assert.doesNotMatch(
   'Shared form controls must use block containers instead of invalid span/div nesting',
 )
 for (const component of ['PmsTextControl', 'PmsCheckboxControl']) {
-  assert.match(columnPicker, new RegExp(`\\b${component}\\b`), `PmsListColumnPicker should consume ${component}`)
+  assert.match(columnPicker + read('src/components/PmsGridLayoutEditor.vue'), new RegExp(`\\b${component}\\b`), `Column settings should consume ${component}`)
 }
 assert.doesNotMatch(columnPicker, /<el-(input|checkbox)\b/, 'Column picker should not render raw Element Plus fields')
 assert.match(columnPicker, /'update:modelValue': \[value: string\[\]\]/, 'Column picker must preserve its model event contract')

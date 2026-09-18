@@ -37,6 +37,7 @@
         <PmsListColumnPicker
           :model-value="selectedArchiveColumnKeys"
           :groups="archiveColumnGroups"
+          :column-definitions="columnDefs"
           :default-keys="defaultArchiveColumnKeys"
           aria-label="项目档案列设置"
           :get-grid-api="() => gridApi"
@@ -619,7 +620,7 @@ function restoreArchiveColumnState() {
         }
       }
       if (state.colId === 'project_code' || state.colId === 'project_name') {
-        return { ...state, hide: !archiveColumnListAvailable(state.colId) }
+        return { ...state, hide: !archiveColumnListAvailable(state.colId) || state.hide === true }
       }
       if (availableArchiveColumnKeys.value.has(state.colId)) return { ...state, hide: !selectedKeys.has(state.colId) }
       if (state.colId && baseArchiveColumnKeys.includes(state.colId)) return null

@@ -1,6 +1,6 @@
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
-import { verifyColumnLayout } from './grid-layout-browser-helper.mjs'
+import { verifyColumnLayout, verifyDynamicColumnDraft } from './grid-layout-browser-helper.mjs'
 
 const browser = await chromium.launch({ headless: true, channel: 'msedge' })
 try {
@@ -32,7 +32,7 @@ try {
     else if (url.pathname === '/api/auth/product-categories') body = { unrestricted: true }
     else if (url.pathname.includes('/dicts/code/')) body = { items: [{ value: '1', label: '测试类别' }], label_map: { 1: '测试类别' } }
     else if (url.pathname === '/api/projects/archives/fields') body = { items: [] }
-    else if (url.pathname === '/api/projects/sheet-fields') body = { groups: [], policies: [] }
+    else if (url.pathname === '/api/projects/sheet-fields') body = { groups: [{ key: 'configuration', label: '产品配置', fields: [{ key: 'configuration', label: '配置说明', group: 'configuration', value_type: 'long_text', list_available: true, quick_addable: false }] }], policies: [] }
     else if (['/api/users', '/api/field-catalog', '/api/field-policies', '/api/operation-logs'].includes(url.pathname)) body = { items: [], total: 0, groups: [] }
     else if (url.pathname === '/api/dicts') body = [{ id: 1, dict_name: '测试枚举', dict_code: 'test', item_count: 1 }]
     else if (url.pathname === '/api/dicts/1/items') body = [{ id: 1, item_value: 1, item_label: '测试名称'.repeat(60), status: 1 }]
@@ -154,6 +154,7 @@ try {
   await page.goto('http://127.0.0.1:5174/project/list')
   await expect(page.getByText('共 2040 条')).toBeVisible()
   await verifyColumnLayout(page, 'design_progress', '设计进度')
+  await verifyDynamicColumnDraft(page)
   await expect(page.locator('.progress-row-actions .detail-btn').first()).toHaveText('编辑')
   assert.deepEqual(await actionGeometry(), archiveActions)
   progressEdit = false
