@@ -109,6 +109,7 @@ import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
+import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
 import { PmsCheckboxControl, PmsSelectControl, PmsTextControl, type PmsOption } from '@/form-system'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import request from '@/utils/request'
@@ -139,7 +140,7 @@ const loading = ref(false)
 const rows = ref<FieldCatalogRow[]>([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(30)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const moduleOptions = ref<ModuleOption[]>([])
 const moduleSelectOptions = computed<PmsOption[]>(() => moduleOptions.value.map(item => ({
   label: `${item.label} (${item.count})`,
@@ -248,8 +249,8 @@ onMounted(fetchCatalog)
 <style scoped>
 .field-catalog-page {
   display: flex;
-  height: calc(100vh - 88px);
-  min-height: 520px;
+  height: 100%;
+  min-height: 0;
   flex-direction: column;
 }
 
@@ -262,7 +263,7 @@ onMounted(fetchCatalog)
 
 .field-catalog-page :deep(.field-catalog-grid) {
   height: auto;
-  min-height: 300px;
+  min-height: 0;
   flex: 1;
 }
 

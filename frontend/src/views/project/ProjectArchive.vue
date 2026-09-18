@@ -67,7 +67,6 @@
       <ag-grid-vue
         ref="agGridRef"
         class="ag-theme-alpine wechat-table pms-ag-grid"
-        :style="archiveGridStyle"
         :rowData="rowData"
         :loading="archiveListLoading"
         :columnDefs="columnDefs"
@@ -317,7 +316,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, defineComponent, h, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { ElMessage, ElMessageBox, ElTooltip, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Delete, Search, Connection, Close } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
@@ -325,6 +324,7 @@ import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
+import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
@@ -682,7 +682,7 @@ const selectedRows = ref<any[]>([])
 const agGridRef = ref()
 const archiveListRef = ref<InstanceType<typeof PmsDataList>>()
 const page = ref(1)
-const pageSize = ref(15)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const filterProductCategory = ref<number | null>(null)
 const archiveQuery = reactive({
   enabled: 'true' as 'true' | 'false' | 'all',
@@ -838,12 +838,6 @@ async function fetchDictOptions(code: string) {
   } catch { /* ignore */ }
 }
 
-const archiveGridStyle = computed(() => {
-  const visibleRows = Math.max(rowData.value.length, 1)
-  const height = Math.min(430, Math.max(176, 74 + visibleRows * 38))
-  return { width: '100%', height: `${height}px` }
-})
-
 function scheduleArchiveScrollbarMetrics() {
   archiveListRef.value?.refreshScrollbar()
 }
@@ -932,13 +926,6 @@ function escapeHtml(value: any) {
     .replace(/'/g, '&#39;')
 }
 
-function formatDeleteBlockers(blockers: unknown) {
-  if (!Array.isArray(blockers) || blockers.length === 0) return '该档案当前受保护，无法删除'
-  return blockers
-    .map(blocker => `${blocker?.label || '业务关联'}（${Number(blocker?.count) || 0}）`)
-    .join('；')
-}
-
 function archiveIsEnabled(row: any) {
   return row?.is_enabled === 1
 }
@@ -963,39 +950,10 @@ const ArchiveActionsRenderer = defineComponent({
     return () => {
       const row = (props.params as any).data
       const actions = []
+      const editable = archiveIsEnabled(row) && hasPermission('project:archive:edit')
+      actions.push(archiveActionButton(editable ? '编辑' : '查看', editable ? 'edit-btn' : 'view-btn', () => openArchiveDrawer(row)))
       if (archiveIsEnabled(row)) {
-        if (hasPermission('project:archive:edit')) actions.push(archiveActionButton('编辑', 'edit-btn', () => openArchiveDrawer(row)))
         if (hasPermission('project:archive:sync')) actions.push(archiveActionButton('同步', 'pms-link-success sync-btn', () => handleSyncSingle(row.id)))
-        if (hasPermission('project:archive:toggle')) actions.push(archiveActionButton('禁用', 'pms-link-muted disable-btn', () => handleArchiveEnabledChange(row, false)))
-      } else {
-        actions.push(archiveActionButton('查看', 'view-btn', () => openArchiveDrawer(row)))
-        if (hasPermission('project:archive:toggle')) actions.push(archiveActionButton('启用', 'pms-link-success enable-btn', () => handleArchiveEnabledChange(row, true)))
-      }
-      if (hasPermission('project:archive:delete')) {
-        if (row.can_delete !== false) {
-          actions.push(archiveActionButton('删除', 'pms-link-danger del-btn', () => handleDeleteSingle(row)))
-        } else {
-          const blockerText = formatDeleteBlockers(row.delete_blockers)
-          actions.push(h(ElTooltip, { content: blockerText, placement: 'top' }, {
-            default: () => h('span', {
-              class: 'archive-delete-tooltip-owner',
-              tabindex: 0,
-              role: 'button',
-              'aria-disabled': 'true',
-              'aria-label': `删除不可用：${blockerText}`,
-              onClick: (event: MouseEvent) => event.stopPropagation(),
-              onKeydown: (event: KeyboardEvent) => event.stopPropagation(),
-            }, [
-              h('button', {
-                type: 'button',
-                class: 'pms-table-action archive-delete-disabled',
-                disabled: true,
-                tabindex: -1,
-                'aria-hidden': 'true',
-              }, '删除'),
-            ]),
-          }))
-        }
       }
       return h('div', { class: 'archive-row-actions' }, actions)
     }
@@ -1081,7 +1039,8 @@ const columnDefs = computed<ColDef[]>(() => [
     },
   },
   {
-    colId: 'archive_actions', headerName: '操作', width: 200, minWidth: 196, pinned: 'right', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false,
+    colId: 'archive_actions', headerName: '操作', width: 112, minWidth: 112, maxWidth: 112, pinned: 'right', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false,
+    cellClass: 'pms-actions-cell', headerClass: 'pms-actions-header archive-list-header-center',
     cellRenderer: ArchiveActionsRenderer,
   },
 ])
@@ -1786,7 +1745,7 @@ onMounted(async () => {
 
 .project-archive-page {
   height: 100%;
-  min-height: 100%;
+  min-height: 0;
 }
 
 .archive-base-filter {
@@ -1937,29 +1896,6 @@ onMounted(async () => {
 
 .archive-drawer-save {
   min-width: 0;
-}
-
-:deep(.pms-table-action + .pms-table-action) {
-  margin-left: 2px;
-}
-
-:deep(.archive-row-actions) {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  width: 100%;
-}
-
-:deep(.archive-delete-tooltip-owner) {
-  display: inline-flex;
-  border-radius: var(--pms-radius-sm);
-}
-
-:deep(.archive-delete-disabled),
-:deep(.archive-delete-disabled:hover) {
-  color: var(--pms-text-muted);
-  cursor: not-allowed;
-  text-decoration: none;
 }
 
 :deep(.archive-row-disabled .ag-cell) {

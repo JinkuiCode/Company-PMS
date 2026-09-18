@@ -53,7 +53,7 @@
         <el-button v-if="hasPermission('system:user:add')" type="primary" size="small" @click="openUserDialog()">新增用户</el-button>
       </div>
 
-        <el-table class="pms-dense-table" :data="userList" v-loading="loading" border stripe size="small">
+        <el-table class="pms-dense-table" height="100%" :data="userList" v-loading="loading" border stripe size="small">
           <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="username" label="用户名" width="110" />
           <el-table-column prop="real_name" label="真实姓名" width="100" />
@@ -209,6 +209,7 @@ import { computed, ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { OfficeBuilding } from '@element-plus/icons-vue'
 import CustomPagination from '@/components/CustomPagination.vue'
+import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -384,7 +385,7 @@ const roleOptions = computed<PmsOption[]>(() => roleList.value.map(role => ({
 })))
 const loading = ref(false)
 const page = ref(1)
-const pageSize = ref(15)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const total = ref(0)
 
 // 用户弹窗
@@ -530,7 +531,11 @@ onMounted(() => {
 .user-panel {
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
+
+.user-panel :deep(.el-table) { flex: 1; min-height: 0; }
+.user-pagination { flex-shrink: 0; }
 
 .page-header {
   flex: 0 0 auto;

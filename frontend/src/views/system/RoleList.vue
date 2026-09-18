@@ -6,7 +6,7 @@
         <el-button v-if="hasPermission('system:role:add')" type="primary" size="small" @click="openDialog()">新增角色</el-button>
       </div>
 
-      <el-table class="pms-dense-table" :data="roleList" border stripe size="small">
+      <el-table class="pms-dense-table" height="100%" :data="roleList" border stripe size="small">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="role_name" label="角色名称" width="150" />
         <el-table-column prop="role_code" label="角色编码" width="150" />
@@ -398,13 +398,18 @@ onMounted(() => { fetchList(); loadProductCategories() })
 }
 
 .role-page {
+  height: 100%;
+  min-height: 0;
   padding: 0;
   border: 0;
   box-shadow: none;
 }
 
 .role-list-section {
-  min-height: 280px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .role-product-chip {

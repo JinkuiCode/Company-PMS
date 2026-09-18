@@ -54,7 +54,7 @@
           border
           stripe
           size="small"
-          height="calc(100vh - 214px)"
+          height="100%"
           empty-text="暂无枚举值"
           class="pms-dense-table enum-value-table"
         >
@@ -296,7 +296,8 @@ onMounted(fetchDicts)
 .enum-page {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  min-height: calc(100vh - 112px);
+  height: 100%;
+  min-height: 0;
   padding: 0;
   overflow: hidden;
 }
@@ -392,12 +393,16 @@ onMounted(fetchDicts)
 }
 
 .enum-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   min-width: 0;
   padding: 14px;
   background: var(--pms-surface);
 }
 
 .enum-detail-head {
+  flex-shrink: 0;
   display: flex;
   min-height: 74px;
   align-items: flex-start;

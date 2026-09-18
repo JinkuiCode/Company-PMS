@@ -55,7 +55,7 @@
             :defaultColGroupDef="defaultColGroupDef"
             :localeText="localeText"
             :theme="'legacy'"
-            :domLayout="'autoHeight'"
+            :domLayout="'normal'"
             :pagination="true"
             :paginationPageSize="pageSize"
             :paginationPageSizeSelector="false"
@@ -343,6 +343,7 @@ import {
 import type { ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
+import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
@@ -527,7 +528,7 @@ const userList = ref<any[]>([])
 const userNames = ref<string[]>([])
 const serverTotal = ref(0)
 const page = ref(1)
-const pageSize = ref(15)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const filterKeyword = ref('')
 const filterStatus = ref<number | null>(null)
 const filterDeptId = ref<number | null>(null)
@@ -1251,7 +1252,8 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
     filter: false,
     sortable: false,
     resizable: false,
-    cellClass: 'progress-actions-cell',
+    cellClass: 'progress-actions-cell pms-actions-cell',
+    headerClass: 'progress-list-header-center pms-actions-header',
     cellRenderer: () => `
       <span class="progress-row-actions">
         <button class="progress-detail-btn detail-btn" type="button" title="打开详情" aria-label="打开详情">详情</button>
@@ -1968,37 +1970,13 @@ onMounted(async () => {
   justify-content: center;
 }
 
-:deep(.progress-row-actions) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  width: 100%;
-  height: 100%;
-}
-
 :deep(.progress-actions-cell) {
   padding-right: 4px !important;
   padding-left: 4px !important;
 }
 
 :deep(.progress-detail-btn) {
-  height: 24px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
   color: var(--pms-primary);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 24px;
-  cursor: pointer;
-}
-
-:deep(.progress-detail-btn:hover),
-:deep(.progress-detail-btn:focus-visible) {
-  background: var(--pms-primary-soft);
-  outline: none;
 }
 
 :deep(.sheet-column-text) {

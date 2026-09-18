@@ -26,8 +26,8 @@ assert.match(
 assert.match(archive, /project:archive:toggle/, 'Archive lifecycle controls should use the toggle permission')
 assert.match(
   archive,
-  /if \(archiveIsEnabled\(row\)\)[\s\S]*?project:archive:edit[\s\S]*?project:archive:sync[\s\S]*?project:archive:toggle[\s\S]*?禁用[\s\S]*?else[\s\S]*?查看[\s\S]*?project:archive:toggle[\s\S]*?启用/,
-  'Enabled and disabled rows should expose the permission-aware lifecycle action sets',
+  /const editable = archiveIsEnabled\(row\) && hasPermission\('project:archive:edit'\)[\s\S]*?editable \? '编辑' : '查看'[\s\S]*?if \(archiveIsEnabled\(row\)\)[\s\S]*?project:archive:sync/,
+  'Rows expose edit or view and permission-aware sync; lifecycle actions remain in toolbar',
 )
 assert.match(
   archive,
@@ -81,13 +81,8 @@ assert.match(
   /!selectedArchive\.value \|\| archiveDrawerReadOnly\.value/,
   'Read-only drawers should reject save and save-sync handlers',
 )
-assert.match(archive, /delete_blockers/, 'Delete protection should consume backend blockers')
-assert.match(archive, /formatDeleteBlockers/, 'Delete blockers should be formatted for a visible tooltip')
-assert.match(
-  archive,
-  /h\(ElTooltip,[\s\S]*?class:\s*'archive-delete-tooltip-owner'[\s\S]*?tabindex:\s*0[\s\S]*?role:\s*'button'[\s\S]*?'aria-disabled':\s*'true'[\s\S]*?'aria-label':\s*`删除不可用：\$\{blockerText\}`[\s\S]*?disabled:\s*true/,
-  'Protected deletion should use a focusable accessible tooltip owner around a disabled button',
-)
+assert.match(archive, /handleBatchDelete/, 'Protected deletion remains available through the batch endpoint')
+assert.doesNotMatch(archive, /actions.push\(archiveActionButton\('删除'/, 'Deletion is no longer a row action')
 assert.doesNotMatch(
   archive,
   /archive-delete-disabled[^\n]*title=/,

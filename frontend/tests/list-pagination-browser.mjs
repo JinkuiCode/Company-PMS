@@ -26,11 +26,14 @@ try {
       Object.assign(row, route.request().postDataJSON())
       return route.fulfill({ json: row })
     }
-    if (url.pathname === '/api/auth/me') body = { id: 1, username: 'test', real_name: '测试', permissions: ['project:archive:view', 'project:archive:edit', 'project:archive:delete', 'project:list:view'] }
+    if (url.pathname === '/api/auth/me') body = { id: 1, username: 'test', real_name: '测试', permissions: ['project:archive:view', 'project:archive:edit', 'project:archive:sync', 'project:archive:delete', 'project:list:view', ...['user', 'role', 'dict', 'enum', 'field-policy', 'operation-log'].map(key => `system:${key}:view`)] }
     else if (url.pathname === '/api/auth/product-categories') body = { unrestricted: true }
     else if (url.pathname.includes('/dicts/code/')) body = { items: [{ value: '1', label: '测试类别' }], label_map: { 1: '测试类别' } }
     else if (url.pathname === '/api/projects/archives/fields') body = { items: [] }
     else if (url.pathname === '/api/projects/sheet-fields') body = { groups: [], policies: [] }
+    else if (['/api/users', '/api/field-catalog', '/api/field-policies', '/api/operation-logs'].includes(url.pathname)) body = { items: [], total: 0, groups: [] }
+    else if (url.pathname === '/api/dicts') body = [{ id: 1, dict_name: '测试枚举', dict_code: 'test', item_count: 1 }]
+    else if (url.pathname === '/api/dicts/1/items') body = [{ id: 1, item_value: 1, item_label: '测试名称'.repeat(60), status: 1 }]
     else if (url.pathname === '/api/projects') {
       const all = Array.from({ length: 2040 }, (_, i) => ({ id: 2040 - i,
         project_code: `PROGRESS-${String(2040 - i).padStart(4, '0')}`, project_name: '项目',
@@ -58,8 +61,13 @@ try {
   })
   await page.goto('http://127.0.0.1:5174/project/archive')
   await expect(page.getByText('共 940 条')).toBeVisible()
-  assert.equal(requests.at(-1).page_size, '15')
-  assert.equal(await page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').count(), 15)
+  assert.equal(requests.at(-1).page_size, '50')
+  assert.ok(await page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').count() <= 50)
+  await expect(page.locator('.archive-row-actions').first()).toHaveText('编辑同步')
+  const nameCell = page.locator('.ag-center-cols-container [col-id="project_name"]').first()
+  await nameCell.hover()
+  await expect(page.locator('.ag-tooltip').first()).toBeVisible({ timeout: 1000 })
+  await page.mouse.move(0, 0)
   await page.locator('.pagination-center .page-btn').filter({ hasText: /^2$/ }).click()
   await expect.poll(() => requests.at(-1).page).toBe('2')
   await expect(page.locator('.ag-center-cols-container [col-id="project_name"]').first()).toBeVisible()
@@ -117,23 +125,41 @@ try {
   await expect(page.getByText('共 940 条')).toBeVisible()
   for (const width of [1366, 1600]) {
     await page.setViewportSize({ width, height: width === 1366 ? 768 : 900 })
+    const pagination = await page.locator('.custom-pagination').boundingBox()
+    assert.ok(pagination.y + pagination.height <= page.viewportSize().height)
+    assert.ok(page.viewportSize().height - pagination.y - pagination.height < 60)
     await page.screenshot({ path: `/tmp/pms-pagination-${width}.png` })
   }
-  rows.splice(0, 20)
-  await page.locator('.pagination-center .page-btn').filter({ hasText: /^63$/ }).click()
-  await expect(page.getByText('共 920 条')).toBeVisible()
-  await expect(page.locator('.pagination-center .page-btn.active')).toHaveText('62')
-  await expect.poll(() => requests.at(-1).page).toBe('62')
+  rows.splice(0, 50)
+  await page.locator('.pagination-center .page-btn').filter({ hasText: /^19$/ }).click()
+  await expect(page.getByText('共 890 条')).toBeVisible()
+  await expect(page.locator('.pagination-center .page-btn.active')).toHaveText('18')
+  await expect.poll(() => requests.at(-1).page).toBe('18')
   await page.goto('http://127.0.0.1:5174/project/list')
   await expect(page.getByText('共 2040 条')).toBeVisible()
-  assert.equal(await page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').count(), 15)
+  assert.ok(await page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').count() <= 50)
   await page.locator('.pagination-center .page-btn').filter({ hasText: /^2$/ }).click()
-  await expect(page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').first()).toHaveText('PROGRESS-2025')
+  await expect(page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').first()).toHaveText('PROGRESS-1990')
   await page.locator('.ag-header-cell[col-id="project_code"] .ag-header-cell-label').click()
-  await expect(page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').first()).toHaveText('PROGRESS-0016')
+  await expect(page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').first()).toHaveText('PROGRESS-0051')
   await page.getByRole('textbox', { name: '搜索项目进度' }).fill('PROGRESS-0001')
   await expect(page.getByText('共 1 条')).toBeVisible()
   await expect(page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').first()).toHaveText('PROGRESS-0001')
+  for (const route of ['user', 'role', 'dict', 'enum', 'field-policy', 'operation-log']) {
+    await page.goto('http://127.0.0.1:5174/system/' + route)
+    const table = page.locator('.el-table, .ag-root-wrapper').first()
+    await expect(table).toBeVisible()
+    await page.waitForTimeout(250)
+    const box = await table.boundingBox()
+    assert.ok(box.height > 450, `${route} height ${box.height}`)
+    assert.ok(box.y + box.height <= 885, `${route} bottom ${box.y + box.height}`)
+    if (route === 'enum') {
+      await page.locator('.el-table__body .el-table__row td').nth(1).hover()
+      await expect(page.getByRole('tooltip')).toBeVisible({ timeout: 1000 })
+      await page.mouse.move(0, 0)
+    }
+    await page.screenshot({ path: `/tmp/pms-density-${route}.png` })
+  }
   assert.deepEqual(failures, [])
   console.log('Browser passed: paging, query retention, sizing, stale responses, errors, widths', geometry)
 } finally {

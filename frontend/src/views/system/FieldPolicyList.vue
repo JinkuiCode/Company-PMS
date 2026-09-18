@@ -47,7 +47,7 @@
         border
         stripe
         size="small"
-        height="calc(100vh - 236px)"
+        height="100%"
         row-key="field_key"
         class="pms-dense-table field-policy-table"
         empty-text="暂无字段规则"
@@ -272,8 +272,8 @@ onMounted(fetchPolicies)
 <style scoped>
 .field-policy-page {
   display: flex;
-  height: calc(100vh - 88px);
-  min-height: 520px;
+  height: 100%;
+  min-height: 0;
   flex-direction: column;
 }
 

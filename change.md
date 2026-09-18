@@ -1,5 +1,37 @@
 # PMS 变更记录
 
+## 2026-09-18 列表自适应高度、统一分页与操作列
+
+- 原因：列表固定高度造成底部空白，分页默认值不一致，首次全文提示延迟过长，档案行内操作过密。
+- 调整：共享列表改为剩余高度布局与内部滚动；档案、进度、用户、数据字典、操作日志默认 50 条；角色、枚举、字段规则、任务列表同步适配高度，不新增分页。查询、排序、保存和分页联动保持原实现。
+- 调整：统一 AG Grid/Element Plus 表格全文提示为 200ms；档案行仅保留编辑/查看和同步，顶部批量操作保留；档案与进度操作列统一按钮尺寸、间距和冷灰背景。
+- 文件：`frontend/src/config/listUi.ts`、`App.vue`、`main.ts`、`components/PmsDataList.vue`、`styles/pms-theme.css`、对应项目/系统列表页面；`frontend/tests/list-density-contract.test.mjs`、分页浏览器测试及相关既有契约；`docs/PMS-UI-STANDARD.md`。
+- 验证：26 项前端契约通过；浏览器以 940 条档案和 2040 条进度模拟数据验证分页、筛选、排序、保存、过期响应、错误重试和长文本边界；1366×768、1600×900 截图与六个系统页面高度检查通过。生产构建通过；仅有原有大包体积提示。本批无后端或数据库修改，部署结果另记。
+
+## 2026-09-18 列表修复部署与远程输入诊断
+
+- 诊断：Mac Finder 自动键盘输入正常，Windows App 远程鼠标正常；切换连接键盘模式为 Unicode 后可输入普通文字，但部分标点和功能键仍丢失。采用 UTF-16LE 编码的 PowerShell 命令及文字换行后恢复可验证的远程命令执行；这确定了本次可用的输入方式，不将更底层工具原因描述为已证实。
+- 发布：按用户批准，从服务器干净的 `d300b413` 在同一功能分支快进到 `9a770fcd36074d28af6bffeb39b13bcb52f28204`。备份目录 `C:\PMS\.runtime\release-history\pagination-20260918-100805`，包位于 `C:\PMS\.runtime\releases\pagination-9a770fcd`。未修改数据库结构、业务数据、受保护配置或 SQL 服务，未推送 GitHub 或合并 master。
+- 收尾：部署器启动子进程后等待输出管道结束，PMS 已正常运行；停止确认身份的部署器进程，不停止新版 PMS，改为独立执行校验。后续本地一次性部署脚本改用临时文件接收子进程输出，避免长期服务持有管道造成等待。
+- 验证：服务器只读验证退出 0，启用档案 940 条，两页各 15 条且 ID 不重复，筛选通过；首个服务内查询约 137ms（非浏览器端到端耗时）。服务器 Git 工作区干净，新 API 含 filters/sort/archive_id；健康接口 HTTP 200，前端首页 SHA256 与本地构建一致，服务器登录页正常显示。业务页面人工视觉验收仍待用户登录后完成。
+- 涉及文件：本次源码版本沿用上一批列表修复；本地 `release/pagination-deploy/deploy.py`、`verify.py`、`Deploy.cmd`、`release/serve-pagination.py` 为一次性运维产物，临时传输服务已关闭。本次没有新增 SMB 共享或更改共享权限。
+
+## 2026-09-18 列表修复发布包准备（服务器部署待继续）
+
+- 后续准备：用户手动执行只读命令后，远程画面确认服务器仍为 `d300b413c69a4c3f22c2f5b6c4e68dffde1e2977` 且工作区干净。新增本地 `release/PMS-pagination-deploy-9a770fcd.zip` 一次性部署工具，包含版本/哈希/ERP 占用校验、项目内程序备份、同分支快进、前端替换、配置保留、健康与真实档案分页只读验证，以及失败时程序回退。Python 语法、发布 ZIP 和源码 bundle 哈希、发布清单全部文件哈希校验通过；Windows 现场执行与验收仍待用户运行，不宣称已部署或回退演练通过。
+- 原因：用户要求使用服务器完整数据验收，已批准部署上一批列表修复。
+- 完成：在现有 `codex/pms-db-permission-split` 分支提交 `9a770fcd`；使用标准发布工具从该提交重建前端并生成发布包及源码增量 bundle，未推送或合并主分支。
+- 文件：`release/pms-server-9a770fcd-20260918.zip`、同名 `.sha256`、`release/pms-source-9a770fcd.bundle`（本地发布产物）。ZIP SHA256 为 `3507f8092d4d2708a2de4ea95e7113d9ad7b9ba8486f2502c560e5d76156c68b`。
+- 验证：发布构建退出 0；服务器 `/api/health` 返回 `ok`。Windows App 已连上 PMS，但远程键盘输入未送达，尚未完成运行路径核对，未停止服务或覆盖服务器文件；已请用户恢复远程输入后继续。此记录不代表部署完成。
+
+## 2026-09-18 列表分页、查询联动及长文本修复（开发机）
+
+- 原因：档案固定请求 1000 条且未分页，逐行查询人员导致大量 SQL；长名称挤出 AG Grid 列宽。用户要求查询、布局保存与分页整体联动，并检查其他列表。
+- 调整：档案使用真实服务端分页、白名单筛选/排序、人员批量读取、按 ID 刷新详情；恢复个人列排序后查询。查询变化清空勾选，保存保留条件，末页回退，旧响应失效，加载失败可重试。项目进度一次读取权限范围内完整结果并由 AG Grid 先排序再分页，避免跨批次记录移动造成漏项；操作日志自定义条件移到 SQL 分页前；用户和数据字典补请求竞态及 loading 收尾；共享表格值容器限制宽度并省略长文本。
+- 涉及文件：`backend/app/services/list_query.py`、`project.py`、`operation_log.py`，对应项目/日志 API；`ProjectArchive.vue`、`ProjectList.vue`、`OperationLogList.vue`、`UserList.vue`、`DataDictionaryList.vue`、`pms-theme.css`；新分页后端/前端/浏览器测试，已有抽屉初始化契约，`docs/PMS-UI-STANDARD.md`、`docs/records/PMS-列表分页验收-20260918.md`。
+- 验证：全部后端和前端契约通过，`npm run build` 通过。1040 条 SQLite 测试集查询每页 15 条时为 6 次 SQL（修复前无人员样本即 50 次）；约 4ms 仅代表本地测试。Edge 模拟浏览器验收 940 条档案及 2040 条项目进度、排序恢复、保存联动、过期响应、失败重试与末页回退；1366×768/1600×900 长名称列内省略通过。
+- 边界：开发机一键启动检查确认后端 8000、前端 5174 来源正确，使用本地 SQLite；自动化临时服务结束后需用户双击启动器进行人工验收。未部署服务器、未修改正式数据、未提交推送或合并。项目进度保留全数据客户端动态筛选，不宣称其全量加载成本已消除。
+
 ## 2026-07-20 - 一键启动器版本一致性修复
 
 - 重构根目录 `start-pms.command` 为稳定启动入口，通过 `.runtime/active-source` 明确选择前后端代码源；启动时打印代码路径、分支、提交号和数据库路径，配置失效时明确失败，不再静默回退旧版本。
@@ -498,3 +530,19 @@
 - 调整：取消档案名称唯一校验及模型索引，保持项目编码和序列号的原有唯一约束；SQLite/MSSQL 升级均移除旧名称唯一索引且不再重建，数据库版本提升为 `2026-09-17-02`。金蝶期初预检只隔离无效编码/长度、来源重复编码和 PMS 已有编码；不同编码同名允许，空备注不填充金蝶名称。重新生成服务器只读诊断文件 `C:\PMS\.runtime\initial-import\20260917\kingdee-initial-code-only-diagnostic-20260917.csv`，旧报告保留。
 - 涉及文件：`backend/app/models/project.py`、`backend/app/services/project.py`、`backend/app/services/project_archive_initial_migration.py`、`backend/app/services/project_archive_semantic_migration.py`、`backend/app/services/kingdee_initial_archive.py`、`backend/app/services/database_revision.py`、`backend/scripts/import_kingdee_initial_archives.py`、`backend/tests/kingdee_initial_archive_contract.py`、`backend/tests/legacy_schema_upgrade_contract.py`、`backend/tests/project_archive_semantic_contract.py`、`docs/superpowers/plans/2026-09-17-kingdee-initial-archive.md`、`change.md`；服务器只读诊断 CSV。
 - 验证：同名预检、接口校验和旧 SQLite 唯一索引迁移测试先失败后通过；SQL Server 升级路径断言仅删除旧名称索引；全部 26 项后端契约、前端档案筛选/风格/标准列表/系统 UI/金蝶期初契约和 `npm run build` 通过。新视图 937 条，候选 936 条（其中空名称 643 条），只剩测试编码冲突 1 条，CSV 重新读取为 1 行。服务器正式库仍有名称唯一索引；`msdb` 最近可见完整备份为 2026-09-15 13:41，未记录备份校验和，不能作为本次升级/导入的已验证备份。未部署、升级或导入。
+
+## 2026-09-17 金蝶期初正式导入结果
+
+- 原因：执行用户已批准并完成备份的期初导入，不重复请求批准。
+- 调整：现场辅助脚本改用 SQLAlchemy URL 构造数据库连接，连接错误仅输出 SQLSTATE/原生错误码，区分权限检查失败，不输出密码。用户再次输入后连接成功；不能据此断定上次具体失败原因。服务器部署 `d300b413`，完成版本化数据库升级和期初写入。
+- 涉及文件：服务器 `C:\PMS\.runtime\initial-import\20260917\release-d300b413\apply.py`、本地同批辅助脚本、上述提交中的生产文件及数据库；本计划与变更日志。
+- 验证：现场依次返回 `database-upgrade_OK`、`runtime-schema_OK`、`initial-import_OK`、`import-verification_OK`。验证脚本确认新增 936 条、643 条名称为空、跳过测试编码 `PMS-ACCEPT-20260914-001`；原有 4 条档案未变、总档案 940 条、项目进度和 ERP 日志数量未变，936 条导入日志齐全，所有导入名称与金蝶备注一致。Mac 独立访问生产 `/api/health` 返回 HTTP 200/status ok，生产首页资源引用与本地本批发布首页一致。
+- 边界：远程窗口最后可见输出停在导入核验成功，最终发布收据和 Git 清洁状态尚未读取；不因此重复导入。未推送 GitHub、未合并 master，未重启 SQL Server 或 OA。
+
+## 2026-09-17 金蝶期初发布包与正式导入准备
+
+- 原因：用户已确认生产升级和期初导入，允许不同编码同名并跳过唯一测试编码冲突。
+- 调整：本地提交 `d300b413`，从该提交重新构建服务器发布包；包与源码增量传至服务器 `C:\PMS\.runtime\initial-import\20260917\release-d300b413`。形成正式预检报告、旧档案哈希核对记录和可连续执行升级/导入/核验的现场辅助脚本；辅助脚本名称避开 Python 标准库 `inspect`，不保存管理员密码。临时传输服务完成传输后关闭。
+- 备份：确认用户提供的 `E:\PMS-bakup\PMS20260917.bak` 是 2026-09-17 16:49:11 的 PMS 完整备份，无校验和；另生成 `E:\PMS-bakup\PMS-preimport-20260917-173045.bak`（COPY_ONLY、CHECKSUM），SQL Server 返回备份及带校验和验证成功。程序备份在 `C:\PMS\.runtime\release-history\20260917\pre-initial-import\PMS-operations-20260917-174625`。
+- 涉及文件：本地 `release/pms-server-d300b413-20260917.zip`、`.runtime/initial-import-release-20260917/`；服务器上述发布准备目录；`docs/superpowers/plans/2026-09-17-kingdee-initial-archive.md`、`change.md`。
+- 验证：发布包构建和 ZIP 完整性检查通过，SHA256 为 `59a0d2a2942a0da7d23a4110db58db82cd69ebcb3bda1fe67bf72a3dd445dd31`；服务器增量源码和发布文件哈希检查通过。正式预检 937 条来源、936 条待导入、643 条空名称、1 条既有测试编码冲突；原有 4 条档案、1 条项目进度，操作人为已存在的 OA 用户 ID 2。现场输出 `STAGE_READY`。截至本记录，执行流程仍等待管理员密码，尚未停止服务、升级结构或写入期初档案；未推送 GitHub、未合并 master。

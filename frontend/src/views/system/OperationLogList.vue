@@ -40,7 +40,7 @@
         :data="logs"
         border
         stripe
-        height="calc(100vh - 330px)"
+        height="100%"
         empty-text="暂无操作日志"
       >
         <el-table-column prop="created_at" label="时间" width="168" fixed>
@@ -160,6 +160,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
+import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import { PmsDateControl, PmsSelectControl, PmsTextControl, type PmsOption } from '@/form-system'
 import {
@@ -251,7 +252,7 @@ const loading = ref(false)
 const logs = ref<OperationLog[]>([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(15)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const detailVisible = ref(false)
 const selectedLog = ref<OperationLog | null>(null)
 

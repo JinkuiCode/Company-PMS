@@ -54,7 +54,7 @@
         :defaultColDef="defaultColDef"
         :localeText="localeText"
         :theme="'legacy'"
-        :domLayout="'autoHeight'"
+        :domLayout="'normal'"
         :enableCellTextSelection="true"
         :alwaysShowHorizontalScroll="true"
         @cell-value-changed="onCellValueChanged"

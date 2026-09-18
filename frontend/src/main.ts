@@ -9,6 +9,10 @@ import { createPinia } from 'pinia'
 
 import App from './App.vue'
 import router from './router'
+import { provideGlobalGridOptions } from 'ag-grid-community'
+import { PMS_GRID_OPTIONS } from './config/listUi'
+
+provideGlobalGridOptions(PMS_GRID_OPTIONS)
 
 const app = createApp(App)
 app.use(ElementPlus, { locale: zhCn })

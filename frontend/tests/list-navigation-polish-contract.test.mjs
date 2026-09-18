@@ -96,8 +96,8 @@ assert.match(
   'Project progress operation column should keep the compact width fixed',
 )
 assert.match(
-  progress,
-  /\.progress-row-actions\)[\s\S]*?justify-content:\s*center;[\s\S]*?width:\s*100%;/,
+  readFileSync(new URL('../src/styles/pms-theme.css', import.meta.url), 'utf8'),
+  /\.progress-row-actions\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?width:\s*100%;/,
   'Project progress row actions should be centered in the compact column',
 )
 

@@ -55,7 +55,15 @@ defineExpose({ refreshScrollbar })
 
 <style scoped>
 .pms-data-list {
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pms-data-list > :not(.pms-data-list-grid-shell) {
+  flex-shrink: 0;
 }
 
 .pms-data-list-header {
@@ -67,12 +75,22 @@ defineExpose({ refreshScrollbar })
 }
 
 .pms-data-list-grid-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   width: 100%;
   min-width: 0;
+  min-height: 176px;
 }
 
-.pms-data-list-grid-shell :deep(.pms-ag-grid) {
-  min-height: 176px;
+.pms-data-list-grid-shell :deep(.pms-ag-grid),
+.pms-data-list-grid-shell :deep(.el-table) {
+  flex: 1;
+  min-height: 0;
+}
+
+.pms-data-list-grid-shell :deep(.grid-horizontal-scrollbar) {
+  flex-shrink: 0;
 }
 
 .pms-data-list-grid-shell :deep(.ag-body-horizontal-scroll) {

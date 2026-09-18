@@ -533,6 +533,55 @@ a {
   font-weight: 400;
 }
 
+.pms-ag-grid .ag-cell.pms-actions-cell,
+.wechat-table .ag-cell.pms-actions-cell,
+.pms-actions-header {
+  background-color: #edf0f7 !important;
+  border-left: 1px solid #dce2ee;
+}
+
+.ag-row-hover .ag-cell.pms-actions-cell,
+.ag-row-selected .ag-cell.pms-actions-cell {
+  background-color: #e4e9f4 !important;
+}
+
+.pms-actions-cell .archive-row-actions,
+.pms-actions-cell .progress-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.pms-actions-cell button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: var(--pms-radius-sm);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pms-actions-cell button:hover,
+.pms-actions-cell button:focus-visible {
+  background: var(--pms-primary-soft);
+  text-decoration: none;
+}
+
+.ag-tooltip {
+  max-width: min(480px, 80vw);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .pms-ag-grid .ag-root-wrapper,
 .wechat-table .ag-root-wrapper {
   overflow: hidden;
