@@ -87,18 +87,18 @@ assert.match(
 
 assert.match(
   progress,
-  /const actionColumnWidth = computed\(\(\) => hasPermission\('project:list:delete'\) \? 88 : 60\)/,
-  'Project progress operation width should shrink according to available actions',
+  /\.\.\.PMS_ACTION_COLUMN/,
+  'Project progress operation width uses the shared standard regardless of permissions',
 )
 assert.match(
   progress,
-  /headerName:\s*'操作',[\s\S]*?width:\s*actionColumnWidth\.value,[\s\S]*?minWidth:\s*actionColumnWidth\.value,[\s\S]*?maxWidth:\s*actionColumnWidth\.value/,
-  'Project progress operation column should keep the compact width fixed',
+  /headerName:\s*'操作',[\s\S]*?colId:\s*'progress_actions',[\s\S]*?\.\.\.PMS_ACTION_COLUMN/,
+  'Project progress operation column has a stable ID and shared fixed width',
 )
 assert.match(
   readFileSync(new URL('../src/styles/pms-theme.css', import.meta.url), 'utf8'),
-  /\.progress-row-actions\s*\{[\s\S]*?justify-content:\s*center;[\s\S]*?width:\s*100%;/,
-  'Project progress row actions should be centered in the compact column',
+  /\.progress-row-actions\s*\{[\s\S]*?justify-content:\s*flex-start;[\s\S]*?width:\s*100%;/,
+  'Project progress row actions align left using the shared standard',
 )
 
 console.log('list navigation polish contract passed')

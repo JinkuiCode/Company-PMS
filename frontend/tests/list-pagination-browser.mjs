@@ -17,6 +17,7 @@ try {
     can_delete: false, erp_sync_status: 'historical',
   }))
   let failNext = false
+  let progressEdit = true
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url())
     if (!url.pathname.startsWith('/api/')) return route.continue()
@@ -26,7 +27,7 @@ try {
       Object.assign(row, route.request().postDataJSON())
       return route.fulfill({ json: row })
     }
-    if (url.pathname === '/api/auth/me') body = { id: 1, username: 'test', real_name: '测试', permissions: ['project:archive:view', 'project:archive:edit', 'project:archive:sync', 'project:archive:delete', 'project:list:view', ...['user', 'role', 'dict', 'enum', 'field-policy', 'operation-log'].map(key => `system:${key}:view`)] }
+    if (url.pathname === '/api/auth/me') body = { id: 1, username: 'test', real_name: '测试', permissions: ['project:archive:view', 'project:archive:edit', 'project:archive:sync', 'project:archive:delete', 'project:list:view', ...(progressEdit ? ['project:list:edit', 'project:list:delete'] : []), ...['user', 'role', 'dict', 'enum', 'field-policy', 'operation-log'].map(key => `system:${key}:view`)] }
     else if (url.pathname === '/api/auth/product-categories') body = { unrestricted: true }
     else if (url.pathname.includes('/dicts/code/')) body = { items: [{ value: '1', label: '测试类别' }], label_map: { 1: '测试类别' } }
     else if (url.pathname === '/api/projects/archives/fields') body = { items: [] }
@@ -64,6 +65,19 @@ try {
   assert.equal(requests.at(-1).page_size, '50')
   assert.ok(await page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').count() <= 50)
   await expect(page.locator('.archive-row-actions').first()).toHaveText('编辑同步')
+  async function actionGeometry() {
+    return page.locator('.ag-cell.pms-actions-cell').first().evaluate(cell => {
+      const buttons = [...cell.querySelectorAll('button')]
+      const rect = cell.getBoundingClientRect()
+      return { width: rect.width, padding: getComputedStyle(cell).paddingLeft,
+        buttons: buttons.map(button => { const r = button.getBoundingClientRect(); return { width: r.width, height: r.height, left: r.left - rect.left } }) }
+    })
+  }
+  const archiveActions = await actionGeometry()
+  assert.equal(archiveActions.width, 112)
+  assert.equal(archiveActions.padding, '8px')
+  assert.deepEqual(archiveActions.buttons.map(b => [b.width, b.height]), [[40, 24], [40, 24]])
+  assert.equal(archiveActions.buttons[1].left - archiveActions.buttons[0].left, 48)
   const nameCell = page.locator('.ag-center-cols-container [col-id="project_name"]').first()
   await nameCell.hover()
   await expect(page.locator('.ag-tooltip').first()).toBeVisible({ timeout: 1000 })
@@ -137,6 +151,14 @@ try {
   await expect.poll(() => requests.at(-1).page).toBe('18')
   await page.goto('http://127.0.0.1:5174/project/list')
   await expect(page.getByText('共 2040 条')).toBeVisible()
+  await expect(page.locator('.progress-row-actions .detail-btn').first()).toHaveText('编辑')
+  assert.deepEqual(await actionGeometry(), archiveActions)
+  progressEdit = false
+  await page.reload()
+  await expect(page.locator('.progress-row-actions .detail-btn').first()).toHaveText('查看')
+  const readOnlyActions = await actionGeometry()
+  assert.equal(readOnlyActions.width, 112)
+  assert.deepEqual(readOnlyActions.buttons, archiveActions.buttons.slice(0, 1))
   assert.ok(await page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').count() <= 50)
   await page.locator('.pagination-center .page-btn').filter({ hasText: /^2$/ }).click()
   await expect(page.locator('.ag-pinned-left-cols-container [col-id="project_code"]').first()).toHaveText('PROGRESS-1990')

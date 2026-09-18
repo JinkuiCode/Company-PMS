@@ -324,7 +324,7 @@ import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
-import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN } from '@/config/listUi'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
@@ -613,6 +613,7 @@ function restoreArchiveColumnState() {
           ...state,
           hide: false,
           pinned: state.colId === 'archive_actions' ? 'right' : 'left',
+          ...(state.colId === 'archive_actions' ? { width: PMS_ACTION_COLUMN.width, flex: null } : {}),
         }
       }
       if (state.colId === 'project_code' || state.colId === 'project_name') {
@@ -1039,7 +1040,7 @@ const columnDefs = computed<ColDef[]>(() => [
     },
   },
   {
-    colId: 'archive_actions', headerName: '操作', width: 112, minWidth: 112, maxWidth: 112, pinned: 'right', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false,
+    colId: 'archive_actions', headerName: '操作', ...PMS_ACTION_COLUMN, pinned: 'right', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false,
     cellClass: 'pms-actions-cell', headerClass: 'pms-actions-header archive-list-header-center',
     cellRenderer: ArchiveActionsRenderer,
   },

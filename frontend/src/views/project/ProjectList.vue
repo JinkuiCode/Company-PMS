@@ -343,7 +343,7 @@ import {
 import type { ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
-import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN } from '@/config/listUi'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
@@ -1153,7 +1153,6 @@ function dynamicColumnDefs(): Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>
     .filter(Boolean) as Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>
 }
 
-const actionColumnWidth = computed(() => hasPermission('project:list:delete') ? 88 : 60)
 
 function applyPmsGridEditorClasses(definitions: Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>): Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>> {
   return definitions.map((definition) => {
@@ -1245,10 +1244,12 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
   ...dynamicColumnDefs(),
   {
     headerName: '操作',
-    width: actionColumnWidth.value,
-    minWidth: actionColumnWidth.value,
-    maxWidth: actionColumnWidth.value,
+    colId: 'progress_actions',
+    ...PMS_ACTION_COLUMN,
     pinned: 'right',
+    lockPinned: true,
+    lockVisible: true,
+    suppressMovable: true,
     filter: false,
     sortable: false,
     resizable: false,
@@ -1256,7 +1257,7 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
     headerClass: 'progress-list-header-center pms-actions-header',
     cellRenderer: () => `
       <span class="progress-row-actions">
-        <button class="progress-detail-btn detail-btn" type="button" title="打开详情" aria-label="打开详情">详情</button>
+        <button class="progress-detail-btn detail-btn" type="button" title="${hasPermission('project:list:edit') ? '编辑项目' : '查看项目'}" aria-label="${hasPermission('project:list:edit') ? '编辑项目' : '查看项目'}">${hasPermission('project:list:edit') ? '编辑' : '查看'}</button>
         ${hasPermission('project:list:delete') ? '<button class="pms-more-btn more-btn" type="button" title="更多操作" aria-label="更多操作"></button>' : ''}
       </span>
     `,
@@ -1346,7 +1347,9 @@ function restoreColumnState() {
     const sanitizedState = saved.columnState.filter((state) => {
       if (!state.colId.startsWith('sheet:')) return true
       return availableSheetIds.has(state.colId)
-    })
+    }).map(state => state.colId === 'progress_actions'
+      ? { ...state, width: PMS_ACTION_COLUMN.width, flex: null, hide: false, pinned: 'right' as const }
+      : state)
     gridApi.value.applyColumnState({ state: sanitizedState, applyOrder: true })
   } finally {
     restoringColumnState.value = false
@@ -1968,11 +1971,6 @@ onMounted(async () => {
 :deep(.progress-list-header-center .ag-header-cell-label),
 :deep(.progress-list-header-center .ag-header-group-cell-label) {
   justify-content: center;
-}
-
-:deep(.progress-actions-cell) {
-  padding-right: 4px !important;
-  padding-left: 4px !important;
 }
 
 :deep(.progress-detail-btn) {

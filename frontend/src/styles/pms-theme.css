@@ -1,4 +1,8 @@
 :root {
+  --pms-action-cell-padding: 8px;
+  --pms-action-button-width: 40px;
+  --pms-action-button-height: 24px;
+  --pms-action-gap: 8px;
   --pms-bg: #f6f8fb;
   --pms-bg-soft: #f8fafc;
   --pms-surface: #ffffff;
@@ -545,12 +549,17 @@ a {
   background-color: #e4e9f4 !important;
 }
 
+.pms-ag-grid .ag-cell.pms-actions-cell,
+.wechat-table .ag-cell.pms-actions-cell {
+  padding-inline: var(--pms-action-cell-padding);
+}
+
 .pms-actions-cell .archive-row-actions,
 .pms-actions-cell .progress-row-actions {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: var(--pms-action-gap);
   width: 100%;
 }
 
@@ -558,7 +567,9 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
+  flex: 0 0 var(--pms-action-button-width);
+  width: var(--pms-action-button-width);
+  height: var(--pms-action-button-height);
   padding: 0 5px;
   border: 0;
   border-radius: var(--pms-radius-sm);
