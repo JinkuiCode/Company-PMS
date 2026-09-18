@@ -2,6 +2,7 @@
   --pms-form-control-height-compact: 32px;
   --pms-form-control-height-regular: 36px;
   --pms-form-control-padding-x: 10px;
+  --pms-form-number-button-width: 32px;
   --pms-form-control-line-height: 20px;
   --pms-form-control-border: var(--pms-border);
   --pms-form-control-border-hover: #c7cfdb;
@@ -29,6 +30,7 @@
 
 .pms-form-control--compact {
   height: var(--pms-form-control-height-compact);
+  --pms-form-number-button-width: 28px;
 }
 
 .pms-form-control--regular {
@@ -447,4 +449,27 @@ button.pms-inline-field__value {
 
 .pms-form-grid .ag-cell-inline-editing :is(input, textarea, button):focus-visible {
   outline: none;
+}
+
+/* Number controls reserve button space independently from the text-field inset. */
+.pms-form-control .el-input-number__increase,
+.pms-form-control .el-input-number__decrease {
+  width: var(--pms-form-number-button-width);
+}
+
+.pms-form-control .el-input-number:not(.is-without-controls) .el-input__wrapper {
+  padding-inline: calc(var(--pms-form-number-button-width) + var(--pms-form-control-padding-x) + 1px);
+}
+
+.pms-form-control .el-input-number.is-controls-right .el-input__wrapper,
+.pms-form-control .el-input-number.is-without-controls .el-input__wrapper {
+  padding-left: var(--pms-form-control-padding-x);
+}
+
+.pms-form-control .el-input-number.is-without-controls .el-input__wrapper {
+  padding-right: var(--pms-form-control-padding-x);
+}
+
+.pms-form-control .el-input-number.is-controls-right :is(.el-input-number__increase, .el-input-number__decrease) {
+  height: calc(50% - 1px);
 }

@@ -125,7 +125,7 @@ async function tryOaSsoLogin(): Promise<boolean> {
     }
     await authStore.fetchUser()
     // 清除 URL 中的 SSO 参数，防止重复用过期参数请求
-    router.replace({ name: 'Dashboard', query: {} })
+    router.replace('/')
     return true
   } catch (e: any) {
     const detail = e?.response?.data?.detail || 'OA 认证失败'
@@ -187,7 +187,7 @@ async function autoLogin(): Promise<boolean> {
     const jwtValid = await verifyJwt(token)
     if (jwtValid) {
       await authStore.fetchUser()
-      router.replace({ name: 'Dashboard' })
+      router.replace('/')
       return true
     }
     localStorage.removeItem('access_token')
@@ -196,7 +196,7 @@ async function autoLogin(): Promise<boolean> {
   // 通道2：尝试用免密令牌换取新 JWT
   const ok = await tryAutoLoginWithFetch()
   if (ok) {
-    router.replace({ name: 'Dashboard' })
+    router.replace('/')
     return true
   }
 
@@ -223,7 +223,7 @@ async function handleLogin() {
       localStorage.setItem('pms_remember_token', res.remember_token)
     }
     await authStore.fetchUser()
-    router.replace({ name: 'Dashboard' })
+    router.replace('/')
   } catch (e: any) {
     const detail = e?.response?.data?.detail || e?.message || '认证失败，请检查账号和密码'
     error.value = detail

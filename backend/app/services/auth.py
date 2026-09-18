@@ -201,7 +201,9 @@ def get_current_user(db: Session, user_id: int, authorization_context: dict | No
     user = db.query(SysUser).filter(SysUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    from app.services.role_home import resolve_user_home
     return UserInfo(
+        home_path=resolve_user_home(db, user_id, (authorization_context or {}).get("permissions", [])),
         id=user.id,
         username=user.username,
         real_name=user.real_name,

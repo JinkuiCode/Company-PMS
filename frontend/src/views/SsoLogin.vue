@@ -58,7 +58,7 @@ async function doSSO() {
 
     localStorage.setItem('access_token', res.access_token)
     await authStore.fetchUser()
-    router.replace({ name: 'Dashboard' })
+    router.replace('/')
   } catch (e: any) {
     error.value = e?.response?.data?.detail || e?.message || 'SSO 验证失败'
     loading.value = false

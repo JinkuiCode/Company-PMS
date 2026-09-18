@@ -26,6 +26,7 @@ export interface UserInfo {
   mobile: string | null
   status: number
   role_codes: string[]
+  home_path?: string
   permissions: string[]
   data_scope: number
   product_category_ids: number[] | null

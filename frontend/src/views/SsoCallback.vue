@@ -78,7 +78,7 @@ async function handleCallback() {
       // 短暂显示成功状态后跳转
       verifying.value = false
       setTimeout(() => {
-        router.replace({ name: 'Dashboard' })
+        router.replace('/')
       }, 500)
     } else {
       error.value = 'OA 认证返回数据异常，缺少 access_token'

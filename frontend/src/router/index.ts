@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { rememberLoginDestination, consumeLoginDestination, chooseLoginDestination } from '@/utils/loginDestination'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -35,7 +36,6 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: () => import('@/layout/AppLayout.vue'),
-    redirect: '/dashboard',
     children: [
       {
         path: 'dashboard',
@@ -121,16 +121,21 @@ const PUBLIC_PATHS = ['/login', '/sso/login', '/sso/start', '/sso/callback']
 
 // 路由守卫：URL 参数 token 自动保存，未登录跳转到登录页
 router.beforeEach(async (to) => {
+  if (PUBLIC_PATHS.includes(to.path)) rememberLoginDestination(to.query.redirect)
   // 处理 URL 参数中的 token（来自 SSO 登录页重定向）
   const urlToken = to.query.token as string
   if (urlToken) {
     localStorage.setItem('access_token', urlToken)
     // 清除 URL 中的 token 参数，跳转到首页
-    return { name: 'Dashboard', query: {} }
+    const query = { ...to.query }
+    delete query.token
+    rememberLoginDestination(router.resolve({ path: to.path, query }).fullPath)
+    return { path: '/', query: {} }
   }
 
   const token = localStorage.getItem('access_token')
   if (!PUBLIC_PATHS.includes(to.path) && !token) {
+    rememberLoginDestination(to.fullPath)
     return '/login'
   }
 
@@ -140,7 +145,15 @@ router.beforeEach(async (to) => {
       await authStore.fetchUser()
     } catch {
       authStore.logout()
+      rememberLoginDestination(to.fullPath)
       return '/login'
+    }
+    if (to.path === '/') {
+      const canAccess = (path: string) => {
+        const target = router.resolve(path)
+        return target.matched.length > 0 && Boolean(target.meta.permission) && authStore.hasPermission(String(target.meta.permission))
+      }
+      return chooseLoginDestination(consumeLoginDestination(), authStore.user?.home_path, canAccess)
     }
     const permission = to.meta.permission as string | undefined
     if (permission && !authStore.hasPermission(permission)) {

@@ -39,6 +39,8 @@ def test_catalog_covers_models_schemas_and_project_sheet_registry():
         ("user", "role_ids"),
         ("department", "parent_id"),
         ("role", "data_scope"),
+        ("role", "home_menu_id"),
+        ("role", "home_priority"),
         ("project_archive", "erp_sync_status"),
         ("project_progress", "frame_progress"),
         ("task", "progress"),

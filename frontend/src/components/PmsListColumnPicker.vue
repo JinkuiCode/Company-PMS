@@ -2,7 +2,7 @@
   <el-popover
     placement="bottom-end"
     trigger="click"
-    :width="332"
+    :width="activeTab === 'layout' ? 540 : 332"
     popper-class="pms-list-column-picker-popper"
   >
     <template #reference>
@@ -30,10 +30,12 @@
       </div>
 
       <div class="column-picker-actions">
+        <PmsSegmentedControl v-if="getGridApi" v-model="activeTab" :options="[{ label: '显示字段', value: 'fields' }, { label: '布局与列宽', value: 'layout' }]" size="compact" aria-label="列设置视图" />
         <el-button size="small" text @click="restoreDefaults">恢复默认</el-button>
       </div>
 
-      <div class="column-picker-groups">
+      <PmsGridLayoutEditor v-if="activeTab === 'layout' && getGridApi" :get-grid-api="getGridApi" :keyword="keyword" @changed="emit('layout-changed')" />
+      <div v-else class="column-picker-groups">
         <section
           v-for="group in visibleGroups"
           :key="group.key"
@@ -78,7 +80,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Setting } from '@element-plus/icons-vue'
-import { PmsCheckboxControl, PmsTextControl } from '@/form-system'
+import { PmsCheckboxControl, PmsTextControl, PmsSegmentedControl } from '@/form-system'
+import PmsGridLayoutEditor from './PmsGridLayoutEditor.vue'
+import type { GridApi } from 'ag-grid-community'
 
 type ColumnPickerField = {
   key: string
@@ -99,16 +103,19 @@ const props = defineProps<{
   groups: ColumnPickerGroup[]
   defaultKeys: string[]
   ariaLabel?: string
+  getGridApi?: () => GridApi | null | undefined
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string[]]
   'restore-defaults': []
+  'layout-changed': []
 }>()
 
 const ariaLabel = computed(() => props.ariaLabel || '列设置')
 
 const keyword = ref('')
+const activeTab = ref('fields')
 
 const normalizedKeyword = computed(() => keyword.value.trim().toLowerCase())
 

@@ -3,6 +3,7 @@
   --pms-action-button-width: 40px;
   --pms-action-button-height: 24px;
   --pms-action-gap: 8px;
+  --pms-frozen-divider: #d9dfe8;
   --pms-bg: #f6f8fb;
   --pms-bg-soft: #f8fafc;
   --pms-surface: #ffffff;
@@ -537,16 +538,25 @@ a {
   font-weight: 400;
 }
 
-.pms-ag-grid .ag-cell.pms-actions-cell,
-.wechat-table .ag-cell.pms-actions-cell,
-.pms-actions-header {
-  background-color: #edf0f7 !important;
-  border-left: 1px solid #dce2ee;
+.pms-ag-grid .ag-pinned-left-header {
+  border-right: 1px solid var(--pms-frozen-divider);
+}
+.pms-ag-grid .ag-pinned-right-header {
+  border-left: 1px solid var(--pms-frozen-divider);
 }
 
-.ag-row-hover .ag-cell.pms-actions-cell,
-.ag-row-selected .ag-cell.pms-actions-cell {
-  background-color: #e4e9f4 !important;
+/* Headers own their divider; body rows use AG Grid's boundary cells only. */
+.pms-ag-grid .ag-pinned-left-cols-container {
+  border-right: 0;
+}
+.pms-ag-grid .ag-pinned-right-cols-container {
+  border-left: 0;
+}
+.pms-ag-grid .ag-cell.ag-cell-last-left-pinned:not(.ag-cell-range-right):not(.ag-cell-range-single-cell) {
+  border-right: 1px solid var(--pms-frozen-divider);
+}
+.pms-ag-grid .ag-cell.ag-cell-first-right-pinned:not(.ag-cell-range-left):not(.ag-cell-range-single-cell) {
+  border-left: 1px solid var(--pms-frozen-divider);
 }
 
 .pms-ag-grid .ag-cell.pms-actions-cell,

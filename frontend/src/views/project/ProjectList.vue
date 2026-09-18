@@ -19,6 +19,9 @@
             :groups="columnPickerGroups"
             :default-keys="defaultSelectedSheetFieldKeys"
             aria-label="项目进度列设置"
+            :get-grid-api="() => gridApi"
+            @layout-changed="handleGridStructureChanged"
+            @restore-defaults="restoreProgressColumnDefaults"
           />
         </template>
 
@@ -1205,7 +1208,7 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
   },
   {
     headerName: '项目进度',
-    marryChildren: true,
+    marryChildren: false,
     children: ([
       { field: 'design_progress', headerName: '设计进度', width: 112, hide: !isProgressPolicyVisible('design_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('design_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('design_progress') },
       { field: 'order_progress', headerName: '下单进度', width: 112, hide: !isProgressPolicyVisible('order_progress'), editable: () => hasPermission('project:list:edit') && isProgressPolicyEditable('order_progress'), cellEditor: 'agNumberCellEditor', valueParser: parseProgressEditValue, cellRenderer: renderStageProgress('order_progress') },
@@ -1218,7 +1221,7 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
   },
   {
     headerName: '成员 / 配置',
-    marryChildren: true,
+    marryChildren: false,
     children: ([
       {
         field: 'pm_name',
@@ -1247,6 +1250,7 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
     colId: 'progress_actions',
     ...PMS_ACTION_COLUMN,
     pinned: 'right',
+    lockPosition: 'right',
     lockPinned: true,
     lockVisible: true,
     suppressMovable: true,
@@ -1382,6 +1386,10 @@ function handleGridStructureChanged() {
   refreshListScrollbar()
   if (!columnPreferenceWritesEnabled.value || restoringColumnState.value) return
   persistColumnPreferences()
+}
+
+function restoreProgressColumnDefaults() {
+  nextTick(() => { gridApi.value?.resetColumnState(); persistColumnPreferences(); refreshListScrollbar() })
 }
 
 function handleColumnResized(event: any) {

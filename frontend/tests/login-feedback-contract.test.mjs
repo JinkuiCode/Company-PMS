@@ -51,6 +51,6 @@ assert.deepEqual(component.errors, [], 'User-info 401 was already handled by the
 component = mountHandler(async () => {})
 await component.handleLogin()
 assert.deepEqual(component.successes, ['登录成功'])
-assert.deepEqual(component.routes, ['/dashboard'])
+assert.deepEqual(component.routes, ['/'])
 assert.deepEqual(component.errors, [])
 console.log('login feedback contract passed: credential rejection, safe fallback, no duplicate errors, successful login')

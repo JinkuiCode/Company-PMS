@@ -39,6 +39,8 @@
           :groups="archiveColumnGroups"
           :default-keys="defaultArchiveColumnKeys"
           aria-label="项目档案列设置"
+          :get-grid-api="() => gridApi"
+          @layout-changed="handleArchiveGridStructureChanged"
           @update:model-value="handleArchiveColumnSelection"
           @restore-defaults="restoreArchiveColumnDefaults"
         />
@@ -970,7 +972,7 @@ function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
 
 const columnDefs = computed<ColDef[]>(() => [
   ...(hasPermission('project:archive:delete') || hasPermission('project:archive:sync') || hasPermission('project:archive:toggle')
-    ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false } as ColDef]
+    ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', lockPosition: 'left', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false } as ColDef]
     : []),
   { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left', hide: !archiveColumnListAvailable('project_code') },
   {
@@ -1040,7 +1042,7 @@ const columnDefs = computed<ColDef[]>(() => [
     },
   },
   {
-    colId: 'archive_actions', headerName: '操作', ...PMS_ACTION_COLUMN, pinned: 'right', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false,
+    colId: 'archive_actions', headerName: '操作', ...PMS_ACTION_COLUMN, pinned: 'right', lockPosition: 'right', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false,
     cellClass: 'pms-actions-cell', headerClass: 'pms-actions-header archive-list-header-center',
     cellRenderer: ArchiveActionsRenderer,
   },

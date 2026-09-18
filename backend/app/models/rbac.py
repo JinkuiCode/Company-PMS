@@ -14,6 +14,8 @@ class SysRole(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     role_name: Mapped[str] = mapped_column(NVARCHAR(64), nullable=False, comment="角色名称")
     role_code: Mapped[str] = mapped_column(NVARCHAR(64), unique=True, nullable=False, comment="角色编码")
+    home_menu_id: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="登录首页菜单")
+    home_priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0", comment="登录首页优先级")
     data_scope: Mapped[int] = mapped_column(Integer, default=1, comment="数据权限: 1本人 2本部门 3本部门及子部门 4全部")
     product_category_ids: Mapped[str | None] = mapped_column(NVARCHAR(256), default=None, comment="允许的产品类别编号，逗号分隔，空=不限制")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1启用 0禁用")

@@ -1,5 +1,6 @@
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
+import { verifyColumnLayout } from './grid-layout-browser-helper.mjs'
 
 const browser = await chromium.launch({ headless: true, channel: 'msedge' })
 try {
@@ -74,6 +75,7 @@ try {
     })
   }
   const archiveActions = await actionGeometry()
+  await verifyColumnLayout(page, 'customer', '客户')
   assert.equal(archiveActions.width, 112)
   assert.equal(archiveActions.padding, '8px')
   assert.deepEqual(archiveActions.buttons.map(b => [b.width, b.height]), [[40, 24], [40, 24]])
@@ -151,6 +153,7 @@ try {
   await expect.poll(() => requests.at(-1).page).toBe('18')
   await page.goto('http://127.0.0.1:5174/project/list')
   await expect(page.getByText('共 2040 条')).toBeVisible()
+  await verifyColumnLayout(page, 'design_progress', '设计进度')
   await expect(page.locator('.progress-row-actions .detail-btn').first()).toHaveText('编辑')
   assert.deepEqual(await actionGeometry(), archiveActions)
   progressEdit = false

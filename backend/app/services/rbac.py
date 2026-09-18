@@ -13,6 +13,7 @@ from app.schemas.rbac import (
 )
 from app.services.operation_log import record_operation_log, serialize_model
 from app.services.enum_registry import validate_enum_value
+from app.services.role_home import validate_role_home
 
 
 def _split_product_category_ids(raw_value: str | None) -> list[int]:
@@ -284,6 +285,7 @@ def create_role(db: Session, data: RoleCreate, operator_id: int | None = None, r
     if db.query(SysRole).filter(SysRole.role_code == data.role_code).first():
         raise HTTPException(status_code=400, detail="角色编码已存在")
     normalized_menu_ids = normalize_role_menu_ids(db, data.menu_ids)
+    validate_role_home(db, data.home_menu_id, normalized_menu_ids)
     for product_category_id in _split_product_category_ids(data.product_category_ids):
         validate_enum_value(db, "product_category", product_category_id)
     try:
@@ -325,6 +327,13 @@ def update_role(db: Session, role_id: int, data: RoleUpdate, operator_id: int | 
     normalized_menu_ids = normalize_role_menu_ids(db, data.menu_ids) if data.menu_ids is not None else before_menu_ids
     try:
         update_data = data.model_dump(exclude_unset=True, exclude={"menu_ids"})
+        if "home_menu_id" in update_data:
+            validate_role_home(db, update_data["home_menu_id"], normalized_menu_ids)
+        elif data.menu_ids is not None and role.home_menu_id is not None:
+            try:
+                validate_role_home(db, role.home_menu_id, normalized_menu_ids)
+            except HTTPException:
+                update_data["home_menu_id"] = None
         if "product_category_ids" in update_data:
             current_category_ids = _split_product_category_ids(role.product_category_ids)
             for product_category_id in _split_product_category_ids(update_data["product_category_ids"]):

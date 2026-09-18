@@ -66,7 +66,7 @@ async function handleLogin() {
   try {
     await authStore.login(form.username, form.password)
     ElMessage.success('登录成功')
-    router.push('/dashboard')
+    router.push('/')
   } catch (error: unknown) {
     // 登录 401 由页面负责提示；其他错误继续由统一拦截器处理。
     if (isAxiosError(error) && error.config?.url === '/auth/login' && error.response?.status === 401) {

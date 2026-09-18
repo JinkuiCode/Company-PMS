@@ -6,6 +6,8 @@ from datetime import datetime
 class RoleBase(BaseModel):
     role_name: str = Field(..., max_length=64)
     role_code: str = Field(..., max_length=64)
+    home_menu_id: int | None = Field(default=None, gt=0)
+    home_priority: int = Field(default=0, ge=0, le=999)
     data_scope: int = Field(default=1, ge=1, le=4)
     product_category_ids: str | None = None
     status: int = Field(default=1)
@@ -17,6 +19,8 @@ class RoleCreate(RoleBase):
 
 
 class RoleUpdate(BaseModel):
+    home_menu_id: int | None = Field(default=None, gt=0)
+    home_priority: int = Field(default=0, ge=0, le=999)
     role_name: str | None = None
     data_scope: int | None = Field(default=None, ge=1, le=4)
     product_category_ids: str | None = None

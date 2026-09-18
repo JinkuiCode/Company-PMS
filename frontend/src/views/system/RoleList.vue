@@ -102,6 +102,22 @@
                 />
               </PmsFormField>
             </el-form-item>
+            <el-row :gutter="16">
+              <el-col :span="16">
+                <el-form-item>
+                  <PmsFormField field-id="role-home" label="登录后打开" hint="仅可选择本角色有查看权限的页面">
+                    <PmsSelectControl id="role-home" :model-value="form.home_menu_id" :options="homeOptions" aria-label="登录后打开" @update:model-value="form.home_menu_id = Number($event)" />
+                  </PmsFormField>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item>
+                  <PmsFormField field-id="role-home-priority" label="首页优先级" hint="多角色时数值高的优先，同值按角色ID">
+                    <PmsNumberControl id="role-home-priority" :model-value="form.home_priority" :min="0" :max="999" :precision="0" aria-label="首页优先级" @update:model-value="form.home_priority = Number($event || 0)" />
+                  </PmsFormField>
+                </el-form-item>
+              </el-col>
+            </el-row>
             <el-form-item>
               <PmsFormField field-id="role-remark" label="备注">
                 <PmsTextareaControl id="role-remark" v-model="form.remark" :rows="2" aria-label="角色备注" />
@@ -162,6 +178,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
+import router from '@/router'
 import { loadEnumOptions, type EnumOption } from '@/composables/useEnumOptions'
 import { Document, FolderOpened, Key } from '@element-plus/icons-vue'
 import {
@@ -169,6 +186,7 @@ import {
   PmsCheckboxGroupControl,
   PmsFormField,
   PmsSelectControl,
+  PmsNumberControl,
   PmsSwitchControl,
   PmsTextareaControl,
   PmsTextControl,
@@ -222,6 +240,24 @@ const form = reactive({
   data_scope: 1,
   status: 1,
   remark: '',
+  home_menu_id: 0,
+  home_priority: 0,
+})
+
+const homeOptions = computed<PmsOption[]>(() => {
+  const options: PmsOption[] = [{ label: '自动选择可访问页面', value: 0 }]
+  const selected = new Set(checkedMenuIds.value)
+  function walk(nodes: any[], parentAvailable = true) {
+    for (const node of nodes) {
+      const available = parentAvailable && node.status === 1 && node.visible === 1 && selected.has(node.id)
+      const permission = node.path ? router.resolve(node.path).meta.permission : undefined
+      const view = node.permission_code === permission ? node : node.children?.find((child: any) => child.permission_code === permission)
+      if (available && node.menu_type === 'C' && permission && view?.status === 1 && selected.has(view.id)) options.push({ label: node.menu_name, value: node.id })
+      walk(node.children || [], available)
+    }
+  }
+  walk(permTree.value)
+  return options
 })
 
 const rules: FormRules = {
@@ -251,6 +287,8 @@ const isIndeterminate = ref(false)
 function updateCheckAllState() {
   if (!permTreeRef.value) return
   const checkedKeys = permTreeRef.value.getCheckedKeys() as number[]
+  checkedMenuIds.value = [...checkedKeys, ...permTreeRef.value.getHalfCheckedKeys()]
+  if (!homeOptions.value.some(option => option.value === form.home_menu_id)) form.home_menu_id = 0
   const checkedLeafCount = checkedKeys.filter((k: number) => allLeafIds.value.includes(k)).length
   const totalLeaf = allLeafIds.value.length
   checkAll.value = checkedLeafCount === totalLeaf && totalLeaf > 0
@@ -265,6 +303,7 @@ function handleCheckAll(val: boolean) {
     permTreeRef.value.setCheckedKeys([])
   }
   isIndeterminate.value = false
+  updateCheckAllState()
 }
 
 function handleTreeCheck(data: any, state: { checkedKeys: number[] }) {
@@ -303,13 +342,14 @@ async function openDialog(row?: any) {
     Object.assign(form, {
       id: row.id, role_name: row.role_name, role_code: row.role_code,
       data_scope: row.data_scope, status: row.status, remark: row.remark,
+      home_menu_id: row.home_menu_id || 0, home_priority: row.home_priority || 0,
     })
     selectedProductCategories.value = row.product_category_ids ? row.product_category_ids.split(',').filter((s: string) => s.trim()) : []
     // 加载该角色已有的权限
     const res: any = await request.get(`/roles/${row.id}/menus`)
     checkedMenuIds.value = res.menu_ids || []
   } else {
-    Object.assign(form, { id: 0, role_name: '', role_code: '', data_scope: 1, status: 1, remark: '' })
+    Object.assign(form, { id: 0, role_name: '', role_code: '', data_scope: 1, status: 1, remark: '', home_menu_id: 0, home_priority: 0 })
     selectedProductCategories.value = []
     checkedMenuIds.value = []
   }
@@ -347,6 +387,8 @@ async function handleSubmit() {
     status: form.status,
     remark: form.remark,
     menu_ids: menuIds,
+    home_menu_id: form.home_menu_id || null,
+    home_priority: form.home_priority,
   }
 
   if (isEdit.value) {

@@ -33,6 +33,7 @@ class UserInfo(BaseModel):
     mobile: str | None
     status: int
     role_codes: list[str] = []
+    home_path: str = "/403"
     permissions: list[str] = []
     data_scope: int = 1
     product_category_ids: list[int] | None = None
