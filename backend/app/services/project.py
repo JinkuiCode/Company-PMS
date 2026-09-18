@@ -357,15 +357,20 @@ def _project_sheet_projection(values: dict[str, Any], requested_keys: list[str])
 def get_project_list(db: Session, page: int = 1, page_size: int = 15,
                      dept_id: int | None = None, status: int | None = None,
                      sheet_field_keys: str | list[str] | tuple[str, ...] | None = None,
-                     scope_context: dict | None = None):
+                     scope_context: dict | None = None, all_rows: bool = False):
     query = _apply_project_scope(db.query(PmsProject), db, scope_context)
     if dept_id:
         query = query.filter(PmsProject.dept_id == dept_id)
     if status:
         query = query.filter(PmsProject.status == status)
 
-    total = query.count()
-    projects = query.order_by(PmsProject.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    ordered = query.order_by(PmsProject.id.desc())
+    if all_rows:
+        projects = ordered.all()
+        total = len(projects)
+    else:
+        total = query.count()
+        projects = ordered.offset((page - 1) * page_size).limit(page_size).all()
     if not projects:
         return {"total": total, "items": []}
 
@@ -1055,14 +1060,19 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
                      product_category: int | None = None,
                      allowed_category_ids: list[int] | None = None,
                      enabled: bool | None = None,
-                     scope_context: dict | None = None):
+                     scope_context: dict | None = None,
+                     filters: str | None = None, sort: str | None = None,
+                     archive_id: int | None = None):
     """查询项目档案列表"""
     query = _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context)
 
     if keyword:
+        escaped_keyword = '%' + keyword.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
         query = query.filter(
-            (PmsProjectArchive.project_code.contains(keyword)) |
-            (PmsProjectArchive.project_name.contains(keyword))
+            (PmsProjectArchive.project_code.ilike(escaped_keyword, escape='!')) |
+            (PmsProjectArchive.project_name.ilike(escaped_keyword, escape='!')) |
+            (PmsProjectArchive.customer.ilike(escaped_keyword, escape='!')) |
+            (PmsProjectArchive.serial_no.ilike(escaped_keyword, escape='!'))
         )
     if status is not None:
         query = query.filter(PmsProjectArchive.status == status)
@@ -1073,17 +1083,25 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
     if enabled is not None:
         query = query.filter(PmsProjectArchive.is_enabled == int(enabled))
 
-    total = query.count()
-    rows = query.order_by(PmsProjectArchive.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    if archive_id is not None:
+        query = query.filter(PmsProjectArchive.id == archive_id)
+    from app.services.list_query import apply_archive_list_query
+    query = apply_archive_list_query(query, filters, sort)
+    total = query.order_by(None).count()
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
     guards = get_archive_delete_guards(db, [archive.id for archive in rows])
+    user_ids = {value for row in rows for value in (
+        row.manager_id, row.created_by, row.updated_by, row.erp_sync_by,
+    ) if value is not None}
+    users = {user.id: user for user in db.query(SysUser).filter(SysUser.id.in_(user_ids)).all()} if user_ids else {}
 
     items = []
     for a in rows:
         guard = guards[a.id]
-        manager = db.query(SysUser).filter(SysUser.id == a.manager_id).first()
-        creator = db.query(SysUser).filter(SysUser.id == a.created_by).first()
-        editor = db.query(SysUser).filter(SysUser.id == a.updated_by).first()
-        syncer = db.query(SysUser).filter(SysUser.id == a.erp_sync_by).first() if a.erp_sync_by else None
+        manager = users.get(a.manager_id)
+        creator = users.get(a.created_by)
+        editor = users.get(a.updated_by)
+        syncer = users.get(a.erp_sync_by)
         items.append(ArchiveResponse(
             id=a.id, project_code=a.project_code, project_name=a.project_name,
             data_origin=a.data_origin,

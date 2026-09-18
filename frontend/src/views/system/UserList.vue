@@ -401,14 +401,22 @@ const userRules: FormRules = {
   password: [{ required: true, message: '请输入密码' }],
 }
 
+let listRequestSerial = 0
 async function fetchUserList() {
+  const requestSerial = ++listRequestSerial
   loading.value = true
   const params: any = { page: page.value, page_size: pageSize.value }
   if (selectedDeptId.value !== null) params.dept_id = selectedDeptId.value
-  const res: any = await request.get('/users', { params })
-  userList.value = res.items
-  total.value = res.total
-  loading.value = false
+  try {
+    const res: any = await request.get('/users', { params })
+    if (requestSerial !== listRequestSerial) return
+    userList.value = res.items
+    total.value = res.total
+  } catch {
+    if (requestSerial === listRequestSerial) { userList.value = []; total.value = 0 }
+  } finally {
+    if (requestSerial === listRequestSerial) loading.value = false
+  }
 }
 
 function handlePageChange(value: number) {

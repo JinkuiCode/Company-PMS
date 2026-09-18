@@ -580,8 +580,18 @@ a {
 
 .pms-ag-grid .ag-cell-value,
 .wechat-table .ag-cell-value {
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pms-ag-grid .ag-cell-wrapper,
+.wechat-table .ag-cell-wrapper {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
 }
 
 .pms-ag-grid .ag-pinned-left-cols-container,

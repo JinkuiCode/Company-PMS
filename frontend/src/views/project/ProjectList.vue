@@ -48,14 +48,19 @@
             ref="agGridRef"
             class="ag-theme-alpine wechat-table pms-ag-grid progress-workbench-grid"
             :class="PMS_AG_GRID_FORM_CLASS"
-            :rowData="displayedRowData"
+            :rowData="filteredRowData"
+            :loading="progressListLoading"
             :columnDefs="columnDefs"
             :defaultColDef="defaultColDef"
             :defaultColGroupDef="defaultColGroupDef"
             :localeText="localeText"
             :theme="'legacy'"
             :domLayout="'autoHeight'"
-            :pagination="false"
+            :pagination="true"
+            :paginationPageSize="pageSize"
+            :paginationPageSizeSelector="false"
+            :suppressPaginationPanel="true"
+            @pagination-changed="handleProgressPaginationChanged"
             :enableCellTextSelection="true"
             :suppressRowClickSelection="true"
             :singleClickEdit="false"
@@ -81,7 +86,7 @@
             v-model="page"
             v-model:page-size="pageSize"
             :total="filteredRowData.length"
-            @update:model-value="refreshListScrollbar"
+            @update:model-value="goToProgressPage"
             @update:page-size="() => { page = 1; refreshListScrollbar() }"
           />
         </template>
@@ -722,10 +727,15 @@ const filteredRowData = computed(() => {
   return applyCustomFilters(result)
 })
 
-const displayedRowData = computed(() => {
-  const start = (page.value - 1) * pageSize.value
-  return filteredRowData.value.slice(start, start + pageSize.value)
-})
+function goToProgressPage() {
+  agGridRef.value?.api?.paginationGoToPage(page.value - 1)
+  refreshListScrollbar()
+}
+
+function handleProgressPaginationChanged(event: any) {
+  if (event.api) page.value = event.api.paginationGetCurrentPage() + 1
+  refreshListScrollbar()
+}
 
 const orderedDrawerGroups = computed(() => {
   if (sheetDetailGroups.value.length) return sheetDetailGroups.value
@@ -738,7 +748,7 @@ watch([filterKeyword, filterStatus, filterDeptId, filterProductCategory, customF
   if (selectedProject.value && !filteredRowData.value.some(row => row.id === selectedProject.value?.id)) {
     selectedProject.value = null
   }
-  nextTick(refreshListScrollbar)
+  nextTick(goToProgressPage)
 }, { deep: true })
 
 watch(
@@ -1267,6 +1277,7 @@ const defaultColDef: ColDef = {
   resizable: true,
   filter: false,
   headerClass: 'progress-list-header-center',
+  tooltipValueGetter: params => params.valueFormatted ?? params.value ?? '',
   cellClassRules: {
     'progress-editable-cell': params => {
       const editable = params.colDef.editable
@@ -1374,20 +1385,28 @@ function handleColumnResized(event: any) {
   persistColumnPreferences()
 }
 
+const progressListLoading = ref(true)
 async function fetchList() {
   const requestSerial = ++listRequestSerial.value
-  const params: Record<string, unknown> = { page: 1, page_size: 1000 }
+  progressListLoading.value = true
+  const params: Record<string, unknown> = { all_rows: true }
   if (requestedSheetFieldKeys.value.length) {
     params.sheet_field_keys = requestedSheetFieldKeys.value.join(',')
   }
-  const res: any = await request.get('/projects', { params })
-  if (requestSerial !== listRequestSerial.value) return
-  rowData.value = res.items.map(normalizeProjectRow)
-  serverTotal.value = res.total
-  if (selectedProject.value) {
-    selectedProject.value = rowData.value.find(row => row.id === selectedProject.value?.id) || null
+  try {
+    const res = await request.get('/projects', { params }) as any
+    if (requestSerial !== listRequestSerial.value) return
+    rowData.value = res.items.map(normalizeProjectRow)
+    serverTotal.value = res.total
+    if (selectedProject.value) {
+      selectedProject.value = rowData.value.find(row => row.id === selectedProject.value?.id) || null
+    }
+    refreshListScrollbar()
+  } catch {
+    if (requestSerial === listRequestSerial.value) { rowData.value = []; serverTotal.value = 0 }
+  } finally {
+    if (requestSerial === listRequestSerial.value) progressListLoading.value = false
   }
-  refreshListScrollbar()
 }
 
 async function fetchOptions() {

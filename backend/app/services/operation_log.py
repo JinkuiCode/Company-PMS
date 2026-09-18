@@ -399,6 +399,7 @@ def get_operation_logs(
     keyword: str | None = None,
     start_time: datetime.datetime | None = None,
     end_time: datetime.datetime | None = None,
+    filters: str | None = None,
 ) -> dict[str, Any]:
     query = db.query(SysOperationLog)
 
@@ -428,6 +429,12 @@ def get_operation_logs(
             )
         )
 
+    from app.services.list_query import apply_list_query
+    columns = {name: (getattr(SysOperationLog, name), 'text') for name in (
+        'module', 'action', 'entity_type', 'entity_name', 'operator_name', 'ip_address', 'status',
+    )}
+    columns['created_at'] = (SysOperationLog.created_at, 'date')
+    query = apply_list_query(query, columns, filters)
     total = query.count()
     logs = (
         query.order_by(SysOperationLog.created_at.desc(), SysOperationLog.id.desc())

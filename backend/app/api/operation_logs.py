@@ -24,6 +24,7 @@ def list_operation_logs(
     keyword: str | None = Query(None),
     start_time: datetime | None = Query(None),
     end_time: datetime | None = Query(None),
+    filters: str | None = Query(None, max_length=12000),
     _scope_ctx: dict = Depends(require_permission("system:operation-log:view")),
     db: Session = Depends(get_db),
 ):
@@ -39,4 +40,5 @@ def list_operation_logs(
         keyword=keyword,
         start_time=start_time,
         end_time=end_time,
+        filters=filters,
     )

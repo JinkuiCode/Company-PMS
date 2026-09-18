@@ -194,7 +194,9 @@ const defaultColDef: ColDef = {
   cellStyle: { display: 'flex', alignItems: 'center' },
 }
 
+let listRequestSerial = 0
 async function fetchCatalog() {
+  const requestSerial = ++listRequestSerial
   loading.value = true
   try {
     const response: any = await request.get('/field-catalog', {
@@ -208,13 +210,16 @@ async function fetchCatalog() {
         page_size: pageSize.value,
       },
     })
+    if (requestSerial !== listRequestSerial) return
     rows.value = response.items || []
     total.value = response.total || 0
     moduleOptions.value = response.modules || []
     await nextTick()
     refreshScrollbar()
+  } catch {
+    if (requestSerial === listRequestSerial) { rows.value = []; total.value = 0 }
   } finally {
-    loading.value = false
+    if (requestSerial === listRequestSerial) loading.value = false
   }
 }
 

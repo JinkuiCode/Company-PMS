@@ -36,6 +36,7 @@ def list_projects(
     page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000),
     dept_id: int | None = Query(None), status: int | None = Query(None),
     sheet_field_keys: str | None = Query(None, description="逗号分隔的动态列表字段 key"),
+    all_rows: bool = Query(False, description="返回权限范围内完整列表，供工作台筛选分页"),
     db: Session = Depends(get_db),
     scope_ctx: dict = Depends(require_permission("project:list:view")),
 ):
@@ -46,6 +47,7 @@ def list_projects(
         dept_id,
         status,
         sheet_field_keys=sheet_field_keys,
+        all_rows=all_rows,
         scope_context=scope_ctx,
     )
 
@@ -137,6 +139,9 @@ def list_archives(
     keyword: str | None = Query(None), status: int | None = Query(None),
     product_category: int | None = Query(None),
     enabled: str = Query("true", description="true=仅启用，false=仅禁用，all=全部"),
+    filters: str | None = Query(None, max_length=12000),
+    sort: str | None = Query(None, max_length=4000),
+    archive_id: int | None = Query(None, ge=1),
     db: Session = Depends(get_db),
     scope_ctx: dict = Depends(require_permission("project:archive:view")),
 ):
@@ -149,6 +154,7 @@ def list_archives(
         product_category,
         enabled=_parse_archive_enabled_filter(enabled),
         scope_context=scope_ctx,
+        filters=filters, sort=sort, archive_id=archive_id,
     )
 
 

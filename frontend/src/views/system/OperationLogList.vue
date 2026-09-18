@@ -37,7 +37,7 @@
       <el-table
         v-loading="loading"
         class="pms-dense-table operation-log-table"
-        :data="filteredLogs"
+        :data="logs"
         border
         stripe
         height="calc(100vh - 330px)"
@@ -157,7 +157,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListFilters from '@/components/PmsListFilters.vue'
@@ -243,7 +243,7 @@ const customFilterFields: ListFilterField[] = [
   { field: 'created_at', label: '时间', type: 'date' },
 ]
 
-const { customFilters, activeCustomFilterCount, applyCustomFilters } = useListFilters<OperationLog>(
+const { customFilters, activeCustomFilterCount } = useListFilters<OperationLog>(
   customFilterFields as ListFilterField<OperationLog>[],
 )
 
@@ -263,7 +263,8 @@ const baseFilters = reactive({
   keyword: '',
 })
 
-const filteredLogs = computed(() => applyCustomFilters(logs.value))
+let logRequestSerial = 0
+let logQueryTimer: ReturnType<typeof setTimeout> | undefined
 
 const diffRows = computed(() => {
   if (selectedLog.value?.diff_items?.length) return selectedLog.value.diff_items
@@ -292,6 +293,8 @@ function toEndDate(date?: string) {
 }
 
 async function fetchLogs() {
+  clearTimeout(logQueryTimer)
+  const serial = ++logRequestSerial
   loading.value = true
   try {
     const params: Record<string, string | number | undefined> = {
@@ -303,18 +306,21 @@ async function fetchLogs() {
       keyword: baseFilters.keyword || undefined,
       start_time: toStartDate(baseFilters.timeRange?.[0]),
       end_time: toEndDate(baseFilters.timeRange?.[1]),
+      filters: JSON.stringify(customFilters.value),
     }
     const data = await request.get('/operation-logs', { params }) as unknown as OperationLogListResponse
+    if (serial !== logRequestSerial) return
     logs.value = data.items || []
     total.value = data.total || 0
+  } catch {
+    if (serial === logRequestSerial) { logs.value = []; total.value = 0 }
   } finally {
-    loading.value = false
+    if (serial === logRequestSerial) loading.value = false
   }
 }
 
 function handleBaseFilterChange() {
   page.value = 1
-  fetchLogs()
 }
 
 function openDetail(row: OperationLog) {
@@ -360,7 +366,14 @@ function formatPrettyJson(value?: string | null) {
   return JSON.stringify(parsed, null, 2)
 }
 
-watch([page, pageSize], () => fetchLogs())
+watch([baseFilters, customFilters, pageSize], () => { page.value = 1 }, { deep: true, flush: 'sync' })
+watch([page, pageSize, baseFilters, customFilters], () => {
+  ++logRequestSerial
+  loading.value = true
+  clearTimeout(logQueryTimer)
+  logQueryTimer = setTimeout(fetchLogs, 200)
+}, { deep: true })
+onUnmounted(() => { ++logRequestSerial; clearTimeout(logQueryTimer) })
 
 onMounted(fetchLogs)
 </script>

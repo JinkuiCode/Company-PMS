@@ -105,8 +105,8 @@ assert.match(
 )
 assert.match(
   archive,
-  /onMounted\(async \(\) => \{[\s\S]*?fetchDictOptions\('product_category'\)[\s\S]*?await fetchList\(\)\.catch[\s\S]*?fetchUsers\(\)\.catch/,
-  'Archive startup should request the list immediately and isolate failures from the remaining page initialization',
+  /onMounted\(async \(\) => \{[\s\S]*?fetchUsers\(\)\.catch[\s\S]*?Promise\.allSettled[\s\S]*?completeArchiveColumnPreferenceRestore\(\)[\s\S]*?handleArchiveSortChanged\(\)[\s\S]*?await fetchList\(\)/,
+  'Archive startup should isolate option failures and restore the saved ordering before querying the first page',
 )
 assert.match(
   archive,

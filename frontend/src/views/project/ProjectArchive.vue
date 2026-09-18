@@ -34,9 +34,6 @@
         </el-button>
     </template>
     <template #toolbar-right>
-        <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
-          已筛选 {{ filteredRowData.length }} / {{ total }} 条
-        </span>
         <PmsListColumnPicker
           :model-value="selectedArchiveColumnKeys"
           :groups="archiveColumnGroups"
@@ -57,7 +54,7 @@
           <PmsTextControl v-model="searchKeyword" placeholder="搜索编号、名称、客户或序列号" size="compact" clearable :prefix-icon="Search" aria-label="搜索项目档案" />
         </div>
         <div class="archive-base-filter archive-base-filter--enabled">
-          <PmsSelectControl v-model="archiveQuery.enabled" :options="archiveEnabledFilterOptions" size="compact" aria-label="启用状态" @change="handleArchiveEnabledFilterChange" />
+          <PmsSelectControl v-model="archiveQuery.enabled" :options="archiveEnabledFilterOptions" size="compact" aria-label="启用状态" />
         </div>
         <div v-if="archiveFieldVisible('product_category')" class="archive-base-filter archive-base-filter--category">
           <PmsSelectControl v-model="filterProductCategory" :options="archiveProductCategoryOptions" placeholder="全部产品类别" size="compact" clearable aria-label="产品类别筛选" />
@@ -66,11 +63,13 @@
     </template>
 
     <template #grid>
+      <div v-if="archiveListError" class="pms-list-load-error" role="alert">加载失败，请重试 <el-button size="small" @click="fetchList">重试</el-button></div>
       <ag-grid-vue
         ref="agGridRef"
         class="ag-theme-alpine wechat-table pms-ag-grid"
         :style="archiveGridStyle"
-        :rowData="filteredRowData"
+        :rowData="rowData"
+        :loading="archiveListLoading"
         :columnDefs="columnDefs"
         :defaultColDef="defaultColDef"
         :localeText="localeText"
@@ -88,6 +87,7 @@
         @column-pinned="handleArchiveGridStructureChanged"
         @displayed-columns-changed="handleArchiveGridStructureChanged"
         @selection-changed="onSelectionChanged"
+        @sort-changed="handleArchiveSortChanged"
       />
     </template>
 
@@ -316,7 +316,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, defineComponent, h, nextTick, onMounted } from 'vue'
+import { ref, reactive, computed, defineComponent, h, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, ElTooltip, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Delete, Search, Connection, Close } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
@@ -826,7 +826,7 @@ const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
   },
 ] as Array<ListFilterField<any> & { policyKey: string }>).filter(field => archiveFieldPolicy(field.policyKey)?.visible !== false))
 
-const { customFilters, activeCustomFilterCount, applyCustomFilters } = useListFilters(archiveFilterFields)
+const { customFilters, activeCustomFilterCount } = useListFilters(archiveFilterFields)
 
 async function fetchDictOptions(code: string) {
   try {
@@ -838,26 +838,8 @@ async function fetchDictOptions(code: string) {
   } catch { /* ignore */ }
 }
 
-// 客户端筛选
-const filteredRowData = computed(() => {
-  let result = rowData.value
-  if (searchKeyword.value) {
-    const kw = searchKeyword.value.toLowerCase()
-    result = result.filter(r =>
-      String(r.project_code ?? '').toLowerCase().includes(kw) ||
-      String(r.project_name ?? '').toLowerCase().includes(kw) ||
-      String(r.customer ?? '').toLowerCase().includes(kw) ||
-      String(r.serial_no ?? '').toLowerCase().includes(kw)
-    )
-  }
-  if (filterProductCategory.value != null) {
-    result = result.filter(r => Number(r.product_category) === filterProductCategory.value)
-  }
-  return applyCustomFilters(result)
-})
-
 const archiveGridStyle = computed(() => {
-  const visibleRows = Math.max(filteredRowData.value.length, 1)
+  const visibleRows = Math.max(rowData.value.length, 1)
   const height = Math.min(430, Math.max(176, 74 + visibleRows * 38))
   return { width: '100%', height: `${height}px` }
 })
@@ -1110,28 +1092,81 @@ const defaultColDef = {
   filter: false,
   suppressSizeToFit: true,
   headerClass: 'archive-list-header-center',
+  tooltipValueGetter: (params: any) => params.valueFormatted ?? params.value ?? '',
+  // SQL owns ordering; AG Grid must not reorder just the current page.
+  comparator: () => 0,
 }
 
 // ========== 数据加载 ==========
-async function fetchList() {
-  const res: any = await request.get('/projects/archives/list', {
-    params: {
-      page: 1,
-      page_size: 1000,
-      enabled: archiveQuery.enabled,
-    },
-  })
-  rowData.value = res.items
-  total.value = res.total
-  scheduleArchiveScrollbarMetrics()
-}
+const archiveListLoading = ref(true)
+const archiveListError = ref(false)
+const archiveSort = ref<Array<{ colId: string; sort: string }>>([])
+let archiveListRequestSerial = 0
+let archiveQueryReady = false
+let archiveQueryTimer: ReturnType<typeof setTimeout> | undefined
 
-function handleArchiveEnabledFilterChange() {
-  page.value = 1
+async function fetchList() {
+  clearTimeout(archiveQueryTimer)
+  const requestSerial = ++archiveListRequestSerial
+  archiveListLoading.value = true
+  archiveListError.value = false
   agGridRef.value?.api?.deselectAll?.()
   selectedRows.value = []
-  fetchList()
+  try {
+    const res: any = await request.get('/projects/archives/list', {
+      params: {
+        page: page.value,
+        page_size: pageSize.value,
+        enabled: archiveQuery.enabled,
+        keyword: searchKeyword.value || undefined,
+        product_category: filterProductCategory.value ?? undefined,
+        filters: JSON.stringify(customFilters.value),
+        sort: JSON.stringify(archiveSort.value),
+      },
+    })
+    if (requestSerial !== archiveListRequestSerial) return
+    total.value = res.total
+    const lastPage = Math.max(1, Math.ceil(res.total / pageSize.value))
+    if (page.value > lastPage) {
+      page.value = lastPage
+      return await fetchList()
+    }
+    rowData.value = res.items
+    scheduleArchiveScrollbarMetrics()
+  } catch {
+    if (requestSerial !== archiveListRequestSerial) return
+    rowData.value = []
+    total.value = 0
+    archiveListError.value = true
+  } finally {
+    if (requestSerial === archiveListRequestSerial) archiveListLoading.value = false
+  }
 }
+
+function scheduleArchiveQuery() {
+  if (!archiveQueryReady) return
+  page.value = 1
+  ++archiveListRequestSerial
+  archiveListLoading.value = true
+  agGridRef.value?.api?.deselectAll?.()
+  selectedRows.value = []
+  clearTimeout(archiveQueryTimer)
+  archiveQueryTimer = setTimeout(fetchList, 200)
+}
+
+function handleArchiveSortChanged() {
+  const sorts = ((gridApi?.getColumnState() || []) as ColumnState[])
+    .filter(state => state.sort && !fixedArchiveColumnKeys.has(state.colId))
+    .sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))
+    .map(state => ({ colId: state.colId, sort: state.sort! }))
+  if (JSON.stringify(sorts) === JSON.stringify(archiveSort.value)) return
+  archiveSort.value = sorts
+  persistArchiveColumnPreferences()
+  scheduleArchiveQuery()
+}
+
+watch([searchKeyword, () => archiveQuery.enabled, filterProductCategory, customFilters], scheduleArchiveQuery, { deep: true })
+onUnmounted(() => { clearTimeout(archiveQueryTimer); ++archiveListRequestSerial })
 
 async function fetchUsers() {
   userList.value = (await request.get('/users/options')) as any
@@ -1474,7 +1509,7 @@ function archiveLifecycleConflictDetail(error: any) {
 
 async function fetchArchiveLifecycleSnapshot(archiveId: number) {
   const response: any = await request.get('/projects/archives/list', {
-    params: { page: 1, page_size: 10000, enabled: 'all' },
+    params: { page: 1, page_size: 1, archive_id: archiveId, enabled: 'all' },
   })
   return (response.items || []).find((row: any) => row.id === archiveId) || null
 }
@@ -1551,8 +1586,9 @@ async function saveArchiveDrawer(syncAfterSave: boolean) {
   let refreshSucceeded = true
   try {
     await fetchList()
-    const refreshed = rowData.value.find(row => row.id === archiveId)
-    if (refreshed) resetArchiveDrawer(refreshed)
+    if (archiveListError.value) throw new Error('List refresh failed')
+    const refreshed = await fetchArchiveLifecycleSnapshot(archiveId)
+    if (refreshed && selectedArchive.value?.id === archiveId) resetArchiveDrawer(refreshed)
   } catch {
     refreshSucceeded = false
     ElMessage.warning('档案已保存，但列表刷新失败，请手动刷新页面')
@@ -1710,22 +1746,21 @@ async function handleBatchSync() {
 }
 
 onMounted(async () => {
-  fetchEffectiveArchiveFields()
-  fetchAllowedProductCategories()
-  fetchDictOptions('product_category')
-  fetchDictOptions('equipment_series')
-  await fetchList().catch(() => {
-    rowData.value = []
-    total.value = 0
-  })
   fetchUsers().catch(() => {
     userList.value = []
   })
-  await resolveArchiveColumnPreferenceOwner()
+  await Promise.allSettled([
+    fetchEffectiveArchiveFields(), fetchAllowedProductCategories(),
+    fetchDictOptions('product_category'), fetchDictOptions('equipment_series'),
+    resolveArchiveColumnPreferenceOwner(),
+  ])
   restoreSelectedArchiveColumnKeys()
   archiveColumnPreferencesReady.value = true
   await nextTick()
   completeArchiveColumnPreferenceRestore()
+  handleArchiveSortChanged()
+  archiveQueryReady = true
+  await fetchList()
   scheduleArchiveScrollbarMetrics()
 })
 </script>
