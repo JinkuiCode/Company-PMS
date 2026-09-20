@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     PMS_ENV: Literal["development", "production"] = "development"
     APP_NAME: str = "PMS 项目管理系统"
     DEBUG: bool = False
+    # Explicitly enabled at deployment; development never writes ERP in the background by default.
+    ERP_SYNC_WORKER_ENABLED: bool = False
 
     # Safe local defaults never target company infrastructure.
     DB_HOST: str = ""

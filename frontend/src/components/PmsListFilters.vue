@@ -2,7 +2,7 @@
   <div class="pms-list-filter-section">
     <div class="filter-bar pms-filter-bar pms-list-filter-bar">
       <slot />
-      <el-button size="small" plain @click="handleAddFilter">
+      <el-button v-if="fields.length" size="small" plain @click="handleAddFilter">
         <el-icon style="margin-right:4px;"><Filter /></el-icon>
         添加筛选
       </el-button>

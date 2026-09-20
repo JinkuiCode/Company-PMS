@@ -52,6 +52,8 @@ def test_upgrade_marks_database_ready_and_can_repeat() -> None:
             check_database_ready(engine)
         with sqlite3.connect(path) as connection:
             assert connection.execute("SELECT COUNT(*) FROM pms_database_revision").fetchone()[0] == 1
+            assert connection.execute("SELECT COUNT(*) FROM erp_sync_task").fetchone()[0] == 0
+            assert connection.execute("SELECT COUNT(*) FROM sys_menu WHERE permission_code LIKE 'system:sync:%'").fetchone()[0] == 3
     finally:
         engine.dispose()
         path.unlink(missing_ok=True)

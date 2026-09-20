@@ -1,5 +1,97 @@
 # PMS 变更记录
 
+## 2026-09-20 自动同步服务器发布准备与单项目保护
+
+- 原因：用户批准直接部署服务器，强调每次仅操作指定项目，不能影响其他编号。
+- 调整：金蝶查询在精确类别/编号、重复记录拒绝的基础上，再校验返回编号与目标相同、内码有效；异常结果不得作为其他项目的更新目标，也不得退化为新增。
+- 文件：backend/app/services/kingdee.py、backend/tests/kingdee_query_scope_contract.py、本记录。
+- 验证：新增两项测试先失败后通过，6 项查询范围、13 项认证、15 项审核、22 项队列测试通过；未向真实金蝶写入。已只读核实服务器 C:\PMS、提交 8a8defc452fc41ec6c7e1ff3e0292cac9e7b63a1、干净工作区及健康状态，部署尚未执行。
+
+## 2026-09-20 档案保存自动入队与管理员同步管理
+
+- 原因：用户批准保存后后台独立同步，取消维护人员手动同步，管理员单独查询和处理异常。
+- 后端：新增持久化任务表、独立修订号 2026-09-20-01、一次性菜单授权、筛选分页与范围受控日志接口；档案保存和入队同事务，旧等待任务被新版本替代。后台条件领取防重复执行；明确连接失败有限重试，不确定结果先回查；重试/核查写操作日志。已写入金蝶及期初档案锁定编号，实际同步中/待核查继续占用保护。
+- 前端：取消单条同步、批量同步、保存并同步；新增系统管理/同步管理标准列表及档案只读日志抽屉，权限分别控制查看、重试/核查。状态自动刷新避开编辑、未保存草稿与选择操作。无自定义字段的筛选栏不显示无效“添加筛选”按钮；空同步状态不再误筛为同步中。
+- 文件：backend/app/models/erp_task.py、services/erp_queue.py、services/erp_queue_migration.py、api/sync_tasks.py；project/kingdee/list_query/生命周期/字段目录/角色模板/数据库修订与初始化及 main/config；frontend/src/views/system/SyncTaskList.vue、components/SyncLogDrawer.vue、config/syncUi.ts、ProjectArchive.vue、PmsListFilters.vue、菜单图标和路由；对应测试及 docs/档案自动同步与同步管理.md、实施计划。
+- 验证：22 项队列行为测试、14 个后端契约脚本及档案分页回归通过；10 个前端契约脚本、Edge 模拟接口浏览器测试通过；类型检查和构建通过，保留既有大包体积提示。浏览器覆盖筛选回首页、50 条分页、日志、重试成功/失败、权限与两种分辨率；没有调用真实金蝶写接口。
+- 安全复核补强：新增 erp_execution_lock.py 跨进程档案执行锁，原进程持锁时拒绝恢复/核查；旧超时任务不覆盖最新版本状态。回查发现金蝶资料存在即锁定项目编号；结果不一致默认保持待核查，管理员须明确确认金蝶端请求已结束后才可解锁重试，确认写入审计。SQL Server 会话锁仍需服务器运行身份实测。
+- 复核结果：针对三项安全问题复核未发现新增严重问题；22 项队列测试通过，模拟 MSSQL 连接检查了锁获取/释放路径，未替代真实 MSSQL 断连恢复验收。
+- 开发机：活动 SQLite 库已先备份校验后独立升级，档案数量 2→2，任务数 0，完整性 ok；PMS 本地后端重启加载，健康接口 ok，新接口拒绝未登录访问。备份位于 .runtime/backups/20260920-auto-sync/。执行器默认关闭，待页面验收及获准的金蝶联调后启用。
+- 边界：未部署服务器、未重启数据库/OA/服务器、未推送 GitHub或合并 master；服务器升级和真实金蝶验收尚未执行。
+
+## 2026-09-20 第三批统一表单：角色新增与编辑
+
+- 原因：用户确认部门/枚举值开发机验收通过，继续已批准的系统表单分批迁移。
+- 调整：角色表单改用 PmsFormDrawer，字段采用单列标签/控件布局，权限树与字段共用内容滚动区，保存按钮固定底部；保存期间阻止再次提交及修改，失败保留草稿。未改权限勾选规则、角色 API、数据范围或登录首页计算。
+- 文件：frontend/src/views/system/RoleList.vue、frontend/tests/role-drawer-browser.mjs、docs/superpowers/plans/2026-09-18-user-parameters-security.md、本记录。
+- 验证：新增浏览器测试先在旧弹窗上失败、迁移后通过，覆盖新增/编辑、必填、失败重试、权限与首页选项联动、原字段保留及 1366×768 / 1600×900 布局；既有 role-home-browser.mjs 回归通过，8 个风格/表单/RBAC/首页契约脚本通过，vue-tsc 和构建通过。浏览器接口均为本机模拟，未写真实角色权限；构建保留既有包体积提示。
+- 状态：开发机实施完成，等待第三批用户验收；未部署服务器、未推送 GitHub、未合并主分支。
+
+## 2026-09-20 第二批统一表单：部门与枚举值
+
+- 原因：用户验收用户 B / 参数 A 后要求继续，按已批准的分批迁移方式统一其他系统表单。
+- 调整：部门、枚举值新增和编辑复用 PmsFormDrawer，固定头部和保存区，使用既有统一控件；保存期间禁止重复提交和修改，失败保留输入。枚举保存绑定打开时的分类；顶级部门不再显示内部值 0。
+- 共享适配：统一抽屉中的 Element 表单校验容器行距，保留错误提示空间，未修改列表行内编辑或业务接口、权限、数据库结构。
+- 文件：frontend/src/views/system/UserList.vue、EnumList.vue；frontend/src/form-system/components/PmsFormDrawer.vue；frontend/tests/system-form-drawer-browser.mjs、user-parameters-browser.mjs；实施计划及本记录。
+- 验证：8 个前端契约脚本通过；部门/枚举 mock 浏览器测试通过，检查 1366×768 与 1600×900 的排版、必填、失败重试和保存请求；原用户/参数浏览器回归通过（测试定位改为用户字段所在抽屉，避免匹配隐藏的部门抽屉）；vue-tsc 与构建通过，仍有既有大包体积提示。仅开发机完成，未部署服务器、未推送或合并 GitHub，等待本批验收。
+
+## 2026-09-20 OA 员工视图只读授权完成
+
+- 原因：按用户明确批准，解除“引用 OA”的 SQL Server 916 访问阻塞。
+- 调整：在 10.10.1.230 的 ecology 库为现有登录 pms_app_runtime 创建同名用户映射，授予 CONNECT 与 dbo.Jinky_Employee 对象 SELECT；未授予全库 SELECT、CONTROL 或视图 INSERT/UPDATE/DELETE，未修改 OA 登录流程。
+- 验证：授权事务及权限检查通过，GRANT_EXIT 0；提交后使用真实 PMS 运行连接查询成功，过滤已有账号后有 447 个候选，抽查 20 条，工号和姓名模糊搜索检查通过。服务健康返回 ok。未新建 PMS 用户、未写 OA 业务数据、未重启任何服务。
+- 回执：C:\PMS\.runtime\permission-changes\oa-reference-20260920\grant-receipt.json，committed=true、user_created=true；授权前记录为同目录 before.json。页面选择回填及用户新增流程仍待用户实际验收。
+- 文件：docs/用户与参数设置.md、docs/superpowers/plans/2026-09-18-user-parameters-security.md、本记录；授权辅助脚本位于忽略目录 release/。
+
+## 2026-09-20 修正 OA 授权检查的身份恢复顺序
+
+- 原因：授权事务中切换至 PMS 查询后直接 REVERT，SQL Server 返回 15199，要求先返回 EXECUTE AS 所在数据库。
+- 调整：检查收尾先 USE ecology，再 REVERT；新增顺序回归测试。涉及忽略目录 release/grant-oa-reference.py、release/test_grant_oa_reference.py 及本记录。
+- 验证：新增测试先失败后通过，4 项本地测试通过。服务器确认 HAS_DBACCESS('ecology') 仍为 0、无提交回执；修正版哈希验证通过，重新等待管理员输入，未扩大权限或重启服务。
+
+## 2026-09-20 准备 OA 视图最小权限授权
+
+- 原因：用户批准为 PMS 运行身份增加指定 OA 员工视图的只读访问。
+- 调整：准备事务化授权脚本，仅建立必要用户映射、CONNECT 和 dbo.Jinky_Employee 的 SELECT；检查无全库 SELECT/CONTROL 和视图写权限，验证业务查询后提交。脚本传至 C:\PMS\.runtime\permission-changes\oa-reference-20260920，未改应用代码或重启服务。
+- 文件：忽略目录 release/grant-oa-reference.py、release/test_grant_oa_reference.py、传输辅助脚本及本记录。
+- 验证：本地 3 项辅助安全测试通过；服务器只读核对账号 pms_app_runtime、PMS 库及 OA 不可访问状态；脚本哈希匹配，当前等待管理员凭据，尚未执行数据库授权。临时传输服务已关闭。
+
+## 2026-09-20 同步用户与参数实施计划状态
+
+- 原因：实施计划仍保留部署前状态，与已完成的服务器测试部署记录不一致。
+- 调整：补充 2026-09-18 服务器部署完成项，明确 OA 只读权限待批准、真实用户验收待完成，以及 OA 登录安全风险仍阻塞正式上线。
+- 文件：docs/superpowers/plans/2026-09-18-user-parameters-security.md、本记录。
+- 验证：与已有发布回执、使用说明核对；未修改业务代码、数据库权限或服务器配置。
+
+## 2026-09-18 用户与参数第一批服务器部署完成
+
+- 原因：按用户授权将已验证的用户 B、参数 A 和密码管理第一批部署到 10.10.1.228 供测试。
+- 调整：服务器代码更新为 8a8defc452fc41ec6c7e1ff3e0292cac9e7b63a1；通过独立身份和 upgrade_database.py 将 10.10.1.230/PMS 升级到 2026-09-18-03，发布前端并启动 PMS。未重启 SQL Server、OA 或整机；未推送 GitHub或合并 master。
+- 备份：程序备份 C:\PMS\.runtime\release-history\user-security-20260918-165509；数据库备份 E:\PMS-bakup\PMS-preimport-20260917-173045.bak 已通过 RESTORE VERIFYONLY。
+- 验证：服务器 deploy.py --verify 退出码 0；运行源码及前端资源哈希、实际首页、数据库结构与版本、新接口、匿名参数访问拒绝、密码组件验证通过，既有业务数据哈希未变。启动子进程退出后部署监控未结束，仅清理已识别的部署 Python 进程；独立再次验证成功后记录 complete，RECOVERY_EXIT 0。Mac 到服务器健康接口返回 ok。
+- 待办：运行身份读取 ecology.dbo.Jinky_Employee 返回 SQLSTATE 08004 / SQL Server 916，无法访问 OA 数据库，引用 OA 尚不可验收；没有自动授权。用户初始密码参数仍未设置，须管理员在页面维护。既有 OA 身份凭证校验风险仍按用户决定暂缓，未修复。真实用户业务验收待用户执行。
+- 文件：本记录、docs/用户与参数设置.md；服务器发布包及忽略目录 release 下部署辅助文件。
+
+## 2026-09-18 服务器密码组件改用离线安装
+
+- 原因：升级身份及 SQL 备份校验通过后，服务器 pip 外网下载长时间未完成，部署仍停留在 prepared 阶段。
+- 调整：从包注册源下载 Windows Python 3.13 适用组件，校验传输包 SHA256 后安装 argon2-cffi 23.1.0 及 bindings 26.1.0；保留服务器已有 cffi/pycparser。仅停止本次部署的 pip 子进程，未停止 PMS、SQL、OA 或服务器。恢复命令设置 PIP_NO_INDEX 和本地 wheels 路径，避免再次外网下载。
+- 文件：忽略目录 release/prepare-user-security-wheels.py、release/serve-user-security.py、离线 wheel 包；本记录。
+- 验证：服务器安装退出码 0，加密哈希生成与验证及 PMS 健康检查通过，恢复前检查通过。数据库备份为 2026-09-17 17:30 的 PMS-preimport 文件，本次 RESTORE VERIFYONLY 已通过。尚未执行结构升级和程序切换；重新等待独立升级凭据，临时传输服务已关闭。
+
+## 2026-09-18 修复发布脚本备份查询并恢复升级前流程
+
+- 原因：输入升级凭据后在 prepared 阶段出现 ProgrammingError；只读检查确认 SQL Server 备份元数据字段为 media_family_count，原脚本错误引用 family_count。
+- 调整：修正备份查询字段并保留结果别名；新增仅允许 prepared 阶段的恢复入口，重新校验版本、业务数据、配置、暂存源码和发布包，不跳过备份校验、不删除部署状态。涉及忽略目录 release/user-security-deploy.py、release/test_user_security_deploy.py 和本记录。
+- 验证：16 项离线测试通过；服务器健康正常，数据库仍为 2026-09-18-02。修正版包校验及恢复前检查通过，远程重新等待独立升级凭据；未停 PMS、未执行数据库升级或发布。临时文件传输服务已关闭。
+
+## 2026-09-18 用户与参数服务器包就绪，等待升级凭据
+
+- 调整：在既有功能分支固定提交 `8a8defc452fc41ec6c7e1ff3e0292cac9e7b63a1`，重新构建生产包并传至服务器 `C:\PMS\.runtime\releases\user-security-8a8defc452fc41ec6c7e1ff3e0292cac9e7b63a1`。未推送 GitHub、未合并 master。
+- 文件：忽略目录 `release/user-security-deploy.py`、部署脚本测试、固定 manifest、离线 Git bundle、生产 ZIP 及临时传包脚本；本条记录。生产包 SHA256 为 `a775f24f1c2ccaf991bf7df863a16f39a2ab5809eb949ec1548ee668ba09e323`。
+- 验证：固定提交的 vue-tsc/Vite 构建通过；发布脚本 14 项测试通过，包内 248 项文件哈希通过。服务器版本/工作区、生产库目标与 revision02、运行健康、无待执行 ERP 同步及包校验已通过；程序备份完成于 `C:\PMS\.runtime\release-history\user-security-20260918-165509`。
+- 当前状态：远程终端停在 `SQL upgrade username`，等待用户输入独立升级账号及隐藏密码。数据库备份尚待此身份查询及 RESTORE VERIFYONLY 校验；没有停服务、升级数据库或切换正式程序。临时传输服务已关闭。OA 遗留风险继续保留，不作为安全验收通过。
+
 ## 2026-09-18 用户与参数服务器发布准备
 
 - 原因：用户知悉遗留 OA 身份校验风险后，明确要求服务器部署测试，并批准数据库升级；不包含 SQL Server、OA 或整机重启。

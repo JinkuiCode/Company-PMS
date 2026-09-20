@@ -26,8 +26,8 @@ assert.match(
 assert.match(archive, /project:archive:toggle/, 'Archive lifecycle controls should use the toggle permission')
 assert.match(
   archive,
-  /const editable = archiveIsEnabled\(row\) && hasPermission\('project:archive:edit'\)[\s\S]*?editable \? '编辑' : '查看'[\s\S]*?if \(archiveIsEnabled\(row\)\)[\s\S]*?project:archive:sync/,
-  'Rows expose edit or view and permission-aware sync; lifecycle actions remain in toolbar',
+  /const editable = archiveIsEnabled\(row\) && hasPermission\('project:archive:edit'\)[\s\S]*?editable \? '编辑' : '查看'/,
+  'Rows expose edit or view; saves arrange background synchronization',
 )
 assert.match(
   archive,

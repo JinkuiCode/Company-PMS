@@ -88,5 +88,6 @@ class AutoAuditContract(unittest.TestCase):
         c=MagicMock();c.login.return_value=True;c.query_assistant_data.return_value=None;c.save_assistant_data.return_value={'success':True,'data':{'Id':'42'}};c.ensure_assistant_data_audited.return_value={'success':False,'message':'保存已完成，但审核失败'}
         db=MagicMock()
         with patch.object(kingdee,'claim_archive_for_sync',return_value=(a,{})),patch.object(kingdee,'get_scoped_archive_query'),patch.object(kingdee,'serialize_model',return_value={}),patch.object(kingdee,'record_operation_log') as log,patch.object(kingdee,'KingdeeClient',return_value=c):r=kingdee.sync_project_archive_to_erp(db,9,user_id=5)
-        self.assertFalse(r['success']);self.assertEqual(a.erp_sync_status,'failed');self.assertEqual(a.erp_synced,0);self.assertEqual(log.call_args.kwargs['status'],'failed');self.assertIn('审核',log.call_args.kwargs['error_msg'])
+        self.assertFalse(r['success']);self.assertEqual(a.erp_sync_status,'failed');self.assertEqual(a.erp_synced,1);self.assertEqual(log.call_args.kwargs['status'],'failed');self.assertIn('审核',log.call_args.kwargs['error_msg'])
+        # Saved external identity must block renumbering/deletion even before audit succeeds.
 if __name__=='__main__':unittest.main()

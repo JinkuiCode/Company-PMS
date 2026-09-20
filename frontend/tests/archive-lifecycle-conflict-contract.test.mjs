@@ -53,10 +53,10 @@ assert.match(
   /reconcileArchiveDrawerLifecycleConflict\(error, archiveId, '保存'\)/,
   'Save conflicts should reconcile lifecycle state before allowing another submission',
 )
-assert.match(
+assert.doesNotMatch(
   saveDrawer,
-  /reconcileArchiveDrawerLifecycleConflict\(error, archiveId, '同步'\)/,
-  'Sync conflicts should reconcile lifecycle state before allowing another submission',
+  /request.post\('\/erp\/sync'/,
+  'Archive drawer must not execute ERP synchronization from the browser',
 )
 
 const openDrawer = functionSource('openArchiveDrawer')

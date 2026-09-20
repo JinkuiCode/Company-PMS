@@ -39,10 +39,10 @@ class PmsProjectArchive(Base):
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="创建人ID")
     updated_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="最后编辑人ID")
     # ERP 同步字段
-    erp_synced: Mapped[int] = mapped_column(Integer, default=0, comment="是否已同步到金蝶: 0否 1是")
+    erp_synced: Mapped[int] = mapped_column(Integer, default=0, comment="是否已写入金蝶资料: 0否 1是，完整结果以同步状态为准")
     erp_sync_time: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="最后同步时间")
     erp_sync_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="最后同步人ID")
-    erp_sync_status: Mapped[str | None] = mapped_column(NVARCHAR(32), default=None, comment="同步状态: success/failed/pending")
+    erp_sync_status: Mapped[str | None] = mapped_column(NVARCHAR(32), default=None, comment="同步状态: queued等待/pending执行中/success成功/failed失败/review待核查/historical历史")
     erp_error_msg: Mapped[str | None] = mapped_column(NVARCHAR(512), default=None, comment="同步失败错误信息")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

@@ -44,6 +44,7 @@ with SessionLocal() as db:
     assert [r.project_code for r in result['items']] == [f'PAGE-{i:04}' for i in range(30, 60, 2)]
     assert get_archive_list(db, keyword='target')['total'] == 520
     assert get_archive_list(db, keyword='PAGE_%')['total'] == 0
+    assert get_archive_list(db, filters='[{"field":"erp_sync_status","operator":"equals","value":"pending"}]')['total'] == 0
     assert get_archive_list(db, filters='[{"field":"created_by_name","operator":"equals","value":"查询测试人"}]')['total'] == 1040
     assert get_archive_list(db, filters='[{"field":"plan_start_date","operator":"equals","value":"2026-09-18"}]')['total'] == 1040
     assert get_archive_list(db, filters='[{"field":"plan_start_date","operator":"after","value":"2026-09-18"}]')['total'] == 0

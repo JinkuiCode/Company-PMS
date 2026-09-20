@@ -36,7 +36,7 @@ try {
   })
   await page.goto('http://127.0.0.1:5174/system/user')
   await page.getByRole('button', { name: '新增用户', exact: true }).click()
-  let drawer = page.locator('.pms-form-drawer')
+  let drawer = page.locator('.pms-form-drawer').filter({ has: page.locator('#user-real-name') })
   await expect(drawer).toBeVisible()
   await expect(drawer.getByRole('textbox', { name: '邮箱', exact: true })).toHaveValue('@aelsystem.com')
   await expect(drawer.locator('input[type=password]')).toHaveCount(0)

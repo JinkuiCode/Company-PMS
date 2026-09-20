@@ -179,7 +179,7 @@ def _claim_enabled_archive_for_write(
     except HTTPException:
         db.rollback()
         raise
-    if reject_pending and current.erp_sync_status == "pending":
+    if reject_pending and current.erp_sync_status in ("pending", "review"):
         db.rollback()
         raise _archive_operation_pending_conflict()
     db.rollback()
@@ -1164,6 +1164,8 @@ def create_archive(
         archive = PmsProjectArchive(**values, created_by=user_id, updated_by=user_id)
         db.add(archive)
         db.flush()
+        from app.services.erp_queue import enqueue
+        enqueue(db, archive, user_id)
         record_operation_log(
             db,
             module="项目档案",
@@ -1212,6 +1214,8 @@ def update_archive(
 
     update_data = _normalize_archive_values(data.model_dump(exclude_unset=True))
     try:
+        if 'project_code' in update_data and update_data['project_code'] != archive.project_code and (archive.erp_synced or archive.data_origin == 'kingdee_initial'):
+            raise HTTPException(409, detail={'code': 'ARCHIVE_CODE_LOCKED', 'field_key': 'project_code', 'message': '已同步或金蝶期初档案的项目编号不可修改'})
         _require_archive_name(update_data.get("project_name", archive.project_name))
         _ensure_archive_unique_values(db, update_data, exclude_archive_id=archive.id)
         if "status" in update_data:
@@ -1264,6 +1268,8 @@ def update_archive(
                 synchronize_session=False,
             )
         db.flush()
+        from app.services.erp_queue import enqueue
+        enqueue(db, archive, user_id)
         record_operation_log(
             db,
             module="项目档案",
@@ -1611,7 +1617,7 @@ def batch_change_archives_enabled(
     archives = _load_batch_archives(db, archive_ids, scope_context)
     target_enabled = int(enabled)
     changes = [archive for archive in archives if archive.is_enabled != target_enabled]
-    if not enabled and any(archive.erp_sync_status == "pending" for archive in changes):
+    if not enabled and any(archive.erp_sync_status in ("pending", "review") for archive in changes):
         db.rollback()
         raise HTTPException(status_code=409, detail={
             "code": "ARCHIVE_OPERATION_PENDING",
@@ -1641,7 +1647,7 @@ def batch_change_archives_enabled(
             db.rollback()
             current_archives = _load_batch_archives(db, change_ids, scope_context)
             if not enabled and any(
-                archive.erp_sync_status == "pending" for archive in current_archives
+                archive.erp_sync_status in ("pending", "review") for archive in current_archives
             ):
                 raise HTTPException(status_code=409, detail={
                     "code": "ARCHIVE_OPERATION_PENDING",

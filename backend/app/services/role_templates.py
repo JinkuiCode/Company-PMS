@@ -40,6 +40,9 @@ ROLE_TEMPLATES = {
             "system:field-policy:list",
             "system:field-policy:view",
             "system:field-policy:edit",
+            "system:sync:list",
+            "system:sync:view",
+            "system:sync:retry",
         },
     },
     "operator": {

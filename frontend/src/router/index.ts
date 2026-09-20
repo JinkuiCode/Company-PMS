@@ -68,6 +68,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '参数设置', permission: 'system:parameter:view' },
       },
       {
+        path: 'system/sync', name: 'SyncTaskList',
+        component: () => import('@/views/system/SyncTaskList.vue'),
+        meta: { title: '同步管理', permission: 'system:sync:view' },
+      },
+      {
         path: 'system/dict',
         name: 'DictList',
         component: () => import('@/views/system/DataDictionaryList.vue'),

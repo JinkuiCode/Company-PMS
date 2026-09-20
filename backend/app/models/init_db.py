@@ -14,6 +14,7 @@ from app.models.operation_log import SysOperationLog  # noqa: F401
 from app.models.field_policy import SysBusinessFieldPolicy  # noqa: F401
 from app.models.database_revision import PmsDatabaseRevision  # noqa: F401
 from app.models.parameter import SysParameter  # noqa: F401
+from app.models.erp_task import ErpSyncTask  # noqa: F401
 from app.services.user_security_migration import upgrade_user_security, initialize_user_security
 
 
@@ -269,6 +270,8 @@ def init_db():
         db.commit()
 
         initialize_user_security(db, grant_existing_admin=not admin_role_created)
+        from app.services.erp_queue_migration import initialize_sync_management
+        initialize_sync_management(db, grant_existing_admin=not admin_role_created)
 
         # 4.5 创建缺失的默认角色模板。仅角色首次创建时写入模板权限。
         from app.services.role_templates import ROLE_TEMPLATES, permission_ids_for_template

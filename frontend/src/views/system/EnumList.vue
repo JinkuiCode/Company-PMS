@@ -106,8 +106,9 @@
       <el-empty v-else description="暂无可维护的业务枚举" />
     </section>
 
-    <el-dialog v-model="itemDialogVisible" :title="isItemEdit ? '编辑枚举值' : '新增枚举值'" width="440px">
-      <el-form ref="itemFormRef" :model="itemForm" :rules="itemRules" label-position="top" class="pms-standard-dialog-form">
+    <PmsFormDrawer v-model="itemDialogVisible" :title="isItemEdit ? '编辑枚举值' : '新增枚举值'" :busy="itemSaving">
+      <h3 class="pms-form-drawer__section">{{ itemDict?.dict_name }}</h3>
+      <el-form id="pms-enum-form" ref="itemFormRef" :model="itemForm" :rules="itemRules" label-position="top" class="pms-standard-dialog-form" @submit.prevent="handleItemSubmit">
         <el-form-item>
           <PmsFormField field-id="enum-storage-value" label="存储值">
             <div id="enum-storage-value" class="enum-generated-value">
@@ -118,12 +119,12 @@
         </el-form-item>
         <el-form-item prop="item_label">
           <PmsFormField field-id="enum-item-label" label="显示名称" required>
-            <PmsTextControl id="enum-item-label" v-model="itemForm.item_label" placeholder="页面展示文字" aria-label="显示名称" />
+            <PmsTextControl id="enum-item-label" v-model="itemForm.item_label" :disabled="itemSaving" placeholder="页面展示文字" aria-label="显示名称" />
           </PmsFormField>
         </el-form-item>
         <el-form-item>
           <PmsFormField field-id="enum-item-sort" label="排序">
-            <PmsNumberControl id="enum-item-sort" v-model="itemForm.sort" :min="0" controls-position="right" aria-label="枚举排序" />
+            <PmsNumberControl id="enum-item-sort" v-model="itemForm.sort" :min="0" :disabled="itemSaving" controls-position="right" aria-label="枚举排序" />
           </PmsFormField>
         </el-form-item>
         <el-form-item>
@@ -132,16 +133,17 @@
               id="enum-item-status"
               :model-value="itemForm.status === 1"
               aria-label="枚举状态"
+              :disabled="itemSaving"
               @update:model-value="itemForm.status = $event ? 1 : 0"
             />
           </PmsFormField>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="itemDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleItemSubmit">保存</el-button>
+        <el-button :disabled="itemSaving" @click="itemDialogVisible = false">取消</el-button>
+        <el-button v-if="hasPermission(isItemEdit ? 'system:enum:edit' : 'system:enum:add')" type="primary" :loading="itemSaving" native-type="submit" form="pms-enum-form">保存</el-button>
       </template>
-    </el-dialog>
+    </PmsFormDrawer>
   </div>
 </template>
 
@@ -151,7 +153,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'
-import { PmsFormField, PmsNumberControl, PmsSwitchControl, PmsTextControl } from '@/form-system'
+import { PmsFormDrawer, PmsFormField, PmsNumberControl, PmsSwitchControl, PmsTextControl } from '@/form-system'
 
 type EnumDefinition = {
   id: number
@@ -234,12 +236,17 @@ async function refreshSelectedEnumCache() {
 const itemDialogVisible = ref(false)
 const isItemEdit = ref(false)
 const itemFormRef = ref<FormInstance>()
+const itemSaving = ref(false)
+const itemDict = ref<EnumDefinition | null>(null)
 const itemForm = reactive({ id: 0, item_value: '', item_label: '', sort: 0, status: 1 })
 const itemRules: FormRules = {
   item_label: [{ required: true, message: '请输入显示名称' }],
 }
 
 function openItemDialog(row?: EnumItem) {
+  if (itemSaving.value || !selectedDict.value) return
+  if (!hasPermission(row ? 'system:enum:edit' : 'system:enum:add')) return
+  itemDict.value = selectedDict.value
   isItemEdit.value = Boolean(row)
   Object.assign(itemForm, row
     ? { id: row.id, item_value: row.item_value, item_label: row.item_label, sort: row.sort, status: row.status }
@@ -248,23 +255,31 @@ function openItemDialog(row?: EnumItem) {
 }
 
 async function handleItemSubmit() {
+  if (itemSaving.value || !hasPermission(isItemEdit.value ? 'system:enum:edit' : 'system:enum:add')) return
   const valid = await itemFormRef.value?.validate().catch(() => false)
-  if (!valid || !selectedDict.value) return
+  if (!valid || !itemDict.value || itemSaving.value) return
   const payload = {
     item_label: itemForm.item_label,
     sort: itemForm.sort,
     status: itemForm.status,
   }
-  if (isItemEdit.value) {
-    await request.put(`/dicts/items/${itemForm.id}`, payload)
-    ElMessage.success('枚举值已更新')
-  } else {
-    await request.post(`/dicts/${selectedDict.value.id}/items`, payload)
-    ElMessage.success('枚举值已新增')
+  itemSaving.value = true
+  try {
+    if (isItemEdit.value) {
+      await request.put(`/dicts/items/${itemForm.id}`, payload)
+      ElMessage.success('枚举值已更新')
+    } else {
+      await request.post(`/dicts/${itemDict.value.id}/items`, payload)
+      ElMessage.success('枚举值已新增')
+    }
+    itemDialogVisible.value = false
+    await loadEnumOptions(itemDict.value.dict_code, true)
+    await Promise.all([fetchItems(), fetchDicts()])
+  } catch {
+    // Request interceptor reports the error; keep the draft available for retry.
+  } finally {
+    itemSaving.value = false
   }
-  itemDialogVisible.value = false
-  await refreshSelectedEnumCache()
-  await Promise.all([fetchItems(), fetchDicts()])
 }
 
 async function handleToggleStatus(row: EnumItem) {

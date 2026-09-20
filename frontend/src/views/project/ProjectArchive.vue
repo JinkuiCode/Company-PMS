@@ -27,11 +27,6 @@
           批量禁用
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
         </el-button>
-        <el-button v-if="hasPermission('project:archive:sync')" type="success" size="small" :disabled="selectedRows.length === 0 || selectedRowsIncludeDisabled" @click="handleBatchSync">
-          <el-icon style="margin-right:4px;"><Connection /></el-icon>
-          批量同步 ERP
-          <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
-        </el-button>
     </template>
     <template #toolbar-right>
         <PmsListColumnPicker
@@ -209,6 +204,7 @@
         </div>
       </header>
 
+      <el-button size="small" text @click="openSyncLog(selectedArchive.id)">同步状态：{{ archiveSyncLabel(selectedArchive.erp_sync_status) }} · 查看日志</el-button>
       <el-form
         ref="archiveDrawerFormRef"
         :model="archiveDrawerForm"
@@ -296,31 +292,23 @@
             size="small"
             :disabled="!archivePendingChangeCount"
             :loading="archiveDrawerSaving"
-            @click="saveArchiveDrawer(false)"
+            @click="saveArchiveDrawer()"
           >
             保存修改{{ archivePendingChangeCount ? ` (${archivePendingChangeCount})` : '' }}
-          </el-button>
-          <el-button
-            v-if="hasPermission('project:archive:sync')"
-            class="archive-drawer-sync"
-            type="success"
-            size="small"
-            plain
-            :loading="archiveDrawerSaving"
-            @click="saveArchiveDrawer(true)"
-          >
-            保存并同步 ERP
           </el-button>
         </div>
       </el-form>
     </aside>
+    <SyncLogDrawer v-model="syncLogVisible" :archive-id="syncLogArchiveId" />
   </section>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, defineComponent, h, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Delete, Search, Connection, Close } from '@element-plus/icons-vue'
+import { Plus, Delete, Search, Close } from '@element-plus/icons-vue'
+import SyncLogDrawer from '@/components/SyncLogDrawer.vue'
+import { archiveSyncLabel } from '@/config/syncUi'
 import { AgGridVue } from 'ag-grid-vue3'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
@@ -348,6 +336,9 @@ import request from '@/utils/request'
 
 const localeText = chineseLocaleText
 const authStore = useAuthStore()
+const syncLogVisible = ref(false)
+const syncLogArchiveId = ref<number | null>(null)
+function openSyncLog(id: number) { syncLogArchiveId.value = id; syncLogVisible.value = true }
 const hasPermission = authStore.hasPermission
 
 type ArchiveColumnPreferenceState = {
@@ -772,7 +763,9 @@ function archiveDrawerSelectPlaceholder(fieldKey: string) {
 }
 
 const erpSyncStatusOptions: ListFilterOption[] = [
-  { label: '待同步', value: 'pending' },
+  { label: '等待同步', value: 'queued' },
+  { label: '同步中', value: 'pending' },
+  { label: '待核查', value: 'review' },
   { label: '金蝶历史档案', value: 'historical' },
   { label: '已同步', value: 'success' },
   { label: '失败', value: 'failed' },
@@ -826,7 +819,7 @@ const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
     label: '同步状态',
     type: 'select',
     options: () => erpSyncStatusOptions,
-    getValue: row => row.erp_sync_status || 'pending',
+    getValue: row => row.erp_sync_status || '',
   },
 ] as Array<ListFilterField<any> & { policyKey: string }>).filter(field => archiveFieldPolicy(field.policyKey)?.visible !== false))
 
@@ -956,9 +949,6 @@ const ArchiveActionsRenderer = defineComponent({
       const actions = []
       const editable = archiveIsEnabled(row) && hasPermission('project:archive:edit')
       actions.push(archiveActionButton(editable ? '编辑' : '查看', editable ? 'edit-btn' : 'view-btn', () => openArchiveDrawer(row)))
-      if (archiveIsEnabled(row)) {
-        if (hasPermission('project:archive:sync')) actions.push(archiveActionButton('同步', 'pms-link-success sync-btn', () => handleSyncSingle(row.id)))
-      }
       return h('div', { class: 'archive-row-actions' }, actions)
     }
   },
@@ -972,7 +962,7 @@ function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
 }
 
 const columnDefs = computed<ColDef[]>(() => [
-  ...(hasPermission('project:archive:delete') || hasPermission('project:archive:sync') || hasPermission('project:archive:toggle')
+  ...(hasPermission('project:archive:delete') || hasPermission('project:archive:toggle')
     ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', lockPosition: 'left', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false } as ColDef]
     : []),
   { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left', hide: !archiveColumnListAvailable('project_code') },
@@ -1031,15 +1021,12 @@ const columnDefs = computed<ColDef[]>(() => [
   {
     ...archiveColumnVisibility('erp_sync_status'), field: 'erp_sync_status', headerName: '同步', width: 100, minWidth: 96,
     cellRenderer: (params: any) => {
-      const v = params.value
-      if (!v || v === 'pending') return '<span class="pms-status pms-status-warning"><span class="pms-status-dot"></span>待同步</span>'
-      if (v === 'historical') return '<span class="pms-status pms-status-neutral"><span class="pms-status-dot"></span>金蝶历史档案</span>'
-      if (v === 'success') return '<span class="pms-status pms-status-success"><span class="pms-status-dot"></span>已同步</span>'
-      if (v === 'failed') {
-        const title = escapeHtml(params.data.erp_error_msg || '')
-        return `<span class="pms-status pms-status-danger" title="${title}"><span class="pms-status-dot"></span>失败</span>`
-      }
-      return '<span class="pms-status pms-status-neutral"><span class="pms-status-dot"></span>-</span>'
+      const button = document.createElement('button')
+      button.className = 'el-button el-button--primary el-button--small is-link'
+      button.textContent = archiveSyncLabel(params.value)
+      button.title = '查看同步日志'
+      button.onclick = () => openSyncLog(params.data.id)
+      return button
     },
   },
   {
@@ -1202,7 +1189,7 @@ function archiveDrawerValues(row: any) {
     serial_no: row.serial_no || '',
     plan_start_date: archiveDateValue(row.plan_start_date),
     plan_end_date: archiveDateValue(row.plan_end_date),
-    erp_sync_status: row.erp_sync_status || 'pending',
+    erp_sync_status: row.erp_sync_status || '',
     erp_sync_time: row.erp_sync_time || '',
     erp_sync_by_name: row.erp_sync_by_name || '',
     erp_error_msg: row.erp_error_msg || '',
@@ -1269,6 +1256,7 @@ function archiveDrawerFieldRequired(field: ArchiveDrawerField) {
 }
 
 function archiveDrawerFieldEditable(field: ArchiveDrawerField) {
+  if (field.key === 'project_code' && (selectedArchive.value?.erp_synced || selectedArchive.value?.data_origin === 'kingdee_initial')) return false
   return !archiveDrawerReadOnly.value
     && field.source_type === 'archive'
     && archiveFieldEditable(field.key)
@@ -1276,6 +1264,7 @@ function archiveDrawerFieldEditable(field: ArchiveDrawerField) {
 }
 
 function archiveDrawerReadonlyReason(field: ArchiveDrawerField) {
+  if (field.key === 'project_code' && (selectedArchive.value?.erp_synced || selectedArchive.value?.data_origin === 'kingdee_initial')) return '已同步或金蝶期初档案编号不可修改'
   if (archiveDrawerLifecycleConflict.value) return '档案状态已变化，当前草稿仅供查看'
   if (selectedArchive.value?.is_enabled !== 1) return '项目档案已禁用，仅供查看'
   if (field.source_type === 'system') return '系统维护字段，仅供查看'
@@ -1311,7 +1300,7 @@ function formatArchiveDrawerValue(field: ArchiveDrawerField) {
     return ({ kingdee_initial: '金蝶期初', pms: 'PMS新建' } as Record<string, string>)[String(value)] || '-'
   }
   if (field.key === 'erp_sync_status') {
-    return ({ pending: '待同步', historical: '金蝶历史档案', success: '已同步', failed: '同步失败' } as Record<string, string>)[String(value || 'pending')] || String(value)
+    return archiveSyncLabel(value)
   }
   if (archiveDrawerValueEmpty(field)) return archiveDrawerFieldEditable(field) ? '点击填写' : '-'
   if (field.key === 'product_category') return enumLabel('product_category', value)
@@ -1444,7 +1433,7 @@ async function handleSubmit() {
 
   try {
     await request.post('/projects/archives', buildArchiveCreatePayload())
-    ElMessage.success('创建成功')
+    ElMessage.success('已保存，后台将自动同步金蝶')
     dialogVisible.value = false
     fetchList()
   } catch (error) {
@@ -1501,11 +1490,10 @@ async function reconcileArchiveDrawerLifecycleConflict(error: any, archiveId: nu
   return true
 }
 
-async function saveArchiveDrawer(syncAfterSave: boolean) {
+async function saveArchiveDrawer() {
   if (!selectedArchive.value || archiveDrawerReadOnly.value || archiveDrawerSaving.value || !hasPermission('project:archive:edit')) return
-  if (syncAfterSave && !hasPermission('project:archive:sync')) return
   commitArchiveFieldEdit()
-  if (!archivePendingChangeCount.value && !syncAfterSave) return
+  if (!archivePendingChangeCount.value) return
 
   const valid = await archiveDrawerFormRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -1531,20 +1519,6 @@ async function saveArchiveDrawer(syncAfterSave: boolean) {
 
   archivePendingChanges.value = {}
   archiveEditingField.value = null
-  let syncSucceeded = false
-  if (syncAfterSave) {
-    try {
-      const syncRes: any = await request.post('/erp/sync', { archive_id: archiveId })
-      syncSucceeded = Boolean(syncRes.success)
-      if (!syncRes.success) ElMessage.warning(`档案已保存，但同步失败：${syncRes.message}`)
-    } catch (error: any) {
-      if (await reconcileArchiveDrawerLifecycleConflict(error, archiveId, '同步')) {
-        archiveDrawerSaving.value = false
-        return
-      }
-      ElMessage.warning('档案已保存，但同步异常：' + (error?.response?.data?.message || error?.message))
-    }
-  }
 
   let refreshSucceeded = true
   try {
@@ -1560,8 +1534,7 @@ async function saveArchiveDrawer(syncAfterSave: boolean) {
   }
 
   if (!refreshSucceeded) return
-  if (!syncAfterSave) ElMessage.success('项目档案已保存')
-  if (syncAfterSave && syncSucceeded) ElMessage.success('保存并同步成功')
+  ElMessage.success('已保存，后台将自动同步金蝶')
 }
 
 async function refreshArchiveListAfterConflict(error: any) {
@@ -1669,45 +1642,6 @@ async function handleBatchDelete() {
   }
 }
 
-// ========== ERP 同步 ==========
-async function handleSyncSingle(id: number) {
-  if (!hasPermission('project:archive:sync')) return
-  try {
-    const res: any = await request.post('/erp/sync', { archive_id: id })
-    if (res.success) {
-      ElMessage.success(res.message)
-    } else {
-      ElMessage.error(res.message)
-    }
-    fetchList()
-  } catch (e: any) {
-    ElMessage.error('同步失败: ' + (e?.response?.data?.message || e?.message))
-  }
-}
-
-async function handleBatchSync() {
-  if (!hasPermission('project:archive:sync')) return
-  if (selectedRows.value.length === 0) return
-  try {
-    await ElMessageBox.confirm(`确定同步选中的 ${selectedRows.value.length} 条档案到金蝶 ERP 吗？`, '同步确认', { type: 'warning' })
-  } catch {
-    return
-  }
-  const ids = selectedRows.value.map((r: any) => r.id)
-  try {
-    const res: any = await request.post('/erp/sync/batch', { archive_ids: ids })
-    if (res.success) {
-      ElMessage.success(res.message)
-    } else {
-      ElMessage.error(res.message)
-    }
-    selectedRows.value = []
-    fetchList()
-  } catch (e: any) {
-    ElMessage.error('批量同步失败: ' + (e?.response?.data?.message || e?.message))
-  }
-}
-
 onMounted(async () => {
   fetchUsers().catch(() => {
     userList.value = []
@@ -1726,6 +1660,11 @@ onMounted(async () => {
   await fetchList()
   scheduleArchiveScrollbarMetrics()
 })
+const archiveSyncPoll = setInterval(() => {
+  if (!archiveQueryReady || archiveListLoading.value || archiveDrawerSaving.value || archiveEditingField.value || archivePendingChangeCount.value || selectedRows.value.length || syncLogVisible.value) return
+  if (rowData.value.some(row => ['queued', 'pending'].includes(row.erp_sync_status))) void fetchList()
+}, 15000)
+onUnmounted(() => clearInterval(archiveSyncPoll))
 </script>
 
 <style scoped>

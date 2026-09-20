@@ -39,10 +39,10 @@ assert.match(
   /class="archive-drawer-savebar"[\s\S]*?保存修改/,
   'Archive drawer should keep its save action in a fixed footer',
 )
-assert.match(
+assert.doesNotMatch(
   archive,
   /保存并同步 ERP/,
-  'Users with ERP permission should retain a save-and-sync action',
+  'Archive saves enqueue background synchronization without a second action',
 )
 assert.match(
   archive,
@@ -82,10 +82,10 @@ assert.doesNotMatch(
   /\bproduct_line\b|\bproduct_type\b/,
   'Project archive UI must not retain legacy product-line or product-type API fields',
 )
-assert.doesNotMatch(
+assert.match(
   archive,
-  /field\.key === 'project_code'/,
-  'Project code should no longer be blocked from drawer editing',
+  /field\.key === 'project_code'.*erp_synced.*kingdee_initial/,
+  'Only externally bound or initial archive codes are locked',
 )
 assert.match(archive, /\/auth\/product-categories/, 'Product-category scope should use the semantic API route')
 assert.match(

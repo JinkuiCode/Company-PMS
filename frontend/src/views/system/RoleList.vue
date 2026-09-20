@@ -41,31 +41,22 @@
       </el-table>
     </section>
 
-    <!-- 新增/编辑弹窗（含权限配置） -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑角色' : '新增角色'" width="680px" top="4vh">
-      <div class="dialog-body">
+    <PmsFormDrawer v-model="dialogVisible" :title="isEdit ? '编辑角色' : '新增角色'" :busy="saving">
+      <div :inert="saving">
         <!-- 基础信息 -->
         <div class="form-section">
-          <div class="section-title">基础信息</div>
-          <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="pms-standard-dialog-form">
-            <el-row :gutter="16">
-              <el-col :span="12">
+          <h3 class="pms-form-drawer__section">基础信息</h3>
+          <el-form id="pms-role-form" ref="formRef" :model="form" :rules="rules" label-position="top" class="pms-standard-dialog-form" @submit.prevent="handleSubmit">
                 <el-form-item prop="role_name">
                   <PmsFormField field-id="role-name" label="角色名称" required>
                     <PmsTextControl id="role-name" v-model="form.role_name" aria-label="角色名称" />
                   </PmsFormField>
                 </el-form-item>
-              </el-col>
-              <el-col :span="12">
                 <el-form-item prop="role_code">
                   <PmsFormField field-id="role-code" label="角色编码" required>
                     <PmsTextControl id="role-code" v-model="form.role_code" :disabled="isEdit" aria-label="角色编码" />
                   </PmsFormField>
                 </el-form-item>
-              </el-col>
-            </el-row>
-            <el-row :gutter="16">
-              <el-col :span="12">
                 <el-form-item>
                   <PmsFormField field-id="role-data-scope" label="数据权限">
                     <PmsSelectControl
@@ -77,8 +68,6 @@
                     />
                   </PmsFormField>
                 </el-form-item>
-              </el-col>
-              <el-col :span="12">
                 <el-form-item>
                   <PmsFormField field-id="role-status" label="状态">
                     <PmsSwitchControl
@@ -89,8 +78,6 @@
                     />
                   </PmsFormField>
                 </el-form-item>
-              </el-col>
-            </el-row>
             <el-form-item>
               <PmsFormField field-id="role-product-categories" label="产品类别" hint="不选 = 不限制（全部产品类别）">
                 <PmsCheckboxGroupControl
@@ -102,22 +89,16 @@
                 />
               </PmsFormField>
             </el-form-item>
-            <el-row :gutter="16">
-              <el-col :span="16">
                 <el-form-item>
                   <PmsFormField field-id="role-home" label="登录后打开" hint="仅可选择本角色有查看权限的页面">
                     <PmsSelectControl id="role-home" :model-value="form.home_menu_id" :options="homeOptions" aria-label="登录后打开" @update:model-value="form.home_menu_id = Number($event)" />
                   </PmsFormField>
                 </el-form-item>
-              </el-col>
-              <el-col :span="8">
                 <el-form-item>
                   <PmsFormField field-id="role-home-priority" label="首页优先级" hint="多角色时数值高的优先，同值按角色ID">
                     <PmsNumberControl id="role-home-priority" :model-value="form.home_priority" :min="0" :max="999" :precision="0" aria-label="首页优先级" @update:model-value="form.home_priority = Number($event || 0)" />
                   </PmsFormField>
                 </el-form-item>
-              </el-col>
-            </el-row>
             <el-form-item>
               <PmsFormField field-id="role-remark" label="备注">
                 <PmsTextareaControl id="role-remark" v-model="form.remark" :rows="2" aria-label="角色备注" />
@@ -128,7 +109,7 @@
 
         <!-- 权限配置 -->
         <div class="perm-section">
-          <div class="section-title">
+          <h3 class="pms-form-drawer__section role-permission-heading">
             权限配置
             <PmsCheckboxControl
               class="permission-check-all"
@@ -140,7 +121,7 @@
             >
               全选
             </PmsCheckboxControl>
-          </div>
+          </h3>
           <div class="perm-tree-wrap">
             <el-tree
               ref="permTreeRef"
@@ -166,10 +147,10 @@
       </div>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button v-if="isEdit ? hasPermission('system:role:edit') : hasPermission('system:role:add')" type="primary" @click="handleSubmit">保存</el-button>
+        <el-button :disabled="saving" @click="dialogVisible = false">取消</el-button>
+        <el-button v-if="isEdit ? hasPermission('system:role:edit') : hasPermission('system:role:add')" type="primary" :loading="saving" native-type="submit" form="pms-role-form">保存</el-button>
       </template>
-    </el-dialog>
+    </PmsFormDrawer>
   </div>
 </template>
 
@@ -185,6 +166,7 @@ import {
   PmsCheckboxControl,
   PmsCheckboxGroupControl,
   PmsFormField,
+  PmsFormDrawer,
   PmsSelectControl,
   PmsNumberControl,
   PmsSwitchControl,
@@ -198,6 +180,7 @@ const hasPermission = authStore.hasPermission
 
 const roleList = ref([])
 const dialogVisible = ref(false)
+const saving = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
 const permTreeRef = ref()
@@ -331,6 +314,7 @@ async function fetchList() {
 }
 
 async function openDialog(row?: any) {
+  if (saving.value) return
   if (row ? !hasPermission('system:role:edit') : !hasPermission('system:role:add')) return
   isEdit.value = !!row
   formRef.value?.resetFields()
@@ -370,9 +354,10 @@ async function openDialog(row?: any) {
 }
 
 async function handleSubmit() {
+  if (saving.value) return
   if (isEdit.value ? !hasPermission('system:role:edit') : !hasPermission('system:role:add')) return
   const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
+  if (!valid || saving.value) return
 
   // 获取所有勾选的节点（含半选的父节点）
   const checkedKeys = permTreeRef.value?.getCheckedKeys() || []
@@ -391,20 +376,27 @@ async function handleSubmit() {
     home_priority: form.home_priority,
   }
 
-  if (isEdit.value) {
-    await request.put(`/roles/${form.id}`, payload)
-    ElMessage.success('角色更新成功')
-  } else {
-    await request.post('/roles', payload)
-    ElMessage.success('角色创建成功')
+  saving.value = true
+  try {
+    if (isEdit.value) {
+      await request.put(`/roles/${form.id}`, payload)
+      ElMessage.success('角色更新成功')
+    } else {
+      await request.post('/roles', payload)
+      ElMessage.success('角色创建成功')
+    }
+    dialogVisible.value = false
+    await authStore.fetchUser()
+    if (!hasPermission('system:role:view')) {
+      window.location.href = '/403'
+      return
+    }
+    await fetchList()
+  } catch {
+    // The request interceptor reports failures; preserve the draft for retry.
+  } finally {
+    saving.value = false
   }
-  dialogVisible.value = false
-  await authStore.fetchUser()
-  if (!hasPermission('system:role:view')) {
-    window.location.href = '/403'
-    return
-  }
-  await fetchList()
 }
 
 async function handleDelete(id: number) {
@@ -458,33 +450,14 @@ onMounted(() => { fetchList(); loadProductCategories() })
   margin: 2px 4px 2px 0;
 }
 
-.dialog-body {
-  max-height: 70vh;
-  overflow-y: auto;
-}
-
-.form-section,
-.perm-section {
-  margin-bottom: 16px;
-}
-
-.section-title {
+.role-permission-heading {
   display: flex;
   align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--pms-border-soft);
-  color: var(--pms-text);
-  font-size: var(--pms-font-size-md);
-  font-weight: 650;
+  gap: 12px;
 }
 
 .perm-tree-wrap {
-  max-height: 320px;
-  overflow-y: auto;
-  border: 1px solid var(--pms-border);
-  border-radius: var(--pms-radius-sm);
-  padding: 8px;
+  padding: 8px 0;
 }
 
 .perm-node {

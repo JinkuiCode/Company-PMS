@@ -55,6 +55,10 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 .pms-form-drawer .pms-form-field__label { grid-column: 1; grid-row: 1; padding-top: 7px; margin: 0; }
 .pms-form-drawer .pms-form-field__control { grid-column: 2; grid-row: 1; min-width: 0; }
 .pms-form-drawer .pms-form-field__hint, .pms-form-drawer .pms-form-field__error { grid-column: 2; margin: 0; }
+/* Adapt legacy Element validation containers without adding a second row gap. */
+.pms-form-drawer .el-form-item { margin-bottom: 0; }
+.pms-form-drawer .el-form-item.is-error { margin-bottom: 20px; }
+.pms-form-drawer .el-form-item__error { left: 110px; }
 .pms-form-drawer__reference.el-button { color: var(--pms-primary); background: var(--pms-primary-soft); border-color: var(--pms-primary); }
 @media (max-width: 400px) {
   .pms-form-drawer .el-drawer__header, .pms-form-drawer .el-drawer__footer { padding: 16px; }

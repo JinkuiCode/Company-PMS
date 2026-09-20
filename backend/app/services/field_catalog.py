@@ -15,6 +15,7 @@ from app.models.project import PmsProject, PmsProjectArchive, PmsTask
 from app.models.rbac import SysDept, SysRole
 from app.models.user import SysUser
 from app.models.parameter import SysParameter
+from app.models.erp_task import ErpSyncTask
 from app.schemas.operation_log import OperationLogResponse
 from app.schemas.project import (
     ArchiveCreate,
@@ -43,6 +44,7 @@ from app.services.project_sheet_fields import (
 
 
 MODULE_CONFIGS = (
+    {"key": "erp_sync_task", "label": "同步管理", "group": "同步任务", "model": ErpSyncTask, "schemas": (), "editable_schemas": ()},
     {
         "key": "parameter",
         "label": "参数设置",

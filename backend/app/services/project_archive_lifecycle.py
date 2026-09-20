@@ -71,7 +71,7 @@ def archive_not_pending_condition():
     """返回可参与非同步 mutation 的同步状态条件。"""
     return or_(
         PmsProjectArchive.erp_sync_status.is_(None),
-        PmsProjectArchive.erp_sync_status != "pending",
+        PmsProjectArchive.erp_sync_status.notin_(["pending", "review"]),
     )
 
 
@@ -121,7 +121,7 @@ def claim_archive_for_sync(
             except HTTPException:
                 db.rollback()
                 raise
-            if current.erp_sync_status == "pending":
+            if current.erp_sync_status in ("pending", "review"):
                 db.rollback()
                 raise _pending_conflict()
             db.rollback()
@@ -209,7 +209,7 @@ def get_archive_delete_guards(db: Session, archive_ids: list[int]) -> dict[int, 
                 "label": "金蝶 ERP",
                 "count": max(sync_count, int(erp_synced == 1), int(data_origin == "kingdee_initial")),
             })
-        if erp_sync_status == "pending":
+        if erp_sync_status in ("pending", "review"):
             blockers.append({
                 "type": "operation_pending",
                 "source": "kingdee",
@@ -248,7 +248,7 @@ def set_archive_enabled(
     if archive.is_enabled == target_enabled:
         db.rollback()
         return {"msg": message}
-    if not enabled and archive.erp_sync_status == "pending":
+    if not enabled and archive.erp_sync_status in ("pending", "review"):
         db.rollback()
         raise _pending_conflict()
 
@@ -272,7 +272,7 @@ def set_archive_enabled(
                 raise HTTPException(status_code=404, detail="档案不存在或无权访问")
             if current.is_enabled == target_enabled:
                 return {"msg": message}
-            if not enabled and current.erp_sync_status == "pending":
+            if not enabled and current.erp_sync_status in ("pending", "review"):
                 raise _pending_conflict()
             raise HTTPException(status_code=409, detail={
                 "code": "ARCHIVE_LIFECYCLE_CONFLICT",

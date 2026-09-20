@@ -41,7 +41,7 @@ def archive_columns():
         fields[name] = (select(SysUser.real_name).where(
             SysUser.id == getattr(Archive, foreign_key)
         ).scalar_subquery(), 'text')
-    fields['erp_sync_status'] = (func.coalesce(Archive.erp_sync_status, 'pending'), 'text')
+    fields['erp_sync_status'] = (func.coalesce(Archive.erp_sync_status, ''), 'text')
     return fields
 
 

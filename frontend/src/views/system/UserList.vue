@@ -91,18 +91,19 @@
         </div>
     </div>
 
-    <!-- 部门新增/编辑弹窗 -->
-    <el-dialog v-model="deptDialogVisible" :title="isDeptEdit ? '编辑部门' : '新增部门'" width="460px">
-      <el-form ref="deptFormRef" :model="deptForm" :rules="deptRules" label-position="top" class="pms-standard-dialog-form">
+    <PmsFormDrawer v-model="deptDialogVisible" :title="isDeptEdit ? '编辑部门' : '新增部门'" :busy="deptSaving">
+      <h3 class="pms-form-drawer__section">基本信息</h3>
+      <el-form id="pms-dept-form" ref="deptFormRef" :model="deptForm" :rules="deptRules" label-position="top" class="pms-standard-dialog-form" @submit.prevent="handleDeptSubmit">
         <el-form-item>
           <PmsFormField field-id="dept-parent" label="上级部门">
             <PmsTreeSelectControl
               id="dept-parent"
-              :model-value="deptForm.parent_id"
+              :model-value="deptForm.parent_id || undefined"
               :data="deptSelectData"
               :props="{ label: 'dept_name', value: 'id', children: 'children' }"
               placeholder="无（顶级部门）"
               aria-label="上级部门"
+              :disabled="deptSaving"
               check-strictly
               clearable
               @update:model-value="deptForm.parent_id = Number($event || 0)"
@@ -111,12 +112,12 @@
         </el-form-item>
         <el-form-item prop="dept_name">
           <PmsFormField field-id="dept-name" label="部门名称" required>
-            <PmsTextControl id="dept-name" v-model="deptForm.dept_name" aria-label="部门名称" />
+            <PmsTextControl id="dept-name" v-model="deptForm.dept_name" :disabled="deptSaving" aria-label="部门名称" />
           </PmsFormField>
         </el-form-item>
         <el-form-item>
           <PmsFormField field-id="dept-sort" label="排序">
-            <PmsNumberControl id="dept-sort" v-model="deptForm.sort" :min="0" aria-label="部门排序" />
+            <PmsNumberControl id="dept-sort" v-model="deptForm.sort" :min="0" :disabled="deptSaving" aria-label="部门排序" />
           </PmsFormField>
         </el-form-item>
         <el-form-item>
@@ -125,16 +126,17 @@
               id="dept-status"
               :model-value="deptForm.status === 1"
               aria-label="部门状态"
+              :disabled="deptSaving"
               @update:model-value="deptForm.status = $event ? 1 : 0"
             />
           </PmsFormField>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="deptDialogVisible = false">取消</el-button>
-        <el-button v-if="isDeptEdit ? hasPermission('system:user:edit') : hasPermission('system:user:add')" type="primary" @click="handleDeptSubmit">保存</el-button>
+        <el-button :disabled="deptSaving" @click="deptDialogVisible = false">取消</el-button>
+        <el-button v-if="isDeptEdit ? hasPermission('system:user:edit') : hasPermission('system:user:add')" type="primary" :loading="deptSaving" native-type="submit" form="pms-dept-form">保存</el-button>
       </template>
-    </el-dialog>
+    </PmsFormDrawer>
 
     <UserFormDrawer v-model="userDialogVisible" :user="editingUser" :departments="deptSelectData" :roles="roleOptions" :default-dept="selectedDeptId" @saved="handleUserSaved" />
   </div>
@@ -150,6 +152,7 @@ import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import {
+  PmsFormDrawer,
   PmsFormField,
   PmsNumberControl,
   PmsSwitchControl,
@@ -185,6 +188,7 @@ const selectedDeptName = ref('')
 const deptDialogVisible = ref(false)
 const isDeptEdit = ref(false)
 const deptFormRef = ref<FormInstance>()
+const deptSaving = ref(false)
 const deptForm = reactive({ id: 0, parent_id: 0, dept_name: '', sort: 0, status: 1 })
 const deptRules: FormRules = { dept_name: [{ required: true, message: '请输入部门名称' }] }
 
@@ -268,6 +272,7 @@ onBeforeUnmount(() => {
 
 // 部门弹窗
 function openDeptDialog(row?: any, parentId?: number) {
+  if (deptSaving.value) return
   if (row ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
   contextMenuVisible.value = false
   isDeptEdit.value = !!(row && row.id)
@@ -281,18 +286,26 @@ function openDeptDialog(row?: any, parentId?: number) {
 }
 
 async function handleDeptSubmit() {
+  if (deptSaving.value) return
   if (isDeptEdit.value ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
   const valid = await deptFormRef.value?.validate().catch(() => false)
-  if (!valid) return
-  if (isDeptEdit.value) {
-    await request.put(`/depts/${deptForm.id}`, deptForm)
-    ElMessage.success('部门更新成功')
-  } else {
-    await request.post('/depts', deptForm)
-    ElMessage.success('部门创建成功')
+  if (!valid || deptSaving.value) return
+  deptSaving.value = true
+  try {
+    if (isDeptEdit.value) {
+      await request.put(`/depts/${deptForm.id}`, deptForm)
+      ElMessage.success('部门更新成功')
+    } else {
+      await request.post('/depts', deptForm)
+      ElMessage.success('部门创建成功')
+    }
+    deptDialogVisible.value = false
+    await fetchDeptTree()
+  } catch {
+    // Request interceptor reports the error; keep the draft available for retry.
+  } finally {
+    deptSaving.value = false
   }
-  deptDialogVisible.value = false
-  await fetchDeptTree()
 }
 
 async function handleDeleteDept(id: number) {

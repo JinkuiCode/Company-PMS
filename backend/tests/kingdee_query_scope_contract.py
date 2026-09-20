@@ -37,5 +37,15 @@ class QueryScopeContract(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, '金蝶同类别项目编号存在重复记录，已停止同步'):
             self.query_rows('xsxm', 'TEST', [('xsxm', 11, 'TEST', 'TEST', '重复一'), ('xsxm', 22, 'TEST', 'TEST', '重复二')])
 
+    def test_unexpected_project_code_cannot_be_used_as_update_target(self):
+        with client_with(lambda req: httpx.Response(200, json=[[99, 'OTHER', 'OTHER', '其他项目']])) as client:
+            with self.assertRaises(RuntimeError):
+                client.query_assistant_data('BOS_ASSISTANTDATA_DETAIL', 'xsxm', 'TEST')
+
+    def test_invalid_external_id_is_not_a_create_fallback(self):
+        with client_with(lambda req: httpx.Response(200, json=[['', 'TEST', 'TEST', '项目']])) as client:
+            with self.assertRaises(RuntimeError):
+                client.query_assistant_data('BOS_ASSISTANTDATA_DETAIL', 'xsxm', 'TEST')
+
 if __name__ == '__main__':
     unittest.main()

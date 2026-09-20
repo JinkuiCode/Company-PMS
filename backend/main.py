@@ -10,6 +10,7 @@ from app.core.config import settings, validate_runtime_config
 from app.core.database import engine, get_db
 from app.api import auth, users, roles, menus, depts, projects, sso, erp, dicts, operation_logs, field_catalog, field_policies
 from app.api import parameters
+from app.api import sync_tasks
 from app.services.authorization import get_current_user_context, require_permission
 from app.models.init_db import init_db
 from app.services.database_revision import check_database_ready
@@ -25,7 +26,20 @@ async def lifespan(app: FastAPI):
     else:
         init_db()
     print(f"   {settings.APP_NAME} 启动成功")
-    yield
+    import threading
+    import asyncio
+    from app.core.database import SessionLocal
+    from app.services.erp_queue import worker
+    stop = threading.Event()
+    runner = threading.Thread(target=worker, args=(stop, SessionLocal), daemon=True, name='pms-erp-worker') if settings.ERP_SYNC_WORKER_ENABLED else None
+    if runner:
+        runner.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        if runner:
+            await asyncio.to_thread(runner.join, 300)
 
 
 app = FastAPI(title=settings.APP_NAME, version="0.1.0", lifespan=lifespan)
@@ -52,6 +66,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(auth.router)
 app.include_router(parameters.router)
+app.include_router(sync_tasks.router)
 app.include_router(users.router)
 app.include_router(roles.router)
 app.include_router(menus.router)

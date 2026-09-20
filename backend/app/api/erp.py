@@ -34,20 +34,15 @@ def sync_project_archive(
     data: SyncRequest,
     request: Request,
     db: Session = Depends(get_db),
-    scope_ctx: dict = Depends(require_permission("project:archive:sync")),
+    scope_ctx: dict = Depends(require_permission("system:sync:retry")),
 ):
     """
     同步单个项目档案到金蝶 ERP
     - 如果金蝶中不存在则创建
     - 如果已存在则更新
     """
-    return kingdee.sync_project_archive_to_erp(
-        db,
-        data.archive_id,
-        user_id=scope_ctx["user_id"],
-        request=request,
-        scope_context=scope_ctx,
-    )
+    from fastapi import HTTPException
+    raise HTTPException(409, '独立同步入口已停用，请在同步管理中处理最新任务')
 
 
 @router.post("/sync/batch", summary="批量同步项目档案")
@@ -55,16 +50,11 @@ def batch_sync_project_archives(
     data: BatchSyncRequest,
     request: Request,
     db: Session = Depends(get_db),
-    scope_ctx: dict = Depends(require_permission("project:archive:sync")),
+    scope_ctx: dict = Depends(require_permission("system:sync:retry")),
 ):
     """批量同步多个项目档案到金蝶 ERP"""
-    return kingdee.batch_sync_project_archives(
-        db,
-        data.archive_ids,
-        user_id=scope_ctx["user_id"],
-        request=request,
-        scope_context=scope_ctx,
-    )
+    from fastapi import HTTPException
+    raise HTTPException(409, '独立批量同步入口已停用，请在同步管理中重试最新任务')
 
 
 @router.get("/logs/{archive_id}", summary="查询同步日志")

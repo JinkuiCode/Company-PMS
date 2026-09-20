@@ -103,6 +103,7 @@ class KingdeeClient:
         应用模式通过真实的签名只读查询验证授权；密码模式登录获取会话。
         不因应用认证失败自动退回密码模式。
         """
+        self.login_retryable = False
         try:
             if self.auth_mode == "app":
                 url = f"{self.base_url}/Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.ExecuteBillQuery.common.kdsvc"
@@ -138,6 +139,7 @@ class KingdeeClient:
                 return False
 
         except Exception as e:
+            self.login_retryable = isinstance(e, (httpx.TimeoutException, httpx.NetworkError))
             # 服务端错误或第三方异常可能含凭据/签名，不输出其原文。
             logger.error("金蝶认证失败（%s），请检查认证模式、应用授权与连接配置", type(e).__name__)
             return False
@@ -181,6 +183,8 @@ class KingdeeClient:
             if result and isinstance(result, list) and len(result) > 0:
                 row = result[0]
                 if isinstance(row, list) and len(row) >= 2:
+                    if row[1] != project_code or type(row[0]) not in (str, int) or not str(row[0]).strip() or str(row[0]) == '0':
+                        raise RuntimeError('金蝶返回的项目编号或内码不符合目标，禁止写入')
                     return {
                         "FEntryID": row[0],   # 内码（用于更新）
                         "FNumber": row[1],    # 编码
@@ -385,6 +389,7 @@ def sync_project_archive_to_erp(
     user_id: int | None = None,
     request: Request | None = None,
     scope_context: dict | None = None,
+    queue_task_id: int | None = None,
 ) -> dict:
     """
     同步单个项目档案到金蝶 ERP
@@ -392,11 +397,20 @@ def sync_project_archive_to_erp(
     :param archive_id: 项目档案 ID
     :return: 包含 success 和 message 的结果字典
     """
+    def validate_claim(current):
+        validate_archive_for_business_operation(db, current)
+        if queue_task_id is not None:
+            from app.models.erp_task import ErpSyncTask
+            from fastapi import HTTPException
+            latest = db.query(ErpSyncTask.id).filter(ErpSyncTask.archive_id == archive_id).order_by(ErpSyncTask.id.desc()).first()
+            if not latest or latest.id != queue_task_id:
+                raise HTTPException(409, detail={'code': 'ERP_TASK_SUPERSEDED'})
+
     claimed = claim_archive_for_sync(
         db,
         archive_id,
         archive_query=get_scoped_archive_query(db, scope_context),
-        validator=lambda current: validate_archive_for_business_operation(db, current),
+        validator=validate_claim,
     )
     if claimed is None:
         try:
@@ -459,7 +473,7 @@ def sync_project_archive_to_erp(
                 db.rollback()
                 raise
 
-            return {"success": False, "message": error_msg}
+            return {"success": False, "message": error_msg, "retryable": getattr(client, 'login_retryable', False) is True}
 
         # 2. 查询是否已存在
         form_id = "BOS_ASSISTANTDATA_DETAIL"
@@ -492,6 +506,8 @@ def sync_project_archive_to_erp(
                 raise KingdeeSaveOutcomeAmbiguous("金蝶保存成功但未返回有效内码，请回查资料，勿直接重试")
             if entry_id and str(saved_id) != entry_id:
                 raise KingdeeSaveOutcomeAmbiguous("金蝶保存返回的内码与目标不一致，请人工核对")
+            # External identity exists even if the subsequent audit is rejected.
+            archive.erp_synced = 1
             save_result = client.ensure_assistant_data_audited(
                 form_id, category_code, archive.project_code, archive.project_name,
                 expected_entry_id=str(saved_id),
@@ -568,7 +584,8 @@ def sync_project_archive_to_erp(
 
     except Exception as e:
         db.rollback()
-        error_msg = f"同步异常: {str(e)}"
+        redact = getattr(client, '_redact_message', None)
+        error_msg = f"同步异常: {redact(str(e)) if callable(redact) else '后台执行失败，请核查连接及实际结果'}"
         archive = (
             get_scoped_archive_query(db, scope_context)
             .populate_existing()
@@ -637,7 +654,7 @@ def sync_project_archive_to_erp(
             db.rollback()
             raise
 
-        return {"success": False, "message": error_msg}
+        return {"success": False, "message": error_msg, "retryable": isinstance(e, (httpx.TimeoutException, httpx.NetworkError))}
 
     finally:
         if client is not None:
