@@ -389,6 +389,11 @@ def upgrade_project_archive_semantics(engine: Engine) -> None:
     """在任何新模型 ORM 查询前完成旧结构升级；整个过程使用单事务。"""
     with engine.begin() as connection:
         inspector = inspect(connection)
+        # This marker distinguishes the independent line from the legacy category.
+        if inspector.has_table("pms_project_archive") and "product_line_id" in {
+            column["name"] for column in inspector.get_columns("pms_project_archive")
+        }:
+            return
         if inspector.has_table("sys_dict"):
             _add_column(connection, "sys_dict", "next_value", "INT NOT NULL DEFAULT 1")
         if inspector.has_table("sys_role"):

@@ -67,6 +67,18 @@ ENUM_REGISTRY: dict[str, dict[str, Any]] = {
         "bindings": ["项目档案.equipment_series"],
         "items": [("1", "链式"), ("2", "槽式")],
     },
+    "product_line": {
+        "name": "产品线",
+        "description": "项目档案独立产品线，不参与产品类别数据权限",
+        "mode": "configurable",
+        "value_strategy": "numeric_sequence",
+        "visible": True,
+        "sort": 17,
+        "table_name": "pms_project_archive",
+        "field_name": "product_line_id",
+        "bindings": ["项目档案.product_line_id"],
+        "items": [("1", "Bench"), ("2", "Single")],
+    },
     "task_status": {
         "name": "任务状态",
         "description": "项目任务执行状态",
@@ -191,7 +203,7 @@ def get_enum_definition(code: str, *, managed_only: bool = False) -> dict[str, A
 def count_enum_references(db: Session, code: str, value: str) -> int:
     """按注册绑定统计精确引用数量。"""
     integer_value = None
-    if code in {"archive_status", "project_status", "task_status", "product_category", "equipment_series"}:
+    if code in {"archive_status", "project_status", "task_status", "product_category", "equipment_series", "product_line"}:
         try:
             integer_value = int(value)
         except (TypeError, ValueError):
@@ -204,6 +216,8 @@ def count_enum_references(db: Session, code: str, value: str) -> int:
         return db.query(PmsTask).filter(PmsTask.status == integer_value).count()
     if code == "equipment_series":
         return db.query(PmsProjectArchive).filter(PmsProjectArchive.equipment_series == integer_value).count()
+    if code == "product_line":
+        return db.query(PmsProjectArchive).filter(PmsProjectArchive.product_line_id == integer_value).count()
     if code == "product_category":
         numeric_value = integer_value
         archive_count = db.query(PmsProjectArchive).filter(PmsProjectArchive.product_category == numeric_value).count()

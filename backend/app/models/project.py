@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Integer, DateTime, ForeignKey, func, DECIMAL, Index, event, text
+from sqlalchemy import Integer, Date, DateTime, ForeignKey, func, DECIMAL, Index, event, text
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,6 +31,16 @@ class PmsProjectArchive(Base):
     )
     manager_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="负责人ID")
     product_category: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品类别枚举值")
+    product_line_id: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品线枚举值")
+    contract_signed_date: Mapped[datetime.date | None] = mapped_column(Date, default=None, comment="合同签订日期")
+    contract_ship_date: Mapped[datetime.date | None] = mapped_column(Date, default=None, comment="合同出货日期")
+    actual_ship_date: Mapped[datetime.date | None] = mapped_column(Date, default=None, comment="实际出货日期")
+    warranty_end_date: Mapped[datetime.date | None] = mapped_column(Date, default=None, comment="质保截止日期")
+    address_province: Mapped[str | None] = mapped_column(NVARCHAR(6), default=None, comment="项目地址省份编码")
+    address_city: Mapped[str | None] = mapped_column(NVARCHAR(6), default=None, comment="项目地址城市编码")
+    address_detail: Mapped[str | None] = mapped_column(NVARCHAR(512), default=None, comment="项目详细地址")
+    project_contact: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="项目联系人")
+    contact_phone: Mapped[str | None] = mapped_column(NVARCHAR(32), default=None, comment="联系人手机")
     equipment_series: Mapped[int | None] = mapped_column(Integer, default=None, comment="设备系列枚举值")
     serial_no: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="序列号")
     serial_no_key: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="序列号唯一键")

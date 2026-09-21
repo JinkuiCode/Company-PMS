@@ -60,6 +60,8 @@ def _registry_field(
 
 ARCHIVE_GROUPS = [
     {"key": "basic", "label": "基础信息"},
+    {"key": "contract", "label": "合同与交付"},
+    {"key": "contact", "label": "项目联系信息"},
     {"key": "plan", "label": "计划信息"},
     {"key": "erp", "label": "ERP 同步"},
     {"key": "system", "label": "系统信息"},
@@ -70,9 +72,19 @@ ARCHIVE_FIELDS = [
     _registry_field("project_name", "项目名称", "basic", required=True, visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("customer", "客户", "basic"),
     _registry_field("product_category", "产品类别", "basic", value_type="select", enum_code="product_category"),
+    _registry_field("product_line_id", "产品线", "basic", value_type="select", enum_code="product_line"),
     _registry_field("manager_id", "负责人", "basic", value_type="user"),
     _registry_field("equipment_series", "设备系列", "basic", value_type="select", enum_code="equipment_series"),
     _registry_field("serial_no", "序列号", "basic"),
+    _registry_field("contract_signed_date", "合同签订日期", "contract", value_type="date", required=True, visible_locked=True, editable_locked=True, required_locked=True),
+    _registry_field("contract_ship_date", "合同出货日期", "contract", value_type="date", required=True, visible_locked=True, editable_locked=True, required_locked=True),
+    _registry_field("actual_ship_date", "实际出货日期", "contract", value_type="date"),
+    _registry_field("warranty_end_date", "质保截止日期", "contract", value_type="date"),
+    _registry_field("address_province", "项目地址省份", "contact"),
+    _registry_field("address_city", "项目地址城市", "contact"),
+    _registry_field("address_detail", "项目详细地址", "contact", value_type="long_text"),
+    _registry_field("project_contact", "项目联系人", "contact"),
+    _registry_field("contact_phone", "联系人手机", "contact"),
     _registry_field("plan_start_date", "计划开始", "plan", value_type="date"),
     _registry_field("plan_end_date", "计划结束", "plan", value_type="date"),
     _registry_field("data_origin", "档案来源", "system", source_type="system", editable=False),
@@ -280,8 +292,14 @@ def reset_field_policies(
         SysBusinessFieldPolicy.module_code == module_code
     ).all()
     before = {row.field_key: serialize_model(row) for row in rows}
+    after = {}
     for row in rows:
-        db.delete(row)
+        # Keep the original introduction cutoff for immutable contract requirements.
+        if module_code == MODULE_PROJECT_ARCHIVE and row.field_key in {"contract_signed_date", "contract_ship_date"}:
+            row.visible = row.editable = row.required = row.list_available = True
+            after[row.field_key] = serialize_model(row)
+        else:
+            db.delete(row)
     record_operation_log(
         db,
         module="字段规则",
@@ -293,7 +311,7 @@ def reset_field_policies(
         request=request,
         summary=f"恢复字段代码默认值：{module_code}",
         before_data=before,
-        after_data={},
+        after_data=after,
     )
     db.commit()
     return get_effective_field_policies(db, module_code)

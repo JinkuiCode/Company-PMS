@@ -15,7 +15,7 @@ from app.models.rbac import SysDept
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
     TaskCreate, TaskUpdate, TaskResponse,
-    ArchiveCreate, ArchiveUpdate, ArchiveResponse, ArchiveOption, ProjectSheetDetailUpdate,
+    ArchiveCreate, ArchiveUpdate, ArchiveResponse, ArchiveOption, ProjectSheetDetailUpdate, ArchiveBusinessFields,
 )
 from app.services.operation_log import record_operation_log, serialize_model
 from app.services.project_archive_lifecycle import (
@@ -1008,7 +1008,7 @@ ARCHIVE_UNIQUE_FIELDS = {
 
 def _normalize_archive_values(values: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(values)
-    for field_key in ("project_code", "project_name", "customer", "serial_no"):
+    for field_key in ("project_code", "project_name", "customer", "serial_no", "address_province", "address_city", "address_detail", "project_contact", "contact_phone"):
         if field_key not in normalized:
             continue
         cleaned = str(normalized[field_key] or "").strip()
@@ -1108,6 +1108,7 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
             status=a.status, manager_id=a.manager_id, customer=a.customer,
             equipment_series=a.equipment_series, serial_no=a.serial_no,
             product_category=a.product_category,
+            **{key: getattr(a, key) for key in ArchiveBusinessFields.model_fields},
             plan_start_date=a.plan_start_date, plan_end_date=a.plan_end_date,
             manager_name=manager.real_name if manager else "",
             created_by_name=creator.real_name if creator else "",
@@ -1142,10 +1143,17 @@ def create_archive(
 ):
     """创建项目档案"""
     values = _normalize_archive_values(data.model_dump())
+    if 'manager_id' not in data.model_fields_set:
+        manager_policy = next(item for item in get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)['items'] if item['field_key'] == 'manager_id')
+        if manager_policy['editable']:
+            values['manager_id'] = user_id
     _ensure_archive_unique_values(db, values)
     validate_enum_value(db, "archive_status", values.get("status"))
     validate_enum_value(db, "product_category", values.get("product_category"))
     validate_enum_value(db, "equipment_series", values.get("equipment_series"))
+    validate_enum_value(db, "product_line", values.get("product_line_id"))
+    from app.services.archive_regions import validate_archive_address
+    validate_archive_address(values)
     _ensure_archive_assignment_allowed(
         db,
         manager_id=values.get("manager_id"),
@@ -1161,7 +1169,7 @@ def create_archive(
         is_create=True,
     )
     try:
-        archive = PmsProjectArchive(**values, created_by=user_id, updated_by=user_id)
+        archive = PmsProjectArchive(**values, created_by=user_id, updated_by=user_id, created_at=datetime.now())
         db.add(archive)
         db.flush()
         from app.services.erp_queue import enqueue
@@ -1213,6 +1221,10 @@ def update_archive(
     before = serialize_model(archive)
 
     update_data = _normalize_archive_values(data.model_dump(exclude_unset=True))
+    sync_queued = any(
+        key in update_data and update_data[key] != getattr(archive, key)
+        for key in ("project_code", "project_name")
+    )
     try:
         if 'project_code' in update_data and update_data['project_code'] != archive.project_code and (archive.erp_synced or archive.data_origin == 'kingdee_initial'):
             raise HTTPException(409, detail={'code': 'ARCHIVE_CODE_LOCKED', 'field_key': 'project_code', 'message': '已同步或金蝶期初档案的项目编号不可修改'})
@@ -1234,6 +1246,10 @@ def update_archive(
                 update_data["equipment_series"],
                 current_value=archive.equipment_series,
             )
+        if "product_line_id" in update_data:
+            validate_enum_value(db, "product_line", update_data["product_line_id"], current_value=archive.product_line_id)
+        from app.services.archive_regions import validate_archive_address
+        validate_archive_address({**serialize_model(archive), **update_data})
         _ensure_archive_assignment_allowed(
             db,
             manager_id=update_data.get("manager_id", archive.manager_id),
@@ -1243,7 +1259,7 @@ def update_archive(
         validate_business_field_write(
             db,
             MODULE_PROJECT_ARCHIVE,
-            current_values={key: _jsonable(getattr(archive, key, None)) for key in {
+            current_values={key: getattr(archive, key, None) for key in {
                 item["field_key"] for item in get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)["items"]
             }},
             updates=update_data,
@@ -1268,8 +1284,9 @@ def update_archive(
                 synchronize_session=False,
             )
         db.flush()
-        from app.services.erp_queue import enqueue
-        enqueue(db, archive, user_id)
+        if sync_queued:
+            from app.services.erp_queue import enqueue
+            enqueue(db, archive, user_id)
         record_operation_log(
             db,
             module="项目档案",
@@ -1295,7 +1312,7 @@ def update_archive(
     except Exception:
         db.rollback()
         raise
-    return {"msg": "更新成功"}
+    return {"msg": "更新成功", "sync_queued": sync_queued}
 
 
 def validate_archive_for_business_operation(db: Session, archive: PmsProjectArchive) -> None:

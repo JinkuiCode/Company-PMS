@@ -34,10 +34,12 @@ def init_db():
     from app.services.project_archive_lifecycle_migration import upgrade_project_archive_lifecycle
     from app.services.project_archive_initial_migration import upgrade_project_archive_initial
     from app.services.role_home import upgrade_role_home
+    from app.services.archive_business_migration import upgrade_archive_business_fields
 
     upgrade_project_archive_semantics(engine)
     upgrade_project_archive_lifecycle(engine)
     upgrade_project_archive_initial(engine)
+    upgrade_archive_business_fields(engine)
     upgrade_role_home(engine)
 
     db = SessionLocal()

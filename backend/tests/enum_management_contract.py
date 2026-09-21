@@ -46,6 +46,7 @@ def test_registry_separates_managed_system_and_legacy_definitions():
     assert MANAGED_ENUM_CODES == {
         "project_status",
         "product_category",
+        "product_line",
         "equipment_series",
         "task_status",
     }

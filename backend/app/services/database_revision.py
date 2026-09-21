@@ -3,7 +3,7 @@ from sqlalchemy import Engine, inspect, select
 from app.models.database_revision import PmsDatabaseRevision
 
 
-CURRENT_DATABASE_REVISION = "2026-09-20-01"
+CURRENT_DATABASE_REVISION = "2026-09-20-02"
 UPGRADE_IN_PROGRESS = "upgrading"
 
 

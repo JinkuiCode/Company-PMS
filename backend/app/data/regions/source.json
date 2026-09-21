@@ -1,0 +1,24 @@
+{
+  "repository": "https://github.com/modood/Administrative-divisions-of-China",
+  "revision": "c49d495b40ac73eb1a66f6eeae5f8fd10696f035",
+  "revision_date": "2025-12-27T10:03:06Z",
+  "data_cutoff": "2023-06-30",
+  "data_publication_date": "2023-09-11",
+  "retrieved_date": "2026-09-20",
+  "scope": "mainland-31",
+  "excluded": ["Hong Kong", "Macao", "Taiwan", "overseas"],
+  "license": "WTFPL",
+  "upstream_data_source": "National Bureau of Statistics statistical division codes",
+  "urls": {
+    "pc-code.json": "https://raw.githubusercontent.com/modood/Administrative-divisions-of-China/c49d495b40ac73eb1a66f6eeae5f8fd10696f035/dist/pc-code.json",
+    "pca-code.json": "https://raw.githubusercontent.com/modood/Administrative-divisions-of-China/c49d495b40ac73eb1a66f6eeae5f8fd10696f035/dist/pca-code.json",
+    "LICENSE": "https://raw.githubusercontent.com/modood/Administrative-divisions-of-China/c49d495b40ac73eb1a66f6eeae5f8fd10696f035/LICENSE",
+    "UPSTREAM-README.md": "https://raw.githubusercontent.com/modood/Administrative-divisions-of-China/c49d495b40ac73eb1a66f6eeae5f8fd10696f035/README.md"
+  },
+  "sha256": {
+    "pc-code.json": "809d72fa8f1eca68a6843618ab95a6819f6f42a37ee2d97c573fc5c26d9ad9bd",
+    "pca-code.json": "83b7536f853ad16beb4d37b92890a3fd7bb9d33d4f37e7c8885fb948749a9bc4",
+    "LICENSE": "ee820ff0db4ce628569e0975ac27dc926052a9f85d102b101edb104311ef4d90",
+    "UPSTREAM-README.md": "44814b160f3d5e1d3157fb3db15e78d5d9e75b2f75a7eadd6e7f9934c3097ac5"
+  }
+}

@@ -182,6 +182,7 @@ ENUM_BINDINGS: dict[tuple[str, str], tuple[str | None, str]] = {
     ("project_archive", "status"): (None, "system_fixed"),
     ("project_archive", "is_enabled"): (None, "system_fixed"),
     ("project_archive", "product_category"): ("product_category", "enum"),
+    ("project_archive", "product_line_id"): ("product_line", "enum"),
     ("project_archive", "equipment_series"): ("equipment_series", "enum"),
     ("project_archive", "erp_sync_status"): (None, "system_fixed"),
     ("project_progress", "status"): ("project_status", "enum"),
@@ -309,9 +310,17 @@ def _base_catalog_for_module(config: dict[str, Any]) -> dict[str, dict[str, Any]
 
 def build_field_catalog() -> list[dict[str, Any]]:
     """合并模型、Schema 与项目总表注册表，返回稳定排序的字段目录。"""
+    from app.services.field_policy import ARCHIVE_FIELDS, ARCHIVE_GROUPS
     catalog: list[dict[str, Any]] = []
     for module_sort, config in enumerate(_catalog_module_configs(), 1):
         fields = _base_catalog_for_module(config)
+        if config["model"] is PmsProjectArchive:
+            groups = {group['key']: group['label'] for group in ARCHIVE_GROUPS}
+            for registered in ARCHIVE_FIELDS:
+                if registered['key'] in fields:
+                    fields[registered['key']].update(
+                        field_name=registered['label'], group=groups[registered['group']],
+                    )
         if config["model"] is PmsProject:
             model_columns = {column.name for column in PmsProject.__table__.columns}
             for sheet_field in PROJECT_SHEET_FIELDS:

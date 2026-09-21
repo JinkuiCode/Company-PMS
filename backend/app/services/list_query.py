@@ -27,12 +27,15 @@ def query_items(value):
 def archive_columns():
     fields = {name: (getattr(Archive, name), 'text') for name in (
         'project_code', 'project_name', 'customer', 'serial_no', 'data_origin', 'erp_sync_status',
+        'address_province', 'address_city', 'address_detail', 'project_contact', 'contact_phone',
     )}
     fields.update({name: (getattr(Archive, name), 'number') for name in (
         'id', 'product_category', 'equipment_series', 'is_enabled', 'status',
+        'product_line_id',
     )})
     fields.update({name: (getattr(Archive, name), 'date') for name in (
         'plan_start_date', 'plan_end_date', 'created_at', 'updated_at', 'erp_sync_time',
+        'contract_signed_date', 'contract_ship_date', 'actual_ship_date', 'warranty_end_date',
     )})
     for name, foreign_key in (
         ('manager_name', 'manager_id'), ('created_by_name', 'created_by'),

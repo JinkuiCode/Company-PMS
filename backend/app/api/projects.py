@@ -68,6 +68,12 @@ def get_archive_fields(
     return project_service.get_archive_field_metadata(db)
 
 
+@router.get("/archives/regions", summary="项目地址省市选项")
+def get_archive_regions(_scope_ctx: dict = Depends(require_permission("project:archive:view"))):
+    from app.services.archive_regions import get_archive_regions
+    return get_archive_regions()
+
+
 @router.post("", summary="创建项目")
 def create_project(
     data: ProjectCreate,

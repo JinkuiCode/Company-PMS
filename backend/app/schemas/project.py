@@ -4,7 +4,20 @@ from typing import Any
 
 
 # ========== 项目档案 ==========
-class ArchiveCreate(BaseModel):
+class ArchiveBusinessFields(BaseModel):
+    product_line_id: int | None = None
+    contract_signed_date: date | None = None
+    contract_ship_date: date | None = None
+    actual_ship_date: date | None = None
+    warranty_end_date: date | None = None
+    address_province: str | None = Field(None, max_length=6)
+    address_city: str | None = Field(None, max_length=6)
+    address_detail: str | None = Field(None, max_length=512)
+    project_contact: str | None = Field(None, max_length=64)
+    contact_phone: str | None = Field(None, max_length=32)
+
+
+class ArchiveCreate(ArchiveBusinessFields):
     project_code: str = Field(..., max_length=32)
     project_name: str = Field(..., max_length=128)
     manager_id: int | None = None
@@ -16,7 +29,7 @@ class ArchiveCreate(BaseModel):
     plan_end_date: datetime | None = None
 
 
-class ArchiveUpdate(BaseModel):
+class ArchiveUpdate(ArchiveBusinessFields):
     project_code: str | None = Field(None, max_length=32)
     project_name: str | None = Field(None, max_length=128)
     manager_id: int | None = None
@@ -47,7 +60,7 @@ class ArchiveBatchEnabledUpdate(ArchiveEnabledUpdate):
     archive_ids: list[int] = Field(..., min_length=1)
 
 
-class ArchiveResponse(BaseModel):
+class ArchiveResponse(ArchiveBusinessFields):
     id: int
     project_code: str
     project_name: str | None

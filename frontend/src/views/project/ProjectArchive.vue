@@ -99,72 +99,54 @@
       />
     </template>
 
-        <!-- 新增档案保持集中录入，编辑使用右侧字段级抽屉。 -->
-        <el-dialog v-model="dialogVisible" title="新增项目档案" width="560px">
-          <el-form ref="formRef" :model="form" :rules="rules" class="archive-create-form" label-position="top">
-            <el-form-item v-if="archiveFieldVisible('project_code')" prop="project_code" class="archive-create-form-item">
-              <PmsFormField field-id="archive-project-code" label="项目编号" :required="archiveFieldRequired('project_code')" :error="archiveCreateServerErrors.project_code">
-                <template #default="{ describedBy, invalid }">
-                  <PmsTextControl id="archive-project-code" v-model="form.project_code" placeholder="请输入项目编号" :disabled="!archiveFieldEditable('project_code')" :error="archiveCreateServerErrors.project_code" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" @update:model-value="clearArchiveServerError(archiveCreateServerErrors, 'project_code')" />
-                </template>
-              </PmsFormField>
-            </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('project_name')" prop="project_name" class="archive-create-form-item">
-              <PmsFormField field-id="archive-project-name" label="项目名称" :required="archiveFieldRequired('project_name')" :error="archiveCreateServerErrors.project_name">
-                <template #default="{ describedBy, invalid }">
-                  <PmsTextControl id="archive-project-name" v-model="form.project_name" placeholder="请输入项目名称" :disabled="!archiveFieldEditable('project_name')" :error="archiveCreateServerErrors.project_name" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" @update:model-value="clearArchiveServerError(archiveCreateServerErrors, 'project_name')" />
-                </template>
-              </PmsFormField>
-            </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('customer')" prop="customer" class="archive-create-form-item">
-              <PmsFormField field-id="archive-customer" label="客户" :required="archiveFieldRequired('customer')">
-                <PmsTextControl id="archive-customer" v-model="form.customer" placeholder="请输入客户名称" :disabled="!archiveFieldEditable('customer')" />
-              </PmsFormField>
-            </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('product_category')" prop="product_category" class="archive-create-form-item">
-              <PmsFormField field-id="archive-product-category" label="产品类别" :required="archiveFieldRequired('product_category')">
-                <PmsSelectControl id="archive-product-category" v-model="form.product_category" :options="archiveProductCategoryOptions" placeholder="请选择产品类别" :disabled="!archiveFieldEditable('product_category')" />
-              </PmsFormField>
-            </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('manager_id')" prop="manager_id" class="archive-create-form-item">
-              <PmsFormField field-id="archive-manager" label="负责人" :required="archiveFieldRequired('manager_id')">
-                <PmsSelectControl id="archive-manager" v-model="form.manager_id" :options="archiveUserOptions" placeholder="请选择负责人" clearable filterable :disabled="!archiveFieldEditable('manager_id')" />
-              </PmsFormField>
-            </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('equipment_series')" prop="equipment_series" class="archive-create-form-item">
-              <PmsFormField field-id="archive-equipment-series" label="设备系列" :required="archiveFieldRequired('equipment_series')">
-                <PmsSelectControl id="archive-equipment-series" v-model="form.equipment_series" :options="archiveEquipmentSeriesOptions" placeholder="请选择设备系列" clearable filterable :disabled="!archiveFieldEditable('equipment_series')" />
-              </PmsFormField>
-            </el-form-item>
-            <el-form-item v-if="archiveFieldVisible('serial_no')" prop="serial_no" class="archive-create-form-item">
-              <PmsFormField field-id="archive-serial-no" label="序列号" :required="archiveFieldRequired('serial_no')" :error="archiveCreateServerErrors.serial_no">
-                <template #default="{ describedBy, invalid }">
-                  <PmsTextControl id="archive-serial-no" v-model="form.serial_no" placeholder="请输入序列号" :disabled="!archiveFieldEditable('serial_no')" :error="archiveCreateServerErrors.serial_no" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" @update:model-value="clearArchiveServerError(archiveCreateServerErrors, 'serial_no')" />
-                </template>
-              </PmsFormField>
-            </el-form-item>
-            <el-row :gutter="12">
-              <el-col v-if="archiveFieldVisible('plan_start_date')" :span="12">
-                <el-form-item prop="plan_start_date" class="archive-create-form-item">
-                  <PmsFormField field-id="archive-plan-start" label="计划开始" :required="archiveFieldRequired('plan_start_date')">
-                    <PmsDateControl id="archive-plan-start" v-model="form.plan_start_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_start_date')" />
-                  </PmsFormField>
-                </el-form-item>
-              </el-col>
-              <el-col v-if="archiveFieldVisible('plan_end_date')" :span="12">
-                <el-form-item prop="plan_end_date" class="archive-create-form-item">
-                  <PmsFormField field-id="archive-plan-end" label="计划结束" :required="archiveFieldRequired('plan_end_date')">
-                    <PmsDateControl id="archive-plan-end" v-model="form.plan_end_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!archiveFieldEditable('plan_end_date')" />
-                  </PmsFormField>
-                </el-form-item>
-              </el-col>
-            </el-row>
+        <PmsFormDrawer v-model="dialogVisible" title="新增项目档案" :busy="archiveCreateSaving" :before-close="beforeCloseArchiveCreate">
+          <el-form ref="formRef" :model="form" :rules="rules" class="archive-create-form pms-standard-dialog-form" label-position="top" :disabled="archiveCreateSaving">
+            <section v-for="group in archiveCreateGroups" :key="group.key">
+              <h3 class="pms-form-drawer__section">{{ group.label }}</h3>
+              <el-form-item v-for="field in group.fields" :key="field.key" :prop="field.key">
+                <PmsFormField :field-id="`archive-create-${field.key}`" :label="field.label" :required="archiveFieldRequired(field.key)" :error="archiveCreateServerErrors[field.key]">
+                  <template #default="{ describedBy, invalid }">
+                    <PmsTextControl
+                      v-if="field.value_type === 'text'"
+                      :id="`archive-create-${field.key}`" v-model="form[field.key]"
+                      :placeholder="`请输入${field.label}`" :disabled="archiveCreateSaving || !archiveFieldEditable(field.key)"
+                      :error="archiveCreateServerErrors[field.key]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined"
+                      @update:model-value="clearArchiveServerError(archiveCreateServerErrors, field.key)"
+                    />
+                    <PmsTextareaControl
+                      v-else-if="field.value_type === 'long_text'"
+                      :id="`archive-create-${field.key}`" v-model="form[field.key]"
+                      :autosize="{ minRows: 2, maxRows: 5 }" :maxlength="512"
+                      :placeholder="`请输入${field.label}`" :disabled="archiveCreateSaving || !archiveFieldEditable(field.key)"
+                      :error="archiveCreateServerErrors[field.key]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined"
+                      @update:model-value="clearArchiveServerError(archiveCreateServerErrors, field.key)"
+                    />
+                    <PmsSelectControl
+                      v-else-if="['select', 'user'].includes(field.value_type)"
+                      :id="`archive-create-${field.key}`" v-model="form[field.key]"
+                      :options="archiveDrawerSelectOptions(field.key, form)" clearable filterable
+                      :placeholder="`请选择${field.label}`"
+                      :disabled="archiveCreateSaving || !archiveFieldEditable(field.key) || (field.key === 'address_city' && !form.address_province)"
+                      :error="archiveCreateServerErrors[field.key]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined"
+                      @change="changeArchiveCreateSelect(field.key)"
+                    />
+                    <PmsDateControl
+                      v-else-if="field.value_type === 'date'"
+                      :id="`archive-create-${field.key}`" v-model="form[field.key]"
+                      type="date" value-format="YYYY-MM-DD" placeholder="选择日期"
+                      :disabled="archiveCreateSaving || !archiveFieldEditable(field.key)"
+                      :error="archiveCreateServerErrors[field.key]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined"
+                    />
+                  </template>
+                </PmsFormField>
+              </el-form-item>
+            </section>
           </el-form>
           <template #footer>
-            <el-button @click="dialogVisible = false">取消</el-button>
-            <el-button v-if="hasPermission('project:archive:add')" type="primary" @click="handleSubmit">保存</el-button>
+            <el-button :disabled="archiveCreateSaving" @click="beforeCloseArchiveCreate(() => { dialogVisible = false })">取消</el-button>
+            <el-button v-if="hasPermission('project:archive:add')" type="primary" :loading="archiveCreateSaving" @click="handleSubmit">创建</el-button>
           </template>
-        </el-dialog>
+        </PmsFormDrawer>
       </PmsDataList>
     </div>
 
@@ -208,10 +190,10 @@
       <el-form
         ref="archiveDrawerFormRef"
         :model="archiveDrawerForm"
-        :rules="rules"
+        :rules="archiveDrawerRules"
         class="archive-drawer-form"
         label-position="top"
-        @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+        @keydown.esc.capture.stop.prevent="cancelArchiveFieldEdit"
       >
         <div class="archive-drawer-body">
           <section
@@ -241,17 +223,18 @@
                   <template #display>{{ formatArchiveDrawerValue(field) }}</template>
                   <template #editor>
                     <PmsSelectControl
-                      v-if="['product_category', 'manager_id', 'equipment_series'].includes(field.key)"
+                      v-if="['select', 'user'].includes(field.value_type)"
                       v-model="archiveDrawerForm[field.key]"
                       size="compact"
                       :options="archiveDrawerSelectOptions(field.key)"
+                      :disabled="field.key === 'address_city' && !archiveDrawerForm.address_province"
                       :clearable="field.key !== 'product_category'"
                       filterable
                       :placeholder="archiveDrawerSelectPlaceholder(field.key)"
                       :id="`archive-drawer-${field.key}`"
                       :aria-label="field.label"
                       :error="archiveDrawerServerErrors[field.key]"
-                      @change="commitArchiveFieldEdit"
+                      @change="changeArchiveDrawerSelect(field.key)"
                       @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
                     />
                     <PmsDateControl
@@ -265,6 +248,15 @@
                       :aria-label="field.label"
                       :error="archiveDrawerServerErrors[field.key]"
                       @change="commitArchiveFieldEdit"
+                      @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
+                    />
+                    <PmsTextareaControl
+                      v-else-if="field.value_type === 'long_text'"
+                      v-model="archiveDrawerForm[field.key]" size="compact"
+                      :autosize="{ minRows: 2, maxRows: 5 }" :maxlength="512"
+                      :id="`archive-drawer-${field.key}`" :aria-label="field.label"
+                      :error="archiveDrawerServerErrors[field.key]"
+                      @keydown.ctrl.enter.prevent="commitArchiveFieldEdit"
                       @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
                     />
                     <PmsTextControl
@@ -321,15 +313,18 @@ import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
   PmsDateControl,
   PmsFormField,
+  PmsFormDrawer,
   PmsInlineField,
   PmsSelectControl,
   PmsTextControl,
+  PmsTextareaControl,
   type PmsOption,
 } from '@/form-system'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
+import { getArchiveRegions, type ArchiveRegion } from '@/api/project'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
@@ -352,6 +347,7 @@ type EffectiveArchiveField = {
   visible: boolean
   editable: boolean
   required: boolean
+  required_effective_at?: string | null
   list_available: boolean
 }
 
@@ -372,6 +368,27 @@ type ArchivePendingChange = {
 const ARCHIVE_COLUMN_STORAGE_KEY = 'pms_project_archive_list_columns_v2'
 const LEGACY_ARCHIVE_LAYOUT_KEY = 'pms_archive_grid_layout_v2'
 
+const ARCHIVE_EXPANSION_GROUPS: Array<{ key: string; label: string; fields: ArchiveDrawerField[] }> = [
+  { key: 'product', label: '基础信息', fields: [
+    { key: 'product_line_id', label: '产品线', value_type: 'select', source_type: 'archive' },
+  ] },
+  { key: 'delivery', label: '合同与交付', fields: [
+    { key: 'contract_signed_date', label: '合同签订日期', value_type: 'date', source_type: 'archive' },
+    { key: 'contract_ship_date', label: '合同出货日期', value_type: 'date', source_type: 'archive' },
+    { key: 'actual_ship_date', label: '实际出货日期', value_type: 'date', source_type: 'archive' },
+    { key: 'warranty_end_date', label: '质保截止日期', value_type: 'date', source_type: 'archive' },
+  ] },
+  { key: 'contact', label: '项目联系信息', fields: [
+    { key: 'address_province', label: '省份', value_type: 'select', source_type: 'archive' },
+    { key: 'address_city', label: '城市', value_type: 'select', source_type: 'archive' },
+    { key: 'address_detail', label: '详细地址', value_type: 'long_text', source_type: 'archive' },
+    { key: 'project_contact', label: '项目联系人', value_type: 'text', source_type: 'archive' },
+    { key: 'contact_phone', label: '联系人手机', value_type: 'text', source_type: 'archive' },
+  ] },
+]
+const archiveExpansionFields = ARCHIVE_EXPANSION_GROUPS.flatMap(group => group.fields)
+const archiveExpansionKeys = new Set(archiveExpansionFields.map(field => field.key))
+
 const ARCHIVE_COLUMN_GROUP_DEFINITIONS = [
   {
     key: 'business',
@@ -383,6 +400,7 @@ const ARCHIVE_COLUMN_GROUP_DEFINITIONS = [
       { key: 'manager_name', label: '负责人', value_type: 'text', list_available: true, quick_addable: false },
       { key: 'equipment_series', label: '设备系列', value_type: 'select', list_available: true, quick_addable: false },
       { key: 'serial_no', label: '序列号', value_type: 'text', list_available: true, quick_addable: false },
+      ...ARCHIVE_EXPANSION_GROUPS[0]!.fields.map(field => ({ ...field, list_available: true, quick_addable: false })),
     ],
   },
   {
@@ -430,6 +448,7 @@ const ARCHIVE_DRAWER_GROUP_DEFINITIONS: Array<{
       { key: 'manager_id', label: '负责人', value_type: 'user', source_type: 'archive' },
       { key: 'equipment_series', label: '设备系列', value_type: 'select', source_type: 'archive' },
       { key: 'serial_no', label: '序列号', value_type: 'text', source_type: 'archive' },
+      ...ARCHIVE_EXPANSION_GROUPS[0]!.fields,
     ],
   },
   {
@@ -463,6 +482,11 @@ const ARCHIVE_DRAWER_GROUP_DEFINITIONS: Array<{
   },
 ]
 
+ARCHIVE_COLUMN_GROUP_DEFINITIONS.splice(1, 0, ...ARCHIVE_EXPANSION_GROUPS.slice(1).map(group => ({
+  ...group, fields: group.fields.map(field => ({ ...field, list_available: true, quick_addable: false })),
+})))
+ARCHIVE_DRAWER_GROUP_DEFINITIONS.splice(1, 0, ...ARCHIVE_EXPANSION_GROUPS.slice(1))
+
 const archiveColumnPolicyKey: Record<string, string> = {
   manager_name: 'manager_id',
 }
@@ -477,6 +501,8 @@ const legacyArchiveRequiredFields = new Set([
   'product_category',
   'plan_start_date',
   'plan_end_date',
+  'contract_signed_date',
+  'contract_ship_date',
 ])
 
 function archiveFieldPolicy(fieldKey: string) {
@@ -492,8 +518,10 @@ function archiveFieldEditable(fieldKey: string) {
   return archiveFieldPolicy(fieldKey)?.editable !== false
 }
 
-function archiveFieldRequired(fieldKey: string) {
+function archiveFieldRequired(fieldKey: string, createdAt?: string) {
   const field = archiveFieldPolicy(fieldKey)
+  if (createdAt && field?.required_effective_at
+    && new Date(createdAt).getTime() < new Date(field.required_effective_at).getTime()) return false
   return field ? field.required === true : legacyArchiveRequiredFields.has(fieldKey)
 }
 
@@ -506,10 +534,10 @@ const archiveColumnGroups = computed(() => ARCHIVE_COLUMN_GROUP_DEFINITIONS.map(
   ...group,
   fields: group.fields.filter(field => archiveColumnListAvailable(field.key)),
 })).filter(group => group.fields.length > 0))
-const defaultArchiveColumnKeys = computed(() => baseArchiveColumnKeys.filter(archiveColumnListAvailable))
-const availableArchiveColumnKeys = computed(() => new Set(defaultArchiveColumnKeys.value))
+const defaultArchiveColumnKeys = computed(() => baseArchiveColumnKeys.filter(key => !archiveExpansionKeys.has(key)).filter(archiveColumnListAvailable))
+const availableArchiveColumnKeys = computed(() => new Set(baseArchiveColumnKeys.filter(archiveColumnListAvailable)))
 const fixedArchiveColumnKeys = new Set(['archive_selection', 'archive_actions'])
-const selectedArchiveColumnKeys = ref<string[]>([...baseArchiveColumnKeys])
+const selectedArchiveColumnKeys = ref<string[]>([...defaultArchiveColumnKeys.value])
 const archiveColumnPreferenceOwnerId = ref<number | null>(null)
 const archiveColumnPreferencesReady = ref(false)
 const archiveColumnPreferenceWritesEnabled = ref(false)
@@ -691,6 +719,7 @@ const archiveEnabledFilterOptions = [
 // 字典选项
 const dictOptions = reactive<Record<string, any[]>>({
   product_category: [],
+  product_line: [],
   equipment_series: [],
 })
 const dictLabelMaps = reactive<Record<string, Record<string, string>>>({})
@@ -749,7 +778,22 @@ const archiveUserOptions = computed<PmsOption[]>(() => userList.value.map(user =
   label: String(user.real_name || user.username || user.id),
 })))
 
-function archiveDrawerSelectOptions(fieldKey: string): PmsOption[] {
+const archiveRegions = ref<ArchiveRegion[]>([])
+async function fetchArchiveRegions() {
+  archiveRegions.value = await getArchiveRegions()
+  agGridRef.value?.api?.refreshCells({ columns: ['address_province', 'address_city'], force: true })
+}
+
+function archiveRegionLabel(fieldKey: string, value: unknown) {
+  const options = fieldKey === 'address_province'
+    ? archiveRegions.value : archiveRegions.value.flatMap(region => region.children)
+  return options.find(option => option.value === value)?.label || '-'
+}
+
+function archiveDrawerSelectOptions(fieldKey: string, values = archiveDrawerForm): PmsOption[] {
+  if (fieldKey === 'product_line_id') return (dictOptions.product_line || []).map(item => ({ ...item, value: Number(item.value) }))
+  if (fieldKey === 'address_province') return archiveRegions.value
+  if (fieldKey === 'address_city') return archiveRegions.value.find(region => region.value === values.address_province)?.children || []
   if (fieldKey === 'product_category') return archiveProductCategoryOptions.value
   if (fieldKey === 'manager_id') return archiveUserOptions.value
   if (fieldKey === 'equipment_series') return archiveEquipmentSeriesOptions.value
@@ -757,9 +801,36 @@ function archiveDrawerSelectOptions(fieldKey: string): PmsOption[] {
 }
 
 function archiveDrawerSelectPlaceholder(fieldKey: string) {
-  if (fieldKey === 'product_category') return '选择产品类别'
-  if (fieldKey === 'manager_id') return '选择负责人'
-  return '选择设备系列'
+  return `选择${archiveDrawerFieldByKey(fieldKey)?.label || ''}`
+}
+
+function changeArchiveProvince(values: Record<string, any>) {
+  values.address_city = ''
+  values.address_detail = ''
+}
+
+function changeArchiveCreateSelect(fieldKey: string) {
+  clearArchiveServerError(archiveCreateServerErrors, fieldKey)
+  if (fieldKey === 'address_province') changeArchiveProvince(form)
+  if (fieldKey === 'address_city') form.address_detail = ''
+}
+
+function changeArchiveDrawerSelect(fieldKey: string) {
+  if (fieldKey === 'address_province') {
+    changeArchiveProvince(archiveDrawerForm)
+    return
+  }
+  if (fieldKey === 'address_city') {
+    archiveDrawerForm.address_detail = ''
+    return
+  }
+  commitArchiveFieldEdit()
+}
+
+function archiveAddressFieldVisible(fieldKey: string, values: Record<string, any>) {
+  if (fieldKey === 'address_city') return Boolean(values.address_province)
+  if (fieldKey === 'address_detail') return Boolean(values.address_province && values.address_city)
+  return true
 }
 
 const erpSyncStatusOptions: ListFilterOption[] = [
@@ -801,6 +872,12 @@ const archiveUserNameOptions = computed(() => uniqueValueOptions([
 ]))
 
 const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
+  ...archiveExpansionFields.map(field => ({
+    field: field.key, policyKey: field.key, label: field.label, type: field.value_type === 'long_text' ? 'text' : field.value_type,
+    ...(field.key === 'product_line_id' ? { options: () => dictFilterOptions('product_line', true) } : {}),
+    ...(field.key === 'address_province' ? { options: () => archiveRegions.value } : {}),
+    ...(field.key === 'address_city' ? { options: () => archiveRegions.value.flatMap(region => region.children) } : {}),
+  })),
   { field: 'project_code', policyKey: 'project_code', label: '项目编号', type: 'text' },
   { field: 'project_name', policyKey: 'project_name', label: '项目名称', type: 'text' },
   { field: 'customer', policyKey: 'customer', label: '客户', type: 'text' },
@@ -832,6 +909,7 @@ async function fetchDictOptions(code: string) {
     dictLabelMaps[code] = definition.label_map
     await nextTick()
     agGridRef.value?.api?.refreshCells({ columns: [code], force: true })
+    if (code === 'product_line') agGridRef.value?.api?.refreshCells({ columns: ['product_line_id'], force: true })
   } catch { /* ignore */ }
 }
 
@@ -841,8 +919,10 @@ function scheduleArchiveScrollbarMetrics() {
 
 // ========== 新增弹窗与编辑抽屉 ==========
 const dialogVisible = ref(false)
+const archiveCreateSaving = ref(false)
+const archiveCreateSnapshot = ref('')
 const formRef = ref<FormInstance>()
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: 0,
   project_code: '',
   project_name: '',
@@ -853,6 +933,7 @@ const form = reactive({
   serial_no: '',
   plan_start_date: '',
   plan_end_date: '',
+  ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, field.key === 'product_line_id' ? null : ''])),
 })
 const archiveCreateServerErrors = reactive<Record<string, string>>({})
 const archiveDrawerServerErrors = reactive<Record<string, string>>({})
@@ -867,18 +948,23 @@ const archiveDrawerForm = reactive<Record<string, any>>({})
 const archiveOriginalValues = ref<Record<string, unknown>>({})
 const archivePendingChanges = ref<Record<string, ArchivePendingChange>>({})
 const archiveEditingField = ref<string | null>(null)
+const archiveEditSnapshot = ref<Record<string, any>>({})
 const archiveDrawerSaving = ref(false)
 const archivePendingChangeCount = computed(() => {
   const changedKeys = new Set(Object.keys(archivePendingChanges.value))
   const activeFieldKey = archiveEditingField.value
   if (!activeFieldKey) return changedKeys.size
-  const activeField = archiveDrawerFieldByKey(activeFieldKey)
-  if (!activeField) return changedKeys.size
-  const activeValue = normalizeArchiveDrawerValue(activeField, archiveDrawerForm[activeFieldKey])
-  if (sameArchiveDrawerValue(activeValue, archiveOriginalValues.value[activeFieldKey])) {
-    changedKeys.delete(activeFieldKey)
-  } else {
-    changedKeys.add(activeFieldKey)
+  const keys = activeFieldKey === 'address_province' ? [activeFieldKey, 'address_city', 'address_detail']
+    : activeFieldKey === 'address_city' ? [activeFieldKey, 'address_detail'] : [activeFieldKey]
+  for (const key of keys) {
+    const activeField = archiveDrawerFieldByKey(key)
+    if (!activeField) continue
+    const activeValue = normalizeArchiveDrawerValue(activeField, archiveDrawerForm[key])
+    if (sameArchiveDrawerValue(activeValue, archiveOriginalValues.value[key])) {
+      changedKeys.delete(key)
+    } else {
+      changedKeys.add(key)
+    }
   }
   return changedKeys.size
 })
@@ -886,8 +972,13 @@ const archiveDrawerGroups = computed(() => ARCHIVE_DRAWER_GROUP_DEFINITIONS.map(
   ...group,
   fields: group.fields.filter((field) => {
     if (field.key === 'erp_error_msg') return Boolean(selectedArchive.value?.erp_error_msg)
-    return archiveFieldVisible(field.key)
+    return archiveFieldVisible(field.key) && archiveAddressFieldVisible(field.key, archiveDrawerForm)
   }),
+})).filter(group => group.fields.length > 0))
+
+const archiveCreateGroups = computed(() => ARCHIVE_DRAWER_GROUP_DEFINITIONS.map(group => ({
+  ...group, fields: group.fields.filter(field => field.source_type === 'archive'
+    && archiveFieldVisible(field.key) && archiveAddressFieldVisible(field.key, form)),
 })).filter(group => group.fields.length > 0))
 
 const legacyArchiveRules: FormRules = {
@@ -896,13 +987,19 @@ const legacyArchiveRules: FormRules = {
   product_category: [{ required: true, message: '请选择产品类别' }],
   plan_start_date: [{ required: true, message: '请选择计划开始日期' }],
   plan_end_date: [{ required: true, message: '请选择计划结束日期' }],
+  contract_signed_date: [{ required: true, message: '请选择合同签订日期' }],
+  contract_ship_date: [{ required: true, message: '请选择合同出货日期' }],
 }
 
-const rules = computed<FormRules>(() => {
-  if (!effectiveArchiveFields.value.length) return legacyArchiveRules
-  const nextRules: FormRules = {}
+function archiveAddressComplete(values: Record<string, any>) {
+  const filled = ['address_province', 'address_city', 'address_detail'].map(key => String(values[key] ?? '').trim().length > 0)
+  return filled.every(Boolean) || filled.every(value => !value)
+}
+
+function buildArchiveRules(values: Record<string, any>, createdAt?: string): FormRules {
+  const nextRules: FormRules = effectiveArchiveFields.value.length ? {} : { ...legacyArchiveRules }
   effectiveArchiveFields.value
-    .filter(field => field.visible && field.required)
+    .filter(field => field.visible && archiveFieldRequired(field.field_key, createdAt))
     .forEach((field) => {
       nextRules[field.field_key] = [{
         required: true,
@@ -910,8 +1007,18 @@ const rules = computed<FormRules>(() => {
         trigger: ['blur', 'change'],
       }]
     })
+  for (const key of ['address_province', 'address_city', 'address_detail']) {
+    if (!archiveFieldVisible(key) || !archiveFieldEditable(key)) continue
+    const existing = nextRules[key]
+    nextRules[key] = [...(Array.isArray(existing) ? existing : existing ? [existing] : []), {
+      validator: (_rule, _value, callback) => callback(archiveAddressComplete(values) ? undefined : new Error('请完整填写省份、城市和详细地址')),
+      trigger: ['blur', 'change'],
+    }]
+  }
   return nextRules
-})
+}
+const rules = computed<FormRules>(() => buildArchiveRules(form))
+const archiveDrawerRules = computed<FormRules>(() => buildArchiveRules(archiveDrawerForm, selectedArchive.value?.created_at))
 
 // ========== AG Grid 列定义 ==========
 function escapeHtml(value: any) {
@@ -962,6 +1069,12 @@ function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
 }
 
 const columnDefs = computed<ColDef[]>(() => [
+  ...archiveExpansionFields.map(field => ({
+    ...archiveColumnVisibility(field.key), field: field.key, headerName: field.label, width: 140, minWidth: 110,
+    valueFormatter: (params: any) => field.key === 'product_line_id' ? enumLabel('product_line', params.value)
+      : ['address_province', 'address_city'].includes(field.key) ? archiveRegionLabel(field.key, params.value)
+      : field.value_type === 'date' ? archiveDateValue(params.value) || '-' : params.value || '-',
+  })),
   ...(hasPermission('project:archive:delete') || hasPermission('project:archive:toggle')
     ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', lockPosition: 'left', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false } as ColDef]
     : []),
@@ -1143,14 +1256,26 @@ function openCreateDialog() {
     project_code: '',
     project_name: '',
     customer: '',
-    manager_id: null,
+    manager_id: authStore.user?.id ?? null,
     equipment_series: null,
     product_category: null,
     serial_no: '',
     plan_start_date: '',
     plan_end_date: '',
+    ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, field.key === 'product_line_id' ? null : ''])),
   })
+  archiveCreateSnapshot.value = JSON.stringify(form)
   dialogVisible.value = true
+}
+
+async function beforeCloseArchiveCreate(done: () => void) {
+  if (archiveCreateSaving.value) return
+  if (JSON.stringify(form) !== archiveCreateSnapshot.value) {
+    try {
+      await ElMessageBox.confirm('新增档案有未保存的修改，确定放弃吗？', '未保存修改', { type: 'warning' })
+    } catch { return }
+  }
+  done()
 }
 
 function buildArchiveCreatePayload() {
@@ -1165,6 +1290,7 @@ function buildArchiveCreatePayload() {
     serial_no: form.serial_no || null,
     plan_start_date: form.plan_start_date || null,
     plan_end_date: form.plan_end_date || null,
+    ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, form[field.key] || null])),
   }
   Object.entries(values).forEach(([fieldKey, value]) => {
     if (!archiveFieldVisible(fieldKey) || !archiveFieldEditable(fieldKey)) return
@@ -1179,6 +1305,9 @@ function archiveDateValue(value: unknown) {
 
 function archiveDrawerValues(row: any) {
   return {
+    ...Object.fromEntries(archiveExpansionFields.map(field => [field.key,
+      field.value_type === 'date' ? archiveDateValue(row[field.key]) : row[field.key] ?? (field.key === 'product_line_id' ? null : ''),
+    ])),
     project_code: row.project_code || '',
     project_name: row.project_name || '',
     data_origin: row.data_origin || 'pms',
@@ -1252,7 +1381,7 @@ async function closeArchiveDrawer() {
 }
 
 function archiveDrawerFieldRequired(field: ArchiveDrawerField) {
-  return archiveFieldPolicy(field.key)?.required === true
+  return archiveFieldRequired(field.key, selectedArchive.value?.created_at)
 }
 
 function archiveDrawerFieldEditable(field: ArchiveDrawerField) {
@@ -1303,6 +1432,8 @@ function formatArchiveDrawerValue(field: ArchiveDrawerField) {
     return archiveSyncLabel(value)
   }
   if (archiveDrawerValueEmpty(field)) return archiveDrawerFieldEditable(field) ? '点击填写' : '-'
+  if (field.key === 'product_line_id') return enumLabel('product_line', value)
+  if (['address_province', 'address_city'].includes(field.key)) return archiveRegionLabel(field.key, value)
   if (field.key === 'product_category') return enumLabel('product_category', value)
   if (field.key === 'equipment_series') return enumLabel('equipment_series', value)
   if (field.key === 'manager_id') {
@@ -1317,7 +1448,7 @@ function formatArchiveDrawerValue(field: ArchiveDrawerField) {
 function normalizeArchiveDrawerValue(field: ArchiveDrawerField, value: unknown) {
   if (field.key === 'manager_id') return value === '' || value == null ? null : Number(value)
   if (field.value_type === 'date') return value ? archiveDateValue(value) : null
-  if (['product_category', 'equipment_series'].includes(field.key)) {
+  if (['product_category', 'equipment_series', 'product_line_id'].includes(field.key)) {
     return value === '' || value == null ? null : Number(value)
   }
   return value ?? ''
@@ -1332,37 +1463,36 @@ function startArchiveFieldEdit(field: ArchiveDrawerField) {
   if (!archiveDrawerFieldEditable(field)) return
   clearArchiveServerError(archiveDrawerServerErrors, field.key)
   if (archiveEditingField.value && archiveEditingField.value !== field.key) commitArchiveFieldEdit()
+  if (archiveEditingField.value === field.key) return
+  archiveEditSnapshot.value = { ...archiveDrawerForm }
   archiveEditingField.value = field.key
 }
 
 function cancelArchiveFieldEdit() {
   if (!archiveEditingField.value) return
-  const fieldKey = archiveEditingField.value
-  archiveDrawerForm[fieldKey] = archivePendingChanges.value[fieldKey]?.value ?? archiveOriginalValues.value[fieldKey]
+  Object.assign(archiveDrawerForm, archiveEditSnapshot.value)
   archiveEditingField.value = null
 }
 
 function commitArchiveFieldEdit() {
   const fieldKey = archiveEditingField.value
   if (!fieldKey) return
-  const field = archiveDrawerFieldByKey(fieldKey)
-  if (!field) {
-    archiveEditingField.value = null
-    return
-  }
-  const value = normalizeArchiveDrawerValue(field, archiveDrawerForm[fieldKey])
-  const originalValue = archiveOriginalValues.value[fieldKey]
-  archiveDrawerForm[fieldKey] = value
-  if (sameArchiveDrawerValue(value, originalValue)) {
-    const nextChanges = { ...archivePendingChanges.value }
-    delete nextChanges[fieldKey]
-    archivePendingChanges.value = nextChanges
-  } else {
-    archivePendingChanges.value = {
-      ...archivePendingChanges.value,
-      [fieldKey]: { value, originalValue },
+  const keys = fieldKey === 'address_province' ? [fieldKey, 'address_city', 'address_detail']
+    : fieldKey === 'address_city' ? [fieldKey, 'address_detail'] : [fieldKey]
+  const nextChanges = { ...archivePendingChanges.value }
+  for (const key of keys) {
+    const field = archiveDrawerFieldByKey(key)
+    if (!field) continue
+    const value = normalizeArchiveDrawerValue(field, archiveDrawerForm[key])
+    const originalValue = archiveOriginalValues.value[key]
+    archiveDrawerForm[key] = value
+    if (sameArchiveDrawerValue(value, originalValue)) {
+      delete nextChanges[key]
+    } else {
+      nextChanges[key] = { value, originalValue }
     }
   }
+  archivePendingChanges.value = nextChanges
   archiveEditingField.value = null
 }
 
@@ -1427,10 +1557,11 @@ async function focusArchivePolicyValidation(error: any, targetForm = formRef) {
 }
 
 async function handleSubmit() {
-  if (!hasPermission('project:archive:add')) return
+  if (!hasPermission('project:archive:add') || archiveCreateSaving.value) return
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  archiveCreateSaving.value = true
   try {
     await request.post('/projects/archives', buildArchiveCreatePayload())
     ElMessage.success('已保存，后台将自动同步金蝶')
@@ -1439,6 +1570,8 @@ async function handleSubmit() {
   } catch (error) {
     if (await focusArchiveUniqueConflict(error, formRef, archiveCreateServerErrors)) return
     await focusArchivePolicyValidation(error)
+  } finally {
+    archiveCreateSaving.value = false
   }
 }
 
@@ -1501,8 +1634,12 @@ async function saveArchiveDrawer() {
   const archiveId = selectedArchive.value.id
   const payload = buildArchiveDrawerPayload()
   archiveDrawerSaving.value = true
+  let syncQueued = false
   try {
-    if (Object.keys(payload).length) await request.put(`/projects/archives/${archiveId}`, payload)
+    if (Object.keys(payload).length) {
+      const result: any = await request.put(`/projects/archives/${archiveId}`, payload)
+      syncQueued = result.sync_queued === true
+    }
   } catch (error) {
     if (await focusArchiveUniqueConflict(error, archiveDrawerFormRef, archiveDrawerServerErrors)) {
       archiveDrawerSaving.value = false
@@ -1534,7 +1671,7 @@ async function saveArchiveDrawer() {
   }
 
   if (!refreshSucceeded) return
-  ElMessage.success('已保存，后台将自动同步金蝶')
+  ElMessage.success(syncQueued ? '已保存，后台将自动同步金蝶' : '已保存')
 }
 
 async function refreshArchiveListAfterConflict(error: any) {
@@ -1649,6 +1786,7 @@ onMounted(async () => {
   await Promise.allSettled([
     fetchEffectiveArchiveFields(), fetchAllowedProductCategories(),
     fetchDictOptions('product_category'), fetchDictOptions('equipment_series'),
+    fetchDictOptions('product_line'), fetchArchiveRegions(),
     resolveArchiveColumnPreferenceOwner(),
   ])
   restoreSelectedArchiveColumnKeys()
@@ -1803,23 +1941,6 @@ onUnmounted(() => clearInterval(archiveSyncPoll))
 .archive-drawer-form-item :deep(.el-form-item__error) {
   position: static;
   padding: 3px 10px 5px 112px;
-  font-size: 11px;
-}
-
-.archive-create-form-item {
-  margin-bottom: 16px;
-}
-
-.archive-create-form-item :deep(.el-form-item__content) {
-  display: block;
-  width: 100%;
-  min-width: 0;
-  line-height: inherit;
-}
-
-.archive-create-form-item :deep(.el-form-item__error) {
-  position: static;
-  padding-top: 4px;
   font-size: 11px;
 }
 

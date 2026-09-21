@@ -70,8 +70,8 @@ assert.match(
 )
 assert.match(
   archive,
-  /<el-dialog[\s\S]*?title="新增项目档案"/,
-  'Creating an archive should continue to use the focused creation dialog',
+  /<PmsFormDrawer[\s\S]*?title="新增项目档案"/,
+  'Creating an archive should use the approved User B drawer',
 )
 assert.match(archive, /客户/, 'Project archives should expose the customer field')
 assert.match(archive, /产品类别/, 'Project archives should use the product-category label')
@@ -79,8 +79,8 @@ assert.match(archive, /设备系列/, 'Project archives should use the equipment
 assert.match(archive, /序列号/, 'Project archives should expose the serial-number field')
 assert.doesNotMatch(
   archive,
-  /\bproduct_line\b|\bproduct_type\b/,
-  'Project archive UI must not retain legacy product-line or product-type API fields',
+  /key:\s*'product_line'|\bproduct_type\b/,
+  'Product line ID must not reuse the legacy product_line field',
 )
 assert.match(
   archive,
