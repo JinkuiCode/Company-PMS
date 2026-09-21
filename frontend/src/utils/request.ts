@@ -45,6 +45,7 @@ function formatErrorDetail(detail: unknown) {
 request.interceptors.response.use(
   (response) => response.data,
   (error) => {
+    if (axios.isCancel(error)) return Promise.reject(error)
     const detail = error.response?.data?.detail
     const msg = formatErrorDetail(detail)
     const requestUrl = error.config?.url || ''

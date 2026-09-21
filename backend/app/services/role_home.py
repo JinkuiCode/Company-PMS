@@ -15,6 +15,7 @@ PAGE_PERMISSIONS = {
     "/system/operation-log": "system:operation-log:view",
     "/system/field-policy": "system:field-policy:view",
     "/system/parameter": "system:parameter:view",
+    "/reports/purchase-progress": "report:purchase:view",
 }
 
 

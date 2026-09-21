@@ -78,6 +78,14 @@ def test_legacy_windows_launchers_delegate_without_embedded_credentials() -> Non
     assert "PWD=" not in combined
 
 
+def test_report_config_is_explicit_and_environment_is_restored() -> None:
+    start = read('Start-Pms.ps1')
+    assert "Properties['purchaseConfig']" in start
+    assert '$env:PMS_PURCHASE_CONFIG_FILE = [string]$config.purchaseConfig' in start
+    assert '$env:PMS_PURCHASE_CONFIG_FILE = $oldPurchaseConfig' in start
+    assert 'Test-Path -LiteralPath $config.purchaseConfig -PathType Leaf' in start
+
+
 if __name__ == "__main__":
     test_windows_operations_package_is_complete()
     test_process_shutdown_is_scoped_to_pms_owned_processes()
@@ -86,4 +94,5 @@ if __name__ == "__main__":
     test_task_schedule_covers_startup_health_and_log_rotation()
     test_backup_resolves_relative_nginx_config_from_nginx_root()
     test_legacy_windows_launchers_delegate_without_embedded_credentials()
+    test_report_config_is_explicit_and_environment_is_restored()
     print("windows operations contract passed")

@@ -21,7 +21,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: string[]]; 'restore-defa
 const ariaLabel = computed(() => props.ariaLabel || '列设置')
 const visible = ref(false), keyword = ref(''), saving = ref(false)
 const draft = ref<LayoutField[]>([])
-const lockedIds = new Set(['archive_selection', 'archive_actions', 'progress_actions'])
+const lockedIds = new Set(['archive_selection', 'archive_actions', 'progress_actions', 'purchase_actions'])
 const columnId = (key: string) => props.fieldColumnId?.(key) || key
 watch(visible, value => { if (value) openDraft() }, { flush: 'sync' })
 function openDraft() {

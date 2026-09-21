@@ -11,6 +11,7 @@ from app.core.database import engine, get_db
 from app.api import auth, users, roles, menus, depts, projects, sso, erp, dicts, operation_logs, field_catalog, field_policies
 from app.api import parameters
 from app.api import sync_tasks
+from app.api import purchase_reports
 from app.services.authorization import get_current_user_context, require_permission
 from app.models.init_db import init_db
 from app.services.database_revision import check_database_ready
@@ -67,6 +68,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(parameters.router)
 app.include_router(sync_tasks.router)
+app.include_router(purchase_reports.router)
 app.include_router(users.router)
 app.include_router(roles.router)
 app.include_router(menus.router)

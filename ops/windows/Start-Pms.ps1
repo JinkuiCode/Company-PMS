@@ -29,8 +29,16 @@ if (-not $backendOwned) {
     Remove-Item -LiteralPath $backendPidFile -Force -ErrorAction SilentlyContinue
     $environment = @{ PMS_CONFIG_FILE = [string]$config.protectedConfig }
     $oldConfigFile = $env:PMS_CONFIG_FILE
+    $oldPurchaseConfig = $env:PMS_PURCHASE_CONFIG_FILE
     $env:PMS_CONFIG_FILE = $environment.PMS_CONFIG_FILE
     try {
+        $env:PMS_PURCHASE_CONFIG_FILE = $null
+        if ($config.PSObject.Properties['purchaseConfig'] -and $config.purchaseConfig) {
+            if (-not (Test-Path -LiteralPath $config.purchaseConfig -PathType Leaf)) {
+                throw 'PMS purchase report configuration file is missing.'
+            }
+            $env:PMS_PURCHASE_CONFIG_FILE = [string]$config.purchaseConfig
+        }
         $backend = Start-Process -FilePath $config.pythonExe `
             -ArgumentList @("-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", [string]$config.backendPort) `
             -WorkingDirectory "$($config.installRoot)\backend" `
@@ -40,6 +48,7 @@ if (-not $backendOwned) {
         Set-Content -LiteralPath $backendPidFile -Value $backend.Id -Encoding ASCII
     } finally {
         $env:PMS_CONFIG_FILE = $oldConfigFile
+        $env:PMS_PURCHASE_CONFIG_FILE = $oldPurchaseConfig
     }
 }
 

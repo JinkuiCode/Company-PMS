@@ -68,6 +68,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '参数设置', permission: 'system:parameter:view' },
       },
       {
+        path: 'reports/purchase-progress', name: 'PurchaseProgressList',
+        component: () => import('@/views/reports/PurchaseProgressList.vue'),
+        meta: { title: '采购进度查询', permission: 'report:purchase:view' },
+      },
+      {
         path: 'system/sync', name: 'SyncTaskList',
         component: () => import('@/views/system/SyncTaskList.vue'),
         meta: { title: '同步管理', permission: 'system:sync:view' },
