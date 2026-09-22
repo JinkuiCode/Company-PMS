@@ -50,3 +50,15 @@
 - [x] Review code diff and report preflight anomaly totals; do not deploy, merge, or write production data.
 
 The `--apply` path is implemented but remains unexecuted. A server-only code-based diagnostic finds 936 candidates and one existing test-code conflict in the filtered source view; it is not an approved import fingerprint. The production database backup, upgrade, formal preflight, and import remain separate stages.
+
+### Task 5: Approved production release and initial import
+
+The user explicitly approved the production upgrade/import on 2026-09-17 after supplying a manual backup and accepting recovery responsibility. Do not repeat this approval request. Any credential entry is a technical handoff only.
+
+- [x] Verify the backup identity. The original full backup is PMS dated 2026-09-17 16:49:11; it has no backup checksum. An additional copy-only backup with checksum was created at `E:\PMS-bakup\PMS-preimport-20260917-173045.bak`, and `RESTORE VERIFYONLY WITH CHECKSUM` succeeded.
+- [x] Build and stage release `d300b413c69a4c3f22c2f5b6c4e68dffde1e2977`; verify ZIP and staged file hashes. No GitHub push or master merge is included in this step.
+- [x] Generate formal server-local preflight: 937 source, 936 ready, 643 blank names, one excluded `PMS-ACCEPT-20260914-001` conflict.
+- [x] Capture existing 4 archives / 1 project and create program backup at `C:\PMS\.runtime\release-history\20260917\pre-initial-import\PMS-operations-20260917-174625`.
+- [x] Execute the approved database upgrade and import using a separately entered upgrade identity. Remote output confirms `database-upgrade_OK`, `runtime-schema_OK`, `initial-import_OK` and `import-verification_OK`.
+- [x] Verify all imported names against source Remarks, unchanged existing archives, 936 import logs, unchanged ERP log count and schema readiness through `verify.py`. Independently request the production health endpoint (HTTP 200, status ok) and compare the served index with the local release index; they match.
+- [ ] Inspect the final deployment receipt and final server Git cleanliness when remote window interaction is available. The observed console ends at `import-verification_OK`; do not repeat the import. GitHub push and master merge are not part of this execution.
