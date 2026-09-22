@@ -53,8 +53,10 @@ def get_child_dept_ids(db: Session, parent_id: int) -> list[int]:
 
 
 def _apply_project_scope(query, db: Session, scope_context: dict | None = None):
-    if not scope_context:
+    if scope_context is None:
         return query
+    if not scope_context.get('product_line_ids'):
+        return query.filter(PmsProject.id == -1)
 
     scope = scope_context["data_scope"]
     if scope == 1:
@@ -71,23 +73,18 @@ def _apply_project_scope(query, db: Session, scope_context: dict | None = None):
         else:
             query = query.filter(PmsProject.id == -1)
 
-    allowed_category_ids = scope_context.get("product_category_ids")
-    if allowed_category_ids is not None:
-        query = query.outerjoin(PmsProjectArchive, PmsProject.archive_id == PmsProjectArchive.id).filter(
-            or_(
-                PmsProjectArchive.product_category.in_(allowed_category_ids),
-                and_(
-                    PmsProjectArchive.product_category.is_(None),
-                    PmsProject.product_category.in_(allowed_category_ids),
-                ),
-            )
-        )
+    query = query.filter(exists().where(
+        PmsProjectArchive.id == PmsProject.archive_id,
+        PmsProjectArchive.business_product_line_id.in_(scope_context.get("product_line_ids") or []),
+    ))
     return query
 
 
 def _apply_archive_scope(query, db: Session, scope_context: dict | None = None):
-    if not scope_context:
+    if scope_context is None:
         return query
+    if not scope_context.get('product_line_ids'):
+        return query.filter(PmsProjectArchive.id == -1)
 
     scope = scope_context["data_scope"]
     if scope == 1:
@@ -103,9 +100,7 @@ def _apply_archive_scope(query, db: Session, scope_context: dict | None = None):
         ).all()]
         query = query.filter(PmsProjectArchive.manager_id.in_(manager_ids or [-1]))
 
-    allowed_category_ids = scope_context.get("product_category_ids")
-    if allowed_category_ids is not None:
-        query = query.filter(PmsProjectArchive.product_category.in_(allowed_category_ids or [-1]))
+    query = query.filter(PmsProjectArchive.business_product_line_id.in_(scope_context.get("product_line_ids") or []))
     return query
 
 
@@ -132,7 +127,7 @@ def ensure_archive_access(
 
 
 def get_scoped_archive_query(db: Session, scope_context: dict | None = None):
-    """返回同时应用数据范围与产品类别范围的档案查询。"""
+    """返回同时应用人员/部门与明确产品线范围的档案查询。"""
     return _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context)
 
 
@@ -189,12 +184,17 @@ def _claim_enabled_archive_for_write(
     })
 
 
-def _ensure_product_category_allowed(product_category: int | None, scope_context: dict | None) -> None:
-    if not scope_context:
-        return
-    allowed_category_ids = scope_context.get("product_category_ids")
-    if allowed_category_ids is not None and product_category not in allowed_category_ids:
-        raise HTTPException(status_code=404, detail="产品类别超出当前数据权限")
+def _require_archive_product_line(db: Session, scope_context: dict | None, line_id: int | None):
+    from app.services.product_line_scope import require_line_access
+    from app.services.product_line_source import get_organization
+
+    if line_id is None:
+        raise HTTPException(422, detail={
+            "field_key": "product_line_id", "message": "请选择产品线",
+        })
+    line = require_line_access(db, scope_context, line_id, selectable=True)
+    get_organization(line.organization_id)
+    return require_line_access(db, scope_context, line_id, selectable=True, lock=True)
 
 
 def _ensure_project_assignment_allowed(
@@ -217,7 +217,6 @@ def _ensure_project_assignment_allowed(
         )
         if dept_id not in allowed_depts:
             raise HTTPException(status_code=404, detail="项目部门超出当前数据权限")
-    _ensure_product_category_allowed(product_category, scope_context)
 
 
 def _ensure_archive_assignment_allowed(
@@ -240,7 +239,6 @@ def _ensure_archive_assignment_allowed(
         )
         if not manager or manager.dept_id not in allowed_depts:
             raise HTTPException(status_code=404, detail="档案负责人超出当前数据权限")
-    _ensure_product_category_allowed(product_category, scope_context)
 
 
 def _jsonable(value):
@@ -1108,7 +1106,8 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
             status=a.status, manager_id=a.manager_id, customer=a.customer,
             equipment_series=a.equipment_series, serial_no=a.serial_no,
             product_category=a.product_category,
-            **{key: getattr(a, key) for key in ArchiveBusinessFields.model_fields},
+            **{key: (a.business_product_line_id if key == 'product_line_id' else getattr(a, key))
+               for key in ArchiveBusinessFields.model_fields},
             plan_start_date=a.plan_start_date, plan_end_date=a.plan_end_date,
             manager_name=manager.real_name if manager else "",
             created_by_name=creator.real_name if creator else "",
@@ -1151,7 +1150,7 @@ def create_archive(
     validate_enum_value(db, "archive_status", values.get("status"))
     validate_enum_value(db, "product_category", values.get("product_category"))
     validate_enum_value(db, "equipment_series", values.get("equipment_series"))
-    validate_enum_value(db, "product_line", values.get("product_line_id"))
+    _require_archive_product_line(db, scope_context, values.get("product_line_id"))
     from app.services.archive_regions import validate_archive_address
     validate_archive_address(values)
     _ensure_archive_assignment_allowed(
@@ -1169,7 +1168,9 @@ def create_archive(
         is_create=True,
     )
     try:
-        archive = PmsProjectArchive(**values, created_by=user_id, updated_by=user_id, created_at=datetime.now())
+        storage_values = dict(values)
+        storage_values['business_product_line_id'] = storage_values.pop('product_line_id')
+        archive = PmsProjectArchive(**storage_values, created_by=user_id, updated_by=user_id, created_at=datetime.now())
         db.add(archive)
         db.flush()
         from app.services.erp_queue import enqueue
@@ -1246,8 +1247,15 @@ def update_archive(
                 update_data["equipment_series"],
                 current_value=archive.equipment_series,
             )
-        if "product_line_id" in update_data:
-            validate_enum_value(db, "product_line", update_data["product_line_id"], current_value=archive.product_line_id)
+        if "product_line_id" in update_data and update_data["product_line_id"] != archive.business_product_line_id:
+            from app.services.product_line_scope import require_line_access
+            require_line_access(db, scope_context, update_data["product_line_id"])
+            if archive.erp_synced or archive.data_origin == 'kingdee_initial':
+                raise HTTPException(409, detail={
+                    'code': 'ARCHIVE_ORGANIZATION_LOCKED', 'field_key': 'product_line_id',
+                    'message': '已同步或金蝶期初档案不可直接更换产品线，请通过管理员迁移处理',
+                })
+            _require_archive_product_line(db, scope_context, update_data["product_line_id"])
         from app.services.archive_regions import validate_archive_address
         validate_archive_address({**serialize_model(archive), **update_data})
         _ensure_archive_assignment_allowed(
@@ -1259,7 +1267,7 @@ def update_archive(
         validate_business_field_write(
             db,
             MODULE_PROJECT_ARCHIVE,
-            current_values={key: getattr(archive, key, None) for key in {
+            current_values={key: getattr(archive, 'business_product_line_id' if key == 'product_line_id' else key, None) for key in {
                 item["field_key"] for item in get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)["items"]
             }},
             updates=update_data,
@@ -1271,7 +1279,7 @@ def update_archive(
         raise
     try:
         for key, val in update_data.items():
-            setattr(archive, key, val)
+            setattr(archive, 'business_product_line_id' if key == 'product_line_id' else key, val)
         archive.updated_by = user_id
         linked_project_updates = {
             source: update_data[source]
@@ -1317,10 +1325,18 @@ def update_archive(
 
 def validate_archive_for_business_operation(db: Session, archive: PmsProjectArchive) -> None:
     """ERP 等后续业务操作前复用档案必填规则。"""
+    from app.models.product_line import SysProductLine
+
+    line = db.get(SysProductLine, archive.business_product_line_id) if archive.business_product_line_id else None
+    if line is None or line.source_key != 'kingdee':
+        raise HTTPException(422, detail={
+            'field_key': 'product_line_id', 'message': '项目尚未确认产品线组织归属，不能执行同步',
+        })
     _require_archive_name(archive.project_name)
     policies = get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)["items"]
     current_values = {
-        item["field_key"]: _jsonable(getattr(archive, item["field_key"], None))
+        item["field_key"]: _jsonable(getattr(archive,
+            'business_product_line_id' if item['field_key'] == 'product_line_id' else item['field_key'], None))
         for item in policies
     }
     validate_business_field_write(

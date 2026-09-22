@@ -100,6 +100,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '操作日志', permission: 'system:operation-log:view' },
       },
       {
+        path: 'system/product-line',
+        name: 'ProductLine',
+        component: () => import('@/views/system/ProductLineList.vue'),
+        meta: { title: '产品线管理', permission: 'system:product-line:view' },
+      },
+      {
         path: 'system/field-policy',
         name: 'FieldPolicyList',
         component: () => import('@/views/system/FieldPolicyList.vue'),

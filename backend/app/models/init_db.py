@@ -15,6 +15,7 @@ from app.models.field_policy import SysBusinessFieldPolicy  # noqa: F401
 from app.models.database_revision import PmsDatabaseRevision  # noqa: F401
 from app.models.parameter import SysParameter  # noqa: F401
 from app.models.erp_task import ErpSyncTask  # noqa: F401
+from app.models.product_line import SysProductLine, SysRoleProductLine  # noqa: F401
 from app.services.user_security_migration import upgrade_user_security, initialize_user_security
 
 
@@ -35,11 +36,13 @@ def init_db():
     from app.services.project_archive_initial_migration import upgrade_project_archive_initial
     from app.services.role_home import upgrade_role_home
     from app.services.archive_business_migration import upgrade_archive_business_fields
+    from app.services.product_line_migration import upgrade_product_lines
 
     upgrade_project_archive_semantics(engine)
     upgrade_project_archive_lifecycle(engine)
     upgrade_project_archive_initial(engine)
     upgrade_archive_business_fields(engine)
+    upgrade_product_lines(engine)
     upgrade_role_home(engine)
 
     db = SessionLocal()
@@ -276,6 +279,8 @@ def init_db():
         initialize_sync_management(db, grant_existing_admin=not admin_role_created)
         from app.services.purchase_migration import initialize_purchase_reports
         initialize_purchase_reports(db, grant_existing_admin=not admin_role_created)
+        from app.services.product_line_migration import initialize_product_line_management
+        initialize_product_line_management(db, grant_existing_admin=not admin_role_created)
 
         # 4.5 创建缺失的默认角色模板。仅角色首次创建时写入模板权限。
         from app.services.role_templates import ROLE_TEMPLATES, permission_ids_for_template

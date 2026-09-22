@@ -4,6 +4,7 @@ from datetime import datetime
 
 # ========== 角色 ==========
 class RoleBase(BaseModel):
+    product_line_ids: list[int] = Field(default_factory=list)
     role_name: str = Field(..., max_length=64)
     role_code: str = Field(..., max_length=64)
     home_menu_id: int | None = Field(default=None, gt=0)
@@ -19,6 +20,7 @@ class RoleCreate(RoleBase):
 
 
 class RoleUpdate(BaseModel):
+    product_line_ids: list[int] | None = None
     home_menu_id: int | None = Field(default=None, gt=0)
     home_priority: int = Field(default=0, ge=0, le=999)
     role_name: str | None = None

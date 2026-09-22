@@ -635,6 +635,7 @@ def test_archive_lifecycle_is_enforced_by_project_delete_batch_and_erp():
 
 
 def test_batch_archive_routes_enforce_permissions_and_static_order():
+    from app.models.product_line import SysProductLine, SysRoleProductLine
     from fastapi.testclient import TestClient
 
     from app.core.database import Base, SessionLocal, engine
@@ -672,8 +673,13 @@ def test_batch_archive_routes_enforce_permissions_and_static_order():
             is_enabled=0,
         )
         db.add_all([user, role, toggle_menu, archive])
+        line = SysProductLine(source_key='kingdee', organization_id=100,
+            organization_code='100', organization_name='测试组织', display_name='测试产品线', name_key='test')
+        db.add(line)
         db.flush()
+        archive.business_product_line_id = line.id
         db.add_all([
+            SysRoleProductLine(role_id=role.id, product_line_id=line.id),
             SysUserRole(user_id=user.id, role_id=role.id),
             SysRoleMenu(role_id=role.id, menu_id=toggle_menu.id),
         ])

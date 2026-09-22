@@ -25,6 +25,7 @@ def _prepare_database():
     from app.models.project import PmsProjectArchive  # noqa: F401
     from app.models.rbac import SysDept, SysMenu, SysRole  # noqa: F401
     from app.models.user import SysUser  # noqa: F401
+    from app.models.product_line import SysProductLine
     from app.services.enum_registry import initialize_enum_definitions
 
     Base.metadata.create_all(bind=engine)
@@ -33,6 +34,11 @@ def _prepare_database():
     db = SessionLocal()
     try:
         initialize_enum_definitions(db)
+        db.add(SysMenu(parent_id=0, menu_type='M', menu_name='系统管理'))
+        db.add_all([SysProductLine(id=i, source_key='kingdee', organization_id=i * 100,
+            organization_code=str(i), organization_name=f'测试组织{i}', display_name=f'产品线{i}', name_key=str(i))
+            for i in (1, 2)])
+        db.commit()
     finally:
         db.close()
 
@@ -47,6 +53,7 @@ def _create_archive(code: str, *, enabled: int = 1) -> int:
     db = SessionLocal()
     try:
         archive = PmsProjectArchive(
+            business_product_line_id=1,
             project_code=code,
             project_name=f"并发档案 {code}",
             is_enabled=enabled,
@@ -76,6 +83,7 @@ def _create_project_context(code: str) -> tuple[int, int, int]:
         db.add_all([dept, user])
         db.flush()
         archive = PmsProjectArchive(
+            business_product_line_id=1,
             project_code=code,
             project_name=f"并发档案 {code}",
             manager_id=user.id,
@@ -141,6 +149,7 @@ def _run_in_thread(target):
 
 
 def test_archive_list_enabled_filter_has_explicit_http_tri_state():
+    from app.models.product_line import SysRoleProductLine
     from fastapi.testclient import TestClient
 
     from app.core.database import SessionLocal
@@ -174,12 +183,14 @@ def test_archive_list_enabled_filter_has_explicit_http_tri_state():
         db.add_all([user, role, view_menu])
         db.flush()
         enabled_archive = PmsProjectArchive(
+            business_product_line_id=1,
             project_code="TRISTATE-ENABLED",
             project_name="三态启用档案",
             manager_id=user.id,
             is_enabled=1,
         )
         disabled_archive = PmsProjectArchive(
+            business_product_line_id=1,
             project_code="TRISTATE-DISABLED",
             project_name="三态禁用档案",
             manager_id=user.id,
@@ -188,6 +199,7 @@ def test_archive_list_enabled_filter_has_explicit_http_tri_state():
         db.add_all([enabled_archive, disabled_archive])
         db.flush()
         db.add_all([
+            SysRoleProductLine(role_id=role.id, product_line_id=1),
             SysUserRole(user_id=user.id, role_id=role.id),
             SysRoleMenu(role_id=role.id, menu_id=view_menu.id),
         ])
@@ -1026,7 +1038,7 @@ def test_erp_claim_rechecks_scope_and_latest_field_policy_before_client_creation
         "user_id": 1,
         "dept_id": None,
         "data_scope": 4,
-        "product_category_ids": [1],
+        "product_line_ids": [1],
     }
     stale_authorization = SessionLocal()
     try:
@@ -1036,7 +1048,7 @@ def test_erp_claim_rechecks_scope_and_latest_field_policy_before_client_creation
         mutate = SessionLocal()
         try:
             archive = mutate.get(PmsProjectArchive, archive_id)
-            archive.product_category = 2
+            archive.business_product_line_id = 2
             mutate.commit()
         finally:
             mutate.close()
@@ -1058,7 +1070,7 @@ def test_erp_claim_rechecks_scope_and_latest_field_policy_before_client_creation
         "user_id": allowed_user_id,
         "dept_id": None,
         "data_scope": 1,
-        "product_category_ids": None,
+        "product_line_ids": [1],
     }
     manager_authorization = SessionLocal()
     try:

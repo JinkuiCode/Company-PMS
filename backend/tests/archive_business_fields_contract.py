@@ -1,6 +1,7 @@
 """Archive expansion: independent line, dated requirements and atomic saves."""
 import sys
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from app.core.database import Base
 import app.models.init_db
 from app.models.project import PmsProjectArchive
 from app.models.user import SysUser
+from app.models.product_line import SysProductLine
 from app.models.dict import SysDict, SysDictItem
 from app.models.erp_task import ErpSyncTask
 from app.models.field_policy import SysBusinessFieldPolicy
@@ -33,7 +35,11 @@ class ArchiveBusinessFields(unittest.TestCase):
         initialize_enum_definitions(self.db)
         self.user = SysUser(username='fields-test', real_name='测试人', password_hash='x', status=1)
         self.db.add(self.user)
+        self.db.add_all([SysProductLine(id=i, source_key='kingdee', organization_id=i * 100,
+            organization_code=str(i), organization_name=f'组织{i}', display_name=f'产品线{i}',
+            name_key=f'line-{i}') for i in (1, 2)])
         self.db.commit()
+        self.scope = {'user_id': self.user.id, 'data_scope': 4, 'product_line_ids': [1, 2]}
 
     def tearDown(self):
         self.db.close()
@@ -44,8 +50,11 @@ class ArchiveBusinessFields(unittest.TestCase):
         upgrade_archive_business_fields(self.engine)
 
     def create(self, **kwargs):
-        return project.create_archive(self.db, ArchiveCreate(
-            project_code=kwargs.pop('project_code', 'NEW'), project_name='测试', **kwargs), self.user.id)['id']
+        kwargs.setdefault('product_line_id', 1)
+        with patch('app.services.product_line_source.get_organization'):
+            return project.create_archive(self.db, ArchiveCreate(
+                project_code=kwargs.pop('project_code', 'NEW'), project_name='测试', **kwargs),
+                self.user.id, scope_context=self.scope)['id']
 
     def test_model_schema_contract(self):
         self.assertTrue(FIELDS <= set(PmsProjectArchive.__table__.columns.keys()))
@@ -109,9 +118,10 @@ class ArchiveBusinessFields(unittest.TestCase):
             project_contact='张三', contact_phone='+86 013800000000', warranty_end_date='2028-12-01')
         archive = self.db.get(PmsProjectArchive, archive_id)
         self.assertEqual(archive.manager_id, self.user.id)
-        self.assertEqual(archive.product_line_id, 2)
+        self.assertEqual(archive.business_product_line_id, 2)
+        self.assertIsNone(archive.product_line_id)
         self.assertEqual(archive.product_category, 1)
-        self.assertEqual(count_enum_references(self.db, 'product_line', '2'), 1)
+        self.assertEqual(count_enum_references(self.db, 'product_line', '2'), 0)
         item = project.get_archive_list(self.db)['items'][0]
         self.assertEqual(item.contact_phone, '+86 013800000000')
         self.assertEqual(item.warranty_end_date.isoformat(), '2028-12-01')
@@ -170,7 +180,7 @@ class ArchiveBusinessFields(unittest.TestCase):
         from app.services.field_catalog import build_field_catalog
         fields = {item['field_code']: item for item in build_field_catalog() if item['module'] == 'project_archive'}
         self.assertTrue(FIELDS <= set(fields))
-        self.assertEqual(fields['product_line_id']['enum_code'], 'product_line')
+        self.assertIsNone(fields['product_line_id']['enum_code'])
         self.assertEqual(fields['product_line_id']['field_name'], '产品线')
         self.assertEqual(fields['contract_ship_date']['group'], '合同与交付')
         self.assertEqual(fields['contract_ship_date']['field_name'], '合同出货日期')
@@ -180,18 +190,18 @@ class ArchiveBusinessFields(unittest.TestCase):
     def test_disabled_line_retains_history_and_references_protect_deletion(self):
         self.upgrade()
         archive_id = self.create(**DATES, product_line_id=2)
-        definition = self.db.query(SysDict).filter_by(dict_code='product_line').one()
-        item = self.db.query(SysDictItem).filter_by(dict_id=definition.id, item_value='2').one()
-        from app.services.dict import delete_dict_item, update_dict_item
-        from app.schemas.dict import DictItemUpdate
+        item = self.db.get(SysProductLine, 2)
+        from app.services.product_line import delete_product_line, update_product_line
+        from app.schemas.product_line import ProductLineUpdate
         with self.assertRaises(HTTPException) as caught:
-            delete_dict_item(self.db, item.id)
+            delete_product_line(self.db, item.id, operator_id=self.user.id)
         self.assertEqual(caught.exception.status_code, 409)
-        update_dict_item(self.db, item.id, DictItemUpdate(status=0), operator_id=self.user.id)
+        update_product_line(self.db, item.id, ProductLineUpdate(
+            is_enabled=False, expected_updated_at=item.updated_at), operator_id=self.user.id)
         with self.assertRaises(HTTPException):
             self.create(project_code='DISABLED', **DATES, product_line_id=2)
         project.update_archive(self.db, archive_id, ArchiveUpdate(product_line_id=2, customer='历史继续维护'), self.user.id)
-        self.assertEqual(self.db.get(PmsProjectArchive, archive_id).product_line_id, 2)
+        self.assertEqual(self.db.get(PmsProjectArchive, archive_id).business_product_line_id, 2)
 
     def test_new_field_filters_and_pagination(self):
         self.upgrade()

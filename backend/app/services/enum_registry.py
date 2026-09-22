@@ -69,10 +69,10 @@ ENUM_REGISTRY: dict[str, dict[str, Any]] = {
     },
     "product_line": {
         "name": "产品线",
-        "description": "项目档案独立产品线，不参与产品类别数据权限",
+        "description": "历史产品线枚举，仅保留迁移核对；新产品线由金蝶组织主数据维护",
         "mode": "configurable",
         "value_strategy": "numeric_sequence",
-        "visible": True,
+        "visible": False,
         "sort": 17,
         "table_name": "pms_project_archive",
         "field_name": "product_line_id",

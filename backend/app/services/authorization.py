@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.rbac import SysMenu, SysRole, SysRoleMenu, SysUserRole
 from app.models.user import SysUser
+from app.services.product_line_scope import get_authorized_product_line_ids
 
 
 security = HTTPBearer()
@@ -65,7 +66,7 @@ def get_me_context(session=Depends(get_password_session), db: Session = Depends(
     context = build_authorization_context(db, session["user_id"])
     context.update(session)
     if session["must_change_password"]:
-        context.update(permissions=[], role_codes=[], data_scope=1, product_category_ids=[])
+        context.update(permissions=[], role_codes=[], data_scope=1, product_category_ids=[], product_line_ids=[])
     return context
 
 
@@ -122,6 +123,7 @@ def build_authorization_context(db: Session, user_id: int) -> AuthorizationConte
             default=1,
         ),
         "product_category_ids": product_category_ids,
+        "product_line_ids": get_authorized_product_line_ids(db, roles),
     }
 
 

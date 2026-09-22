@@ -16,6 +16,8 @@ from app.models.rbac import SysDept, SysRole
 from app.models.user import SysUser
 from app.models.parameter import SysParameter
 from app.models.erp_task import ErpSyncTask
+from app.models.product_line import SysProductLine, SysRoleProductLine
+from app.schemas.product_line import ProductLineCreate, ProductLineUpdate
 from app.schemas.operation_log import OperationLogResponse
 from app.schemas.project import (
     ArchiveCreate,
@@ -44,6 +46,15 @@ from app.services.project_sheet_fields import (
 
 
 MODULE_CONFIGS = (
+    {
+        "key": "product_line", "label": "产品线管理", "group": "组织产品线",
+        "model": SysProductLine, "schemas": (ProductLineCreate, ProductLineUpdate),
+        "editable_schemas": (ProductLineUpdate,),
+    },
+    {
+        "key": "role_product_line", "label": "角色产品线授权", "group": "关联字段",
+        "model": SysRoleProductLine, "schemas": (), "editable_schemas": (),
+    },
     {"key": "erp_sync_task", "label": "同步管理", "group": "同步任务", "model": ErpSyncTask, "schemas": (), "editable_schemas": ()},
     {
         "key": "parameter",
@@ -155,6 +166,8 @@ def _catalog_module_configs() -> list[dict[str, Any]]:
 
 
 FIELD_LABELS = {
+    "product_line_ids": "授权产品线",
+    "expected_updated_at": "预期版本时间",
     "id": "ID",
     "role_ids": "角色",
     "role_names": "角色名称",
@@ -315,6 +328,15 @@ def build_field_catalog() -> list[dict[str, Any]]:
     for module_sort, config in enumerate(_catalog_module_configs(), 1):
         fields = _base_catalog_for_module(config)
         if config["model"] is PmsProjectArchive:
+            fields['legacy_product_line_id'] = {
+                **fields['product_line_id'], 'field_code': 'legacy_product_line_id',
+                'field_name': '历史产品线枚举值', 'editable': False,
+                'description': '旧枚举仅保留用于迁移核对，不参与组织产品线授权',
+            }
+            fields['product_line_id'].update(
+                storage_column='business_product_line_id', enum_code=None, source_type='relation',
+                description='组织产品线主数据 ID，对应 sys_product_line.id；仅允许选择已授权且启用的产品线',
+            )
             groups = {group['key']: group['label'] for group in ARCHIVE_GROUPS}
             for registered in ARCHIVE_FIELDS:
                 if registered['key'] in fields:

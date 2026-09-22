@@ -11,6 +11,7 @@ from app.schemas.rbac import (
     DeptCreate, DeptUpdate, DeptResponse,
 )
 from app.services.operation_log import record_operation_log, serialize_model
+from app.models.product_line import SysProductLine, SysRoleProductLine
 from app.services.enum_registry import validate_enum_value
 from app.services.role_home import validate_role_home
 
@@ -311,10 +312,30 @@ def delete_user(db: Session, user_id: int, operator_id: int | None = None, reque
 
 
 # ==================== 角色管理 ====================
+def _role_product_line_ids(db, role_id):
+    return [value for (value,) in db.query(SysRoleProductLine.product_line_id)
+            .filter(SysRoleProductLine.role_id == role_id)
+            .order_by(SysRoleProductLine.product_line_id).all()]
+
+
+def _replace_role_product_lines(db, role_id, line_ids):
+    if len(line_ids) != len(set(line_ids)) or any(type(value) is not int or value <= 0 for value in line_ids):
+        raise HTTPException(422, '产品线授权编号无效或重复')
+    before = set(_role_product_line_ids(db, role_id))
+    lines = db.query(SysProductLine).filter(SysProductLine.id.in_(line_ids)).all()
+    if len(lines) != len(line_ids) or any(not line.is_enabled and line.id not in before for line in lines):
+        raise HTTPException(422, '产品线不存在或已禁用，不能新增授权')
+    db.query(SysRoleProductLine).filter(SysRoleProductLine.role_id == role_id).delete()
+    db.add_all([SysRoleProductLine(role_id=role_id, product_line_id=value) for value in line_ids])
+
+
 def get_role_list(db: Session):
     """查询所有角色"""
     roles = db.query(SysRole).order_by(SysRole.id).all()
-    return [RoleResponse.model_validate(r) for r in roles]
+    grants = {}
+    for role_id, line_id in db.query(SysRoleProductLine.role_id, SysRoleProductLine.product_line_id).order_by(SysRoleProductLine.product_line_id):
+        grants.setdefault(role_id, []).append(line_id)
+    return [RoleResponse.model_validate(r).model_copy(update={"product_line_ids": grants.get(r.id, [])}) for r in roles]
 
 
 def get_role_options(db: Session) -> list[dict]:
@@ -331,10 +352,11 @@ def create_role(db: Session, data: RoleCreate, operator_id: int | None = None, r
     for product_category_id in _split_product_category_ids(data.product_category_ids):
         validate_enum_value(db, "product_category", product_category_id)
     try:
-        role_data = data.model_dump(exclude={"menu_ids"})
+        role_data = data.model_dump(exclude={"menu_ids", "product_line_ids"})
         role = SysRole(**role_data)
         db.add(role)
         db.flush()
+        _replace_role_product_lines(db, role.id, data.product_line_ids)
         for menu_id in normalized_menu_ids:
             db.add(SysRoleMenu(role_id=role.id, menu_id=menu_id))
         db.flush()
@@ -349,7 +371,7 @@ def create_role(db: Session, data: RoleCreate, operator_id: int | None = None, r
             operator_id=operator_id,
             request=request,
             summary=f"创建角色：{role.role_name}",
-            after_data=serialize_model(role, extra={"menu_ids": normalized_menu_ids}),
+            after_data=serialize_model(role, extra={"menu_ids": normalized_menu_ids, "product_line_ids": sorted(data.product_line_ids)}),
         )
         db.commit()
         return {"msg": "创建成功", "id": role.id}
@@ -365,10 +387,14 @@ def update_role(db: Session, role_id: int, data: RoleUpdate, operator_id: int | 
         raise HTTPException(status_code=404, detail="角色不存在")
 
     before_menu_ids = get_role_menu_ids(db, role_id)
-    before = serialize_model(role, extra={"menu_ids": before_menu_ids})
+    before = serialize_model(role, extra={"menu_ids": before_menu_ids, "product_line_ids": _role_product_line_ids(db, role_id)})
     normalized_menu_ids = normalize_role_menu_ids(db, data.menu_ids) if data.menu_ids is not None else before_menu_ids
     try:
-        update_data = data.model_dump(exclude_unset=True, exclude={"menu_ids"})
+        update_data = data.model_dump(exclude_unset=True, exclude={"menu_ids", "product_line_ids"})
+        if "product_line_ids" in data.model_fields_set:
+            if data.product_line_ids is None:
+                raise HTTPException(422, '产品线授权必须为列表，清空请提交空列表')
+            _replace_role_product_lines(db, role_id, data.product_line_ids)
         if "home_menu_id" in update_data:
             validate_role_home(db, update_data["home_menu_id"], normalized_menu_ids)
         elif data.menu_ids is not None and role.home_menu_id is not None:
@@ -406,7 +432,7 @@ def update_role(db: Session, role_id: int, data: RoleUpdate, operator_id: int | 
             request=request,
             summary=f"更新角色：{role.role_name}",
             before_data=before,
-            after_data=serialize_model(role, extra={"menu_ids": normalized_menu_ids}),
+            after_data=serialize_model(role, extra={"menu_ids": normalized_menu_ids, "product_line_ids": _role_product_line_ids(db, role_id)}),
         )
         db.commit()
         return {"msg": "更新成功"}
@@ -422,7 +448,8 @@ def delete_role(db: Session, role_id: int, operator_id: int | None = None, reque
         raise HTTPException(status_code=404, detail="角色不存在")
     if db.query(SysUserRole).filter(SysUserRole.role_id == role_id).first():
         raise HTTPException(status_code=409, detail="该角色仍关联用户，请先完成用户角色迁移")
-    before = serialize_model(role, extra={"menu_ids": get_role_menu_ids(db, role_id)})
+    before = serialize_model(role, extra={"menu_ids": get_role_menu_ids(db, role_id), "product_line_ids": _role_product_line_ids(db, role_id)})
+    db.query(SysRoleProductLine).filter(SysRoleProductLine.role_id == role_id).delete()
     db.query(SysRoleMenu).filter(SysRoleMenu.role_id == role_id).delete()
     db.delete(role)
     db.flush()

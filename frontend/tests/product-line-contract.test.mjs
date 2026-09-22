@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict'
+import { readFileSync, existsSync } from 'node:fs'
+const read = path => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8')
+assert.ok(existsSync(new URL('../src/views/system/ProductLineList.vue', import.meta.url)), 'product-line page missing')
+const page = read('views/system/ProductLineList.vue')
+for (const component of ['PmsDataList', 'PmsFormDrawer', 'PmsFormField', 'PmsTextControl', 'PmsSelectControl', 'CustomPagination']) assert.ok(page.includes(component), component)
+assert.ok(page.includes('expected_updated_at'), 'optimistic save required')
+assert.ok(page.includes('system:product-line:add') && page.includes('system:product-line:edit'))
+const roles = read('views/system/RoleList.vue')
+assert.ok(roles.includes('product_line_ids'))
+assert.ok(!roles.includes('不选 = 不限制'))
+assert.ok(read('router/index.ts').includes('system/product-line'))
+const archive = read('views/project/ProjectArchive.vue')
+assert.ok(archive.includes('useProductLineOptions'))
+assert.ok(!archive.includes("fetchDictOptions('product_line')"))
+for (const path of ['views/project/ProjectArchive.vue', 'views/project/ProjectList.vue']) assert.ok(!read(path).includes('/auth/product-categories'), path)
+console.log('product line UI contract passed')

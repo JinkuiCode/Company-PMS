@@ -42,14 +42,14 @@ assert.match(projectList, /field\.enum_code/)
 assert.match(projectList, /escapeHtml\(statusLabel\(params\.value\)\)/)
 assert.match(projectProgress, /function escapeHtml/)
 assert.match(projectProgress, /escapeHtml\(taskStatusLabelMap\.value\[String\(params\.value\)\] \|\| '-'\)/)
-assert.match(roleList, /productCategoryLabel\(pl\)/)
+assert.match(roleList, /productLineLabel\(pl\)/)
+assert.match(roleList, /getRoleProductLines/)
 
 for (const file of [
   'src/views/project/ProjectArchive.vue',
   'src/views/project/ProjectList.vue',
   'src/views/project/ProjectProgress.vue',
   'src/views/Dashboard.vue',
-  'src/views/system/RoleList.vue',
 ]) {
   const source = readFileSync(resolve(root, file), 'utf8')
   assert.match(source, /useEnumOptions|loadEnumOptions/, `${file} 应使用统一枚举能力`)

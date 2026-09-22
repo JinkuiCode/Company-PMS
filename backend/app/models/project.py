@@ -32,6 +32,7 @@ class PmsProjectArchive(Base):
     manager_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="负责人ID")
     product_category: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品类别枚举值")
     product_line_id: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品线枚举值")
+    business_product_line_id: Mapped[int | None] = mapped_column(Integer, ForeignKey('sys_product_line.id'), nullable=True, comment="组织产品线归属ID")
     contract_signed_date: Mapped[datetime.date | None] = mapped_column(Date, default=None, comment="合同签订日期")
     contract_ship_date: Mapped[datetime.date | None] = mapped_column(Date, default=None, comment="合同出货日期")
     actual_ship_date: Mapped[datetime.date | None] = mapped_column(Date, default=None, comment="实际出货日期")
@@ -59,6 +60,7 @@ class PmsProjectArchive(Base):
 
     __table_args__ = (
         Index("idx_project_archive_enabled", "is_enabled"),
+        Index('idx_archive_business_product_line', 'business_product_line_id'),
         Index("ux_pms_project_archive_project_code_key", "project_code_key", unique=True),
         Index(
             "ux_pms_project_archive_serial_no_key",

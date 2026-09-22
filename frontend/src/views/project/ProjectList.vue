@@ -583,15 +583,13 @@ const listRequestSerial = ref(0)
 
 const productCategoryOptions = ref<ListFilterOption[]>([])
 const productCategoryLabelMap = reactive<Record<string, string>>({})
-const allowedProductCategories = ref<number[] | null>(null)
 const projectStatusOptions = reactive<ListFilterOption[]>([])
 const projectStatusLabelMap = reactive<Record<string, string>>({})
 const sheetEnumDefinitions = reactive<Record<string, EnumDefinition>>({})
 const projectStatusEditorValues = computed(() => projectStatusOptions.map(item => item.value))
 
 const filteredProductCategoryOptions = computed(() => {
-  if (allowedProductCategories.value === null) return productCategoryOptions.value
-  return productCategoryOptions.value.filter(item => allowedProductCategories.value!.includes(Number(item.value)))
+  return productCategoryOptions.value
 })
 
 const progressProductCategoryOptions = computed<PmsOption[]>(() => filteredProductCategoryOptions.value.map(item => ({
@@ -1448,13 +1446,6 @@ async function fetchOptions() {
   } catch {
     productCategoryOptions.value = []
     projectStatusOptions.splice(0)
-  }
-
-  try {
-    const categoryRes: any = await request.get('/auth/product-categories')
-    allowedProductCategories.value = categoryRes.unrestricted ? null : (categoryRes.items || []).map(Number)
-  } catch {
-    allowedProductCategories.value = null
   }
 
   const deptOptions = (await request.get('/depts/options')) as any[]

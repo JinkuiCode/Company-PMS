@@ -1,5 +1,6 @@
 """Fixed, parameterized Kingdee queries through the dedicated read-only identity."""
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Literal
@@ -43,14 +44,45 @@ def effective_state(status, cancelled):
     return None
 
 
-def scope_clause(column, codes):
-    if codes is None:
-        return '1=1', []
-    if not codes:
+@dataclass(frozen=True)
+class ProjectOrganizationGrant:
+    project_code: str
+    organization_id: int
+
+    def __post_init__(self):
+        if not isinstance(self.project_code, str) or not self.project_code or len(self.project_code) > 100:
+            raise ValueError('invalid_project_code')
+        if type(self.organization_id) is not int or self.organization_id <= 0:
+            raise ValueError('invalid_organization_id')
+
+
+def scope_clause(column, grants):
+    if not grants:
         return '1=0', []
-    if len(codes) > 2000:
-        raise ValueError('项目权限范围超过当前查询上限，请联系管理员')
-    return column + ' IN (' + ','.join(['%s'] * len(codes)) + ')', list(codes)
+    if any(not isinstance(grant, ProjectOrganizationGrant) for grant in grants):
+        raise ValueError('paired_project_organization_grants_required')
+    if len(grants) > 400:
+        return (f'EXISTS (SELECT 1 FROM #pms_purchase_scope g WHERE g.project_code={column}'
+                ' AND g.organization_id=h.FAPPLICATIONORGID)'), []
+    return '(' + ' OR '.join([f'({column}=%s AND h.FAPPLICATIONORGID=%s)'] * len(grants)) + ')', [
+        value for grant in grants for value in (grant.project_code, grant.organization_id)]
+
+
+def _prepare_scope(connection, grants):
+    scope_clause('a.FNUMBER', grants)
+    if not grants or len(grants) <= 400:
+        return
+    cursor = connection.cursor()
+    try:
+        cursor.execute('DROP TABLE IF EXISTS #pms_purchase_scope', ())
+        cursor.execute('CREATE TABLE #pms_purchase_scope (project_code nvarchar(100) COLLATE DATABASE_DEFAULT, organization_id bigint)', ())
+        for start in range(0, len(grants), 400):
+            batch = grants[start:start + 400]
+            cursor.execute('INSERT INTO #pms_purchase_scope (project_code, organization_id) VALUES '
+                + ','.join(['(%s,%s)'] * len(batch)), tuple(
+                    value for grant in batch for value in (grant.project_code, grant.organization_id)))
+    finally:
+        cursor.close()
 
 
 def receipt_source_valid(receipt, edges, order, receiving):
@@ -77,7 +109,7 @@ def receipt_source_valid(receipt, edges, order, receiving):
 
 REQUEST_SELECT = """
 SELECT e.FENTRYID AS id, e.FID AS bill_id, e.FSEQ AS line_no,
- h.FBILLNO AS bill_no, h.FAPPLICATIONDATE AS application_date,
+ h.FBILLNO AS bill_no, h.FAPPLICATIONDATE AS application_date, h.FAPPLICATIONORGID AS organization_id,
  h.FDOCUMENTSTATUS AS document_status, h.FCANCELSTATUS AS cancel_status,
  h.FCLOSESTATUS AS close_status, e.FMRPCLOSESTATUS AS line_close_status,
  e.FMRPTERMINATESTATUS AS terminate_status, e.FISSPLITCANCEL AS split_cancel,
@@ -113,6 +145,7 @@ def _with_state(rows):
 
 
 def load_request(connection, request_id, project_codes):
+    _prepare_scope(connection, project_codes)
     scope, params = scope_clause('a.FNUMBER', project_codes)
     rows = _rows(connection, REQUEST_SELECT + ' WHERE e.FENTRYID=%s AND h.FAPPLICATIONDATE>=%s AND ' + scope,
                  [request_id, REPORT_START_DATE, *params])
@@ -132,7 +165,7 @@ def load_chains(connection, requests):
     request_ids = [row['id'] for row in requests]
     orders = _with_state(_rows(connection, f"""
 SELECT e.FENTRYID AS id, e.FID AS bill_id, e.FSEQ AS line_no,
- h.FBILLNO AS bill_no, h.FDATE AS order_date, h.FDOCUMENTSTATUS AS document_status,
+ h.FBILLNO AS bill_no, h.FDATE AS order_date, h.FDOCUMENTSTATUS AS document_status, h.FPURCHASEORGID AS organization_id,
  h.FCANCELSTATUS AS cancel_status, h.FCLOSESTATUS AS close_status,
  h.FSUPPLIERID AS supplier_id, s.FNAME AS supplier_name,
  e.FMATERIALID AS material_id, e.FUNITID AS unit_id, e.FBASEUNITID AS base_unit_id,
@@ -161,19 +194,21 @@ WHERE LOWER(FSTABLENAME)='t_pur_reqentry' AND FSID IN ({_in(request_ids)})""", r
  FBASEUNITQTY AS base_qty FROM dbo.T_PUR_POORDERENTRY_LK WHERE FENTRYID IN ({_in(batch)})""", batch))
         receipts.extend(_with_state(_rows(connection, f"""
 SELECT e.FENTRYID AS id, e.FID AS bill_id, e.FSEQ AS line_no,
- h.FBILLNO AS bill_no, h.FDATE AS stock_date, h.FDOCUMENTSTATUS AS document_status,
+ h.FBILLNO AS bill_no, h.FDATE AS stock_date, h.FDOCUMENTSTATUS AS document_status, h.FSTOCKORGID AS organization_id,
  h.FCANCELSTATUS AS cancel_status, e.FPOORDERENTRYID AS order_id,
  e.FMATERIALID AS material_id, e.FUNITID AS unit_id, e.FBASEUNITID AS base_unit_id,
  e.FREALQTY AS quantity, e.FBASEUNITQTY AS base_qty, u.FNAME AS unit_name
 FROM dbo.T_STK_INSTOCKENTRY e JOIN dbo.T_STK_INSTOCK h ON h.FID=e.FID
 LEFT JOIN dbo.T_BD_UNIT_L u ON u.FUNITID=e.FUNITID AND u.FLOCALEID=2052
 WHERE e.FPOORDERENTRYID IN ({_in(batch)})""", batch)))
-        receiving.extend(_rows(connection, f"""SELECT FENTRYID AS id, FID AS bill_id,
- FPOORDERENTRYID AS order_id, FMATERIALID AS material_id, FBASEUNITID AS base_unit_id
-FROM dbo.T_PUR_RECEIVEENTRY WHERE FPOORDERENTRYID IN ({_in(batch)})""", batch))
+        receiving.extend(_rows(connection, f"""SELECT e.FENTRYID AS id, e.FID AS bill_id,
+ e.FPOORDERENTRYID AS order_id, e.FMATERIALID AS material_id, e.FBASEUNITID AS base_unit_id,
+ h.FSTOCKORGID AS organization_id
+FROM dbo.T_PUR_RECEIVEENTRY e LEFT JOIN dbo.T_PUR_RECEIVE h ON h.FID=e.FID
+WHERE e.FPOORDERENTRYID IN ({_in(batch)})""", batch))
         returns.extend(_with_state(_rows(connection, f"""
 SELECT e.FENTRYID AS id, e.FID AS bill_id, e.FSEQ AS line_no, e.FPOORDERENTRYID AS order_id,
- h.FBILLNO AS bill_no, h.FDATE AS return_date, h.FDOCUMENTSTATUS AS document_status,
+ h.FBILLNO AS bill_no, h.FDATE AS return_date, h.FDOCUMENTSTATUS AS document_status, h.FSTOCKORGID AS organization_id,
  h.FCANCELSTATUS AS cancel_status, e.FMATERIALID AS material_id,
  e.FBASEUNITID AS base_unit_id, e.FRMREALQTY AS quantity, e.FBASEUNITQTY AS entry_base_qty,
  l.FLINKID AS link_id, l.FSTABLENAME AS source_table, l.FSID AS receipt_id,
@@ -216,12 +251,20 @@ WHERE e.FPOORDERENTRYID IN ({_in(batch)})""", batch)))
         selected_orders = [row for row in orders if row['id'] in ids]
         selected_receipts = [row for row in receipts if row['order_id'] in ids]
         selected_returns = [row for row in returns if row['order_id'] in ids]
+        selected_receiving = [row for row in receiving if row['order_id'] in ids]
+        organization = request.get('organization_id')
+        organization_valid = bool(organization) and all(
+            row.get('organization_id') == organization
+            for row in [*selected_orders, *selected_receipts, *selected_returns, *selected_receiving])
         summary = summarize_requisition(request, selected_orders,
-            [row for row in links if row['order_id'] in ids], selected_receipts, selected_returns, complete=True)
+            [row for row in links if row['order_id'] in ids], selected_receipts, selected_returns, complete=organization_valid)
+        if not organization_valid:
+            summary['issues'] = ['organization_chain_unverified']
         public_order_ids = set()
         for order in selected_orders:
             edges = [link for link in links if link['order_id'] == order['id']]
-            if (len(edges) == 1 and edges[0]['request_id'] == request['id']
+            if (organization and order.get('organization_id') == organization
+                    and len(edges) == 1 and edges[0]['request_id'] == request['id']
                     and edges[0]['request_bill_id'] == request['bill_id']
                     and order['material_id'] == request['material_id']
                     and order['base_unit_id'] == request['base_unit_id']):
@@ -230,11 +273,14 @@ WHERE e.FPOORDERENTRYID IN ({_in(batch)})""", batch)))
         # documents could disclose another project's quantities and suppliers.
         if len(public_order_ids) != len(ids):
             summary['issues'] = sorted(set(summary['issues']) | {'withheld_source_documents'})
-        public_receipts = [row for row in selected_receipts if row['order_id'] in public_order_ids and row['source_valid']]
+        unsafe_receiving_orders = {row['order_id'] for row in selected_receiving if row.get('organization_id') != organization}
+        public_receipts = [row for row in selected_receipts if row['order_id'] in public_order_ids and row['source_valid']
+                           and row.get('organization_id') == organization and row['order_id'] not in unsafe_receiving_orders]
         public_stock_ids = {row['id'] for row in public_receipts}
         result[request['id']] = dict(summary=summary,
             orders=[row for row in selected_orders if row['id'] in public_order_ids], receipts=public_receipts,
             returns=[row for row in selected_returns if row['order_id'] in public_order_ids
+                     and row.get('organization_id') == organization
                      and row['source_kind'] == 'stock' and row['receipt_id'] in public_stock_ids],
             withheld_order_count=len(ids - public_order_ids))
     return result
@@ -256,7 +302,7 @@ ACCOUNTING_STAGES = [('order_ids', """
 """), ('orders', """
  SELECT e.FENTRYID AS id, e.FID AS bill_id, e.FMATERIALID AS material_id,
  e.FBASEUNITID AS base_unit_id, h.FDATE AS order_date, h.FSUPPLIERID AS supplier_id,
- s.FNAME AS supplier_name,
+ s.FNAME AS supplier_name, h.FPURCHASEORGID AS organization_id,
  CASE WHEN h.FCANCELSTATUS='B' THEN 0
  WHEN h.FCANCELSTATUS='A' AND h.FDOCUMENTSTATUS='C' THEN 1
  WHEN h.FCANCELSTATUS='A' AND h.FDOCUMENTSTATUS IN ('A','B','D','Z') THEN 0 ELSE -1 END AS active
@@ -266,7 +312,7 @@ ACCOUNTING_STAGES = [('order_ids', """
 """), ('stock', """
  SELECT e.FENTRYID AS id, e.FID AS bill_id, e.FPOORDERENTRYID AS order_id,
  e.FMATERIALID AS material_id, e.FBASEUNITID AS base_unit_id, e.FBASEUNITQTY AS base_qty,
- h.FDATE AS stock_date,
+ h.FDATE AS stock_date, h.FSTOCKORGID AS organization_id,
  CASE WHEN h.FCANCELSTATUS='B' THEN 0
  WHEN h.FCANCELSTATUS='A' AND h.FDOCUMENTSTATUS='C' THEN 1
  WHEN h.FCANCELSTATUS='A' AND h.FDOCUMENTSTATUS IN ('A','B','D','Z') THEN 0 ELSE -1 END AS active,
@@ -284,7 +330,7 @@ ACCOUNTING_STAGES = [('order_ids', """
  SELECT e.FENTRYID AS id, e.FPOORDERENTRYID AS order_id, e.FMATERIALID AS material_id,
  e.FBASEUNITID AS base_unit_id, e.FBASEUNITQTY AS entry_base_qty,
  l.FSID AS stock_id, l.FSBILLID AS stock_bill_id, l.FBASEUNITQTY AS base_qty,
- LOWER(l.FSTABLENAME) AS source_table,
+ LOWER(l.FSTABLENAME) AS source_table, h.FSTOCKORGID AS organization_id,
  (SELECT COUNT(*) FROM dbo.T_PUR_MRBENTRY_LK x WHERE x.FENTRYID=e.FENTRYID) AS edge_count,
  CASE WHEN h.FCANCELSTATUS='B' THEN 0
  WHEN h.FCANCELSTATUS='A' AND h.FDOCUMENTSTATUS='C' THEN 1
@@ -320,6 +366,14 @@ ACCOUNTING_STAGES = [('order_ids', """
  SELECT q.id, l.order_id, l.base_qty, o.order_date, o.supplier_id, o.supplier_name, o.active,
  COALESCE(s.received,0) AS received, COALESCE(r.returned,0) AS returned, s.last_stock_date,
  CASE WHEN l.edge_count=1 AND l.request_bill_id=q.bill_id AND o.id IS NOT NULL
+ AND o.organization_id=q.organization_id
+ AND NOT EXISTS (SELECT 1 FROM stock os WHERE os.order_id=o.id
+  AND (os.organization_id IS NULL OR os.organization_id<>q.organization_id))
+ AND NOT EXISTS (SELECT 1 FROM return_edges org_return WHERE org_return.order_id=o.id
+  AND (org_return.organization_id IS NULL OR org_return.organization_id<>q.organization_id))
+ AND NOT EXISTS (SELECT 1 FROM dbo.T_PUR_RECEIVEENTRY org_entry
+  LEFT JOIN dbo.T_PUR_RECEIVE org_head ON org_head.FID=org_entry.FID
+  WHERE org_entry.FPOORDERENTRYID=o.id AND (org_head.FSTOCKORGID IS NULL OR org_head.FSTOCKORGID<>q.organization_id))
  AND o.material_id=q.material_id AND (o.active=0 OR
  (o.active=1 AND o.base_unit_id=q.base_unit_id AND l.base_qty>=0))
  THEN 0 ELSE 1 END AS order_invalid,
@@ -403,6 +457,9 @@ def request_query(query, project_codes):
  JOIN dbo.T_PUR_POORDER sh ON sh.FID=se.FID
  JOIN dbo.T_BD_SUPPLIER_L sn ON sn.FSUPPLIERID=sh.FSUPPLIERID AND sn.FLOCALEID=2052
  WHERE LOWER(sl.FSTABLENAME)='t_pur_reqentry' AND sl.FSID=e.FENTRYID AND sl.FSBILLID=e.FID
+ AND sh.FPURCHASEORGID=h.FAPPLICATIONORGID
+ AND se.FMATERIALID=e.FMATERIALID AND se.FBASEUNITID=e.FBASEUNITID
+ AND (SELECT COUNT(*) FROM dbo.T_PUR_POORDERENTRY_LK all_links WHERE all_links.FENTRYID=se.FENTRYID)=1
  AND sn.FNAME LIKE %s ESCAPE '~')""")
         params.append(_like(query.supplier))
     return REQUEST_SELECT + ' WHERE ' + ' AND '.join(filters), params
@@ -411,6 +468,7 @@ def request_query(query, project_codes):
 def list_requests(connection, query, project_codes):
     import re
     import time
+    _prepare_scope(connection, project_codes)
     base, params = request_query(query, project_codes)
     if not query.progress:
         return _page_then_summarize(connection, query, base, params)
@@ -488,6 +546,7 @@ def _decorate_rows(connection, items):
 
 
 def list_options(connection, field, keyword, project_codes):
+    _prepare_scope(connection, project_codes)
     base, params = request_query(PurchaseQuery(), project_codes)
     if field == 'project':
         choices = "SELECT DISTINCT project_code AS value FROM q WHERE project_code IS NOT NULL AND project_code<>'' AND project_code LIKE %s ESCAPE '~'"
@@ -496,7 +555,10 @@ def list_options(connection, field, keyword, project_codes):
  JOIN dbo.T_PUR_POORDERENTRY_LK l ON l.FSID=q.id AND l.FSBILLID=q.bill_id AND LOWER(l.FSTABLENAME)='t_pur_reqentry'
  JOIN dbo.T_PUR_POORDERENTRY e ON e.FENTRYID=l.FENTRYID JOIN dbo.T_PUR_POORDER h ON h.FID=e.FID
  JOIN dbo.T_BD_SUPPLIER_L sn ON sn.FSUPPLIERID=h.FSUPPLIERID AND sn.FLOCALEID=2052
- WHERE sn.FNAME LIKE %s ESCAPE '~'"""
+ WHERE h.FPURCHASEORGID=q.organization_id
+ AND e.FMATERIALID=q.material_id AND e.FBASEUNITID=q.base_unit_id
+ AND (SELECT COUNT(*) FROM dbo.T_PUR_POORDERENTRY_LK all_links WHERE all_links.FENTRYID=e.FENTRYID)=1
+ AND sn.FNAME LIKE %s ESCAPE '~'"""
     else:
         raise ValueError('invalid_option_field')
     sql = f'WITH q AS ({base}), choices AS ({choices}), numbered AS (SELECT value, ROW_NUMBER() OVER (ORDER BY value) AS n FROM choices) SELECT value FROM numbered WHERE n<=51 ORDER BY n'

@@ -405,6 +405,8 @@ def sync_project_archive_to_erp(
             latest = db.query(ErpSyncTask.id).filter(ErpSyncTask.archive_id == archive_id).order_by(ErpSyncTask.id.desc()).first()
             if not latest or latest.id != queue_task_id:
                 raise HTTPException(409, detail={'code': 'ERP_TASK_SUPERSEDED'})
+            from app.services.erp_queue import validate_task_target
+            validate_task_target(db, db.get(ErpSyncTask, queue_task_id, populate_existing=True), current)
 
     claimed = claim_archive_for_sync(
         db,

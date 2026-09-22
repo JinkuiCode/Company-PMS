@@ -22,6 +22,7 @@ def read(path: str) -> str:
 
 
 def seed_project_sheet_list_runtime_data() -> int:
+    from app.models.product_line import SysProductLine
     from app.core.database import SessionLocal
     from app.models.init_db import init_db
     from app.models.project import PmsProject, PmsProjectArchive, PmsProjectSheetDetail, PmsTask
@@ -39,12 +40,15 @@ def seed_project_sheet_list_runtime_data() -> int:
             dept_id=None,
             status=1,
         )
-        db.add_all([dept, pm])
+        line = SysProductLine(id=1, source_key='kingdee', organization_id=100,
+            organization_code='100', organization_name='组织', display_name='产品线', name_key='line')
+        db.add_all([dept, pm, line])
         db.flush()
 
         pm.dept_id = dept.id
 
         archive = PmsProjectArchive(
+            business_product_line_id=line.id,
             project_code="PA-001",
             project_name="档案项目A",
             customer="客户甲",
@@ -207,7 +211,7 @@ def test_project_list_sheet_fields_projection_and_backwards_compatibility():
             "user_id": 1,
             "dept_id": None,
             "data_scope": 4,
-            "product_category_ids": None,
+            "product_line_ids": [1],
         }
         result = get_project_list(
             db,

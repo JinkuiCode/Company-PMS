@@ -57,7 +57,8 @@ def test_workbench_save_updates_both_sources_once_and_rejects_partial_writes():
     from app.core.database import SessionLocal
     from app.models.init_db import init_db
     from app.models.operation_log import SysOperationLog
-    from app.models.project import PmsProject, PmsProjectSheetDetail
+    from app.models.project import PmsProject, PmsProjectSheetDetail, PmsProjectArchive
+    from app.models.product_line import SysProductLine
     from app.schemas.project import ProjectSheetDetailUpdate
     from app.services.project import update_project_sheet_detail
 
@@ -66,6 +67,21 @@ def test_workbench_save_updates_both_sources_once_and_rejects_partial_writes():
     try:
         project = db.query(PmsProject).first()
         assert project is not None
+        line = db.query(SysProductLine).filter_by(source_key='kingdee', organization_id=100).first()
+        if line is None:
+            line = SysProductLine(source_key='kingdee', organization_id=100,
+                organization_code='100', organization_name='测试组织', display_name='测试产品线', name_key='test')
+            db.add(line)
+            db.flush()
+        archive = db.get(PmsProjectArchive, project.archive_id) if project.archive_id else None
+        if archive is None:
+            archive = PmsProjectArchive(project_code=project.project_code, project_name=project.project_name)
+            db.add(archive)
+            db.flush()
+            project.archive_id = archive.id
+        archive.business_product_line_id = line.id
+        db.commit()
+        scope = {'data_scope': 4, 'product_line_ids': [line.id]}
         old_log_count = db.query(SysOperationLog).count()
         category = f"原子保存-{uuid4().hex}"
         saved_progress = 17 if project.design_progress != 17 else 18
@@ -78,7 +94,7 @@ def test_workbench_save_updates_both_sources_once_and_rejects_partial_writes():
                 project_values={"design_progress": saved_progress},
             ),
             operator_id=1,
-            scope_context={"data_scope": 4, "product_category_ids": None},
+            scope_context=scope,
         )
 
         db.refresh(project)
@@ -99,7 +115,7 @@ def test_workbench_save_updates_both_sources_once_and_rejects_partial_writes():
                     project_values={"design_progress": 57},
                 ),
                 operator_id=1,
-                scope_context={"data_scope": 4, "product_category_ids": None},
+                scope_context=scope,
             )
         except HTTPException as exc:
             assert exc.status_code == 400

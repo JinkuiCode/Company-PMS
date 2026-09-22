@@ -15,13 +15,43 @@ STATUS_LABELS = {'queued': '等待同步', 'running': '同步中', 'success': '�
                  'failed': '同步失败', 'review': '待核查', 'superseded': '已被新版本替代'}
 
 
-def event(task, status, message):
+def event(task, status, message, *, target=None):
     task.status = status
     task.message = str(message)[:1024]
     history = json.loads(task.history or '[]')
     history.append({'time': datetime.now().isoformat(), 'attempt': task.attempts,
                     'status': status, 'message': task.message})
+    if target is not None:
+        history[-1]['target'] = target
     task.history = json.dumps(history, ensure_ascii=False)
+
+
+def _archive_target(db, archive):
+    from app.models.product_line import SysProductLine
+    line = db.get(SysProductLine, archive.business_product_line_id) if archive.business_product_line_id else None
+    if line is None:
+        return None
+    return dict(product_line_id=line.id, organization_id=line.organization_id, source_key=line.source_key)
+
+
+def validate_task_target(db, task, archive):
+    try:
+        history = json.loads(task.history or '[]')
+        target = history[0].get('target') if history else None
+    except (ValueError, TypeError, AttributeError, KeyError):
+        target = None
+    if (task.archive_id != archive.id or not target or target != _archive_target(db, archive)
+            or task.project_code != archive.project_code or task.project_name != archive.project_name):
+        raise HTTPException(409, detail={'code': 'ERP_TASK_TARGET_CHANGED',
+            'message': '同步任务的项目或组织归属缺失或已变化，未发送请求；请核实后重新保存或重试'})
+
+
+def _interactive_archive_query(db, user_id):
+    from app.services.authorization import build_authorization_context, enforce_permission
+    from app.services.project import get_scoped_archive_query
+    context = build_authorization_context(db, user_id)
+    enforce_permission(context, 'system:sync:retry')
+    return get_scoped_archive_query(db, context)
 
 
 def enqueue(db, archive, operator_id):
@@ -37,7 +67,7 @@ def enqueue(db, archive, operator_id):
     archive.erp_error_msg = None
     db.add(task)
     db.flush()
-    event(task, 'queued', '保存成功，等待后台同步')
+    event(task, 'queued', '保存成功，等待后台同步', target=_archive_target(db, archive))
     return task
 
 
@@ -97,6 +127,15 @@ def _run_claimed(db, candidate):
         event(task, 'superseded', '已由最新保存版本替代')
         db.commit()
         return True
+    try:
+        validate_task_target(db, task, archive)
+    except HTTPException as exc:
+        event(task, 'failed', exc.detail['message'])
+        task.finished_at = datetime.now()
+        archive.erp_sync_status = 'failed'
+        archive.erp_error_msg = task.message
+        db.commit()
+        return True
     task.attempts += 1
     event(task, 'running', '开始执行金蝶登录、保存及提交审核')
     db.commit()
@@ -139,7 +178,7 @@ def retry(db, task_id, user_id, request=None):
     task = db.get(ErpSyncTask, task_id)
     if not task:
         raise HTTPException(404, '同步任务不存在')
-    rows = claim_archive_lifecycle_rows(db.query(PmsProjectArchive), [task.archive_id])
+    rows = claim_archive_lifecycle_rows(_interactive_archive_query(db, user_id), [task.archive_id])
     if not rows:
         raise HTTPException(404, '档案不存在')
     archive = rows[0]
@@ -151,7 +190,9 @@ def retry(db, task_id, user_id, request=None):
         raise HTTPException(409, '已有更新版本，请处理最新任务')
     if not archive.is_enabled:
         raise HTTPException(409, '禁用档案不能同步')
-    new_task = enqueue(db, archive, task.operator_id)
+    if _archive_target(db, archive) is None:
+        raise HTTPException(409, '档案尚未关联组织产品线，不能同步')
+    new_task = enqueue(db, archive, user_id)
     record_operation_log(db, module='同步管理', action='retry', entity_type='pms_project_archive',
         entity_id=archive.id, entity_name=archive.project_name, operator_id=user_id, request=request,
         summary='管理员重试档案同步', after_data={'task_id': new_task.id, 'previous_task_id': task_id})
@@ -163,6 +204,8 @@ def inspect_result(db, task_id, user_id, request=None, *, external_request_finis
     task = db.get(ErpSyncTask, task_id)
     if not task:
         raise HTTPException(404, '同步任务不存在')
+    if not _interactive_archive_query(db, user_id).filter(PmsProjectArchive.id == task.archive_id).first():
+        raise HTTPException(404, '档案不存在或无权访问')
     with archive_execution_lock(db, task.archive_id) as acquired:
         if not acquired:
             raise HTTPException(409, '原执行进程仍在运行，暂不能核查或重试')
@@ -176,6 +219,10 @@ def _inspect_result(db, task_id, user_id, request, external_request_finished):
         raise HTTPException(404, '同步任务不存在')
     if task.status != 'review':
         raise HTTPException(409, '仅待核查任务可执行回查')
+    archive = _interactive_archive_query(db, user_id).filter(PmsProjectArchive.id == task.archive_id).populate_existing().first()
+    if archive is None:
+        raise HTTPException(404, '档案不存在或无权访问')
+    validate_task_target(db, task, archive)
     client = KingdeeClient()
     try:
         if not client.login():
@@ -188,7 +235,7 @@ def _inspect_result(db, task_id, user_id, request, external_request_finished):
     finally:
         client.close()
     from app.services.project_archive_lifecycle import claim_archive_lifecycle_rows
-    rows = claim_archive_lifecycle_rows(db.query(PmsProjectArchive), [task.archive_id])
+    rows = claim_archive_lifecycle_rows(_interactive_archive_query(db, user_id), [task.archive_id])
     if not rows:
         raise HTTPException(404, '档案不存在')
     archive = rows[0]
@@ -196,6 +243,7 @@ def _inspect_result(db, task_id, user_id, request, external_request_finished):
     newest = db.query(ErpSyncTask.id).filter(ErpSyncTask.archive_id == task.archive_id).order_by(ErpSyncTask.id.desc()).first()
     if task.status != 'review' or newest.id != task.id:
         raise HTTPException(409, '任务已发生变化，请刷新后处理最新任务')
+    validate_task_target(db, task, archive)
     if row:
         archive.erp_synced = 1
     matched = row and row.get('FNumber') == task.project_code and row.get('FDataValue') == task.project_code and row.get('FDescription') == task.project_name and row.get('FDocumentStatus') == 'C'

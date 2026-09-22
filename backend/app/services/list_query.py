@@ -31,8 +31,8 @@ def archive_columns():
     )}
     fields.update({name: (getattr(Archive, name), 'number') for name in (
         'id', 'product_category', 'equipment_series', 'is_enabled', 'status',
-        'product_line_id',
     )})
+    fields['product_line_id'] = (Archive.business_product_line_id, 'number')
     fields.update({name: (getattr(Archive, name), 'date') for name in (
         'plan_start_date', 'plan_end_date', 'created_at', 'updated_at', 'erp_sync_time',
         'contract_signed_date', 'contract_ship_date', 'actual_ship_date', 'warranty_end_date',

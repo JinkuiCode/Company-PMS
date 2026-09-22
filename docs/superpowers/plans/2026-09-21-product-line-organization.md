@@ -24,6 +24,31 @@
 
 ## 执行顺序与批准边界
 
+### 2026-09-22 业务确认补充
+
+- 产品线选用及显示名、角色产品线授权由用户在已实现的配置页面自行操作，不再以提前提供完整组织/角色清单作为页面交付条件。
+- 历史 Bench → 8吋半导体事业部（组织 200292）；Single → Single事业部（组织 4146325）。执行前核对目标库旧枚举实际值，未覆盖归属不猜测。
+- 历史迁移仅处理档案归属，实际清单 `roles: []` 保留用户页面配置；所需产品线由用户先创建，再读取真实主键生成清单。
+- 本次确认不代表服务器结构升级、数据应用或发布已经执行，相关发布边界不变。
+- [x] 2026-09-22 补充只读 `--prepare-mapping`：根据核对后的旧枚举值和已确认组织，读取页面创建的真实产品线编号，生成档案清单；未知值单列、已有归属不覆盖、角色清单固定为空。16 项迁移契约通过，未对正式数据执行。
+
+### 2026-09-21 本轮实施进度
+
+- [x] 同步任务保存固定项目/组织目标；发送和人工回查前后复核，当前交互重试读取实时授权。
+- [x] 报表使用“项目编码 + 组织”成对范围，大授权集会话临时表；隐藏跨组织链路及合并订单的供应商候选/筛选侧漏。
+- [x] 产品线标准列表/用户 B 抽屉、角色产品线勾选、档案受控候选接入；停用授权可撤销，单候选默认、多候选主动选择、零候选阻止新增。
+- [x] 旧产品线枚举隐藏；字段目录区分历史枚举与新组织外键；ERP 业务校验读取新外键。
+- [x] 本地迁移工具默认只读，明确清单、版本/快照校验、原子写入、审计批次防重复；12 项隔离用例通过，包含旧角色范围变化令清单失效。
+- [x] 产品线/档案浏览器回归；前端规定的七个契约及构建；后端档案并发、进度、授权、字段目录、操作日志与采购相关契约通过（具体见 change.md）。
+- [ ] 补齐真实退料链路、服务器完整归属清单及迁移候选冲突核对；本轮真实抽查只覆盖 6 条有订单和入库的申请、2 个组织。
+- [ ] MSSQL 锁/升级及多用户实际验收；历史映射和角色分配须用户确认，未执行正式应用。
+- [x] 同 JWT 档案列表/写入撤权与重新授权接口验收；档案候选源失败拒绝新增、恢复后重试通过。
+- [x] 组织候选读取失败重试、旧响应迟到不覆盖新查询通过隔离浏览器验证；独立复核发现的四项问题均已加入反例并修复。
+- [x] 2026-09-22 补充角色候选请求失败保护，失败不打开编辑页、不写授权，恢复后重试及停用授权撤销通过隔离浏览器验证；前端契约与构建通过。
+- [ ] 目标数据与多用户完整业务验收、正式切换复核；当前不是整批部署完成。
+
+迁移工具按实际职责独立为 `backend/app/services/product_line_assignments.py`，避免将运行时资料迁移混入结构升级；正式组织新增仍走已核对的主数据接口，工具只接收已存在的产品线绑定。
+
 1. 任务 1 只读发现，形成真实组织字段证据；任务 2 至 6 可在开发机使用确定接口和测试夹具实施。
 2. 不因无法访问正式组织候选就停止不受影响的模型、授权、页面及测试开发；真实字段接入和验收保留为受阻项。
 3. 任务 7 先生成只读清单；真实数据写入必须等待组织名单、档案归属和角色分配获批。
@@ -35,10 +60,10 @@
 
 **Interfaces:** 输出脱敏的组织字段和关联证据，不输出凭据或完整业务明细。后续组织读取器统一返回 `OrganizationOption(source_key, organization_id, code, name, active)`。
 
-- [ ] 先写测试，确认发现工具只允许固定数据源、固定 SELECT 元数据及有界样本；失败报告只含阶段和错误类别，不执行 GRANT 或业务写入。
-- [ ] 运行 `cd backend && PYTHONPATH=. .venv-security312/bin/python tests/product_line_discovery_contract.py`，新工具缺失时应失败。
-- [ ] 使用现有只读连接核对已授权的 `T_PUR_REQUISITION.FAPPLICATIONORGID`、`T_PUR_POORDER.FPURCHASEORGID`、`T_STK_INSTOCK.FSTOCKORGID`。已有发现文件仅作为线索，不作为当前生产事实。
-- [ ] 从实际元数据确认组织主表、中文名称表和启停字段，以及收料、退料的归属字段。权限不足时输出准确的表/列缺口，等待用户输入身份执行只读发现或批准最小 SELECT 授权，不扩大到全库 SELECT。
+- [x] 先写测试，确认发现工具只允许固定数据源、固定 SELECT 元数据及有界样本；失败报告只含阶段和错误类别，不执行 GRANT 或业务写入。
+- [x] 运行 `cd backend && PYTHONPATH=. .venv-security312/bin/python tests/product_line_discovery_contract.py`，新工具缺失时应失败。
+- [x] 使用现有只读连接核对已授权的 `T_PUR_REQUISITION.FAPPLICATIONORGID`、`T_PUR_POORDER.FPURCHASEORGID`、`T_STK_INSTOCK.FSTOCKORGID`。已有发现文件仅作为线索，不作为当前生产事实。
+- [x] 从实际元数据确认组织主表、中文名称表和启停字段，以及收料、退料的归属字段。权限不足时输出准确的表/列缺口，等待用户输入身份执行只读发现或批准最小 SELECT 授权，不扩大到全库 SELECT。
 - [ ] 有界抽查同一项目的申请、订单、入库、退料组织；发现冲突时保留冲突清单，不能改变用户“不跨组织”的规则。
 - [ ] 文档列明实际表/列、连接键、语言条件、是否已有读取权限、抽样结果和未覆盖范围；测试通过后提交本任务。
 
@@ -59,10 +84,10 @@ def test_old_enum_id_does_not_authorize_new_line(db, archive_factory, line_facto
     # 相同数字不是映射；此记录必须等待明确迁移。
 ```
 
-- [ ] 补充唯一组织绑定、重命名不换绑、重复显示名校验、引用删除、禁用历史保留、并发 409 的行为测试。
-- [ ] 运行 `PYTHONPATH=. .venv-security312/bin/python tests/product_line_contract.py`，确认新模型/服务测试先失败。
-- [ ] 实现主数据与关联表，唯一键分别为 `(source_key, organization_id)`、`(role_id, product_line_id)`；外键限制错误引用。所有组织绑定只能来自核对过的候选。
-- [ ] 独立升级创建结构并添加新档案归属字段，不自动填值、不自动授权角色产品线；版本从当前 `2026-09-21-01` 提升到 `2026-09-21-02`，如其他已批准任务先占用版本则采用新的递增版本并记录。
+- [x] 补充唯一组织绑定、重命名不换绑、重复显示名校验、引用删除、禁用历史保留、并发 409 的行为测试。
+- [x] 运行 `PYTHONPATH=. .venv-security312/bin/python tests/product_line_contract.py`，确认新模型/服务测试先失败。
+- [x] 实现主数据与关联表，唯一键分别为 `(source_key, organization_id)`、`(role_id, product_line_id)`；外键限制错误引用。所有组织绑定只能来自核对过的候选。
+- [x] 独立升级创建结构并添加新档案归属字段，不自动填值、不自动授权角色产品线；版本从当前 `2026-09-21-01` 提升到 `2026-09-21-02`，如其他已批准任务先占用版本则采用新的递增版本并记录。
 - [ ] 本地新库和已有库升级、重复执行及失败路径通过；不在正式环境运行迁移。
 - [ ] GREEN 后记录实际实现并提交本任务。
 
@@ -81,14 +106,16 @@ def test_empty_role_selection_is_denied(db, user_factory, role_factory):
 
 - [ ] 添加多角色并集、停用角色、同 JWT 实时撤权、admin 无授权、强制改密、禁用产品线历史访问及新建拒绝测试。
 - [ ] RED：`PYTHONPATH=. .venv-security312/bin/python tests/product_line_authorization_contract.py`。
-- [ ] 用关联表计算明确 ID 集合；部门范围和按钮权限沿用现有计算规则。角色保存事务内校验主数据 ID，防止重复或不存在的授权。
+- [x] 用关联表计算明确 ID 集合；部门范围和按钮权限沿用现有计算规则。角色保存事务内校验主数据 ID，防止重复或不存在的授权。
 - [ ] 新建模板不默认授权未来产品线；产品线管理菜单仅一次性授予管理员，已有菜单不启动回补。
 - [ ] `/api/auth/me` 和业务产品线 options 返回一致范围；移除消费端对旧产品类别权限接口的依赖，旧接口不再产生业务授权旁路。
 - [ ] GREEN 并回归 `rbac_permission_contract.py`、`role_home_contract.py`，记录并提交。
 
 ## 任务 4：档案、进度、任务及同步写路径
 
-**Files:** 新建 `backend/tests/product_line_project_scope_contract.py`；修改 `backend/app/services/project.py`、`backend/app/services/project_archive_lifecycle.py`、`backend/app/services/erp_queue.py`、`backend/app/services/dashboard.py`、`backend/app/services/field_policy.py`、`backend/app/schemas/project.py`、`backend/app/services/list_query.py` 及对应项目 API。
+**Files:** 新建 `backend/tests/product_line_project_scope_contract.py`；修改 `backend/app/services/project.py`、`backend/app/services/project_archive_lifecycle.py`、`backend/app/services/erp_queue.py`、`backend/app/services/field_policy.py`、`backend/app/schemas/project.py`、`backend/app/services/list_query.py` 及对应项目 API。
+
+**范围修订（2026-09-21 用户确认）：** 仪表盘当前不用，本批不调整、不纳入验收；不将本批授权覆盖结论延伸到仪表盘，未来启用前另行检查其数据范围。
 
 **Interfaces:** `_apply_archive_scope` 过滤档案 `business_product_line_id`；`_apply_project_scope` 必须关联档案归属，不再回退到进度产品类别。`require_line_access(..., selectable=True)` 用于创建和变更目标。
 
@@ -106,9 +133,9 @@ def test_change_requires_source_and_target_scope(db, scoped_actor, archive_facto
 
 - [ ] 先测列表/总数/详情/候选/新增/修改/删除/启停/任务/批量/同步重试越权，包含未归属历史记录、进度无档案引用。
 - [ ] RED：`PYTHONPATH=. .venv-security312/bin/python tests/product_line_project_scope_contract.py`。
-- [ ] 收敛到统一对象过滤；新建产品线强制必填，字段规则不能解除安全必填或开放未授权值；保留历史未归属仅在迁移入口可处理。
-- [ ] 同步队列区分已接受的系统任务和当前交互重试；逐条确认目标项目归属，不将组织缺失当作全量访问；测试撤权后新发起/重试拒绝，执行身份不绕过固定目标校验。
-- [ ] 已同步项目更改组织，若现有金蝶写接口不能证明外部归属一致则拒绝，并提示管理员迁移；不修改金蝶目标匹配算法来绕过该限制。
+- [x] 收敛到统一对象过滤；新建产品线强制必填，字段规则不能解除安全必填或开放未授权值；保留历史未归属仅在迁移入口可处理。
+- [x] 同步队列区分已接受的系统任务和当前交互重试；逐条确认目标项目归属，不将组织缺失当作全量访问；测试撤权后新发起/重试拒绝，执行身份不绕过固定目标校验。
+- [x] 已同步项目更改组织，若现有金蝶写接口不能证明外部归属一致则拒绝，并提示管理员迁移；不修改金蝶目标匹配算法来绕过该限制。
 - [ ] GREEN 并执行档案生命周期、并发、自动同步队列、进度及操作日志契约；记录并提交。
 
 ## 任务 5：金蝶组织读取与报表隔离
@@ -127,8 +154,8 @@ def test_scope_keeps_project_organization_pairs(report_fixture):
 - [ ] 添加主表、候选、数量、进度筛选、详情、导出双维度隔离测试；必须按项目与组织的配对匹配，不能两个独立 IN 形成错误笛卡尔授权。
 - [ ] 添加跨组织订单/入库/退料异常测试：明细不可见、合计不可误报完整、不得从异常消息泄漏他组织单号。
 - [ ] RED：`PYTHONPATH=. .venv-security312/bin/python tests/purchase_organization_scope_contract.py`。
-- [ ] 根据任务 1 实证字段实现固定参数化 SQL，授权限制早于分页；大量项目授权使用受限会话临时映射，不能拼接未转义编码或超过 SQL 参数上限。
-- [ ] 每一层来源关联验证组织；无法证实的链路按现有待核对策略返回空合计，保留已有合法分批公式和 Decimal 运算。
+- [x] 根据任务 1 实证字段实现固定参数化 SQL，授权限制早于分页；大量项目授权使用受限会话临时映射，不能拼接未转义编码或超过 SQL 参数上限。
+- [x] 每一层来源关联验证组织；无法证实的链路按现有待核对策略返回空合计，保留已有合法分批公式和 Decimal 运算。
 - [ ] 权限扩展脚本仅处理确需新增的组织表列和收料/退料组织字段，默认只输出脱敏检查结果；执行授权需用户批准并交互输入管理员凭据。不重建已有账号、不轮换既有密码。
 - [ ] GREEN 并回归全部 `purchase_*contract.py`，保留真实样本对比与性能记录；记录并提交。
 
@@ -150,8 +177,8 @@ test('empty authorized options cannot create an archive', async () => {
 
 - [ ] 先测无权限菜单/按钮隐藏、复选保存、单个默认/多个主动选择/零个阻止创建、禁用历史显示、来源失败重试、组织候选模糊分页与乱序响应。
 - [ ] RED：`node tests/product-line-contract.test.mjs` 和新行为测试。
-- [ ] 主数据页面用标准列表和用户 B 抽屉，区分金蝶原名称与 PMS 显示名；绑定字段不可编辑，加载/空/错误/并发状态统一组件处理。
-- [ ] 角色将产品类别授权改为产品线勾选并标注未选无权限；创建档案使用受控 options。普通产品类别字段仍从原枚举读取，不删除该业务枚举。
+- [x] 主数据页面用标准列表和用户 B 抽屉，区分金蝶原名称与 PMS 显示名；绑定字段不可编辑，加载/空/错误/并发状态统一组件处理。
+- [x] 角色将产品类别授权改为产品线勾选并标注未选无权限；创建档案使用受控 options。普通产品类别字段仍从原枚举读取，不删除该业务枚举。
 - [ ] 旧产品线枚举从枚举管理隐藏，字段目录声明主数据来源；查询方案校验旧字段语义，旧枚举编号不得自动恢复成新产品线条件。
 - [ ] 更新所有受影响引用、路由权限、图标注册和日志中文差异；UI 不覆盖第三方控件内部样式。
 - [ ] GREEN，运行标准样式、列表、系统 UI、档案筛选、字段目录和枚举契约；1366×768、1600×900、窄窗口截图及鼠标/键盘验收；记录并提交。
@@ -174,8 +201,8 @@ def test_migration_conflict_rolls_back_all_assignments(migration_fixture):
 - [ ] RED：`PYTHONPATH=. .venv-security312/bin/python tests/product_line_assignment_migration_contract.py`。
 - [ ] 默认 dry-run，分组展示未归属、单一候选、多个组织冲突、缺失档案关联、旧角色范围不能转换；不从订单活动自动决定项目归属。
 - [ ] 用户确认真实组织名称和映射清单前，只在本地测试事务；不得对正式库运行 apply。
-- [ ] 应用时在事务内复核源指纹、唯一性、引用和管理员治理权限，写归属与角色关系及统一日志；旧字段保留审计，不回填错误默认值。
-- [ ] 幂等通过迁移批次及实际目标值判断；不允许重复执行覆盖后来人工撤权。
+- [x] 应用时在事务内复核源指纹、唯一性、引用和管理员治理权限，写归属与角色关系及统一日志；旧字段保留审计，不回填错误默认值。
+- [x] 幂等通过迁移批次及实际目标值判断；不允许重复执行覆盖后来人工撤权。
 - [ ] GREEN，交付中文清单和操作说明，记录并提交。
 
 ## 任务 8：整体回归、正式切换与验收

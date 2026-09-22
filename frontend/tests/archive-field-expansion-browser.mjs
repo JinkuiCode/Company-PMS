@@ -8,6 +8,8 @@ try {
   page.setDefaultTimeout(10000)
   const errors = [], writes = [], creates = [], queries = []
   let regionRequests = 0, rejectCreate = true
+  let lineOptions = [{ value: 7, label: 'Bench' }]
+  let rejectLines = false
   let releaseCreate
   const row = { id: 1, project_code: 'ARCH-TEST', project_name: '测试档案', is_enabled: 1,
     manager_id: 17, manager_name: '原负责人', product_category: 1, product_line_id: 7,
@@ -28,6 +30,10 @@ try {
     if (path === '/api/auth/me') body = { id: 42, username: 'test', real_name: '当前用户', permissions: ['project:archive:view', 'project:archive:add', 'project:archive:edit'] }
     else if (path === '/api/users/options') body = [{ id: 42, real_name: '当前用户' }, { id: 17, real_name: '原负责人' }]
     else if (path === '/api/auth/product-categories') body = { unrestricted: true }
+    else if (path === '/api/product-lines/options') {
+      if (rejectLines) return route.fulfill({ status: 503, json: { detail: '测试数据源不可用' } })
+      body = { options: lineOptions, label_map: { 7: 'Bench', 8: 'Single' } }
+    }
     else if (path === '/api/projects/archives/fields') body = { items: fields.map(field_key => ({ field_key, label: field_key,
       visible: true, editable: true, list_available: true,
       required: ['contract_signed_date', 'contract_ship_date'].includes(field_key), required_effective_at: '2026-09-20T00:00:00' })) }
@@ -50,6 +56,7 @@ try {
   await page.getByRole('button', { name: '新增档案', exact: true }).click()
   const create = page.locator('.pms-form-drawer:visible')
   await expect(create).toContainText('当前用户')
+  await expect(create.locator('.pms-form-field:has(#archive-create-product_line_id)')).toContainText('Bench')
   await expect(create).toContainText('合同与交付')
   await expect(create).toContainText('项目联系信息')
   assert.equal(Math.round((await create.boundingBox()).width), 492)
@@ -93,6 +100,7 @@ try {
   await expect(create).toContainText('测试编号已存在')
   await expect(create.locator('#archive-create-project_code')).toHaveValue('ARCH-CREATE')
   assert.equal(creates[0].manager_id, 42)
+  assert.equal(creates[0].product_line_id, 7)
   assert.equal(creates[0].contract_signed_date, '2026-09-20')
   await create.getByRole('button', { name: '取消', exact: true }).click()
   await expect(page.locator('.el-message-box')).toContainText('未保存')
@@ -179,6 +187,23 @@ try {
     assert.ok(footer.y + footer.height <= height)
     await page.screenshot({ path: `/tmp/pms-archive-expansion-create-${width}.png` })
   }
+  await create.getByRole('button', { name: '取消', exact: true }).click()
+  lineOptions = [{ value: 7, label: 'Bench' }, { value: 8, label: 'Single' }]
+  await page.getByRole('button', { name: '新增档案', exact: true }).click()
+  await expect(create.locator('.pms-form-field:has(#archive-create-product_line_id)')).toContainText('请选择产品线')
+  await create.getByRole('button', { name: '取消', exact: true }).click()
+  lineOptions = []
+  await page.getByRole('button', { name: '新增档案', exact: true }).click()
+  await expect(page.getByText('没有可用的产品线权限，请联系管理员')).toBeVisible()
+  await expect(create).toHaveCount(0)
+  rejectLines = true
+  await page.getByRole('button', { name: '新增档案', exact: true }).click()
+  await expect(page.getByText('产品线读取失败，请重新点击新增档案重试')).toBeVisible()
+  await expect(create).toHaveCount(0)
+  rejectLines = false
+  lineOptions = [{ value: 7, label: 'Bench' }]
+  await page.getByRole('button', { name: '新增档案', exact: true }).click()
+  await expect(create.locator('.pms-form-field:has(#archive-create-product_line_id)')).toContainText('Bench')
   assert.deepEqual(errors, [])
   console.log('Archive browser passed: required/new vs old, manager, date payload, failed create/draft, discard guard, province/city Escape and save, one region request, User B width')
 } finally { await browser.close() }

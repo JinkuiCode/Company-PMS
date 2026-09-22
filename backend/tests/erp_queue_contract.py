@@ -15,6 +15,9 @@ from app.core.database import Base
 import app.models.init_db  # register all tables
 from app.models.project import PmsProjectArchive
 from app.models.erp_task import ErpSyncTask
+from app.models.product_line import SysProductLine, SysRoleProductLine
+from app.models.user import SysUser
+from app.models.rbac import SysRole, SysMenu, SysRoleMenu, SysUserRole
 from app.services import erp_queue
 from fastapi import HTTPException
 
@@ -24,7 +27,18 @@ class QueueContract(unittest.TestCase):
         self.engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
         Base.metadata.create_all(self.engine)
         self.db = Session(self.engine)
-        self.archive = PmsProjectArchive(project_code='TEST', project_name='名称', is_enabled=1)
+        self.line = SysProductLine(source_key='kingdee', organization_id=100, organization_code='100',
+            organization_name='测试组织', display_name='测试产品线', name_key='test')
+        self.user = SysUser(username='queue-admin', real_name='测试管理员', password_hash='test', status=1)
+        role = SysRole(role_code='queue-test', role_name='队列测试', data_scope=4, status=1)
+        menu = SysMenu(menu_name='重试', menu_type='B', permission_code='system:sync:retry', status=1)
+        self.db.add_all([self.line, self.user, role, menu])
+        self.db.flush()
+        self.db.add_all([SysUserRole(user_id=self.user.id, role_id=role.id),
+            SysRoleMenu(role_id=role.id, menu_id=menu.id),
+            SysRoleProductLine(role_id=role.id, product_line_id=self.line.id)])
+        self.archive = PmsProjectArchive(project_code='TEST', project_name='名称', is_enabled=1,
+            business_product_line_id=self.line.id)
         self.db.add(self.archive)
         self.db.commit()
 
@@ -65,7 +79,12 @@ class QueueContract(unittest.TestCase):
             engine = create_engine(f'sqlite:///{folder}/queue.db')
             Base.metadata.create_all(engine)
             with Session(engine) as db:
-                archive = PmsProjectArchive(project_code='CONCURRENT', project_name='并发测试', is_enabled=1)
+                line = SysProductLine(source_key='kingdee', organization_id=100, organization_code='100',
+                    organization_name='测试', display_name='测试', name_key='test')
+                db.add(line)
+                db.flush()
+                archive = PmsProjectArchive(project_code='CONCURRENT', project_name='并发测试', is_enabled=1,
+                    business_product_line_id=line.id)
                 db.add(archive)
                 db.flush()
                 erp_queue.enqueue(db, archive, None)
@@ -160,7 +179,7 @@ class QueueContract(unittest.TestCase):
         with patch('app.services.kingdee.KingdeeClient') as client:
             client.return_value.query_assistant_data.side_effect = RuntimeError('duplicate or timeout')
             with self.assertRaises(HTTPException):
-                erp_queue.inspect_result(self.db, task.id, None)
+                erp_queue.inspect_result(self.db, task.id, self.user.id)
         self.assertEqual(task.status, 'review')
         self.assertEqual(self.archive.erp_sync_status, 'review')
 
@@ -173,7 +192,7 @@ class QueueContract(unittest.TestCase):
             client.return_value.query_assistant_data.return_value = {
                 'FEntryID': '42', 'FNumber': 'TEST', 'FDataValue': 'TEST',
                 'FDescription': '名称', 'FDocumentStatus': 'A'}
-            erp_queue.inspect_result(self.db, task.id, None)
+            erp_queue.inspect_result(self.db, task.id, self.user.id)
         self.assertEqual(self.archive.erp_synced, 1)
         self.assertEqual(task.status, 'review')
 
@@ -204,7 +223,7 @@ class QueueContract(unittest.TestCase):
             self.db.commit()
             with patch('app.services.kingdee.KingdeeClient') as client:
                 with self.assertRaises(HTTPException) as result:
-                    erp_queue.inspect_result(self.db, task.id, None, external_request_finished=True)
+                    erp_queue.inspect_result(self.db, task.id, self.user.id, external_request_finished=True)
                 self.assertEqual(result.exception.status_code, 409)
                 client.assert_not_called()
 
@@ -215,11 +234,11 @@ class QueueContract(unittest.TestCase):
         self.db.commit()
         with patch('app.services.kingdee.KingdeeClient') as client:
             client.return_value.query_assistant_data.return_value = None
-            erp_queue.inspect_result(self.db, task.id, None)
+            erp_queue.inspect_result(self.db, task.id, self.user.id)
             self.assertEqual(task.status, 'review')
-            erp_queue.inspect_result(self.db, task.id, None, external_request_finished=True)
+            erp_queue.inspect_result(self.db, task.id, self.user.id, external_request_finished=True)
         self.assertEqual(task.status, 'failed')
-        self.assertEqual(self.db.get(ErpSyncTask, erp_queue.retry(self.db, task.id, None)['id']).status, 'queued')
+        self.assertEqual(self.db.get(ErpSyncTask, erp_queue.retry(self.db, task.id, self.user.id)['id']).status, 'queued')
 
     def test_file_execution_lock_is_shared_across_connections(self):
         from app.services.erp_execution_lock import archive_execution_lock
@@ -242,7 +261,7 @@ class QueueContract(unittest.TestCase):
             erp_queue.run_once(self.db)
         self.db.refresh(task)
         self.assertEqual(task.status, 'failed')
-        new = erp_queue.retry(self.db, task.id, None)
+        new = erp_queue.retry(self.db, task.id, self.user.id)
         self.assertNotEqual(new['id'], task.id)
         self.assertEqual(self.db.get(ErpSyncTask, new['id']).status, 'queued')
         from app.models.operation_log import SysOperationLog
@@ -254,12 +273,12 @@ class QueueContract(unittest.TestCase):
         self.archive.erp_sync_status = 'review'
         self.db.commit()
         with self.assertRaises(HTTPException):
-            erp_queue.retry(self.db, task.id, None)
+            erp_queue.retry(self.db, task.id, self.user.id)
         self.db.rollback()
         with patch('app.services.kingdee.KingdeeClient') as client:
             client.return_value.query_assistant_data.return_value = {
                 'FNumber': 'TEST', 'FDataValue': 'TEST', 'FDescription': '名称', 'FDocumentStatus': 'C'}
-            result = erp_queue.inspect_result(self.db, task.id, None)
+            result = erp_queue.inspect_result(self.db, task.id, self.user.id)
         self.assertEqual(result['status'], 'success')
         self.assertEqual(self.archive.erp_synced, 1)
 
@@ -290,7 +309,7 @@ class QueueContract(unittest.TestCase):
         self.db.add(SysRole(role_name='管理员', role_code='admin', data_scope=4, status=1))
         self.db.commit()
         initialize_sync_management(self.db)
-        self.assertEqual(self.db.query(SysRoleMenu).count(), 3)
+        self.assertEqual(self.db.query(SysRoleMenu).count(), 4)
         self.db.query(SysRoleMenu).delete()
         self.db.commit()
         initialize_sync_management(self.db)
@@ -302,7 +321,11 @@ class QueueContract(unittest.TestCase):
         from app.services.enum_registry import initialize_enum_definitions
         initialize_enum_definitions(self.db)
         self.db.commit()
-        result = create_archive(self.db, ArchiveCreate(project_code='NEW', project_name='新项目'), 1)
+        from app.services.authorization import build_authorization_context
+        with patch('app.services.product_line_source.get_organization'):
+            result = create_archive(self.db, ArchiveCreate(project_code='NEW', project_name='新项目',
+                product_line_id=self.line.id), self.user.id,
+                scope_context=build_authorization_context(self.db, self.user.id))
         self.assertEqual(self.db.query(ErpSyncTask).filter_by(archive_id=result['id']).count(), 1)
         update_archive(self.db, result['id'], ArchiveUpdate(project_name='新名称'), 1)
         tasks = self.db.query(ErpSyncTask).filter_by(archive_id=result['id']).order_by(ErpSyncTask.id).all()
@@ -335,7 +358,8 @@ class QueueContract(unittest.TestCase):
         from app.services.authorization import get_current_user_context
         app = FastAPI()
         app.include_router(router)
-        ctx = {'user_id': 1, 'data_scope': 4, 'permissions': ['project:archive:view']}
+        ctx = {'user_id': 1, 'data_scope': 4, 'permissions': ['project:archive:view'],
+               'product_line_ids': [self.line.id]}
         app.dependency_overrides[get_db] = lambda: self.db
         app.dependency_overrides[get_current_user_context] = lambda: ctx
         task = self.enqueue()

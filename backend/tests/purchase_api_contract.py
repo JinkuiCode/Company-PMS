@@ -15,6 +15,8 @@ from app.core.database import Base
 import app.models.init_db
 from app.models.rbac import SysRole, SysRoleMenu, SysMenu
 from app.models.project import PmsProjectArchive
+from app.models.product_line import SysProductLine
+from app.services.purchase_reader import ProjectOrganizationGrant
 from fastapi import HTTPException
 
 
@@ -30,6 +32,13 @@ class ReportApiContract(unittest.TestCase):
         self.assertIsNotNone(importlib.util.find_spec('app.api.purchase_reports'), 'Report API is not implemented')
         from app.api import purchase_reports
         return purchase_reports
+
+    def line(self):
+        line = SysProductLine(source_key='kingdee', organization_id=100, organization_code='100',
+            organization_name='100', display_name='100', name_key='100')
+        self.db.add(line)
+        self.db.flush()
+        return line
 
     def test_permissions_are_separate_and_never_replenished(self):
         self.assertIsNotNone(importlib.util.find_spec('app.services.purchase_migration'), 'Report permissions are missing')
@@ -58,14 +67,19 @@ class ReportApiContract(unittest.TestCase):
         page = self.db.query(SysMenu).filter_by(permission_code='report:purchase:list').one()
         self.assertEqual(self.db.get(SysMenu, page.parent_id).menu_name, '报表中心')
 
-    def test_scope_unmapped_is_only_for_unrestricted_accounts(self):
+    def test_scope_always_requires_explicit_project_organization_pairs(self):
         api = self.api()
-        self.db.add_all([PmsProjectArchive(project_code='A', project_name='A', manager_id=7),
+        line = SysProductLine(source_key='kingdee', organization_id=100, organization_code='100',
+            organization_name='100', display_name='100', name_key='100')
+        self.db.add(line)
+        self.db.flush()
+        self.db.add_all([PmsProjectArchive(project_code='A', project_name='A', manager_id=7, business_product_line_id=line.id),
                          PmsProjectArchive(project_code='B', project_name='B', manager_id=8)])
         self.db.commit()
-        self.assertIsNone(api.project_scope(self.db, {'data_scope': 4, 'product_category_ids': None}))
-        self.assertEqual(api.project_scope(self.db, {'data_scope': 1, 'user_id': 7, 'product_category_ids': None}), ['A'])
-        self.assertEqual(api.project_scope(self.db, {'data_scope': 4, 'product_category_ids': []}), [])
+        self.assertEqual(api.project_scope(self.db, {'data_scope': 4, 'product_category_ids': None}), [])
+        self.assertEqual(api.project_scope(self.db, {'data_scope': 1, 'user_id': 7,
+            'product_line_ids': [line.id]}), [ProjectOrganizationGrant('A', 100)])
+        self.assertEqual(api.project_scope(self.db, {'data_scope': 4, 'product_line_ids': []}), [])
 
     def test_export_requires_view_and_export_and_sanitizes_formulas(self):
         api = self.api()
@@ -100,10 +114,11 @@ class ReportApiContract(unittest.TestCase):
     def test_project_names_are_from_pms_not_kingdee(self):
         api = self.api()
         self.assertTrue(hasattr(api, 'enrich_project_names'))
-        self.db.add(PmsProjectArchive(project_code='A', project_name='PMS 名称', manager_id=7))
+        line = self.line()
+        self.db.add(PmsProjectArchive(project_code='A', project_name='PMS 名称', manager_id=7, business_product_line_id=line.id))
         self.db.commit()
         rows = [{'project_code': 'A', 'project_name': '金蝶名称'}, {'project_code': 'B', 'project_name': '不能回退'}]
-        api.enrich_project_names(self.db, {'data_scope': 1, 'user_id': 7, 'product_category_ids': None}, rows)
+        api.enrich_project_names(self.db, {'data_scope': 1, 'user_id': 7, 'product_line_ids': [line.id]}, rows)
         self.assertEqual(rows[0]['project_name'], 'PMS 名称')
         self.assertIsNone(rows[1]['project_name'])
 
@@ -135,10 +150,11 @@ class ReportApiContract(unittest.TestCase):
         from app.services.authorization import get_current_user_context
         from app.core.database import get_db
         app = FastAPI(); app.include_router(api.router)
-        ctx = {'user_id': 7, 'permissions': ['report:purchase:view', 'report:purchase:export'], 'data_scope': 1, 'product_category_ids': None}
+        line = self.line()
+        ctx = {'user_id': 7, 'permissions': ['report:purchase:view', 'report:purchase:export'], 'data_scope': 1, 'product_line_ids': [line.id]}
         app.dependency_overrides[get_current_user_context] = lambda: ctx
         app.dependency_overrides[get_db] = lambda: self.db
-        self.db.add(PmsProjectArchive(project_code='A', project_name='PMS 项目', manager_id=7)); self.db.commit()
+        self.db.add(PmsProjectArchive(project_code='A', project_name='PMS 项目', manager_id=7, business_product_line_id=line.id)); self.db.commit()
         @contextmanager
         def connection():
             yield object()
@@ -153,7 +169,7 @@ class ReportApiContract(unittest.TestCase):
             self.assertEqual(args[1].page, 1)
             self.assertEqual(args[1].page_size, 500)
             self.assertEqual(str(args[1].date_from), '2026-01-01')
-            self.assertEqual(args[2], ['A'])
+            self.assertEqual(args[2], [ProjectOrganizationGrant('A', 100)])
             self.assertEqual(log.call_args.kwargs['operator_id'], 7)
             query.return_value = {'total': 501, 'items': []}; log.reset_mock()
             self.assertEqual(client.get('/api/reports/purchase/export').status_code, 422)

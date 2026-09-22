@@ -322,6 +322,7 @@ import {
 } from '@/form-system'
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
+import { useProductLineOptions } from '@/composables/useProductLineOptions'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
 import { getArchiveRegions, type ArchiveRegion } from '@/api/project'
@@ -331,6 +332,7 @@ import request from '@/utils/request'
 
 const localeText = chineseLocaleText
 const authStore = useAuthStore()
+const productLines = useProductLineOptions()
 const syncLogVisible = ref(false)
 const syncLogArchiveId = ref<number | null>(null)
 function openSyncLog(id: number) { syncLogArchiveId.value = id; syncLogVisible.value = true }
@@ -719,31 +721,18 @@ const archiveEnabledFilterOptions = [
 // 字典选项
 const dictOptions = reactive<Record<string, any[]>>({
   product_category: [],
-  product_line: [],
   equipment_series: [],
 })
 const dictLabelMaps = reactive<Record<string, Record<string, string>>>({})
 
 function enumLabel(code: string, value: unknown) {
+  if (code === 'product_line') return productLines.label(value)
   if (value === null || value === undefined || value === '') return '-'
   const labelMap = dictLabelMaps[code]
   if (!labelMap) return '-'
   return labelMap[String(value)] || String(value)
 }
 
-// 用户允许的产品类别
-const allowedProductCategoryIds = ref<number[] | null>(null)
-
-async function fetchAllowedProductCategories() {
-  try {
-    const res: any = await request.get('/auth/product-categories')
-    if (res.unrestricted) {
-      allowedProductCategoryIds.value = null // null = 不限制
-    } else {
-      allowedProductCategoryIds.value = (res.items || []).map(Number)
-    }
-  } catch { /* ignore */ }
-}
 
 async function fetchEffectiveArchiveFields() {
   try {
@@ -754,12 +743,7 @@ async function fetchEffectiveArchiveFields() {
   }
 }
 
-// 筛选栏可用的产品类别选项（取字典与权限的交集）
-const filteredProductCategoryOptions = computed(() => {
-  const all = dictOptions.product_category || []
-  if (allowedProductCategoryIds.value === null) return all
-  return all.filter(item => allowedProductCategoryIds.value!.includes(Number(item.value)))
-})
+const filteredProductCategoryOptions = computed(() => dictOptions.product_category || [])
 
 const archiveProductCategoryOptions = computed<PmsOption[]>(() => filteredProductCategoryOptions.value.map(item => ({
   value: Number(item.value),
@@ -791,7 +775,7 @@ function archiveRegionLabel(fieldKey: string, value: unknown) {
 }
 
 function archiveDrawerSelectOptions(fieldKey: string, values = archiveDrawerForm): PmsOption[] {
-  if (fieldKey === 'product_line_id') return (dictOptions.product_line || []).map(item => ({ ...item, value: Number(item.value) }))
+  if (fieldKey === 'product_line_id') return productLines.options.value
   if (fieldKey === 'address_province') return archiveRegions.value
   if (fieldKey === 'address_city') return archiveRegions.value.find(region => region.value === values.address_province)?.children || []
   if (fieldKey === 'product_category') return archiveProductCategoryOptions.value
@@ -874,7 +858,7 @@ const archiveUserNameOptions = computed(() => uniqueValueOptions([
 const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
   ...archiveExpansionFields.map(field => ({
     field: field.key, policyKey: field.key, label: field.label, type: field.value_type === 'long_text' ? 'text' : field.value_type,
-    ...(field.key === 'product_line_id' ? { options: () => dictFilterOptions('product_line', true) } : {}),
+    ...(field.key === 'product_line_id' ? { options: () => productLines.filterOptions.value } : {}),
     ...(field.key === 'address_province' ? { options: () => archiveRegions.value } : {}),
     ...(field.key === 'address_city' ? { options: () => archiveRegions.value.flatMap(region => region.children) } : {}),
   })),
@@ -1247,8 +1231,20 @@ function getArchiveRowClass(params: any) {
 }
 
 // ========== 新增与字段级抽屉编辑 ==========
-function openCreateDialog() {
-  if (!hasPermission('project:archive:add')) return
+const archiveCreateOpening = ref(false)
+async function openCreateDialog() {
+  if (!hasPermission('project:archive:add') || archiveCreateOpening.value) return
+  archiveCreateOpening.value = true
+  await productLines.load()
+  archiveCreateOpening.value = false
+  if (productLines.failed.value) {
+    ElMessage.error('产品线读取失败，请重新点击新增档案重试')
+    return
+  }
+  if (!productLines.options.value.length) {
+    ElMessage.warning('没有可用的产品线权限，请联系管理员')
+    return
+  }
   formRef.value?.resetFields()
   clearArchiveServerErrors(archiveCreateServerErrors)
   Object.assign(form, {
@@ -1264,6 +1260,7 @@ function openCreateDialog() {
     plan_end_date: '',
     ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, field.key === 'product_line_id' ? null : ''])),
   })
+  form.product_line_id = productLines.options.value.length === 1 ? productLines.options.value[0]!.value : null
   archiveCreateSnapshot.value = JSON.stringify(form)
   dialogVisible.value = true
 }
@@ -1784,9 +1781,9 @@ onMounted(async () => {
     userList.value = []
   })
   await Promise.allSettled([
-    fetchEffectiveArchiveFields(), fetchAllowedProductCategories(),
+    fetchEffectiveArchiveFields(), productLines.load(),
     fetchDictOptions('product_category'), fetchDictOptions('equipment_series'),
-    fetchDictOptions('product_line'), fetchArchiveRegions(),
+    fetchArchiveRegions(),
     resolveArchiveColumnPreferenceOwner(),
   ])
   restoreSelectedArchiveColumnKeys()

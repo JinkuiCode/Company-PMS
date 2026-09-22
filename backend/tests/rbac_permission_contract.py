@@ -172,21 +172,27 @@ def test_multiple_active_roles_merge_permissions_and_widest_scope():
         db.close()
 
 
-def test_project_scope_denies_missing_department_and_uses_archive_product_category():
+def test_project_scope_denies_missing_department_and_uses_archive_product_line():
     from fastapi import HTTPException
 
     from app.core.database import Base, SessionLocal, engine
     from app.models.project import PmsProject, PmsProjectArchive
+    from app.models.product_line import SysProductLine
     from app.schemas.project import ProjectUpdate
     from app.services.project import ensure_project_access, update_project
 
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        line = SysProductLine(source_key='kingdee', organization_id=100, organization_code='100',
+            organization_name='RBAC 组织', display_name='RBAC 产品线', name_key='rbac-test')
+        db.add(line)
+        db.flush()
         archive = PmsProjectArchive(
             project_code="RBAC-ARCHIVE",
             project_name="RBAC 档案",
             product_category=1,
+            business_product_line_id=line.id,
             status=1,
         )
         db.add(archive)
@@ -204,6 +210,7 @@ def test_project_scope_denies_missing_department_and_uses_archive_product_catego
         db.commit()
 
         no_dept_context = {
+            "product_line_ids": [line.id],
             "user_id": 1,
             "dept_id": None,
             "data_scope": 2,
@@ -217,6 +224,7 @@ def test_project_scope_denies_missing_department_and_uses_archive_product_catego
             raise AssertionError("未绑定部门时不应退化为全部数据")
 
         stale_fallback_context = {
+            "product_line_ids": [],
             "user_id": 1,
             "dept_id": None,
             "data_scope": 4,
@@ -230,6 +238,7 @@ def test_project_scope_denies_missing_department_and_uses_archive_product_catego
             raise AssertionError("已关联档案时不得用项目旧产品线绕过档案产品线权限")
 
         unrestricted_context = {
+            "product_line_ids": [line.id],
             "user_id": 1,
             "dept_id": None,
             "data_scope": 4,
@@ -298,6 +307,10 @@ def test_init_db_does_not_restore_revoked_admin_permission():
 
     db = SessionLocal()
     try:
+        # Earlier cases share this temporary database and insert isolated button
+        # menus. Supply the directory that a real initialized installation has.
+        if not db.query(SysMenu).filter_by(parent_id=0, menu_type="M", menu_name="系统管理").first():
+            db.add(SysMenu(parent_id=0, menu_type="M", menu_name="系统管理"))
         admin = db.query(SysUser).filter(SysUser.username == "admin").first()
         if not admin:
             admin = SysUser(username="admin", real_name="系统管理员", password_hash="x", status=1)
@@ -500,7 +513,7 @@ if __name__ == "__main__":
     test_authorization_context_uses_only_active_roles_and_live_permissions()
     test_disabled_user_is_rejected_on_every_context_load()
     test_multiple_active_roles_merge_permissions_and_widest_scope()
-    test_project_scope_denies_missing_department_and_uses_archive_product_category()
+    test_project_scope_denies_missing_department_and_uses_archive_product_line()
     test_role_menu_normalization_validates_nodes_and_adds_view_and_ancestors()
     test_init_db_does_not_restore_revoked_admin_permission()
     test_permission_dependencies_and_matrix_are_wired_to_apis()

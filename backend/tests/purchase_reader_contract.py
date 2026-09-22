@@ -14,6 +14,7 @@ class SqliteCursor:
 
     def execute(self, sql, params):
         sql = sql.replace('dbo.', '').replace('%s', '?').replace("N'", "'").replace('#pms_', 'temp_pms_')
+        sql = sql.replace(' COLLATE DATABASE_DEFAULT', '')
         # SQLite ignores DECIMAL scale; emulate the report's display rounding so
         # classification tests cannot accidentally depend on its unrounded casts.
         sql = sql.replace('CAST(', 'ROUND(').replace(' AS decimal(28,8))', ', 8)')
@@ -37,6 +38,13 @@ class FixtureConnection:
         return SqliteCursor(self.db)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.services.purchase_reader import ProjectOrganizationGrant
+GRANTS = [ProjectOrganizationGrant('P-1', 100)]
+
+
+def fixture_columns(fields):
+    return ', '.join(name + (' DEFAULT 100' if name in ('FAPPLICATIONORGID', 'FPURCHASEORGID', 'FSTOCKORGID') else '')
+                     for name in fields.split())
 
 
 class ReaderContract(unittest.TestCase):
@@ -61,10 +69,10 @@ class ReaderContract(unittest.TestCase):
         self.assertEqual(sql, '1=0')
         self.assertEqual(params, [])
         code = "X'; DROP TABLE demo;--"
-        sql, params = reader.scope_clause('project_code', [code, 'A'])
+        sql, params = reader.scope_clause('project_code', [ProjectOrganizationGrant(code, 100), ProjectOrganizationGrant('A', 200)])
         self.assertNotIn(code, sql)
-        self.assertEqual(params, [code, 'A'])
-        self.assertEqual(reader.scope_clause('project_code', None), ('1=1', []))
+        self.assertEqual(params, [code, 100, 'A', 200])
+        self.assertEqual(reader.scope_clause('project_code', None), ('1=0', []))
         with self.assertRaises(ValueError):
             reader.scope_clause('project_code', ['x'] * 2001)
 
@@ -105,7 +113,7 @@ class ReaderContract(unittest.TestCase):
         db.row_factory = sqlite3.Row
         self.addCleanup(db.close)
         for table, fields in schema.items():
-            db.execute(f'CREATE TABLE {table} ({", ".join(fields.split())})')
+            db.execute(f'CREATE TABLE {table} ({fixture_columns(fields)})')
         def put(table, **values):
             db.execute(f'INSERT INTO {table} ({",".join(values)}) VALUES ({",".join("?" for _ in values)})', tuple(values.values()))
         # Each row is independently classified; the displayed unit is 1/3 of a base unit.
@@ -129,24 +137,27 @@ class ReaderContract(unittest.TestCase):
                     FMATERIALID=10, FBASEUNITID=1, FBASEUNITQTY=received)
                 put('T_STK_INSTOCKENTRY_LK', FENTRYID=number, FSTABLENAME='T_PUR_POORDERENTRY',
                     FSID=number, FSBILLID=number, FBASEUNITQTY=received)
+        db.execute("INSERT INTO T_BAS_ASSISTANTDATAENTRY(FENTRYID,FNUMBER) VALUES ('fixture','P-1')")
+        db.execute("UPDATE T_PUR_REQENTRY SET F_TWBJ_ASSISTANT_83G='fixture'")
+        db.execute('UPDATE T_PUR_REQUISITION SET FAPPLICATIONORGID=100')
         return db, FixtureConnection(db)
 
     def assert_classification_sets(self, connection, expected):
         reader = self.reader()
-        plain = reader.list_requests(connection, reader.PurchaseQuery(), None)
+        plain = reader.list_requests(connection, reader.PurchaseQuery(), GRANTS)
         for progress in ('not_ordered', 'ordering', 'receiving', 'complete', 'review'):
             ids = expected.get(progress, set())
             with self.subTest(progress=progress, path='python'):
                 self.assertEqual({row['id'] for row in plain['items'] if row['progress'] == progress}, ids)
             with self.subTest(progress=progress, path='sql_filter'):
-                selected = reader.list_requests(connection, reader.PurchaseQuery(progress=progress), None)
+                selected = reader.list_requests(connection, reader.PurchaseQuery(progress=progress), GRANTS)
                 self.assertEqual({row['id'] for row in selected['items']}, ids)
                 self.assertEqual(selected['total'], len(ids))
                 self.assertTrue(all(row['progress'] == progress for row in selected['items']))
                 # Count and membership must also survive server pagination.
                 paged_ids = set()
                 for page in range(1, len(ids) + 2):
-                    part = reader.list_requests(connection, reader.PurchaseQuery(progress=progress, page=page, page_size=1), None)
+                    part = reader.list_requests(connection, reader.PurchaseQuery(progress=progress, page=page, page_size=1), GRANTS)
                     self.assertEqual(part['total'], len(ids))
                     paged_ids.update(row['id'] for row in part['items'])
                 self.assertEqual(paged_ids, ids)
@@ -162,7 +173,7 @@ class ReaderContract(unittest.TestCase):
         self.assert_classification_sets(connection, dict(not_ordered={1}, ordering={7},
             receiving={9}, complete={4}, review={2, 3, 5, 6, 8}))
         reader = self.reader()
-        chain = reader.load_chains(connection, [reader.load_request(connection, 3, None)])[3]
+        chain = reader.load_chains(connection, [reader.load_request(connection, 3, GRANTS)])[3]
         self.assertIsNone(chain['summary']['ordered'])
         self.assertIn('order_source_mismatch', chain['summary']['issues'])
 
@@ -200,7 +211,7 @@ class ReaderContract(unittest.TestCase):
             db.execute('INSERT INTO T_STK_INSTOCKENTRY (FENTRYID,FID,FPOORDERENTRYID,FMATERIALID,FBASEUNITID,FBASEUNITQTY) VALUES (?,?,?,10,1,0)', (number, number, number))
             db.execute("INSERT INTO T_STK_INSTOCKENTRY_LK (FENTRYID,FSTABLENAME,FSID,FSBILLID,FBASEUNITQTY) VALUES (?,'T_PUR_POORDERENTRY',?,?,0)", (number, number, number))
         reader = self.reader()
-        rows = reader.list_requests(connection, reader.PurchaseQuery(), None)['items']
+        rows = reader.list_requests(connection, reader.PurchaseQuery(), GRANTS)['items']
         row = next(row for row in rows if row['id'] == 4)
         for key in ('order_statuses', 'stock_statuses'):
             self.assertIn(key, row)
@@ -210,7 +221,7 @@ class ReaderContract(unittest.TestCase):
         self.assertEqual(empty['order_statuses'], '')
         self.assertEqual(empty['stock_statuses'], '')
         db.execute('UPDATE T_PUR_POORDERENTRY_LK SET FSBILLID=99 WHERE FENTRYID IN (20,21,22,23)')
-        row = reader.list_requests(connection, reader.PurchaseQuery(keyword='R4'), None)['items'][0]
+        row = reader.list_requests(connection, reader.PurchaseQuery(keyword='R4'), GRANTS)['items'][0]
         self.assertEqual(row['order_statuses'], '已审核')
         self.assertEqual(row['stock_statuses'], '已审核')
 
@@ -223,7 +234,7 @@ class ReaderContract(unittest.TestCase):
         self.addCleanup(db.close)
         db.row_factory = sqlite3.Row
         for table, fields in schema.items():
-            db.execute(f'CREATE TABLE {table} ({", ".join(fields.split())})')
+            db.execute(f'CREATE TABLE {table} ({fixture_columns(fields)})')
         def put(table, **values):
             db.execute(f'INSERT INTO {table} ({",".join(values)}) VALUES ({",".join("?" for _ in values)})', tuple(values.values()))
         put('T_BAS_ASSISTANTDATAENTRY', FENTRYID='project', FNUMBER='P-1')
@@ -246,62 +257,63 @@ class ReaderContract(unittest.TestCase):
             put('T_STK_INSTOCKENTRY', FENTRYID=stock_id, FID=stock_id, FSEQ=1, FMATERIALID=10, FBASEUNITID=1, FUNITID=1,
                 FPOORDERENTRYID=2002, FREALQTY=qty, FBASEUNITQTY=qty)
             put('T_STK_INSTOCKENTRY_LK', FENTRYID=stock_id, FLINKID=stock_id, FSTABLENAME='T_PUR_POORDERENTRY', FSID=2002, FSBILLID=2002, FBASEUNITQTY=qty)
+        db.execute('UPDATE T_PUR_REQUISITION SET FAPPLICATIONORGID=100')
         connection = FixtureConnection(db)
-        self.assertIsNone(reader.load_request(connection, 9000, None), 'Pre-2026 details must be excluded too')
+        self.assertIsNone(reader.load_request(connection, 9000, GRANTS), 'Pre-2026 details must be excluded too')
         self.assertTrue(hasattr(reader, 'list_options'), 'Scoped report candidates are missing')
         self.assertEqual(reader.list_options(connection, 'project', '', [])['items'], [])
-        self.assertEqual(reader.list_options(connection, 'project', 'P-', None)['items'], [{'value': 'P-1', 'label': 'P-1'}])
-        page = reader.list_requests(connection, reader.PurchaseQuery(), None)
+        self.assertEqual(reader.list_options(connection, 'project', 'P-', GRANTS)['items'], [{'value': 'P-1', 'label': 'P-1'}])
+        page = reader.list_requests(connection, reader.PurchaseQuery(), GRANTS)
         self.assertEqual(page['total'], 1005)
         self.assertEqual(len(page['items']), 50)
-        last = reader.list_requests(connection, reader.PurchaseQuery(page=21), ['P-1'])
+        last = reader.list_requests(connection, reader.PurchaseQuery(page=21), GRANTS)
         self.assertEqual(len(last['items']), 5)
         empty = reader.list_requests(connection, reader.PurchaseQuery(), [])
         self.assertEqual(empty['total'], 0)
-        selected = reader.list_requests(connection, reader.PurchaseQuery(progress='receiving'), None)
+        selected = reader.list_requests(connection, reader.PurchaseQuery(progress='receiving'), GRANTS)
         self.assertEqual(selected['total'], 1)
         row = selected['items'][0]
         self.assertEqual(row['id'], 1)
         self.assertEqual(row['ordered'], 18)
         self.assertEqual(row['net_received'], 8)
         self.assertEqual(row['pending_receipt'], 10)
-        self.assertEqual(reader.list_requests(connection, reader.PurchaseQuery(keyword="' OR 1=1 --"), None)['total'], 0)
-        self.assertEqual(reader.list_requests(connection, reader.PurchaseQuery(date_from='2026-09-02'), None)['total'], 0)
-        self.assertEqual(reader.list_requests(connection, reader.PurchaseQuery(date_to='2026-08-31'), None)['total'], 0)
-        detail = reader.load_chains(connection, [reader.load_request(connection, 1, None)])[1]
+        self.assertEqual(reader.list_requests(connection, reader.PurchaseQuery(keyword="' OR 1=1 --"), GRANTS)['total'], 0)
+        self.assertEqual(reader.list_requests(connection, reader.PurchaseQuery(date_from='2026-09-02'), GRANTS)['total'], 0)
+        self.assertEqual(reader.list_requests(connection, reader.PurchaseQuery(date_to='2026-08-31'), GRANTS)['total'], 0)
+        detail = reader.load_chains(connection, [reader.load_request(connection, 1, GRANTS)])[1]
         self.assertEqual(detail['summary']['ordered'], 18)
         self.assertEqual(detail['summary']['received'], 8)
         # A current stock-source return reduces net receipts, never ordered qty.
         put('T_PUR_MRB', FID=4001, FBILLNO='RETURN', FDATE='2026-09-04', FDOCUMENTSTATUS='C', FCANCELSTATUS='A')
         put('T_PUR_MRBENTRY', FENTRYID=4001, FID=4001, FMATERIALID=10, FBASEUNITID=1, FPOORDERENTRYID=2002, FBASEUNITQTY=2)
         put('T_PUR_MRBENTRY_LK', FENTRYID=4001, FLINKID=4001, FSTABLENAME='T_STK_INSTOCKENTRY', FSID=3001, FSBILLID=3001, FBASEUNITQTY=2)
-        row = reader.list_requests(connection, reader.PurchaseQuery(keyword='R0001'), None)['items'][0]
+        row = reader.list_requests(connection, reader.PurchaseQuery(keyword='R0001'), GRANTS)['items'][0]
         self.assertEqual(row['returned'], 2)
         self.assertEqual(row['net_received'], 6)
         # Merging another requisition into this order makes receipt allocation unknown.
         put('T_PUR_POORDERENTRY_LK', FENTRYID=2002, FLINKID=5001, FSTABLENAME='T_PUR_REQENTRY', FSID=2, FSBILLID=2, FBASEUNITQTY=1)
-        row = reader.list_requests(connection, reader.PurchaseQuery(keyword='R0001'), None)['items'][0]
+        row = reader.list_requests(connection, reader.PurchaseQuery(keyword='R0001'), GRANTS)['items'][0]
         self.assertIsNone(row['net_received'])
         self.assertEqual(row['progress'], 'review')
-        chain = reader.load_chains(connection, [reader.load_request(connection, 1, None)])[1]
+        chain = reader.load_chains(connection, [reader.load_request(connection, 1, GRANTS)])[1]
         self.assertNotIn(2002, [order['id'] for order in chain['orders']], 'Do not disclose a merged order and receipts from another request')
         db.execute('DELETE FROM T_PUR_POORDERENTRY_LK WHERE FLINKID=5001')
         db.execute('UPDATE T_PUR_POORDERENTRY_LK SET FSBILLID=99 WHERE FLINKID=2001')
-        chain = reader.load_chains(connection, [reader.load_request(connection, 1, None)])[1]
+        chain = reader.load_chains(connection, [reader.load_request(connection, 1, GRANTS)])[1]
         self.assertNotIn(2001, [order['id'] for order in chain['orders']], 'Wrong source header must not expose a document')
         db.execute('UPDATE T_PUR_POORDERENTRY_LK SET FSBILLID=1 WHERE FLINKID=2001')
         db.execute('UPDATE T_PUR_MRBENTRY SET FBASEUNITQTY=4 WHERE FENTRYID=4001')
-        row = reader.list_requests(connection, reader.PurchaseQuery(keyword='R0001'), None)['items'][0]
+        row = reader.list_requests(connection, reader.PurchaseQuery(keyword='R0001'), GRANTS)['items'][0]
         self.assertIsNone(row['net_received'], 'Return entry and allocation quantity mismatch must fail closed')
-        reviewed = reader.list_requests(connection, reader.PurchaseQuery(keyword='R0001', progress='review'), None)['items'][0]
+        reviewed = reader.list_requests(connection, reader.PurchaseQuery(keyword='R0001', progress='review'), GRANTS)['items'][0]
         for field in ('ordered', 'received', 'returned', 'net_received', 'pending_order', 'pending_receipt'):
             self.assertEqual(row[field], reviewed[field], f'SQL/Python mismatch: {field}')
         self.assertEqual(reviewed['received'], 8, 'Return anomaly must not erase confirmed receipts')
         db.execute("UPDATE T_PUR_REQUISITION SET FAPPLICATIONDATE='2026-01-01' WHERE FID=2")
-        boundary = reader.list_requests(connection, reader.PurchaseQuery(date_from='2025-01-01', date_to='2026-01-01'), None)
+        boundary = reader.list_requests(connection, reader.PurchaseQuery(date_from='2025-01-01', date_to='2026-01-01'), GRANTS)
         self.assertEqual([item['id'] for item in boundary['items']], [2])
-        self.assertIsNotNone(reader.load_request(connection, 2, None))
-        self.assertEqual(reader.list_requests(connection, reader.PurchaseQuery(date_to='2025-12-31'), None)['total'], 0)
+        self.assertIsNotNone(reader.load_request(connection, 2, GRANTS))
+        self.assertEqual(reader.list_requests(connection, reader.PurchaseQuery(date_to='2025-12-31'), GRANTS)['total'], 0)
 
 
 if __name__ == '__main__':

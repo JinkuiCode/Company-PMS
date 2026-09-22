@@ -115,7 +115,9 @@ def test_archive_uniqueness_and_linked_project_synchronization():
     from app.models.user import SysUser
     from app.schemas.project import ArchiveCreate, ArchiveUpdate, ProjectUpdate
     from app.services.enum_registry import initialize_enum_definitions
-    from app.services.project import create_archive, update_archive, update_project
+    from app.services.project import create_archive as create_archive_service, update_archive, update_project
+    from app.models.product_line import SysProductLine
+    from unittest.mock import patch
 
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -124,7 +126,15 @@ def test_archive_uniqueness_and_linked_project_synchronization():
         user = SysUser(username="archive-semantic", real_name="档案测试", password_hash="x", status=1)
         dept = SysDept(dept_name="档案测试部门", status=1)
         db.add_all([user, dept])
+        line = SysProductLine(source_key='kingdee', organization_id=100,
+            organization_code='100', organization_name='测试组织', display_name='测试产品线', name_key='test')
+        db.add(line)
         db.commit()
+
+        def create_archive(db, data, user_id):
+            with patch('app.services.product_line_source.get_organization'):
+                return create_archive_service(db, data.model_copy(update={'product_line_id': line.id}),
+                    user_id=user_id, scope_context={'data_scope': 4, 'product_line_ids': [line.id]})
 
         first_id = create_archive(
             db,

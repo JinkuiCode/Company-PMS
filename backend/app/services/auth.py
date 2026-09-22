@@ -226,6 +226,7 @@ def get_current_user(db: Session, user_id: int, authorization_context: dict | No
         permissions=(authorization_context or {}).get("permissions", []),
         data_scope=(authorization_context or {}).get("data_scope", 1),
         product_category_ids=(authorization_context or {}).get("product_category_ids"),
+        product_line_ids=(authorization_context or {}).get("product_line_ids", []),
     )
 
 

@@ -3,7 +3,7 @@
     <section class="role-list-section pms-surface-section">
       <div class="page-header pms-section-header">
         <span class="pms-section-title">角色管理</span>
-        <el-button v-if="hasPermission('system:role:add')" type="primary" size="small" @click="openDialog()">新增角色</el-button>
+        <el-button v-if="hasPermission('system:role:add')" type="primary" size="small" :disabled="opening" @click="openDialog()">新增角色</el-button>
       </div>
 
       <el-table class="pms-dense-table" height="100%" :data="roleList" border stripe size="small">
@@ -15,12 +15,12 @@
             <span class="pms-status pms-status-neutral">{{ ['', '仅本人', '本部门', '本部门及子部门', '全部'][row.data_scope] }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="产品类别" width="200">
+        <el-table-column label="授权产品线" width="200">
           <template #default="{ row }">
-            <template v-if="row.product_category_ids">
-              <span v-for="pl in row.product_category_ids.split(',')" :key="pl" class="pms-chip role-product-chip">{{ productCategoryLabel(pl) }}</span>
+            <template v-if="row.product_line_ids?.length">
+              <span v-for="pl in row.product_line_ids" :key="pl" class="pms-chip role-product-chip">{{ productLineLabel(pl) }}</span>
             </template>
-            <span v-else class="pms-chip">全部</span>
+            <span v-else class="pms-chip">未授权</span>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="80">
@@ -34,7 +34,7 @@
         <el-table-column prop="remark" label="备注" />
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="hasPermission('system:role:edit')" link type="primary" size="small" @click="openDialog(row)">编辑</el-button>
+            <el-button v-if="hasPermission('system:role:edit')" link type="primary" size="small" :disabled="opening" @click="openDialog(row)">编辑</el-button>
             <el-button v-if="hasPermission('system:role:delete')" link type="danger" size="small" @click="handleDelete(row.id)">删除</el-button>
           </template>
         </el-table-column>
@@ -79,13 +79,13 @@
                   </PmsFormField>
                 </el-form-item>
             <el-form-item>
-              <PmsFormField field-id="role-product-categories" label="产品类别" hint="不选 = 不限制（全部产品类别）">
+              <PmsFormField field-id="role-product-lines" label="授权产品线" hint="不勾选则无项目数据权限；多角色取并集">
                 <PmsCheckboxGroupControl
-                  id="role-product-categories"
-                  :model-value="selectedProductCategories"
-                  :options="productCategoryCheckboxOptions"
-                  aria-label="产品类别范围"
-                  @update:model-value="selectedProductCategories = $event.map(String)"
+                  id="role-product-lines"
+                  :model-value="selectedProductLines"
+                  :options="productLineCheckboxOptions"
+                  aria-label="授权产品线"
+                  @update:model-value="selectedProductLines = $event.map(String)"
                 />
               </PmsFormField>
             </el-form-item>
@@ -160,7 +160,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
-import { loadEnumOptions, type EnumOption } from '@/composables/useEnumOptions'
+import { getRoleProductLines, type LineOption } from '@/api/productLine'
 import { Document, FolderOpened, Key } from '@element-plus/icons-vue'
 import {
   PmsCheckboxControl,
@@ -186,19 +186,19 @@ const formRef = ref<FormInstance>()
 const permTreeRef = ref()
 const permTree = ref<any[]>([])
 const checkedMenuIds = ref<number[]>([])
-const productCategoryOptions = ref<EnumOption[]>([])
-const selectedProductCategories = ref<string[]>([])
-const visibleProductCategories = computed(() => {
-  const byValue = new Map(productCategoryOptions.value.map(item => [item.value, item]))
-  selectedProductCategories.value.forEach(value => {
-    if (!byValue.has(value)) byValue.set(value, { value, label: value, status: 0 })
+const productLineOptions = ref<LineOption[]>([])
+const selectedProductLines = ref<string[]>([])
+const visibleProductLines = computed(() => {
+  const byValue = new Map(productLineOptions.value.map(item => [String(item.value), item]))
+  selectedProductLines.value.forEach(value => {
+    if (!byValue.has(value)) byValue.set(value, { value: Number(value), label: value, disabled: true })
   })
-  return Array.from(byValue.values()).filter(item => item.status !== 0 || selectedProductCategories.value.includes(item.value))
+  return Array.from(byValue.values()).filter(item => !item.disabled || selectedProductLines.value.includes(String(item.value)))
 })
-const productCategoryCheckboxOptions = computed<PmsOption[]>(() => visibleProductCategories.value.map(item => ({
-  value: item.value,
+const productLineCheckboxOptions = computed<PmsOption[]>(() => visibleProductLines.value.map(item => ({
+  value: String(item.value),
   label: item.label,
-  disabled: item.status === 0,
+  disabled: !!item.disabled && !selectedProductLines.value.includes(String(item.value)),
 })))
 const dataScopeOptions: PmsOption[] = [
   { label: '仅本人', value: 1 },
@@ -207,13 +207,19 @@ const dataScopeOptions: PmsOption[] = [
   { label: '全部数据', value: 4 },
 ]
 
-function productCategoryLabel(value: string) {
-  return productCategoryOptions.value.find(item => item.value === value)?.label || value
+function productLineLabel(value: number) {
+  return productLineOptions.value.find(item => item.value === Number(value))?.label || String(value)
 }
 
-async function loadProductCategories() {
-  const definition = await loadEnumOptions('product_category')
-  productCategoryOptions.value = definition.all_items
+async function loadProductLines() {
+  try {
+    const definition = await getRoleProductLines()
+    productLineOptions.value = definition.items
+    return true
+  } catch {
+    // The interceptor reports the error; do not treat failure as an empty grant list.
+    return false
+  }
 }
 
 const form = reactive({
@@ -313,9 +319,22 @@ async function fetchList() {
   roleList.value = (await request.get('/roles')) as any
 }
 
+const opening = ref(false)
 async function openDialog(row?: any) {
-  if (saving.value) return
+  if (saving.value || opening.value || dialogVisible.value) return
   if (row ? !hasPermission('system:role:edit') : !hasPermission('system:role:add')) return
+  opening.value = true
+  try {
+    if (!await loadProductLines()) return
+    await loadRoleDialog(row)
+  } catch {
+    // Failed permission reads must not open a partially initialized editor.
+  } finally {
+    opening.value = false
+  }
+}
+
+async function loadRoleDialog(row?: any) {
   isEdit.value = !!row
   formRef.value?.resetFields()
 
@@ -328,13 +347,13 @@ async function openDialog(row?: any) {
       data_scope: row.data_scope, status: row.status, remark: row.remark,
       home_menu_id: row.home_menu_id || 0, home_priority: row.home_priority || 0,
     })
-    selectedProductCategories.value = row.product_category_ids ? row.product_category_ids.split(',').filter((s: string) => s.trim()) : []
+    selectedProductLines.value = (row.product_line_ids || []).map(String)
     // 加载该角色已有的权限
     const res: any = await request.get(`/roles/${row.id}/menus`)
     checkedMenuIds.value = res.menu_ids || []
   } else {
     Object.assign(form, { id: 0, role_name: '', role_code: '', data_scope: 1, status: 1, remark: '', home_menu_id: 0, home_priority: 0 })
-    selectedProductCategories.value = []
+    selectedProductLines.value = []
     checkedMenuIds.value = []
   }
 
@@ -368,7 +387,7 @@ async function handleSubmit() {
     role_name: form.role_name,
     role_code: form.role_code,
     data_scope: form.data_scope,
-    product_category_ids: selectedProductCategories.value.length > 0 ? selectedProductCategories.value.join(',') : null,
+    product_line_ids: selectedProductLines.value.map(Number),
     status: form.status,
     remark: form.remark,
     menu_ids: menuIds,
@@ -423,7 +442,7 @@ function markButtonContainers() {
   })
 }
 
-onMounted(() => { fetchList(); loadProductCategories() })
+onMounted(() => { fetchList(); loadProductLines() })
 </script>
 
 <style scoped>
