@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Download, Refresh, Search } from '@element-plus/icons-vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
+import ReportExportControl from '@/components/ReportExportControl.vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import { AllCommunityModule, ModuleRegistry, type ColDef, type ColumnState, type GridApi, type GridReadyEvent, type ColumnResizedEvent } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
@@ -15,7 +16,7 @@ import { DEFAULT_PAGE_SIZE, PMS_GRID_OPTIONS } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { hasListFilterValue, type ListCustomFilter, type ListFilterField } from '@/composables/useListFilters'
 import { useAuthStore } from '@/stores/auth'
-import { getInventoryMetadata, getInventoryRows, getInventoryStocks, exportInventoryRows, type InventoryField, type InventoryMetadata, type InventoryRow } from '@/api/inventoryReport'
+import { getInventoryMetadata, getInventoryRows, getInventoryStocks, type InventoryField, type InventoryMetadata, type InventoryRow } from '@/api/inventoryReport'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 const auth = useAuthStore()
@@ -23,7 +24,7 @@ const metadata = ref<InventoryMetadata | null>(null), rows = ref<InventoryRow[]>
 const filters = reactive({ keyword: '', organization_id: null as number | null, stock: '' })
 const custom = ref<ListCustomFilter[]>([]), visible = ref<string[]>([])
 const page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), total = ref(0)
-const loading = ref(false), exporting = ref(false), error = ref(''), stamp = ref('')
+const loading = ref(false), error = ref(''), stamp = ref('')
 const stocks = ref<{ value: string; label: string }[]>([]), stockLoading = ref(false)
 const sort = reactive({ sort: 'FID', direction: 'asc' })
 const listRef = ref<InstanceType<typeof PmsDataList>>()
@@ -117,16 +118,7 @@ async function findStocks(keyword = '') {
   finally { if (current === stockRevision) stockLoading.value = false }
 }
 function reset() { Object.assign(filters, {keyword: '', organization_id: null, stock: ''}); custom.value = []; page.value = 1; scheduleFetch() }
-async function exportRows() {
-  if (exporting.value) return
-  if (total.value > (metadata.value?.export_limit || 500)) { ElMessage.warning('单次最多导出500条，请缩小筛选范围'); return }
-  exporting.value = true
-  try {
-    const blob = await exportInventoryRows(params()); const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = '即时库存查询.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
-  } catch { /* Shared request handler displays the server's safe error. */ }
-  finally { exporting.value = false }
-}
+const exportColumns = () => grid?.getAllDisplayedColumns().map(column => column.getColId()).filter(key => visible.value.includes(key)) || visible.value
 watch(() => filters.organization_id, () => { ++stockRevision; stocks.value = []; stockLoading.value = false; filters.stock = '' })
 watch([filters, custom, pageSize], () => { page.value = 1 }, {deep: true, flush: 'sync'})
 watch([filters, custom, page, pageSize, sort], scheduleFetch, {deep: true})
@@ -138,7 +130,7 @@ onUnmounted(() => { ++revision; ++stockRevision; controller?.abort(); clearTimeo
   <PmsDataList ref="listRef" class="inventory-page" scrollbar-label="即时库存横向滚动条">
     <template #toolbar-left>
       <el-button type="primary" size="small" :icon="Refresh" :disabled="loading" @click="metadata ? fetchRows() : initialize()">刷新</el-button>
-      <el-button v-if="auth.hasPermission('report:inventory:export')" size="small" :icon="Download" :disabled="loading || !total" :loading="exporting" @click="exportRows">导出当前筛选</el-button>
+      <ReportExportControl v-if="auth.hasPermission('report:inventory:export')" report="inventory" :parameters="params" :columns="exportColumns" :disabled="loading || !total" />
     </template>
     <template #toolbar-right>
       <PmsListColumnPicker v-if="metadata" v-model="visible" :groups="groups" :default-keys="defaultKeys" :column-definitions="columns" :get-grid-api="() => grid" aria-label="即时库存列设置" @layout-changed="savePreferences" />
@@ -150,7 +142,7 @@ onUnmounted(() => { ++revision; ++stockRevision; controller?.abort(); clearTimeo
         <div class="inventory-filter"><PmsSelectControl v-model="filters.stock" :options="stocks" size="compact" clearable filterable remote :remote-method="findStocks" :loading="stockLoading" placeholder="全部仓库" aria-label="库存仓库筛选" @visible-change="(open: boolean) => open && findStocks()" /></div>
         <el-button size="small" @click="reset">重置</el-button>
       </PmsListFilters>
-      <div class="inventory-status"><span>共 {{ total }} 条库存明细 · 已显示 {{ visible.length }} / {{ metadata?.fields.length || 11 }} 个字段</span><span>金蝶ERP · YD_JIN_INVENTORY <template v-if="stamp"> · {{ new Date(stamp).toLocaleTimeString('zh-CN', {hour12: false}) }}</template></span></div>
+      <div class="inventory-status"><span>共 {{ total }} 条库存明细 · 已显示 {{ visible.length }} / {{ metadata?.fields.length || 10 }} 个字段</span><span>金蝶ERP · YD_JIN_INVENTORY <template v-if="stamp"> · {{ new Date(stamp).toLocaleTimeString('zh-CN', {hour12: false}) }}</template></span></div>
     </template>
     <template #grid>
       <div v-if="error" class="pms-list-load-error" role="alert">{{ error }} <el-button size="small" @click="metadata ? fetchRows() : initialize()">重试</el-button></div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
 import { ElButton, ElMessage } from 'element-plus'
-import { Close, Download, Refresh, Search } from '@element-plus/icons-vue'
+import { Close, Refresh, Search } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import { AllCommunityModule, ModuleRegistry, type ColDef, type ColGroupDef, type ColumnState, type GridApi, type GridReadyEvent, type RowClickedEvent, type ColumnResizedEvent, type CellFocusedEvent } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
@@ -14,7 +14,8 @@ import { PmsTextControl, PmsDateControl, PmsSelectControl, PmsFormDrawer, PmsFor
 import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN, PMS_GRID_OPTIONS } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
-import { getPurchaseMetadata, getPurchaseOptions, getPurchaseRows, getPurchaseDetail, exportPurchaseRows, type PurchaseField, type PurchaseRow, type PurchaseDocument, type PurchaseMetadata, type PurchaseDetail } from '@/api/purchaseReport'
+import { getPurchaseMetadata, getPurchaseOptions, getPurchaseRows, getPurchaseDetail, type PurchaseField, type PurchaseRow, type PurchaseDocument, type PurchaseMetadata, type PurchaseDetail } from '@/api/purchaseReport'
+import ReportExportControl from '@/components/ReportExportControl.vue'
 import { createPurchaseDetailState, type PurchaseDetailState } from './purchaseDetailState'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -22,7 +23,7 @@ const auth = useAuthStore()
 const filters = reactive({ keyword: '', project_code: '', supplier: '', progress: '' })
 const dates = ref<string[]>([]), page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), total = ref(0)
 const rows = ref<PurchaseRow[]>([]), metadata = ref<PurchaseMetadata | null>(null)
-const loading = ref(false), error = ref(''), exporting = ref(false), stamp = ref('')
+const loading = ref(false), error = ref(''), stamp = ref('')
 const candidates = reactive({ project: [] as { value: string; label: string }[], supplier: [] as { value: string; label: string }[] })
 const optionLoading = reactive({ project: false, supplier: false })
 const optionRevision = { project: 0, supplier: 0 }
@@ -157,14 +158,7 @@ async function initialize() {
   try { metadata.value = await getPurchaseMetadata(); readPreferences(); await nextTick(); await fetchRows() }
   catch { error.value = '报表初始化失败，请重试'; loading.value = false }
 }
-async function exportRows() {
-  if (exporting.value) return
-  if (total.value > (metadata.value?.export_limit || 500)) { ElMessage.warning('单次最多导出 500 条，请缩小筛选范围'); return }
-  exporting.value = true
-  try { const blob = await exportPurchaseRows(params()); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = '采购进度查询.csv'; link.click(); URL.revokeObjectURL(url) }
-  catch { /* Shared handler displays safe errors. */ }
-  finally { exporting.value = false }
-}
+const exportColumns = () => grid?.getAllDisplayedColumns().map(column => column.getColId()).filter(key => visible.value.includes(key)) || visible.value
 function stateLabel(row: PurchaseDocument) { return row.cancel_status === 'B' ? '已作废' : metadata.value?.document_status_labels[row.document_status] || '未知状态' }
 function orderLabel(id?: number) { const order = detailState.value.data?.orders.find(row => row.id === id); return order ? `${order.bill_no} / ${order.line_no}` : '-' }
 watch([filters, dates, pageSize], () => { page.value = 1 }, { deep: true, flush: 'sync' })
@@ -182,7 +176,7 @@ onUnmounted(() => { ++revision; controller?.abort(); clearTimeout(timer); detail
     <template #toolbar-right>
       <span v-if="stamp" class="purchase-stamp">查询时间 {{ new Date(stamp).toLocaleTimeString('zh-CN', { hour12: false }) }}</span>
       <el-tooltip content="刷新"><el-button size="small" :icon="Refresh" aria-label="刷新采购数据" :disabled="loading" @click="metadata ? fetchRows() : initialize()" /></el-tooltip>
-      <el-button v-if="auth.hasPermission('report:purchase:export')" size="small" :icon="Download" :loading="exporting" :disabled="loading || !total" @click="exportRows">导出</el-button>
+      <ReportExportControl v-if="auth.hasPermission('report:purchase:export')" report="purchase" :parameters="params" :columns="exportColumns" :disabled="loading || !total" />
       <PmsListColumnPicker v-if="metadata" v-model="visible" :groups="groups" :default-keys="defaultKeys" :column-definitions="columns" :get-grid-api="() => grid" aria-label="采购进度列设置" @layout-changed="savePreferences" />
     </template>
     <template #filters>

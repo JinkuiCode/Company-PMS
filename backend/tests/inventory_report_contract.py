@@ -50,7 +50,7 @@ class InventoryContract(unittest.TestCase):
 
     def test_schema_has_all_view_columns_and_decimal_quantity(self):
         r = self.reader()
-        self.assertEqual([f['key'] for f in r.report_fields()], ['FID','Organization','Stock','MaterialCode','MaterialName','FSPECIFICATION','Brand','Material','SupplierNumber','FBaseQty','Unit'])
+        self.assertEqual([f['key'] for f in r.report_fields()], ['Organization','Stock','MaterialCode','MaterialName','FSPECIFICATION','Brand','Material','SupplierNumber','FBaseQty','Unit'])
         self.assertEqual(r.public_row({'FID':'x','FBaseQty':Decimal('999999.99'),'secret':'no'})['FBaseQty'], '999999.99')
         self.assertNotIn('secret', r.public_row({'secret':'no'}))
 
@@ -126,7 +126,7 @@ class InventoryApiContract(unittest.TestCase):
 
     def test_metadata_names_are_source_fields_not_user_renames(self):
         data=self.client.get('/api/reports/inventory/metadata').json()
-        self.assertEqual(len(data['fields']),11)
+        self.assertEqual(len(data['fields']),10)
         self.assertEqual(data['organizations'][0]['value'],200292)
         self.assertEqual(data['organizations'][0]['label'],'重命名')
 
@@ -136,19 +136,12 @@ class InventoryApiContract(unittest.TestCase):
             self.assertEqual(r.status_code,503);self.assertNotIn('PRIVATE_SECRET',r.text)
         self.assertEqual(self.client.get('/api/reports/inventory?sort=unknown').status_code,422)
 
-    def test_export_scope_limit_formula_and_log(self):
+    def test_legacy_export_retired_with_permissions_preserved(self):
         self.assertEqual(self.client.get('/api/reports/inventory/export').status_code,403)
         self.ctx['permissions'].append('report:inventory:export')
-        @contextmanager
-        def conn():yield object()
-        data={'total':1,'items':[{'FID':'a','MaterialName':'=1+1','FBaseQty':Decimal('-2.30')}]}
-        with patch.object(self.api,'purchase_connection',conn),patch.object(self.api,'list_inventory',return_value=data) as read,patch.object(self.api,'record_operation_log') as log:
-            r=self.client.get('/api/reports/inventory/export?page=2')
-            self.assertEqual(r.status_code,200);self.assertIn("'=1+1",r.text)
-            self.assertEqual(read.call_args.args[2],[200292]);self.assertEqual(read.call_args.args[1].page,1)
-            self.assertEqual(log.call_count,1)
-            read.return_value={'total':501,'items':[]};log.reset_mock()
-            self.assertEqual(self.client.get('/api/reports/inventory/export').status_code,422);log.assert_not_called()
+        with patch.object(self.api,'purchase_connection') as read:
+            self.assertEqual(self.client.get('/api/reports/inventory/export').status_code,410)
+            read.assert_not_called()
             self.ctx['permissions']=['report:inventory:export']
             self.assertEqual(self.client.get('/api/reports/inventory/export').status_code,403)
 

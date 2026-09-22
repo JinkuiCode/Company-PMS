@@ -7,7 +7,6 @@ from app.services.inventory_fields import FIELDS, report_fields
 
 KEYS = tuple(row[0] for row in FIELDS)
 SOURCE = ' FROM dbo.YD_JIN_INVENTORY v '
-EXPORT_LIMIT = 500
 
 
 class Condition(BaseModel):
@@ -19,7 +18,7 @@ class Condition(BaseModel):
 
     @model_validator(mode='after')
     def validate_condition(self):
-        if self.field not in KEYS:
+        if self.field not in KEYS or self.field == 'FID':
             raise ValueError('未知筛选字段')
         if self.field == 'FBaseQty':
             if self.operator not in ('equals','greaterThan','lessThan','between'):

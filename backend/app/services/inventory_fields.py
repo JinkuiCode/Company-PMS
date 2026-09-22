@@ -17,7 +17,7 @@ FIELDS = [
 def report_fields():
     return [dict(key=key, label=label, value_type=kind, width=width, group='即时库存',
                  description=description, editable=False, list_available=True)
-            for key, label, kind, width, description in FIELDS]
+            for key, label, kind, width, description in FIELDS if key != 'FID']
 
 
 def catalog_fields():

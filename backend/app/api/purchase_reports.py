@@ -1,12 +1,9 @@
-import csv
-import io
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-from fastapi.responses import Response
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
@@ -18,7 +15,6 @@ from app.services.project import get_scoped_archive_query
 from app.services.purchase_connection import purchase_connection
 from app.services.purchase_reader import PurchaseQuery, ProjectOrganizationGrant, load_request, load_chains, list_requests, list_options, REPORT_START_DATE
 from app.services.purchase_fields import report_fields, DOCUMENT_STATUSES, PROGRESS_LABELS
-from app.services.operation_log import record_operation_log
 
 router = APIRouter(prefix='/api/reports/purchase', tags=['采购进度查询'])
 
@@ -64,7 +60,7 @@ def enrich_project_names(db, ctx, rows):
 @router.get('/metadata')
 def metadata(ctx: dict = Depends(require_permission('report:purchase:view'))):
     return dict(fields=report_fields(), progress_labels=PROGRESS_LABELS, document_status_labels=DOCUMENT_STATUSES,
-                export_limit=500, start_date=REPORT_START_DATE.isoformat())
+                start_date=REPORT_START_DATE.isoformat())
 
 
 @router.get('')
@@ -91,34 +87,11 @@ def ensure_export_permission(ctx):
     enforce_permission(ctx, 'report:purchase:export')
 
 
-def csv_cell(value):
-    text = '' if value is None else str(value)
-    return "'" + text if text.lstrip().startswith(('=', '+', '-', '@')) or text.startswith(('\t', '\r', '\n')) else text
-
-
 @router.get('/export')
 def export(request: Request, query: Annotated[PurchaseQuery, Query()], db: Session = Depends(get_db),
            ctx: dict = Depends(require_permission('report:purchase:export'))):
     ensure_export_permission(ctx)
-    with report_connection() as connection:
-        result = list_requests(connection, query.model_copy(update={'page': 1, 'page_size': 500}), project_scope(db, ctx))
-    if result['total'] > 500:
-        raise HTTPException(422, '单次最多导出 500 条，请缩小筛选范围后重试')
-    enrich_project_names(db, ctx, result['items'])
-    fields = report_fields()
-    output = io.StringIO(newline='')
-    writer = csv.writer(output)
-    writer.writerow([field['label'] for field in fields])
-    for row in result['items']:
-        row = dict(row, document_status=DOCUMENT_STATUSES.get(row['document_status'], '未知状态'),
-                   close_status={'A': '未关闭', 'B': '已关闭'}.get(row.get('close_status'), ''),
-                   progress=PROGRESS_LABELS.get(row['progress'], '数据待核对'))
-        writer.writerow([csv_cell(row.get(field['key'])) for field in fields])
-    record_operation_log(db, module='采购进度查询', action='export', entity_type='purchase_report',
-        operator_id=ctx['user_id'], request=request, summary=f"导出采购进度 {result['total']} 条",
-        after_data={'filters': query.model_dump(mode='json'), 'row_count': result['total']}, commit=True)
-    return Response(content=('\ufeff' + output.getvalue()).encode('utf-8'), media_type='text/csv; charset=utf-8',
-                    headers={'Content-Disposition': 'attachment; filename="purchase-progress.csv"', 'Cache-Control': 'no-store'})
+    raise HTTPException(410, '导出已升级为后台Excel任务，请刷新页面后使用导出按钮')
 
 
 @router.get('/{request_id}')

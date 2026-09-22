@@ -6,10 +6,9 @@ export interface InventoryField {
 }
 export type InventoryRow = Record<string, string | number | null>
 export interface InventoryMetadata {
-  fields: InventoryField[]; export_limit: number
+  fields: InventoryField[]
   organizations: { value: number; label: string }[]
 }
 export const getInventoryMetadata = () => request.get<unknown, InventoryMetadata>('/reports/inventory/metadata')
 export const getInventoryRows = (params: object, signal: AbortSignal) => request.get<unknown, {items: InventoryRow[]; total: number; queried_at: string}>('/reports/inventory', {params, signal, timeout: 60000})
 export const getInventoryStocks = (keyword: string, organization_id?: number) => request.get<unknown, {items: {value: string; label: string}[]; has_more: boolean}>('/reports/inventory/options', {params: {field: 'Stock', keyword, organization_id}, timeout: 30000})
-export const exportInventoryRows = (params: object) => request.get<unknown, Blob>('/reports/inventory/export', {params, responseType: 'blob', timeout: 60000})

@@ -14,6 +14,7 @@ from app.api import product_lines
 from app.api import sync_tasks
 from app.api import purchase_reports
 from app.api import inventory_reports
+from app.api import report_exports
 from app.services.authorization import get_current_user_context, require_permission
 from app.models.init_db import init_db
 from app.services.database_revision import check_database_ready
@@ -33,14 +34,18 @@ async def lifespan(app: FastAPI):
     import asyncio
     from app.core.database import SessionLocal
     from app.services.erp_queue import worker
+    from app.services.report_export_jobs import worker as export_worker
     stop = threading.Event()
     runner = threading.Thread(target=worker, args=(stop, SessionLocal), daemon=True, name='pms-erp-worker') if settings.ERP_SYNC_WORKER_ENABLED else None
     if runner:
         runner.start()
+    export_runner = threading.Thread(target=export_worker, args=(stop, SessionLocal), daemon=True, name='pms-report-export-worker')
+    export_runner.start()
     try:
         yield
     finally:
         stop.set()
+        await asyncio.to_thread(export_runner.join, 60)
         if runner:
             await asyncio.to_thread(runner.join, 300)
 
@@ -73,6 +78,7 @@ app.include_router(product_lines.router)
 app.include_router(sync_tasks.router)
 app.include_router(purchase_reports.router)
 app.include_router(inventory_reports.router)
+app.include_router(report_exports.router)
 app.include_router(users.router)
 app.include_router(roles.router)
 app.include_router(menus.router)

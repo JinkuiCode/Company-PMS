@@ -19,6 +19,7 @@ page.on('pageerror', error => errors.push(error.message))
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url()), path = url.pathname
   if (!path.startsWith('/api/')) return route.continue()
+  if (path === '/api/report-exports') return route.fulfill({json:[]})
   if (path === '/api/auth/me') return route.fulfill({ json: { id: 990, username: 'report-test', real_name: '报表测试', permissions: ['report:purchase:view', ...(canExport ? ['report:purchase:export'] : [])], role_codes: [], data_scope: 4 } })
   if (path === '/api/my-menus') return route.fulfill({ json: [{ id: 4, menu_name: '报表中心', menu_type: 'M', icon: 'DataAnalysis', children: [{ id: 41, menu_name: '采购进度查询', path: '/reports/purchase-progress', icon: 'Document' }] }] })
   if (path === '/api/reports/purchase/metadata') return route.fulfill({ json: metadata })

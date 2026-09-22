@@ -15,6 +15,7 @@ from app.models.field_policy import SysBusinessFieldPolicy  # noqa: F401
 from app.models.database_revision import PmsDatabaseRevision  # noqa: F401
 from app.models.parameter import SysParameter  # noqa: F401
 from app.models.erp_task import ErpSyncTask  # noqa: F401
+from app.models.report_export import ReportExportJob  # noqa: F401
 from app.models.product_line import SysProductLine, SysRoleProductLine  # noqa: F401
 from app.services.user_security_migration import upgrade_user_security, initialize_user_security
 

@@ -528,8 +528,8 @@ def _page_then_summarize(connection, query, base, params):
     return dict(total=total, items=items, page=query.page, page_size=query.page_size)
 
 
-def _decorate_rows(connection, items):
-    chains = load_chains(connection, items)
+def _decorate_rows(connection, items, chains=None):
+    chains = load_chains(connection, items) if chains is None else chains
     for row in items:
         chain = chains[row['id']]
         row.update(chain['summary'])

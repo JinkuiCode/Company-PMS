@@ -81,16 +81,13 @@ class ReportApiContract(unittest.TestCase):
             'product_line_ids': [line.id]}), [ProjectOrganizationGrant('A', 100)])
         self.assertEqual(api.project_scope(self.db, {'data_scope': 4, 'product_line_ids': []}), [])
 
-    def test_export_requires_view_and_export_and_sanitizes_formulas(self):
+    def test_export_requires_view_and_export(self):
         api = self.api()
         for permissions in ([], ['report:purchase:view'], ['report:purchase:export']):
             with self.assertRaises(HTTPException) as result:
                 api.ensure_export_permission({'permissions': permissions})
             self.assertEqual(result.exception.status_code, 403)
         api.ensure_export_permission({'permissions': ['report:purchase:view', 'report:purchase:export']})
-        for value in ('=1+1', '+cmd', '-1+2', '@SUM(A1)', '\t=1', '  =1'):
-            self.assertTrue(api.csv_cell(value).startswith("'"))
-        self.assertEqual(api.csv_cell('物料'), '物料')
         self.assertEqual(api.public_row({'requested': Decimal('123456789.1234567890')})['requested'], '123456789.1234567890')
 
     def test_detail_out_of_scope_is_404_and_never_loads_children(self):
@@ -143,7 +140,7 @@ class ReportApiContract(unittest.TestCase):
                 self.assertEqual(response.status_code, 503)
                 self.assertNotIn('PRIVATE', response.text)
 
-    def test_http_export_uses_shared_query_scope_and_logs(self):
+    def test_legacy_export_is_retired_without_querying_erp(self):
         api = self.api()
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
@@ -159,21 +156,10 @@ class ReportApiContract(unittest.TestCase):
         def connection():
             yield object()
         data = {'total': 1, 'items': [{'id': 1, 'project_code': 'A', 'bill_no': '=1+1', 'close_status': 'B', 'document_status': 'C', 'progress': 'complete'}]}
-        with TestClient(app) as client, patch.object(api, 'purchase_connection', connection), patch.object(api, 'list_requests', return_value=data) as query, patch.object(api, 'record_operation_log') as log:
+        with TestClient(app) as client, patch.object(api, 'list_requests') as query:
             response = client.get('/api/reports/purchase/export?date_from=2026-01-01&page=2')
-            self.assertEqual(response.status_code, 200)
-            self.assertIn('已关闭', response.text)
-            self.assertIn("'=1+1", response.text)
-            self.assertIn('PMS 项目', response.text)
-            args = query.call_args.args
-            self.assertEqual(args[1].page, 1)
-            self.assertEqual(args[1].page_size, 500)
-            self.assertEqual(str(args[1].date_from), '2026-01-01')
-            self.assertEqual(args[2], [ProjectOrganizationGrant('A', 100)])
-            self.assertEqual(log.call_args.kwargs['operator_id'], 7)
-            query.return_value = {'total': 501, 'items': []}; log.reset_mock()
-            self.assertEqual(client.get('/api/reports/purchase/export').status_code, 422)
-            log.assert_not_called()
+            self.assertEqual(response.status_code, 410)
+            query.assert_not_called()
 
 
 if __name__ == '__main__':

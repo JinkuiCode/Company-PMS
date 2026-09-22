@@ -53,6 +53,7 @@ def test_upgrade_marks_database_ready_and_can_repeat() -> None:
         with sqlite3.connect(path) as connection:
             assert connection.execute("SELECT COUNT(*) FROM pms_database_revision").fetchone()[0] == 1
             assert connection.execute("SELECT COUNT(*) FROM erp_sync_task").fetchone()[0] == 0
+            assert connection.execute("SELECT COUNT(*) FROM pms_report_export_job").fetchone()[0] == 0
             assert connection.execute("SELECT COUNT(*) FROM sys_menu WHERE permission_code LIKE 'system:sync:%'").fetchone()[0] == 3
     finally:
         engine.dispose()
@@ -99,6 +100,7 @@ def test_production_lifespan_checks_revision_without_running_upgrade() -> None:
         patch.object(main, "validate_runtime_config"),
         patch.object(main, "init_db") as initialize,
         patch.object(main, "check_database_ready") as check,
+        patch('app.services.report_export_jobs.worker'),
     ):
         asyncio.run(exercise())
         check.assert_called_once()

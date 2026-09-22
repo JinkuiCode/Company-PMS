@@ -21,10 +21,9 @@ export interface PurchaseDetail {
 }
 export interface PurchaseMetadata {
   fields: PurchaseField[]; progress_labels: Record<string, string>
-  document_status_labels: Record<string, string>; export_limit: number; start_date: string
+  document_status_labels: Record<string, string>; start_date: string
 }
 export const getPurchaseMetadata = () => request.get<unknown, PurchaseMetadata>('/reports/purchase/metadata')
 export const getPurchaseOptions = (field: 'project' | 'supplier', keyword: string) => request.get<unknown, { items: { value: string; label: string }[]; has_more: boolean }>('/reports/purchase/options', { params: { field, keyword }, timeout: 30000 })
 export const getPurchaseRows = (params: object, signal: AbortSignal) => request.get<unknown, { items: PurchaseRow[]; total: number; queried_at: string }>('/reports/purchase', { params, signal, timeout: 60000 })
 export const getPurchaseDetail = (id: string, signal: AbortSignal) => request.get<unknown, PurchaseDetail>(`/reports/purchase/${id}`, { signal, timeout: 60000 })
-export const exportPurchaseRows = (params: object) => request.get<unknown, Blob>('/reports/purchase/export', { params, responseType: 'blob', timeout: 60000 })

@@ -13,7 +13,8 @@ await page.route('**/api/**', async route => {
   if (!path.startsWith('/api/')) return route.continue()
   if(path === '/api/auth/me') return route.fulfill({json:{id:999, username:'test', real_name:'验收用户', permissions:['report:inventory:view','report:inventory:export'],role_codes:[],product_line_ids:[1]}})
   if(path === '/api/my-menus') return route.fulfill({json:[{id:1,menu_name:'报表中心',menu_type:'M',icon:'Document',children:[{id:2,menu_name:'即时库存查询',path:'/reports/inventory',icon:'Document'}]}]})
-  if(path.endsWith('/metadata')) return route.fulfill({json:{fields:keys.map((key,i)=>({key,label:labels[i],value_type:key==='FBaseQty'?'number':'text',width:i===4?220:140,description:labels[i],list_available:true})),organizations:[{value:100,label:'8吋半导体'}],export_limit:500}})
+  if(path === '/api/report-exports') return route.fulfill({json:[]})
+  if(path.endsWith('/metadata')) return route.fulfill({json:{fields:keys.map((key,i)=>({key,label:labels[i],value_type:key==='FBaseQty'?'number':'text',width:i===4?220:140,description:labels[i],list_available:true})).filter(f=>f.key!=='FID'),organizations:[{value:100,label:'8吋半导体'}]}})
   if(path.endsWith('/options')) return route.fulfill({json:{items:[{value:'原料仓',label:'原料仓'}]}})
   if(path === '/api/reports/inventory') {
     last = Object.fromEntries(url.searchParams)
@@ -30,7 +31,8 @@ try {
   assert.equal(last.page_size,'50')
   await page.getByRole('button',{name:'2',exact:true}).click()
   await expect.poll(()=>last.page).toBe('2')
-  await expect(page.locator('.ag-row[row-index="0"] .ag-cell[col-id="FID"]')).toHaveText('51')
+  await expect(page.locator('.ag-row[row-index="0"] .ag-cell[col-id="MaterialCode"]')).toHaveText('MAT-51')
+  await expect(page.locator('.ag-cell[col-id="FID"]')).toHaveCount(0)
   const search = page.getByRole('textbox',{name:'搜索库存物料'})
   await search.fill('新物料')
   await expect.poll(()=>last.keyword).toBe('新物料')
@@ -59,7 +61,7 @@ try {
   await expect(page.locator('.column-picker-panel')).not.toBeVisible()
   await expect(page.locator('.el-message')).toHaveCount(0, {timeout: 10000})
   await page.mouse.move(10,10)
-  assert.ok(await page.evaluate(()=>JSON.parse(localStorage.getItem('pms:inventory-report:v1:999')).columns.length===11))
+  assert.ok(await page.evaluate(()=>JSON.parse(localStorage.getItem('pms:inventory-report:v1:999')).columns.length===10))
   for(const width of [1366,1600]) {
     await page.setViewportSize({width,height:900})
     await page.evaluate(()=>document.fonts.ready)
