@@ -16,6 +16,7 @@ PAGE_PERMISSIONS = {
     "/system/field-policy": "system:field-policy:view",
     "/system/parameter": "system:parameter:view",
     "/reports/purchase-progress": "report:purchase:view",
+    "/reports/inventory": "report:inventory:view",
 }
 
 

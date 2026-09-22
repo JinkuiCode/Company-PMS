@@ -389,6 +389,8 @@ def build_field_catalog() -> list[dict[str, Any]]:
             catalog.append(field)
     from app.services.purchase_fields import catalog_fields
     catalog.extend(catalog_fields())
+    from app.services.inventory_fields import catalog_fields as inventory_catalog_fields
+    catalog.extend(inventory_catalog_fields())
     return sorted(catalog, key=lambda item: (item["sort"], item["field_code"]))
 
 

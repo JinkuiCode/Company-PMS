@@ -279,6 +279,8 @@ def init_db():
         initialize_sync_management(db, grant_existing_admin=not admin_role_created)
         from app.services.purchase_migration import initialize_purchase_reports
         initialize_purchase_reports(db, grant_existing_admin=not admin_role_created)
+        from app.services.inventory_migration import initialize_inventory_report
+        initialize_inventory_report(db, grant_existing_admin=not admin_role_created)
         from app.services.product_line_migration import initialize_product_line_management
         initialize_product_line_management(db, grant_existing_admin=not admin_role_created)
 

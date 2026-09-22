@@ -68,6 +68,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '参数设置', permission: 'system:parameter:view' },
       },
       {
+        path: 'reports/inventory', name: 'InventoryList',
+        component: () => import('@/views/reports/InventoryList.vue'),
+        meta: { title: '即时库存查询', permission: 'report:inventory:view' },
+      },
+      {
         path: 'reports/purchase-progress', name: 'PurchaseProgressList',
         component: () => import('@/views/reports/PurchaseProgressList.vue'),
         meta: { title: '采购进度查询', permission: 'report:purchase:view' },
