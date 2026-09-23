@@ -282,6 +282,8 @@ def init_db():
         initialize_purchase_reports(db, grant_existing_admin=not admin_role_created)
         from app.services.inventory_migration import initialize_inventory_report
         initialize_inventory_report(db, grant_existing_admin=not admin_role_created)
+        from app.services.stock_detail_migration import initialize_stock_detail_report
+        initialize_stock_detail_report(db, grant_existing_admin=not admin_role_created)
         from app.services.product_line_migration import initialize_product_line_management
         initialize_product_line_management(db, grant_existing_admin=not admin_role_created)
         from app.services.all_data_migration import initialize_all_business_data

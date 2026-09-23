@@ -1,5 +1,42 @@
 # PMS 变更记录
 
+## 2026-09-23 物料收发完整读取流程与权限边界（进行中）
+
+- 原因：继续已批准的报表开发，补齐库存来源、期初与名称读取，防止局部数据被误当成完整报表。
+- 调整：`stock_detail_sources.py` 扩展至37类单据来源，补充采购入库双侧、采购退料、分步式调拨/在途、组装拆卸及初始库存。新增 `stock_detail_snapshots.py`、`stock_detail_normalize.py`、`stock_detail_catalog.py`、`stock_detail_baseline.py`、`stock_detail_engine.py`、`stock_detail_fetch.py`，实现完整组织基点、名称和单位映射、数量归一及所有注册来源读取后统一补算。任一来源失败不得返回部分报表。
+- 调整：新增 `backend/app/api/stock_detail_reports.py`，列表/候选同时校验菜单和查看权限、组织范围及脱敏错误；前后端正式路由已接入。数量以十进制字符串返回，接口不输出价格金额。新增完整查询汇总，多个库存维度不混算。
+- 调整：接入现有 `report_export_jobs.py`、`report_export_data.py`、`report_exports.py` 和 `ReportExportControl.vue`，独立导出权限、运行/下载复核范围；期初与完整流水同表导出，不按页面截断。新增 `stock_detail_migration.py` 并接入独立初始化、字段目录和角色首页，数据库目标版本提升至 `2026-09-23-02`，尚未执行PMS数据库升级。
+- 授权：新增126对象、1149列的最小只读审阅清单。用户明确批准后，通过本机交互凭据执行，首次连接失败无变更，第二次成功补齐1105项列SELECT，其余有效权限保留；逐对象TOP(0)验证成功后提交。无业务数据修改、全库读取/写入授权或服务重启。新增权限差异保存在 `.runtime/stock-detail-reader-grant-result.json`，未保存凭据。
+- 审查修复：`stock_detail_fetch.py` 为整批来源读取增加事务级SNAPSHOT及结束回滚释放，数据库未启用时明确拒绝查询；`report_export_data.py` 在连接ERP前处理空组织授权，避免无授权导出依赖ERP连接。真实连接发现pymssql回滚后自动开始旧隔离事务，新增失败测试后修正为设置隔离后再次回滚开启新快照事务。
+- 数据库设置：用户独立批准并交互输入凭据后，金蝶AIS20231211221516的ALLOW_SNAPSHOT_ISOLATION从0变为1，RCSI保持开启；未重启服务或修改业务数据。结果保存于 `.runtime/stock-detail-snapshot-result.json`。开启后重新查询六笔流水及生成15列完整Excel通过，本次约2.47秒。
+- 验证：80项后端报表测试、10项既有导出回归通过；字段目录、枚举、独立数据库升级契约通过。前端状态5项、页面契约、标准样式/列表/系统UI及字典/枚举契约通过，构建成功（既有大分包提示）。Edge模拟接口验证导出请求、汇总、查询方案、列宽、明细联动与1600/1366/390宽度通过。
+- 真实验证：日常只读账号读取37类来源后，截图六笔收入/发出6、10、20米与期初0/期末0一致，样本完整查询约0.58秒；查询期内零流水但期初9的样本保留期初；采购退料负收入1、生产退料负发出4样本读通。真实Excel包含期初与六笔流水、15列，即使请求每页1条也未截断。读取边界修复SQL整数零转换，仍拒绝浮点数参与数量计算。
+- 未完成：独立审查结论处理、扩展业务对账与正式环境完整联调、PMS数据库升级/部署及GitHub收尾。代表性样本通过不等于37类业务场景均已验收。
+
+## 2026-09-23 物料收发正式页面与数量取数基础（进行中）
+
+- 原因：继续已批准的物料收发报表实施，不重复请求同范围细节确认。
+- 调整：新增 `frontend/src/views/reports/StockDetailList.vue`、`stockDetailState.ts` 和 `frontend/src/api/stockDetailReport.ts`，使用统一列表与字段控件实现物料必填、仓库候选选择、50条分页、查询方案恢复、列宽/冻结/排序保存、只读明细随行切换及重置。修改筛选时清理旧结果，过期请求不得覆盖新结果；重置不执行空物料查询，不清除保存方案或列设置。非模态详情通过组件公开属性允许点击背景列表，不新增全局样式覆盖。
+- 调整：`backend/app/services/stock_detail_reader.py` 增加候选查询和完整数量计算后分页；`stock_detail_balance.py` 增加已核实基点到查询日前的期初补算，拒绝越界日期、重复流水、未知维度和浮点数量；新增 `stock_detail_sources.py`，当前包含29类参数化原始来源适配，覆盖生产、委外、其他出入库、转换、盘盈盘亏、销售出退库及采购收料。尚未完成全部来源，不允许以局部来源发布完整报表。
+- 测试文件：`backend/tests/stock_detail_*contract.py`、`frontend/tests/stock-detail-state.test.mjs`、`stock-detail-page-contract.test.mjs`、`stock-detail-browser.mjs` 与 `tests/fixtures/stock-detail-entry.ts`。
+- 验证：35项后端测试、5项前端状态测试及页面契约通过；Edge模拟接口验证必填、仓库选择、50条分页、明细联动、方案恢复、列宽持久化、重置和1600/1366/390宽度通过。29类SQL引用列与已读取正式库结构匹配，无缺失字段。前端三项标准契约及 `npm run build` 通过，仅保留既有大分包提示。以上不代替真实ERP取数对账。
+- 未完成：剩余来源、真实取数整合、完整期初基点读取、权限/API/菜单迁移、后台导出和正式数据验收。当前页面尚未注册正式路由；未新增数据库授权、升级数据库、部署、提交或推送GitHub。
+
+## 2026-09-23 物料收发报表基础开发（未接入正式取数）
+
+- 原因：样稿及物料必填、仓库选择规则获批，用户确认独立功能分支开发。
+- 完成：在 `codex/pms-stock-detail-report` 新增 `stock_detail_reader.py` 查询参数及组织范围收敛、`stock_detail_fields.py` 数量型公开字段、`stock_detail_balance.py` 库存维度隔离及Decimal单位换算和流水结存。缺少核实期初时拒绝计算，不默认置零。
+- 涉及：上述文件位于 `backend/app/services/`；新增 `backend/tests/stock_detail_report_contract.py`、`stock_detail_balance_contract.py`；计划位于 `docs/superpowers/plans/2026-09-23-stock-detail-report.md`。
+- 验证：先观察新测试因模块缺失失败，随后9项新测试通过，既有库存12项测试通过。仅为未注册到API的基础模块，尚未完成真实取数、正式页面、权限迁移和后台导出；未授权、升级数据库或部署服务器。
+- 后续补充：`stock_detail_balance.py` 增加收入、发出、负收入、负发出、调拨双方向及转换方向的数量计算，未知方向拒绝；追加跨页非零结存和金蝶负方向测试，11项新测试全部通过。正式报表仍未完成，未开放局部来源查询。
+
+## 2026-09-23 物料收发明细交互样稿
+
+- 用户确认样式后追加约束：物料为查询必填，空值或纯空格阻止查询并提示；仓库仅下拉选择，保留“全部仓库”。已更新 `.runtime/stock-detail-prototype/index.html` 并通过 Edge 空值、空格、正常查询及仓库选择验证。正式开发需在后端同样校验物料必填和仓库有效性，不允许仅依赖前端。
+- 原因：用户要求先确认报表样式，再实施正式功能。
+- 完成：新增独立本地样稿 `.runtime/stock-detail-prototype/index.html`，使用六笔已核对记录展示分组数量列、右侧数量列固定、日期和物料筛选、查询方案、显示字段及列宽保存、只读明细联动、样稿 CSV 导出。明确标注非实时数据，不调用业务接口。
+- 验证：Edge 自动化检查筛选、明细随行切换、列宽持久化、方案恢复及下载通过；1600、1366、390 像素截图检查，无页面横向溢出或脚本异常。样稿待用户确认，未修改正式报表、数据库或服务器。
+
 ## 2026-09-23 主分支合并收尾
 
 - 已推送 `codex/pms-inventory-report` 至GitHub，并将本地master从 `a670307` 快进合并至 `a844856`，包含即时库存、后台Excel导出、全部业务数据权限及详情联动和发布记录。未创建PR，未强制推送，保留功能分支避免影响其他任务。

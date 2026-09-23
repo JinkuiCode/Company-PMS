@@ -31,7 +31,8 @@ async function download(job: ReportExportJob) {
     const blob = await downloadReportExport(job.id)
     const url = URL.createObjectURL(blob), link = document.createElement('a')
     link.href = url
-    link.download = `${props.report === 'purchase' ? '采购进度' : '即时库存'}-${job.id.slice(0, 8)}.xlsx`
+    const reportLabel = { purchase: '采购进度', inventory: '即时库存', 'stock-detail': '物料收发明细' }[props.report]
+    link.download = `${reportLabel}-${job.id.slice(0, 8)}.xlsx`
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch { /* The shared request handler displays the error. */ }

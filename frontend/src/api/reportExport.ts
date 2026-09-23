@@ -1,6 +1,6 @@
 import request from '@/utils/request'
 
-export type ReportName = 'inventory' | 'purchase'
+export type ReportName = 'inventory' | 'purchase' | 'stock-detail'
 export interface ReportExportJob {
   id: string; report: ReportName; status: 'queued' | 'running' | 'success' | 'failed' | 'expired'
   processed: number; message: string | null; created_at: string; finished_at: string | null

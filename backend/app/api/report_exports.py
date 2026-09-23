@@ -13,7 +13,7 @@ router = APIRouter(prefix='/api/report-exports', tags=['报表导出'])
 
 class ExportRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    report: Literal['inventory', 'purchase']
+    report: Literal['inventory', 'purchase', 'stock-detail']
     parameters: dict = Field(default_factory=dict)
     columns: list[str] = Field(min_length=1, max_length=100)
 
@@ -24,7 +24,7 @@ def create(body: ExportRequest, request: Request, db: Session = Depends(get_db),
 
 
 @router.get('')
-def listing(report: Literal['inventory', 'purchase'], db: Session = Depends(get_db), ctx=Depends(get_current_user_context)):
+def listing(report: Literal['inventory', 'purchase', 'stock-detail'], db: Session = Depends(get_db), ctx=Depends(get_current_user_context)):
     check_permission(ctx, report)
     rows = db.query(ReportExportJob).filter_by(user_id=ctx['user_id'], report=report).order_by(ReportExportJob.created_at.desc()).limit(20).all()
     return [public_job(row) for row in rows]
@@ -41,7 +41,7 @@ def download(job_id: str, db: Session = Depends(get_db), ctx=Depends(get_current
     path = job_file(job)
     if not path.is_file():
         raise HTTPException(410, '文件已清理，请重新导出')
-    filename = ('即时库存' if job.report == 'inventory' else '采购进度') + '-' + job.created_at.strftime('%Y%m%d-%H%M%S') + '.xlsx'
+    filename = {'inventory': '即时库存', 'purchase': '采购进度', 'stock-detail': '物料收发明细'}[job.report] + '-' + job.created_at.strftime('%Y%m%d-%H%M%S') + '.xlsx'
     return FileResponse(path, filename=filename,
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})

@@ -1,5 +1,6 @@
 """Batch reads reuse report filters and verified document-chain authorization."""
 import json
+from contextlib import nullcontext
 from app.services.report_workbook import ReportWorkbook
 from app.services.purchase_connection import purchase_connection
 from app.services.purchase_fields import DOCUMENT_STATUSES, PROGRESS_LABELS
@@ -95,8 +96,15 @@ def write_report(db, job, ctx, path, checkpoint):
     if job.report == 'purchase':
         # Always retain human-readable linkage, even if hidden in the screen layout.
         columns = list(dict.fromkeys(['bill_no', 'line_no', *columns]))
-    with ReportWorkbook(path) as book, purchase_connection() as connection:
-        main = book.sheet('即时库存' if job.report == 'inventory' else '采购申请主表',
+    stock_organizations = None
+    if job.report == 'stock-detail':
+        from app.api.inventory_reports import authorized_organizations
+        from app.services.stock_detail_reader import StockDetailQuery, effective_organizations
+        stock_query = StockDetailQuery.model_validate_json(job.parameters)
+        stock_organizations = effective_organizations(stock_query, authorized_organizations(db, ctx))
+    source = nullcontext(None) if stock_organizations == [] else purchase_connection()
+    with ReportWorkbook(path) as book, source as connection:
+        main = book.sheet({'inventory': '即时库存', 'purchase': '采购申请主表', 'stock-detail': '物料收发明细'}[job.report],
             [(key, fields[key]['label']) for key in columns])
         count = 0
         if job.report == 'inventory':
@@ -109,6 +117,17 @@ def write_report(db, job, ctx, path, checkpoint):
                     main.append(row)
                 count += len(batch)
                 checkpoint(count)
+        elif job.report == 'stock-detail':
+            from app.services.stock_detail_fetch import read_dataset
+            from app.services.stock_detail_engine import export_rows
+            dataset = read_dataset(connection, stock_query, stock_organizations)
+            checkpoint(count)
+            for row in export_rows(dataset, stock_query.start_date):
+                main.append(row)
+                count += 1
+                if count % 500 == 0:
+                    checkpoint(count)
+            checkpoint(count)
         else:
             from app.services.purchase_reader import PurchaseQuery, load_chains, _decorate_rows
             from app.api.purchase_reports import project_scope, enrich_project_names

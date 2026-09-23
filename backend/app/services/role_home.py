@@ -17,6 +17,7 @@ PAGE_PERMISSIONS = {
     "/system/parameter": "system:parameter:view",
     "/reports/purchase-progress": "report:purchase:view",
     "/reports/inventory": "report:inventory:view",
+    "/reports/stock-detail": "report:stock-detail:list",
 }
 
 
