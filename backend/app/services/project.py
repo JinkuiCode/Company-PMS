@@ -53,6 +53,9 @@ def get_child_dept_ids(db: Session, parent_id: int) -> list[int]:
 
 
 def _apply_project_scope(query, db: Session, scope_context: dict | None = None):
+    from app.services.business_data_scope import has_all_business_data
+    if has_all_business_data(scope_context):
+        return query
     if scope_context is None:
         return query
     if not scope_context.get('product_line_ids'):
@@ -81,6 +84,9 @@ def _apply_project_scope(query, db: Session, scope_context: dict | None = None):
 
 
 def _apply_archive_scope(query, db: Session, scope_context: dict | None = None):
+    from app.services.business_data_scope import has_all_business_data
+    if has_all_business_data(scope_context):
+        return query
     if scope_context is None:
         return query
     if not scope_context.get('product_line_ids'):
@@ -205,6 +211,9 @@ def _ensure_project_assignment_allowed(
     product_category: int | None,
     scope_context: dict | None,
 ) -> None:
+    from app.services.business_data_scope import has_all_business_data
+    if has_all_business_data(scope_context):
+        return
     if not scope_context:
         return
     scope = scope_context["data_scope"]
@@ -226,6 +235,9 @@ def _ensure_archive_assignment_allowed(
     product_category: int | None,
     scope_context: dict | None,
 ) -> None:
+    from app.services.business_data_scope import has_all_business_data
+    if has_all_business_data(scope_context):
+        return
     if not scope_context:
         return
     scope = scope_context["data_scope"]

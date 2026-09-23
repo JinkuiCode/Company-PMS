@@ -60,6 +60,8 @@ def normalize_role_menu_ids(db: Session, menu_ids: list[int]) -> list[int]:
             selected.add(view_menu.id)
 
     for menu in list(menus):
+        if menu.permission_code == 'business:data:all':
+            continue
         if menu.menu_type != "B" or not menu.permission_code or menu.permission_code.endswith(":view"):
             continue
         view_menu = db.query(SysMenu).filter(

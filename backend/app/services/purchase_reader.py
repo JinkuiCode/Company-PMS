@@ -57,6 +57,9 @@ class ProjectOrganizationGrant:
 
 
 def scope_clause(column, grants):
+    from app.services.business_data_scope import ALL_DATA_SCOPE
+    if grants is ALL_DATA_SCOPE:
+        return '1=1', []
     if not grants:
         return '1=0', []
     if any(not isinstance(grant, ProjectOrganizationGrant) for grant in grants):
@@ -69,6 +72,9 @@ def scope_clause(column, grants):
 
 
 def _prepare_scope(connection, grants):
+    from app.services.business_data_scope import ALL_DATA_SCOPE
+    if grants is ALL_DATA_SCOPE:
+        return
     scope_clause('a.FNUMBER', grants)
     if not grants or len(grants) <= 400:
         return

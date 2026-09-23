@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.services.inventory_fields import FIELDS, report_fields
+from app.services.business_data_scope import ALL_DATA_SCOPE
 
 KEYS = tuple(row[0] for row in FIELDS)
 SOURCE = ' FROM dbo.YD_JIN_INVENTORY v '
@@ -77,18 +78,20 @@ def like(value):
 
 
 def effective_organizations(query, authorized):
-    ids = sorted({value for value in authorized if type(value) is int and value > 0})
+    if authorized is ALL_DATA_SCOPE:
+        return [query.organization_id] if query.organization_id else ALL_DATA_SCOPE
+    ids = sorted({value for value in (authorized or []) if type(value) is int and value > 0})
     return [query.organization_id] if query.organization_id in ids else [] if query.organization_id else ids
 
 
 def where_clause(query, organizations):
-    if not organizations:
+    if organizations is None or organizations == []:
         return ' WHERE 1=0', []
-    if len(organizations) > 500:
+    if organizations is not ALL_DATA_SCOPE and len(organizations) > 500:
         raise ValueError('组织范围超出上限')
-    parts = ['EXISTS (SELECT 1 FROM dbo.T_STK_INVENTORY s WHERE s.FID=v.FID AND s.FSTOCKORGID IN ('+
+    parts = ['1=1'] if organizations is ALL_DATA_SCOPE else ['EXISTS (SELECT 1 FROM dbo.T_STK_INVENTORY s WHERE s.FID=v.FID AND s.FSTOCKORGID IN ('+
              ','.join(['%s']*len(organizations))+'))']
-    params = list(organizations)
+    params = [] if organizations is ALL_DATA_SCOPE else list(organizations)
     if query.keyword.strip():
         parts.append('('+' OR '.join(f"v.[{key}] LIKE %s ESCAPE '~'" for key in ('MaterialCode','MaterialName','FSPECIFICATION'))+')')
         params.extend([like(query.keyword.strip())]*3)
@@ -109,7 +112,7 @@ def where_clause(query, organizations):
 
 def list_inventory(connection, query, authorized):
     organizations = effective_organizations(query, authorized)
-    if not organizations:
+    if organizations == []:
         return {'items': [], 'total': 0}
     where, params = where_clause(query, organizations)
     cursor = connection.cursor()
@@ -130,7 +133,7 @@ def list_inventory(connection, query, authorized):
 def list_options(connection, field, keyword, organizations):
     if field != 'Stock' or len(keyword) > 100:
         raise ValueError('候选字段或搜索无效')
-    if not organizations:
+    if organizations == []:
         return {'items': [], 'has_more': False}
     where, params = where_clause(InventoryQuery(), organizations)
     where += " AND v.Stock IS NOT NULL AND v.Stock<>'' AND v.Stock LIKE %s ESCAPE '~'"

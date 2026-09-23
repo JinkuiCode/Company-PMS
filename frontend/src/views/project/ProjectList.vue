@@ -74,6 +74,7 @@
             :getRowClass="getRowClass"
             @grid-ready="onGridReady"
             @cell-double-clicked="onProjectCellDoubleClicked"
+            @row-clicked="onProgressRowClicked"
             @cell-value-changed="onCellValueChanged"
             @first-data-rendered="handleGridStructureChanged"
             @grid-size-changed="refreshListScrollbar"
@@ -320,6 +321,8 @@
 </template>
 
 <script setup lang="ts">
+import { createDetailSwitch } from '@/utils/detailSwitch'
+import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
 import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
@@ -749,7 +752,7 @@ const orderedDrawerGroups = computed(() => {
 
 watch([filterKeyword, filterStatus, filterDeptId, filterProductCategory, customFilters], () => {
   page.value = 1
-  if (selectedProject.value && !filteredRowData.value.some(row => row.id === selectedProject.value?.id)) {
+  if (selectedProject.value && !drawerHasPendingChanges.value && !drawerSaving.value && !filteredRowData.value.some(row => row.id === selectedProject.value?.id)) {
     selectedProject.value = null
   }
   nextTick(goToProgressPage)
@@ -1411,7 +1414,7 @@ async function fetchList() {
     if (requestSerial !== listRequestSerial.value) return
     rowData.value = res.items.map(normalizeProjectRow)
     serverTotal.value = res.total
-    if (selectedProject.value) {
+    if (selectedProject.value && !drawerHasPendingChanges.value && !drawerSaving.value) {
       selectedProject.value = rowData.value.find(row => row.id === selectedProject.value?.id) || null
     }
     refreshListScrollbar()
@@ -1563,7 +1566,22 @@ function setSavedText(row?: ProjectRow) {
   refreshListScrollbar()
 }
 
-async function openProjectDrawer(row: ProjectRow) {
+const progressDetailSwitch = createDetailSwitch<ProjectRow>(async () => {
+  if (drawerSaving.value) return false
+  commitDrawerEdit()
+  if (!drawerPendingChangeCount.value) return true
+  const decision = await confirmDetailSwitch()
+  if (decision === 'cancel') return false
+  if (decision === 'save') {
+    await saveDrawerChanges()
+    return !drawerPendingChangeCount.value
+  }
+  for (const change of Object.values(drawerPendingChanges.value)) {
+    patchSheetFieldValue(change.field.key, change.originalValue)
+  }
+  drawerPendingChanges.value = {}
+  return true
+}, async row => {
   selectedProject.value = rowData.value.find(item => item.id === row.id) || row
   drawerOpenGroups.value = [...drawerDefaultExpandedGroupKeys]
   drawerEditingField.value = null
@@ -1574,21 +1592,39 @@ async function openProjectDrawer(row: ProjectRow) {
   await fetchProjectSheetDetail(row.id)
   await nextTick()
   refreshListScrollbar()
+})
+
+function onProgressRowClicked(event: any) {
+  if (!selectedProject.value || !event.data) return
+  if ((event.event?.target as HTMLElement | null)?.closest('button, input, .ag-selection-checkbox')) return
+  void openProjectDrawer(event.data)
 }
 
+async function openProjectDrawer(row: ProjectRow) {
+  if (selectedProject.value?.id === row.id) {
+    progressDetailSwitch.invalidate()
+    return
+  }
+  await progressDetailSwitch.select(row)
+}
+
+let detailRequestSerial = 0
 async function fetchProjectSheetDetail(projectId: number) {
+  const serial = ++detailRequestSerial
   sheetDetailLoading.value = true
   try {
     const res: any = await request.get(`/projects/${projectId}/sheet-detail`)
+    if (serial !== detailRequestSerial || selectedProject.value?.id !== projectId) return
     if (Array.isArray(res?.groups) && res.groups.length) {
       sheetDetailGroups.value = normalizeSheetDetailGroups(res.groups, selectedProject.value)
     }
   } catch {
+    if (serial !== detailRequestSerial || selectedProject.value?.id !== projectId) return
     if (selectedProject.value) {
       sheetDetailGroups.value = buildDrawerGroupsFromRow(selectedProject.value)
     }
   } finally {
-    sheetDetailLoading.value = false
+    if (serial === detailRequestSerial) sheetDetailLoading.value = false
   }
 }
 
@@ -1632,6 +1668,7 @@ function productCategoryLabel(value: unknown) {
 }
 
 function startSheetFieldEdit(field: ProjectSheetField) {
+  if (sheetDetailLoading.value || drawerSaving.value) return
   if (!selectedProject.value || !field.editable || !hasPermission('project:list:edit')) return
   if (drawerEditingField.value && drawerEditingField.value !== field.key) {
     commitDrawerEdit()
@@ -1663,7 +1700,7 @@ function commitDrawerEdit() {
   if (!selectedProject.value || !drawerEditingField.value || !drawerEditingFieldData.value) return
   const field = drawerEditingFieldData.value
   const existingChange = drawerPendingChanges.value[field.key]
-  const originalValue = existingChange?.originalValue ?? field.value
+  const originalValue = existingChange ? existingChange.originalValue : field.value
   const value = normalizeDrawerFieldValue(field, drawerDraftValue.value)
 
   if (isSameDrawerValue(value, originalValue)) {
@@ -1757,6 +1794,7 @@ function onProjectCellDoubleClicked(event: CellDoubleClickedEvent<ProjectRow>) {
 }
 
 async function closeProjectDrawer() {
+  if (drawerSaving.value) return
   if (drawerEditingField.value) commitDrawerEdit()
   if (drawerPendingChangeCount.value) {
     try {
@@ -1775,6 +1813,8 @@ async function closeProjectDrawer() {
       if (selectedProject.value) await fetchProjectSheetDetail(selectedProject.value.id)
     }
   }
+  progressDetailSwitch.invalidate()
+  detailRequestSerial++
   selectedProject.value = null
   drawerOpenGroups.value = [...drawerDefaultExpandedGroupKeys]
   sheetDetailGroups.value = []
@@ -1786,6 +1826,10 @@ async function closeProjectDrawer() {
 function getRowClass(params: RowClassParams<ProjectRow>) {
   return selectedProject.value?.id === params.data?.id ? 'progress-row-active' : ''
 }
+
+watch(() => selectedProject.value?.id, () => {
+  nextTick(() => agGridRef.value?.api?.redrawRows())
+})
 
 async function handleRowMenu(row: ProjectRow) {
   if (!hasPermission('project:list:delete')) {

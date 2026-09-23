@@ -42,7 +42,7 @@ for (const permission of [
   'project:archive:add',
   'project:archive:edit',
   'project:archive:delete',
-  'project:archive:sync',
+  'project:archive:toggle',
 ]) {
   assert.match(projectArchive, new RegExp(`hasPermission\\('${permission.replaceAll(':', '\\:')}'\\)`))
 }

@@ -20,6 +20,9 @@ router = APIRouter(prefix='/api/reports/purchase', tags=['采购进度查询'])
 
 
 def project_scope(db, ctx):
+    from app.services.business_data_scope import has_all_business_data, ALL_DATA_SCOPE
+    if has_all_business_data(ctx):
+        return ALL_DATA_SCOPE
     return [ProjectOrganizationGrant(code, organization_id)
             for code, organization_id in get_scoped_archive_query(db, ctx)
             .join(SysProductLine, SysProductLine.id == PmsProjectArchive.business_product_line_id)

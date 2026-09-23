@@ -7,6 +7,7 @@ from app.services.authorization import require_permission, require_any_permissio
 from app.services.product_line import (list_product_lines, create_product_line, update_product_line,
                                        delete_product_line, snapshot)
 from app.services.product_line_source import list_organizations, get_organization
+from app.services.business_data_scope import has_all_business_data
 
 router = APIRouter(prefix='/api/product-lines', tags=['产品线管理'])
 
@@ -29,8 +30,10 @@ def organization_candidates(keyword: str = Query('', max_length=100), page: int 
 def business_options(db: Session = Depends(get_db), context=Depends(require_any_permission(
         'project:archive:view', 'project:archive:add', 'project:archive:edit', 'project:list:view',
         'project:list:add', 'project:list:edit'))):
-    lines = (db.query(SysProductLine).filter(SysProductLine.id.in_(context.get('product_line_ids') or []))
-             .order_by(SysProductLine.sort, SysProductLine.id).all())
+    query = db.query(SysProductLine)
+    if not has_all_business_data(context):
+        query = query.filter(SysProductLine.id.in_(context.get('product_line_ids') or []))
+    lines = query.order_by(SysProductLine.sort, SysProductLine.id).all()
     options = []
     for line in lines:
         if not line.is_enabled:

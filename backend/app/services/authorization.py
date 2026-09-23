@@ -103,7 +103,7 @@ def build_authorization_context(db: Session, user_id: int) -> AuthorizationConte
     product_category_ids: list[int] | None
     if not roles:
         product_category_ids = []
-    elif any(not role.product_category_ids for role in roles):
+    elif 'business:data:all' in permissions or any(not role.product_category_ids for role in roles):
         product_category_ids = None
     else:
         product_category_ids = sorted({

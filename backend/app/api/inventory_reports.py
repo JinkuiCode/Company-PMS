@@ -9,13 +9,20 @@ from app.services.authorization import require_permission, enforce_permission
 from app.services.inventory_reader import (InventoryQuery, report_fields, list_inventory,
     list_options, effective_organizations)
 from app.services.purchase_connection import purchase_connection
+from app.services.business_data_scope import has_all_business_data, ALL_DATA_SCOPE
 
 router = APIRouter(prefix='/api/reports/inventory', tags=['即时库存查询'])
 
 
 def scoped_lines(db, ctx):
-    return db.query(SysProductLine).filter(SysProductLine.source_key=='kingdee',
-        SysProductLine.id.in_(ctx.get('product_line_ids') or [])).order_by(SysProductLine.sort,SysProductLine.id).all()
+    query = db.query(SysProductLine).filter(SysProductLine.source_key=='kingdee')
+    if not has_all_business_data(ctx):
+        query = query.filter(SysProductLine.id.in_(ctx.get('product_line_ids') or []))
+    return query.order_by(SysProductLine.sort,SysProductLine.id).all()
+
+
+def authorized_organizations(db, ctx):
+    return ALL_DATA_SCOPE if has_all_business_data(ctx) else [line.organization_id for line in scoped_lines(db, ctx)]
 
 
 @contextmanager
@@ -36,8 +43,8 @@ def metadata(db: Session=Depends(get_db),ctx=Depends(require_permission('report:
 
 
 def query_rows(query,db,ctx):
-    organizations=effective_organizations(query,[line.organization_id for line in scoped_lines(db,ctx)])
-    if not organizations:
+    organizations=effective_organizations(query,authorized_organizations(db,ctx))
+    if organizations == []:
         return {'items':[],'total':0}
     with inventory_connection() as connection:
         return list_inventory(connection,query,organizations)
@@ -55,8 +62,8 @@ def options(field: Literal['Stock'],keyword: str=Query('',max_length=100),
             organization_id: int | None=Query(None,gt=0),db: Session=Depends(get_db),
             ctx=Depends(require_permission('report:inventory:view'))):
     organizations=effective_organizations(InventoryQuery(organization_id=organization_id),
-        [line.organization_id for line in scoped_lines(db,ctx)])
-    if not organizations:
+        authorized_organizations(db,ctx))
+    if organizations == []:
         return {'items':[],'has_more':False}
     with inventory_connection() as connection:
         return list_options(connection,field,keyword,organizations)

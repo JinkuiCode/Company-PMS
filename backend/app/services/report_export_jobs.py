@@ -30,7 +30,10 @@ def fields_for(report):
 
 
 def scope_signature(db, ctx, report):
-    if report == 'inventory':
+    from app.services.business_data_scope import has_all_business_data
+    if has_all_business_data(ctx):
+        scope = {'all_business_data': True}
+    elif report == 'inventory':
         from app.api.inventory_reports import scoped_lines
         scope = sorted((r.id, r.organization_id) for r in scoped_lines(db, ctx))
     else:

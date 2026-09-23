@@ -751,3 +751,13 @@ a {
     grid-template-columns: 1fr;
   }
 }
+/* Shared master-detail transitions keep the existing compact control tokens. */
+.pms-detail-switch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.pms-detail-switch-actions .el-button + .el-button { margin-left: 0; }
+.pms-ag-grid .pms-detail-row-active { background: var(--pms-primary-soft, #eef0ff); }

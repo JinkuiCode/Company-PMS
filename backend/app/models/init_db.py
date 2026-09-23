@@ -284,6 +284,8 @@ def init_db():
         initialize_inventory_report(db, grant_existing_admin=not admin_role_created)
         from app.services.product_line_migration import initialize_product_line_management
         initialize_product_line_management(db, grant_existing_admin=not admin_role_created)
+        from app.services.all_data_migration import initialize_all_business_data
+        initialize_all_business_data(db, grant_existing_admin=not admin_role_created)
 
         # 4.5 创建缺失的默认角色模板。仅角色首次创建时写入模板权限。
         from app.services.role_templates import ROLE_TEMPLATES, permission_ids_for_template

@@ -87,7 +87,7 @@ assert.match(
   /field\.key === 'project_code'.*erp_synced.*kingdee_initial/,
   'Only externally bound or initial archive codes are locked',
 )
-assert.match(archive, /\/auth\/product-categories/, 'Product-category scope should use the semantic API route')
+assert.match(archive, /useProductLineOptions/, 'Business organization choices must use authorized product-line options')
 assert.match(
   archive,
   /archiveProductCategoryOptions[\s\S]*?value:\s*Number\(item\.value\)/,

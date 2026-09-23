@@ -84,6 +84,7 @@
         @column-pinned="handleArchiveGridStructureChanged"
         @displayed-columns-changed="handleArchiveGridStructureChanged"
         @selection-changed="onSelectionChanged"
+        @row-clicked="onArchiveRowClicked"
         @sort-changed="handleArchiveSortChanged"
       />
     </template>
@@ -296,6 +297,8 @@
 </template>
 
 <script setup lang="ts">
+import { createDetailSwitch } from '@/utils/detailSwitch'
+import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
 import { ref, reactive, computed, defineComponent, h, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Delete, Search, Close } from '@element-plus/icons-vue'
@@ -1227,8 +1230,13 @@ function onSelectionChanged() {
 const selectedRowsIncludeDisabled = computed(() => selectedRows.value.some(row => !archiveIsEnabled(row)))
 
 function getArchiveRowClass(params: any) {
-  return archiveIsEnabled(params.data) ? undefined : 'archive-row-disabled'
+  return [archiveIsEnabled(params.data) ? '' : 'archive-row-disabled',
+    selectedArchive.value?.id === params.data?.id ? 'pms-detail-row-active' : ''].filter(Boolean)
 }
+
+watch(() => selectedArchive.value?.id, () => {
+  nextTick(() => agGridRef.value?.api?.redrawRows())
+})
 
 // ========== 新增与字段级抽屉编辑 ==========
 const archiveCreateOpening = ref(false)
@@ -1359,18 +1367,38 @@ async function confirmDiscardArchiveChanges() {
   }
 }
 
+const archiveDetailSwitch = createDetailSwitch<any>(async () => {
+  if (archiveDrawerSaving.value) return false
+  commitArchiveFieldEdit()
+  if (!archivePendingChangeCount.value) return true
+  const decision = await confirmDetailSwitch()
+  if (decision === 'cancel') return false
+  if (decision === 'save') {
+    await saveArchiveDrawer()
+    return !archivePendingChangeCount.value
+  }
+  return true
+}, async row => { resetArchiveDrawer(row) })
+
+function onArchiveRowClicked(event: any) {
+  if (!selectedArchive.value || !event.data) return
+  if ((event.event?.target as HTMLElement | null)?.closest('button, input, .ag-selection-checkbox')) return
+  void openArchiveDrawer(event.data)
+}
+
 async function openArchiveDrawer(row: any) {
-  if (archiveIsEnabled(row) && !hasPermission('project:archive:edit')) return
   if (selectedArchive.value?.id === row.id) {
+    archiveDetailSwitch.invalidate()
     reconcileSelectedArchiveLifecycle(row)
     return
   }
-  if (!await confirmDiscardArchiveChanges()) return
-  resetArchiveDrawer(row)
+  await archiveDetailSwitch.select(row)
 }
 
 async function closeArchiveDrawer() {
+  if (archiveDrawerSaving.value) return
   if (!await confirmDiscardArchiveChanges()) return
+  archiveDetailSwitch.invalidate()
   selectedArchive.value = null
   archivePendingChanges.value = {}
   archiveEditingField.value = null
@@ -1456,6 +1484,7 @@ function sameArchiveDrawerValue(left: unknown, right: unknown) {
 }
 
 function startArchiveFieldEdit(field: ArchiveDrawerField) {
+  if (archiveDrawerSaving.value) return
   if (archiveDrawerReadOnly.value) return
   if (!archiveDrawerFieldEditable(field)) return
   clearArchiveServerError(archiveDrawerServerErrors, field.key)

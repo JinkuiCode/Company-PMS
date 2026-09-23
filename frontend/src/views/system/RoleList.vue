@@ -296,6 +296,7 @@ function handleCheckAll(val: boolean) {
 }
 
 function handleTreeCheck(data: any, state: { checkedKeys: number[] }) {
+  if (data.permission_code === 'business:data:all') { updateCheckAllState(); return }
   if (data.menu_type === 'B' && data.permission_code) {
     const parent = permTreeRef.value?.getNode(data.parent_id)?.data
     const siblings = parent?.children || []

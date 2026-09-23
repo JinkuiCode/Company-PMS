@@ -2,6 +2,7 @@
 from fastapi import HTTPException
 from app.models.product_line import SysProductLine, SysRoleProductLine
 from app.models.rbac import SysRole
+from app.services.business_data_scope import has_all_business_data
 
 
 def get_authorized_product_line_ids(db, roles):
@@ -17,7 +18,7 @@ def get_authorized_product_line_ids(db, roles):
 
 
 def require_line_access(db, context, line_id, *, selectable=False, lock=False):
-    if not context or line_id not in (context.get('product_line_ids') or []):
+    if not has_all_business_data(context) and (not context or line_id not in (context.get('product_line_ids') or [])):
         raise HTTPException(404, '产品线不存在或无权访问')
     if lock:
         query = db.query(SysProductLine).filter(SysProductLine.id == line_id).populate_existing()

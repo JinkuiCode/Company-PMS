@@ -44,7 +44,7 @@ def append_purchase(main, orders, receipts, row, chain):
 def inventory_batches(connection, query, organizations):
     from app.services.inventory_reader import effective_organizations, where_clause, KEYS, SOURCE
     organizations = effective_organizations(query, organizations)
-    if not organizations:
+    if organizations == []:
         return
     where, params = where_clause(query, organizations)
     ordering = f'v.[{query.sort}] {query.direction.upper()}'
@@ -101,9 +101,9 @@ def write_report(db, job, ctx, path, checkpoint):
         count = 0
         if job.report == 'inventory':
             from app.services.inventory_reader import InventoryQuery
-            from app.api.inventory_reports import scoped_lines
+            from app.api.inventory_reports import authorized_organizations
             query = InventoryQuery.model_validate_json(job.parameters)
-            for batch in inventory_batches(connection, query, [line.organization_id for line in scoped_lines(db, ctx)]):
+            for batch in inventory_batches(connection, query, authorized_organizations(db, ctx)):
                 checkpoint(count)
                 for row in batch:
                     main.append(row)
