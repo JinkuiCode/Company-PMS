@@ -15,6 +15,7 @@ from app.services.project import get_scoped_archive_query
 from app.services.purchase_connection import purchase_connection
 from app.services.purchase_reader import PurchaseQuery, OrganizationGrant, load_request, load_chains, list_requests, list_options, REPORT_START_DATE
 from app.services.purchase_fields import report_fields, DOCUMENT_STATUSES, PROGRESS_LABELS
+from app.services.report_filters import filter_fields
 
 router = APIRouter(prefix='/api/reports/purchase', tags=['采购进度查询'])
 
@@ -58,7 +59,7 @@ def enrich_project_names(db, ctx, rows):
 
 @router.get('/metadata')
 def metadata(ctx: dict = Depends(require_permission('report:purchase:view'))):
-    return dict(fields=report_fields(), progress_labels=PROGRESS_LABELS, document_status_labels=DOCUMENT_STATUSES,
+    return dict(fields=report_fields(), filter_fields=filter_fields('purchase'), progress_labels=PROGRESS_LABELS, document_status_labels=DOCUMENT_STATUSES,
                 start_date=REPORT_START_DATE.isoformat())
 
 

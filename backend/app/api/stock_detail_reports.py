@@ -15,6 +15,7 @@ from app.services.stock_detail_fields import report_fields
 from app.services.stock_detail_fetch import read_dataset
 from app.services.stock_detail_engine import quantity_summary
 from app.services.stock_detail_reader import StockDetailQuery, assemble_page, effective_organizations, list_candidates
+from app.services.report_filters import filter_fields, STOCK_FILTER_SEMANTICS
 
 router = APIRouter(prefix='/api/reports/stock-detail', tags=['物料收发明细'])
 
@@ -32,7 +33,11 @@ def stock_detail_connection():
 
 @router.get('/metadata')
 def metadata(db: Session = Depends(get_db), ctx=Depends(require_permission('report:stock-detail:list'))):
-    return {'fields': report_fields(), 'organizations': [
+    return {'fields': report_fields(), 'filter_fields': filter_fields('stock-detail'),
+        'filter_semantics': dict(STOCK_FILTER_SEMANTICS),
+        'summary_scope_note': '完整期间汇总（不随附加条件重算）',
+        'opening_scope_note': '期初保留完整查询范围（不随附加条件筛选）',
+        'organizations': [
         {'value': line.organization_id, 'label': line.display_name} for line in scoped_lines(db, ctx)]}
 
 

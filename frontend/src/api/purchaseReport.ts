@@ -20,6 +20,7 @@ export interface PurchaseDetail {
   summary: { issues: string[]; [key: string]: unknown }; queried_at: string
 }
 export interface PurchaseMetadata {
+  filter_fields?: import('@/report-query/state').ReportField[]
   fields: PurchaseField[]; progress_labels: Record<string, string>
   document_status_labels: Record<string, string>; start_date: string
 }

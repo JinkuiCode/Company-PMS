@@ -6,6 +6,7 @@ from app.services.stock_detail_fields import report_fields
 from app.services.stock_detail_catalog import row_labels
 from app.services.stock_detail_normalize import inventory_key, normalize_movement, normalize_snapshots
 from app.services.stock_detail_sources import require_source_coverage
+from app.services.report_filters import matches_filters
 
 
 def validate_registry(rows):
@@ -56,7 +57,7 @@ def compile_organization(query, organization_id, baseline, snapshots, movements,
     return {'rows': period, 'openings': openings, 'labels': labels}
 
 
-def export_rows(dataset, start_date):
+def export_rows(dataset, start_date, *, conditions=()):
     fields = {field['key'] for field in report_fields()}
     for key, value in dataset['openings'].items():
         row = dict(dataset['labels'].get(key, {}), bill_date=start_date, bill_name='期初',
@@ -65,7 +66,8 @@ def export_rows(dataset, start_date):
     ordered = sorted(dataset['rows'], key=lambda row: (row['bill_date'], row['source_order'],
         row['created_at'], row['bill_no'], row['bill_seq'], row['row_id']))
     for row in running_balances(ordered, dataset['openings']):
-        yield {field: row.get(field) for field in fields}
+        if matches_filters(row, conditions):
+            yield {field: row.get(field) for field in fields}
 
 
 def quantity_summary(dataset):

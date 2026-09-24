@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
-import { ElButton, ElMessage } from 'element-plus'
+import { ElButton, ElMessage, ElMessageBox } from 'element-plus'
 import { Close, Refresh, Search } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
-import { AllCommunityModule, ModuleRegistry, type ColDef, type ColGroupDef, type ColumnState, type GridApi, type GridReadyEvent, type RowClickedEvent, type ColumnResizedEvent, type CellFocusedEvent } from 'ag-grid-community'
+import { AllCommunityModule, ModuleRegistry, type ColDef, type ColGroupDef, type ColumnState, type GridApi, type GridReadyEvent, type RowClickedEvent, type ColumnResizedEvent, type CellFocusedEvent, type SortChangedEvent } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import PmsDataList from '@/components/PmsDataList.vue'
-import PmsListFilters from '@/components/PmsListFilters.vue'
+import PmsReportQueryBar from '@/report-query/PmsReportQueryBar.vue'
+import { cloneQuery, validateConditions, type ReportCondition } from '@/report-query/state'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import { PmsTextControl, PmsDateControl, PmsSelectControl, PmsFormDrawer, PmsFormField } from '@/form-system'
@@ -21,6 +22,9 @@ import { createPurchaseDetailState, type PurchaseDetailState } from './purchaseD
 ModuleRegistry.registerModules([AllCommunityModule])
 const auth = useAuthStore()
 const filters = reactive({ keyword: '', project_code: '', supplier: '', progress: '' })
+const conditions = ref<ReportCondition[]>([])
+const filterFields = computed(() => metadata.value?.filter_fields || [])
+const invalid = computed(() => validateConditions(conditions.value, filterFields.value))
 const dates = ref<string[]>([]), page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), total = ref(0)
 const rows = ref<PurchaseRow[]>([]), metadata = ref<PurchaseMetadata | null>(null)
 const loading = ref(false), error = ref(''), stamp = ref('')
@@ -48,7 +52,7 @@ const groups = computed(() => [...new Set((metadata.value?.fields || []).map(fie
   key: group, label: group, fields: metadata.value!.fields.filter(field => field.group === group).map(field => ({ ...field, quick_addable: true })),
 })))
 const storageKey = computed(() => `pms:purchase-report:v1:${auth.user?.id || 'anonymous'}`)
-type Plan = { name: string; filters: typeof filters; dates: string[]; pageSize: number; columns: ColumnState[]; visible: string[]; sort: typeof sort }
+type Plan = { name: string; filters: typeof filters; dates: string[]; conditions?: ReportCondition[]; pageSize: number; columns: ColumnState[]; visible: string[]; sort: typeof sort }
 const plans = ref<Plan[]>([]), planName = ref(''), planOpen = ref(false), activePlan = ref('当前查询')
 const planOptions = computed(() => [{ value: '', label: '当前查询' }, ...plans.value.map(plan => ({ value: plan.name, label: plan.name }))])
 const planSelected = ref('')
@@ -73,7 +77,8 @@ function savePreferences() {
 async function savePlan() {
   const name = planName.value.trim()
   if (!name) return
-  const plan: Plan = { name, filters: { ...filters }, dates: [...(dates.value || [])], pageSize: pageSize.value, columns: grid?.getColumnState() || [], visible: [...visible.value], sort: { ...sort } }
+  if (invalid.value) { ElMessage.warning(invalid.value); return }
+  const plan: Plan = { name, filters: { ...filters }, dates: [...(dates.value || [])], conditions:cloneQuery(conditions.value), pageSize: pendingPageSize.value ?? pageSize.value, columns: grid?.getColumnState() || [], visible: [...visible.value], sort: { ...sort } }
   plans.value = [...plans.value.filter(item => item.name !== name), plan].slice(-30)
   activePlan.value = name; planSelected.value = name; planOpen.value = false; planName.value = ''; savePreferences()
   ElMessage.success('查询方案已保存')
@@ -81,16 +86,23 @@ async function savePlan() {
 async function loadPlan(value: unknown) {
   const plan = plans.value.find(item => item.name === value)
   if (!plan) return
+  const restoredConditions = cloneQuery(plan.conditions || [])
+  if (plan.filters.progress) restoredConditions.push({ id: Date.now(), field: 'progress', operator: 'equals', value: plan.filters.progress, valueEnd: null })
+  const problem = validateConditions(restoredConditions,filterFields.value)
+  if (problem) { ElMessage.warning(problem); return }
+  invalidate()
   restoring = true
   for (const key of Object.keys(filters) as (keyof typeof filters)[]) filters[key] = typeof plan.filters[key] === 'string' ? plan.filters[key] : ''
-  dates.value = plan.dates.slice(0, 2); pageSize.value = [15, 50, 100, 200, 500].includes(plan.pageSize) ? plan.pageSize : 50
-  Object.assign(sort, plan.sort || { sort: 'date', direction: 'desc' }); page.value = 1
+  dates.value = plan.dates.slice(0, 2); pendingPageSize.value = [15, 50, 100, 200, 500].includes(plan.pageSize) ? plan.pageSize : 50
+  filters.progress = ''
+  conditions.value = restoredConditions
+  Object.assign(sort, plan.sort || { sort: 'date', direction: 'desc' })
   visible.value = plan.visible.filter(key => metadata.value?.fields.some(field => field.key === key))
   activePlan.value = plan.name
   await nextTick(); grid?.applyColumnState({ state: plan.columns, applyOrder: true })
-  restoring = false; savePreferences(); scheduleFetch()
+  restoring = false; savePreferences()
 }
-function reset() { Object.assign(filters, { keyword: '', project_code: '', supplier: '', progress: '' }); dates.value = []; page.value = 1; activePlan.value = '当前查询'; planSelected.value = '' }
+function reset() { invalidate(); Object.assign(filters, { keyword: '', project_code: '', supplier: '', progress: '' }); dates.value = []; conditions.value = []; pendingPageSize.value = null; activePlan.value = '当前查询'; planSelected.value = '' }
 const number = (value: unknown) => value === null || value === undefined || value === '' ? '-' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 8 }).format(Number(value))
 const date = (value: unknown) => value ? String(value).slice(0, 10) : '-'
 function display(row: PurchaseRow, field: PurchaseField) {
@@ -103,7 +115,7 @@ const Actions = defineComponent({ props: ['params'], setup(props) { return () =>
 const Progress = defineComponent({ props: ['params'], setup(props) { return () => h('span', { class: ['pms-status', tone(props.params.data.progress)] }, props.params.data.progress_label) } })
 const columns = computed<(ColDef<PurchaseRow> | ColGroupDef<PurchaseRow>)[]>(() => [
   ...groups.value.map(group => ({ headerName: group.label, groupId: group.key, children: group.fields.map(field => ({
-    field: field.key, colId: field.key, headerName: field.label, headerTooltip: field.description,
+    field: field.key, colId: field.key, headerName: field.label, headerTooltip: field.label,
     initialWidth: field.key === 'material_name' || field.key === 'specification' ? 180 : field.value_type === 'number' ? 125 : 136,
     initialPinned: ['project_code', 'material_name'].includes(field.key) ? 'left' as const : field.key === 'progress' ? 'right' as const : undefined,
     hide: !visible.value.includes(field.key), minWidth: 80, maxWidth: 800,
@@ -115,7 +127,7 @@ const columns = computed<(ColDef<PurchaseRow> | ColGroupDef<PurchaseRow>)[]>(() 
   })) })),
   { colId: 'purchase_actions', headerName: '操作', pinned: 'right', lockPosition: 'right', ...PMS_ACTION_COLUMN, cellRenderer: Actions, cellClass: 'pms-action-cell' },
 ])
-const defaultColDef: ColDef = { resizable: true, sortable: false, editable: false, cellStyle: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }
+const defaultColDef: ColDef = { resizable: true, sortable: false, comparator:()=>0, editable: false, cellStyle: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }
 function onGridReady(event: GridReadyEvent<PurchaseRow>) {
   grid = event.api
   if (savedColumns.length) { restoring = true; grid.applyColumnState({ state: savedColumns, applyOrder: true }); restoring = false }
@@ -128,76 +140,92 @@ function onCellFocus(event: CellFocusedEvent) {
 }
 function onRowClicked(event: RowClickedEvent<PurchaseRow>) { if (event.data) void detail.selectRow(String(event.data.id)) }
 function onColumnResized(event: ColumnResizedEvent) { if (event.finished) savePreferences() }
-function onSortChanged() {
-  if (restoring) return
+function onSortChanged(event: SortChangedEvent) {
+  if (restoring || event.source === 'api' || event.source === 'gridInitializing') return
   const column = grid?.getColumnState().find(state => state.sort && sortFields[state.colId])
   Object.assign(sort, { sort: column ? sortFields[column.colId] : 'date', direction: column?.sort || 'desc' })
-  page.value = 1; savePreferences()
+  restoring = true; page.value = 1; restoring = false; savePreferences(); void fetchRows(false, undefined, true)
 }
-let revision = 0, controller: AbortController | null = null, timer: ReturnType<typeof setTimeout> | undefined
-const params = () => ({ ...filters, ...sort, date_from: dates.value?.[0] || undefined, date_to: dates.value?.[1] || undefined, page: page.value, page_size: pageSize.value })
-async function fetchRows() {
+let revision = 0, controller: AbortController | null = null
+const draftSnapshot = () => ({...filters,dates:[...(dates.value || [])],conditions:cloneQuery(conditions.value)})
+type Draft = ReturnType<typeof draftSnapshot>
+const applied = ref<Draft | null>(null), pendingPageSize = ref<number | null>(null)
+const dirty = computed(()=>!!applied.value && (JSON.stringify(draftSnapshot()) !== JSON.stringify(applied.value) || pendingPageSize.value !== null))
+const buildParams = (draft:Draft, submit:boolean) => ({...draft,...sort, dates:undefined, conditions:undefined, date_from:draft.dates[0] || undefined,date_to:draft.dates[1] || undefined,filters:JSON.stringify(draft.conditions.map(({field,operator,value,valueEnd})=>({field,operator,value,valueEnd}))),page:submit?1:page.value,page_size:submit?(pendingPageSize.value??pageSize.value):pageSize.value})
+const acceptedParams = ref<ReturnType<typeof buildParams> | null>(null)
+type RequestSnapshot = {draft:Draft; params:ReturnType<typeof buildParams>; submit:boolean}
+let failedRequest: RequestSnapshot | null = null
+const params = () => cloneQuery(acceptedParams.value!)
+function invalidate() { ++revision; controller?.abort(); loading.value=false; failedRequest=null }
+async function confirmExport() {
+  if (dirty.value) { try { await ElMessageBox.confirm('当前条件尚未查询，将导出上次查询结果。是否继续？','导出查询结果',{confirmButtonText:'继续导出',cancelButtonText:'取消',type:'warning'}) } catch { return false } }
+  return true
+}
+function retry() { if (!metadata.value) void initialize(); else if (failedRequest) void fetchRows(failedRequest.submit,failedRequest) }
+async function fetchRows(submit = false, replay?:RequestSnapshot, applySort = false) {
+  if (!metadata.value || (!submit && !applied.value)) return
+  if (!replay && submit && invalid.value) return
+  const draft = cloneQuery(replay?.draft || (submit?draftSnapshot():applied.value!))
+  const request = replay?cloneQuery(replay.params):buildParams(draft,submit)
+  if (!replay && !submit && !applySort && acceptedParams.value) {
+    request.sort = acceptedParams.value.sort; request.direction = acceptedParams.value.direction
+  }
   const current = ++revision
   controller?.abort(); controller = new AbortController(); loading.value = true; error.value = ''
   try {
-    const data = await getPurchaseRows(params(), controller.signal)
+    const data = await getPurchaseRows(request, controller.signal)
     if (current !== revision) return
     rows.value = data.items; total.value = data.total; stamp.value = data.queried_at
+    applied.value=draft; acceptedParams.value=cloneQuery(request); failedRequest=null
+    restoring=true; page.value=request.page; pageSize.value=request.page_size; restoring=false
+    if(submit) pendingPageSize.value=null
     detail.reconcileRows(rows.value.map(row => String(row.id)))
-    if (page.value > 1 && !rows.value.length && total.value) page.value = Math.ceil(total.value / pageSize.value)
     await nextTick(); listRef.value?.refreshScrollbar()
-  } catch { if (current === revision) { rows.value = []; total.value = 0; detail.close(); error.value = '采购数据加载失败，请重试' } }
+  } catch { if (current === revision) {
+    failedRequest={draft,params:cloneQuery(request),submit}; error.value='采购数据加载失败，请重试'
+    if(acceptedParams.value) { restoring=true; page.value=acceptedParams.value.page; pageSize.value=acceptedParams.value.page_size; restoring=false }
+  } }
   finally { if (current === revision) loading.value = false }
-}
-function scheduleFetch() {
-  if (restoring || !metadata.value) return
-  ++revision; controller?.abort(); clearTimeout(timer); timer = setTimeout(fetchRows, 300)
 }
 async function initialize() {
   loading.value = true; error.value = ''
-  try { metadata.value = await getPurchaseMetadata(); readPreferences(); await nextTick(); await fetchRows() }
+  try { metadata.value = await getPurchaseMetadata(); readPreferences(); await nextTick(); loading.value=false }
   catch { error.value = '报表初始化失败，请重试'; loading.value = false }
 }
 const exportColumns = () => grid?.getAllDisplayedColumns().map(column => column.getColId()).filter(key => visible.value.includes(key)) || visible.value
 function stateLabel(row: PurchaseDocument) { return row.cancel_status === 'B' ? '已作废' : metadata.value?.document_status_labels[row.document_status] || '未知状态' }
 function orderLabel(id?: number) { const order = detailState.value.data?.orders.find(row => row.id === id); return order ? `${order.bill_no} / ${order.line_no}` : '-' }
-watch([filters, dates, pageSize], () => { page.value = 1 }, { deep: true, flush: 'sync' })
-watch([filters, dates, page, pageSize, sort], scheduleFetch, { deep: true })
+watch(page,()=>{if(!restoring) void fetchRows()}, {flush:'sync'})
+watch(pageSize,()=>{if(!restoring) {restoring=true;page.value=1;restoring=false;void fetchRows()}}, {flush:'sync'})
 onMounted(initialize)
-onUnmounted(() => { ++revision; controller?.abort(); clearTimeout(timer); detail.close(); grid = null })
+onUnmounted(() => { invalidate(); detail.close(); grid = null })
 </script>
 
 <template>
-  <PmsDataList ref="listRef" class="purchase-page" scrollbar-label="采购进度横向滚动条">
+  <PmsDataList ref="listRef" class="purchase-page pms-report-query-surface" scrollbar-label="采购进度横向滚动条">
     <template #toolbar-left>
-      <div class="purchase-plan"><PmsSelectControl v-model="planSelected" :options="planOptions" :placeholder="activePlan" size="compact" aria-label="查询方案" @update:model-value="loadPlan" /></div>
+      <div class="pms-report-query-plan-select"><PmsSelectControl v-model="planSelected" :options="planOptions" :placeholder="activePlan" size="compact" aria-label="查询方案" @update:model-value="loadPlan" /></div>
       <el-button size="small" @click="planOpen = true">保存查询方案</el-button>
     </template>
     <template #toolbar-right>
-      <span v-if="stamp" class="purchase-stamp">查询时间 {{ new Date(stamp).toLocaleTimeString('zh-CN', { hour12: false }) }}</span>
-      <el-tooltip content="刷新"><el-button size="small" :icon="Refresh" aria-label="刷新采购数据" :disabled="loading" @click="metadata ? fetchRows() : initialize()" /></el-tooltip>
-      <ReportExportControl v-if="auth.hasPermission('report:purchase:export')" report="purchase" :parameters="params" :columns="exportColumns" :disabled="loading || !total" />
+      <span class="pms-report-query-status" :class="{'is-dirty':dirty}">{{loading?'正在查询':dirty?'条件已修改，待查询':applied?'已查询':'尚未查询'}}<template v-if="stamp"> · {{ new Date(stamp).toLocaleTimeString('zh-CN', { hour12: false }) }}</template></span>
+      <ReportExportControl v-if="auth.hasPermission('report:purchase:export')" report="purchase" :parameters="params" :columns="exportColumns" :before-export="confirmExport" :disabled="loading || !applied || !total" />
       <PmsListColumnPicker v-if="metadata" v-model="visible" :groups="groups" :default-keys="defaultKeys" :column-definitions="columns" :get-grid-api="() => grid" aria-label="采购进度列设置" @layout-changed="savePreferences" />
     </template>
     <template #filters>
-      <PmsListFilters :filters="[]" :fields="[]" :active-count="0">
-        <div class="purchase-filter purchase-filter--search"><PmsTextControl v-model="filters.keyword" size="compact" :prefix-icon="Search" clearable placeholder="申请单 / 物料编码 / 名称 / 规格" aria-label="搜索采购明细" /></div>
-        <div class="purchase-filter"><PmsSelectControl v-model="filters.project_code" :options="candidates.project" :loading="optionLoading.project" remote filterable :remote-method="(value: string) => findOptions('project', value)" size="compact" clearable placeholder="全部项目" aria-label="项目编号筛选" @visible-change="(open: boolean) => open && findOptions('project')" /></div>
-        <div class="purchase-filter"><PmsSelectControl v-model="filters.supplier" :options="candidates.supplier" :loading="optionLoading.supplier" remote filterable :remote-method="(value: string) => findOptions('supplier', value)" size="compact" clearable placeholder="全部供应商" aria-label="供应商筛选" @visible-change="(open: boolean) => open && findOptions('supplier')" /></div>
-        <div class="purchase-filter purchase-filter--dates"><PmsDateControl v-model="dates" type="daterange" size="compact" value-format="YYYY-MM-DD" start-placeholder="申请开始日期" end-placeholder="申请结束日期" aria-label="申请日期范围" /></div>
-        <el-button size="small" @click="reset">重置</el-button>
-      </PmsListFilters>
-      <div class="purchase-tabs" role="group" aria-label="采购进度筛选">
-        <button :class="{ selected: !filters.progress }" :aria-pressed="!filters.progress" @click="filters.progress = ''">全部</button>
-        <button v-for="(label, key) in metadata?.progress_labels" :key="key" :class="{ selected: filters.progress === key }" :aria-pressed="filters.progress === key" @click="filters.progress = String(key)">{{ label }}</button>
-        <span class="purchase-scope-note">申请日期：{{ metadata?.start_date || '2026-01-01' }} 起</span>
-      </div>
+      <PmsReportQueryBar v-model:conditions="conditions" :fields="filterFields" :loading="loading" :disabled="!metadata" :invalid="invalid" @query="fetchRows(true)" @reset="reset">
+        <div class="query-material"><PmsTextControl v-model="filters.keyword" size="compact" :prefix-icon="Search" clearable placeholder="申请单 / 物料编码 / 名称 / 规格" aria-label="搜索采购明细" /></div>
+        <PmsSelectControl v-model="filters.project_code" :options="candidates.project" :loading="optionLoading.project" remote filterable :remote-method="(value: string) => findOptions('project', value)" size="compact" clearable placeholder="全部项目" aria-label="项目编号筛选" @visible-change="(open: boolean) => open && findOptions('project')" />
+        <div class="query-dates"><PmsDateControl v-model="dates" type="daterange" size="compact" value-format="YYYY-MM-DD" start-placeholder="申请开始日期" end-placeholder="申请结束日期" aria-label="申请日期范围" /></div>
+        <PmsSelectControl v-model="filters.supplier" :options="candidates.supplier" :loading="optionLoading.supplier" remote filterable :remote-method="(value: string) => findOptions('supplier', value)" size="compact" clearable placeholder="全部供应商" aria-label="供应商筛选" @visible-change="(open: boolean) => open && findOptions('supplier')" />
+      </PmsReportQueryBar>
     </template>
     <template #grid>
-      <div v-if="error" class="pms-list-load-error" role="alert">{{ error }} <el-button size="small" @click="metadata ? fetchRows() : initialize()">重试</el-button></div>
+      <div v-if="error" class="pms-list-load-error" role="alert">{{ error }}<span v-if="applied">，下方保留上次查询结果</span> <el-button size="small" @click="retry">重试</el-button></div>
       <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy"
         :row-data="rows" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS"
         :locale-text="chineseLocaleText" :loading="loading" :pagination="false" :row-height="36"
+        :overlay-no-rows-template="applied ? '<span>没有符合条件的数据</span>' : '<span>设置条件后，点击查询</span>'"
         :get-row-id="params => String(params.data.id)" :get-row-class="params => String(params.data.id) === detailState.requestId ? 'purchase-selected-row' : ''"
         :enable-cell-text-selection="true" @grid-ready="onGridReady" @cell-focused="onCellFocus"
         @row-clicked="onRowClicked"

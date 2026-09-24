@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 const component = readFileSync(new URL('../src/components/ReportExportControl.vue', import.meta.url), 'utf8')
 for (const word of ['createReportExport', 'listReportExports', 'downloadReportExport', 'onUnmounted', 'processed', '导出任务']) assert.ok(component.includes(word), word)
 assert.ok(!component.includes(':loading="busy"'))
+assert.ok(component.includes('beforeExport'), '报表需要在导出已查询快照前提示未提交条件')
 for (const name of ['InventoryList', 'PurchaseProgressList']) {
   const source = readFileSync(new URL(`../src/views/reports/${name}.vue`, import.meta.url), 'utf8')
   assert.ok(source.includes('<ReportExportControl'))

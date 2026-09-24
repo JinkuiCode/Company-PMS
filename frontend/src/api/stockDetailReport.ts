@@ -1,9 +1,13 @@
 import request from '@/utils/request'
 import type { StockDetailParameters, StockDetailResult } from '@/views/reports/stockDetailState'
+import type { ReportField } from '@/report-query/state'
 
 export interface StockDetailField { key: string; label: string; type: string; width: number }
 export interface StockDetailMetadata {
   fields: StockDetailField[]
+  filter_fields?: ReportField[]
+  summary_scope_note?: string
+  opening_scope_note?: string
   organizations: { value: number; label: string }[]
 }
 export interface StockCandidate { value: string | number; code: string; label: string }

@@ -5,10 +5,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.services.business_data_scope import ALL_DATA_SCOPE
 from app.services.stock_detail_fields import report_fields
 from app.services.stock_detail_balance import quantity, running_balances
+from app.services.report_filters import parse_filters, matches_filters, STOCK_FILTER_SEMANTICS
 
 
 class StockDetailQuery(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    filters: str = Field(default='[]', max_length=12000)
 
     material: str = Field(min_length=1, max_length=100)
     start_date: date
@@ -29,6 +31,7 @@ class StockDetailQuery(BaseModel):
 
     @model_validator(mode='after')
     def date_order(self):
+        self.conditions()
         if self.organization_id is None and not self.organization_ids:
             raise ValueError('请选择至少一个库存组织后再查询')
         if self.organization_id is not None and self.organization_ids:
@@ -36,6 +39,9 @@ class StockDetailQuery(BaseModel):
         if self.start_date > self.end_date:
             raise ValueError('起始日期不得晚于截止日期')
         return self
+
+    def conditions(self):
+        return parse_filters(self.filters, 'stock-detail')
 
 
 def effective_organizations(query, authorized):
@@ -119,10 +125,15 @@ def assemble_page(query, rows, verified_openings, *, opening_date, opening_label
                                   row['bill_seq'], row['row_id']))
     start = (query.page - 1) * query.page_size
     items = []
-    for index, row in enumerate(running_balances(ordered, verified_openings)):
-        if start <= index < start + query.page_size:
+    conditions = query.conditions()
+    total = 0
+    for row in running_balances(ordered, verified_openings):
+        if not matches_filters(row, conditions):
+            continue
+        if start <= total < start + query.page_size:
             items.append({**{key: row.get(key) for key in fields},
                           'row_id': row['row_id'], 'row_kind': 'movement'})
+        total += 1
     openings = []
     for index, (key, value) in enumerate(verified_openings.items()):
         value = quantity(value)
@@ -131,5 +142,6 @@ def assemble_page(query, rows, verified_openings, *, opening_date, opening_label
                          'bill_date': query.start_date, 'bill_name': '期初',
                          'bill_no': None, 'bill_seq': None, 'opening_qty': value,
                          'income_qty': None, 'issue_qty': None, 'balance_qty': value})
-    return {'items': items, 'openings': openings, 'total': len(ordered),
+    return {'items': items, 'openings': openings, 'total': total,
+            'filter_semantics': dict(STOCK_FILTER_SEMANTICS),
             'page': query.page, 'page_size': query.page_size}

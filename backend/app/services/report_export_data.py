@@ -60,30 +60,29 @@ def inventory_batches(connection, query, organizations):
 
 
 def purchase_batches(connection, query, scope):
-    from app.services.purchase_reader import _prepare_scope, request_query, _rows, _with_state
-    _prepare_scope(connection, scope)
-    base, params = request_query(query, scope)
-    cursor = connection.cursor()
-    created = []
-    try:
-        # Materialize the selected request rows once so edits cannot shift later pages.
-        sort = {'date': 'application_date', 'bill_no': 'bill_no', 'project_code': 'project_code', 'material_code': 'material_code'}[query.sort]
-        cursor.execute(f'WITH q AS ({base}) SELECT *, ROW_NUMBER() OVER (ORDER BY {sort} {query.direction}, id {query.direction}) AS export_row INTO #pms_export_selected FROM q', tuple(params))
-        created.append('selected')
-        cursor.execute('CREATE UNIQUE CLUSTERED INDEX ix_export_row ON #pms_export_selected(export_row)')
-        start = 0
-        while True:
-            rows = _rows(connection, 'SELECT * FROM #pms_export_selected WHERE export_row>%s AND export_row<=%s ORDER BY export_row', [start, start+200])
-            if not rows:
-                break
-            yield _with_state(rows)
-            start += len(rows)
-    finally:
+    from app.services.purchase_reader import purchase_selection, _rows, _with_state
+    with purchase_selection(connection, query, scope) as (base, params):
+        cursor = connection.cursor()
+        created = []
         try:
-            for name in reversed(created):
-                cursor.execute(f'DROP TABLE #pms_export_{name}')
+            # Snapshot membership after all filters, including full-scope progress.
+            sort = {'date': 'application_date', 'bill_no': 'bill_no', 'project_code': 'project_code', 'material_code': 'material_code'}[query.sort]
+            cursor.execute(f'WITH q AS ({base}) SELECT *, ROW_NUMBER() OVER (ORDER BY {sort} {query.direction}, id {query.direction}) AS export_row INTO #pms_export_selected FROM q', tuple(params))
+            created.append('selected')
+            cursor.execute('CREATE UNIQUE CLUSTERED INDEX ix_export_row ON #pms_export_selected(export_row)')
+            start = 0
+            while True:
+                rows = _rows(connection, 'SELECT * FROM #pms_export_selected WHERE export_row>%s AND export_row<=%s ORDER BY export_row', [start, start+200])
+                if not rows:
+                    break
+                yield _with_state(rows)
+                start += len(rows)
         finally:
-            cursor.close()
+            try:
+                for name in reversed(created):
+                    cursor.execute(f'DROP TABLE #pms_export_{name}')
+            finally:
+                cursor.close()
 
 
 def matches_progress(query, row):
@@ -123,7 +122,7 @@ def write_report(db, job, ctx, path, checkpoint):
             from app.services.stock_detail_engine import export_rows
             dataset = read_dataset(connection, stock_query, stock_organizations)
             checkpoint(count)
-            for row in export_rows(dataset, stock_query.start_date):
+            for row in export_rows(dataset, stock_query.start_date, conditions=stock_query.conditions()):
                 main.append(row)
                 count += 1
                 if count % 500 == 0:
@@ -140,8 +139,6 @@ def write_report(db, job, ctx, path, checkpoint):
                 _decorate_rows(connection, batch, chains=chains)
                 enrich_project_names(db, ctx, batch)
                 for row in batch:
-                    if not matches_progress(query, row):
-                        continue
                     append_purchase(main, orders, receipts, row, chains[row['id']])
                     count += 1
                 checkpoint(count)

@@ -93,6 +93,25 @@ class InventoryContract(unittest.TestCase):
         self.assertIn('FSTOCKORGID',sql);self.assertIn(12,params)
         self.assertIn('%~%%',params)
 
+    def test_typed_query_operators_keep_values_parameterized_and_null_separate(self):
+        r = self.reader()
+        cases = [('notContains','MaterialName',"%_'",'NOT LIKE'),
+                 ('startsWith','MaterialCode','A','LIKE'), ('endsWith','MaterialCode','Z','LIKE'),
+                 ('greaterOrEqual','FBaseQty',0,'>='), ('lessOrEqual','FBaseQty',0,'<='),
+                 ('notEquals','FBaseQty',0,'<>'), ('isEmpty','FBaseQty',None,'IS NULL'),
+                 ('notEmpty','Stock',None,'IS NOT NULL')]
+        for op, field, value, fragment in cases:
+            q = r.InventoryQuery(filters=json.dumps([{'field':field,'operator':op,'value':value}]))
+            sql, params = r.where_clause(q, [42])
+            self.assertIn(fragment, sql)
+            self.assertIn('FSTOCKORGID', sql)
+            self.assertEqual(params[0], 42)
+            if op == 'isEmpty': self.assertNotIn('=0', sql)
+        from pydantic import ValidationError
+        for value in (None, '', '  '):
+            with self.assertRaises(ValidationError):
+                r.Condition(field='MaterialCode',operator='equals',value=value)
+
 
 class InventoryApiContract(unittest.TestCase):
     def setUp(self):

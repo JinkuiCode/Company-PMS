@@ -1,5 +1,6 @@
 """Fixed, parameterized Kingdee queries through the dedicated read-only identity."""
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
@@ -9,11 +10,13 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.services.purchase_progress import summarize_requisition
 from app.services.purchase_fields import DOCUMENT_STATUSES
+from app.services.report_filters import Condition, parse_filters, sql_conditions
 
 REPORT_START_DATE = date(2026, 1, 1)
 
 
 class PurchaseQuery(BaseModel):
+    filters: str = Field(default='[]', max_length=12000)
     keyword: str = Field(default='', max_length=100)
     project_code: str = Field(default='', max_length=100)
     supplier: str = Field(default='', max_length=100)
@@ -27,9 +30,13 @@ class PurchaseQuery(BaseModel):
 
     @model_validator(mode='after')
     def date_range(self):
+        self.conditions()
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError('开始日期不能晚于结束日期')
         return self
+
+    def conditions(self):
+        return parse_filters(self.filters, 'purchase')
 
 
 def effective_state(status, cancelled):
@@ -482,16 +489,33 @@ def request_query(query, project_codes):
  AND (SELECT COUNT(*) FROM dbo.T_PUR_POORDERENTRY_LK all_links WHERE all_links.FENTRYID=se.FENTRYID)=1
  AND sn.FNAME LIKE %s ESCAPE '~')""")
         params.append(_like(query.supplier))
-    return REQUEST_SELECT + ' WHERE ' + ' AND '.join(filters), params
+    base = REQUEST_SELECT + ' WHERE ' + ' AND '.join(filters)
+    extra, extra_params = sql_conditions([condition for condition in query.conditions()
+                                          if condition.field != 'progress'])
+    if extra:
+        base = f'SELECT * FROM ({base}) AS filter_source WHERE {extra}'
+        params.extend(extra_params)
+    return base, params
 
 
 def list_requests(connection, query, project_codes):
+    with purchase_selection(connection, query, project_codes) as (base, params):
+        return _page_then_summarize(connection, query, base, params)
+
+
+@contextmanager
+def purchase_selection(connection, query, project_codes):
+    """Share pre-pagination membership and full accounting with export snapshots."""
     import re
     import time
     _prepare_scope(connection, project_codes)
     base, params = request_query(query, project_codes)
-    if not query.progress:
-        return _page_then_summarize(connection, query, base, params)
+    conditions = [condition for condition in query.conditions() if condition.field == 'progress']
+    if query.progress:
+        conditions.append(Condition('progress', 'equals', 'enum', query.progress))
+    if not conditions:
+        yield base, params
+        return
     deadline = time.monotonic() + 25
     names = ['q', *(name for name, _ in ACCOUNTING_STAGES)]
     # Session-local tempdb worksets avoid SQL Server repeatedly expanding a
@@ -507,17 +531,8 @@ def list_requests(connection, query, project_codes):
             cursor.execute(f'WITH workset AS ({select}) SELECT * INTO #pms_purchase_{name} FROM workset',
                            tuple(params) if name == 'q' else ())
             created.append(name)
-        where = ' WHERE progress=%s' if query.progress else ''
-        params = [query.progress] if query.progress else []
-        total = _rows(connection, 'SELECT COUNT(*) AS total FROM #pms_purchase_report' + where, params)[0]['total']
-        sort = {'date': 'application_date', 'bill_no': 'bill_no', 'project_code': 'project_code',
-                'material_code': 'material_code'}[query.sort]
-        sql = f'WITH numbered AS (SELECT *, ROW_NUMBER() OVER (ORDER BY {sort} {query.direction}, id {query.direction}) AS row_number FROM #pms_purchase_report{where})'
-        start = (query.page - 1) * query.page_size
-        items = _rows(connection, sql + ' SELECT * FROM numbered WHERE row_number>%s AND row_number<=%s ORDER BY row_number',
-                      [*params, start, start + query.page_size]) if total else []
-        _decorate_rows(connection, _with_state(items))
-        return dict(total=total, items=items, page=query.page, page_size=query.page_size)
+        where, params = sql_conditions(conditions)
+        yield 'SELECT * FROM #pms_purchase_report AS filter_source WHERE ' + where, params
     finally:
         try:
             for name in reversed(created):
