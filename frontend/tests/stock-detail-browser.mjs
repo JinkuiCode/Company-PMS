@@ -69,7 +69,7 @@ try {
   await page.getByRole('textbox', { name: '物料（必填）', exact: true }).press('Enter')
   assert.equal(calls, 0)
   await page.getByRole('textbox', { name: '物料（必填）', exact: true }).fill('180102020045')
-  assert.equal(await query.isEnabled(), true)
+  assert.equal(await query.isDisabled(), true, 'organization is required too')
   await page.locator('.pms-form-control[aria-label="库存组织"]').click()
   await page.getByRole('option', { name: '8吋半导体', exact: true }).click()
   await page.getByRole('option', { name: 'Single', exact: true }).click()

@@ -6,9 +6,13 @@ const source = new URL('../src/views/reports/stockDetailState.ts', import.meta.u
 test('stock-detail state module exists', () => assert.ok(existsSync(source)))
 if (existsSync(source)) {
   const { buildStockDetailQuery, createStockDetailRequest } = await import(source.href)
-  const filters = { material: ' PFA ', dates: ['2026-06-01', '2026-09-23'], organization_id: null, stock_id: null }
+  const filters = { material: ' PFA ', dates: ['2026-06-01', '2026-09-23'], organization_id: 1, stock_id: null }
+  test('organization is required even for a saved plan without selection', () => {
+    assert.throws(() => buildStockDetailQuery({ ...filters, organization_id: null }, 1, 50), /组织/)
+    assert.throws(() => buildStockDetailQuery({ ...filters, organization_id: null, organization_ids: [] }, 1, 50), /组织/)
+  })
   test('multiple organizations and legacy saved plans share a normalized query', () => {
-    assert.deepEqual(buildStockDetailQuery({ ...filters, organization_ids: [2, 1, 2] }, 1, 50).organization_ids, [1, 2])
+    assert.deepEqual(buildStockDetailQuery({ ...filters, organization_id: null, organization_ids: [2, 1, 2] }, 1, 50).organization_ids, [1, 2])
     assert.deepEqual(buildStockDetailQuery({ ...filters, organization_id: 3 }, 1, 50).organization_ids, [3])
     assert.throws(() => buildStockDetailQuery({ ...filters, organization_ids: [0] }, 1, 50))
   })

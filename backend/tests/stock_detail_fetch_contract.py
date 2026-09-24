@@ -50,7 +50,7 @@ class FetchContract(unittest.TestCase):
         return stock_detail_fetch
 
     def query(self):
-        return StockDetailQuery(material='M1', start_date=date(2026, 6, 1), end_date=date(2026, 6, 30))
+        return StockDetailQuery(material='M1', organization_ids=[1], start_date=date(2026, 6, 1), end_date=date(2026, 6, 30))
 
     def registry(self):
         return [dict(FBILLFORMID=form) for form in ('STK_InvBal', 'PRD_PickMtrl')]

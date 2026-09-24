@@ -16,7 +16,7 @@ class SourceContract(unittest.TestCase):
         return stock_detail_sources
 
     def query(self, **changes):
-        return StockDetailQuery(material="PFA%' OR 1=1--", start_date='2026-06-01', end_date='2026-09-23', **changes)
+        return StockDetailQuery(material="PFA%' OR 1=1--", organization_ids=[1], start_date='2026-06-01', end_date='2026-09-23', **changes)
 
     def test_bound_material_dates_organizations_and_stock(self):
         sql, params = self.sources().movement_sql('PRD_PickMtrl', self.query(stock_id=20), [1])
@@ -191,7 +191,7 @@ class SourceContract(unittest.TestCase):
                 connection.execute(f'CREATE TABLE dbo.{table} ({",".join(columns)})')
                 connection.executemany(f'INSERT INTO dbo.{table} VALUES ({",".join("?" for _ in columns)})',
                                        [tuple(row[column] for column in columns) for row in rows])
-            query = StockDetailQuery(material='PFA', start_date='2026-09-01', end_date='2026-09-30')
+            query = StockDetailQuery(material='PFA', organization_ids=[1], start_date='2026-09-01', end_date='2026-09-30')
             def result(scope):
                 values = []
                 for side, sql, params in module.movement_queries('STK_TransferDirect', query, scope):

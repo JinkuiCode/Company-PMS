@@ -25,6 +25,7 @@ const today = new Date()
 const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const filters = reactive<StockDetailFilters>({ material: '', dates: [localDate(new Date(today.getFullYear(), today.getMonth(), 1)), localDate(today)], organization_ids: [], stock_id: null })
 const materialMissing = computed(() => !String(filters.material || '').trim())
+const organizationMissing = computed(() => !filters.organization_ids?.length)
 const page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), metadata = ref<StockDetailMetadata | null>(null)
 const initializationError = ref(''), initializing = ref(false)
 const listRef = ref<InstanceType<typeof PmsDataList>>()
@@ -108,7 +109,7 @@ async function initialize() {
   finally { if (!disposed) initializing.value = false }
 }
 async function query(resetPage = false) {
-  if (materialMissing.value) return
+  if (materialMissing.value || organizationMissing.value) return
   if (resetPage) page.value = 1
   closeDetail()
   await request.query({ ...filters, dates: [...(filters.dates || [])] }, page.value, pageSize.value)
@@ -122,6 +123,7 @@ function resetFilters() {
   request.clear(); closeDetail()
 }
 async function findOptions(kind: 'material' | 'stock', keyword = '') {
+  if (organizationMissing.value) return
   const ticket = ++optionRevision[kind]; optionLoading[kind] = true
   try {
     const data = await getStockDetailCandidates(kind, keyword, stockDetailOrganizations(filters))
@@ -141,7 +143,7 @@ function savePlan() {
 async function loadPlan(value: unknown) {
   const plan = plans.value.find(p => p.name === value)
   if (!plan) return
-  try { buildStockDetailQuery(plan.filters, 1, plan.size) } catch { ElMessage.warning('查询方案无效，请重新维护'); return }
+  try { buildStockDetailQuery(plan.filters, 1, plan.size) } catch (error) { ElMessage.warning((error as Error).message); return }
   Object.assign(filters, { ...plan.filters, organization_id: undefined, organization_ids: stockDetailOrganizations(plan.filters), dates: [...plan.filters.dates] })
   filters.stock_id = plan.filters.stock_id
   pageSize.value = plan.size; page.value = 1
@@ -170,10 +172,10 @@ onUnmounted(() => { disposed = true; request.clear(); detailSwitch.invalidate();
     <template #filters>
       <PmsListFilters :filters="[]" :fields="[]" :active-count="0">
         <div class="stock-detail-filter stock-detail-material"><PmsTextControl v-model="filters.material" size="compact" clearable :error="result.error && !String(filters.material || '').trim() ? '请填写物料' : ''" placeholder="物料编码 / 名称 / 规格型号（必填）" aria-label="物料（必填）" aria-required="true" @keyup.enter="query(true)" /></div>
-        <div class="stock-detail-filter"><PmsSelectControl v-model="filters.organization_ids" :options="metadata?.organizations || []" size="compact" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="全部授权组织" aria-label="库存组织" /></div>
+        <div class="stock-detail-filter"><PmsSelectControl v-model="filters.organization_ids" :options="metadata?.organizations || []" size="compact" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="库存组织（必选）" aria-label="库存组织" aria-required="true" /></div>
         <div class="stock-detail-dates"><PmsDateControl v-model="filters.dates" type="daterange" size="compact" start-placeholder="起始日期" end-placeholder="截止日期" aria-label="收发日期范围" /></div>
         <div class="stock-detail-filter"><PmsSelectControl v-model="filters.stock_id" :options="candidates.stock" size="compact" clearable :value-on-clear="null" filterable remote :remote-method="(keyword: string) => findOptions('stock', keyword)" :loading="optionLoading.stock" placeholder="全部仓库" aria-label="仓库" @visible-change="(open: boolean) => open && findOptions('stock')" /></div>
-        <el-button type="primary" size="small" :icon="Search" :disabled="!metadata || result.loading || materialMissing" @click="query(true)">查询</el-button>
+        <el-button type="primary" size="small" :icon="Search" :disabled="!metadata || result.loading || materialMissing || organizationMissing" @click="query(true)">查询</el-button>
         <el-button size="small" @click="resetFilters">重置</el-button>
       </PmsListFilters>
       <div v-if="result.summary" class="stock-detail-summary" aria-label="完整查询数量汇总">

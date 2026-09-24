@@ -38,7 +38,7 @@ class EngineContract(unittest.TestCase):
                     statuses={1: dict(name='可用')}, owners={})
 
     def test_history_rolls_into_opening_and_pagination_keeps_balance(self):
-        query = StockDetailQuery(material='M1', start_date=date(2026, 6, 1), end_date=date(2026, 6, 30), page=2, page_size=1)
+        query = StockDetailQuery(material='M1', organization_ids=[1], start_date=date(2026, 6, 1), end_date=date(2026, 6, 30), page=2, page_size=1)
         snapshot = dict(self.raw(1, date(2026, 5, 1), 0, 0), snapshot_id=1, base_qty=D(10))
         rows = [self.raw(2, date(2026, 5, 20), 4, 0), self.raw(3, date(2026, 6, 2), 0, 3), self.raw(4, date(2026, 6, 3), 2, 0)]
         result = self.service().compile_organization(query, 1, Baseline(date(2026, 5, 1), date(2026, 4, 30), 0),
@@ -49,7 +49,7 @@ class EngineContract(unittest.TestCase):
         self.assertEqual(page['total'], 2)
 
     def test_cross_organization_rows_are_rejected_before_normalization(self):
-        query = StockDetailQuery(material='M1', start_date=date(2026, 6, 1), end_date=date(2026, 6, 30))
+        query = StockDetailQuery(material='M1', organization_ids=[1], start_date=date(2026, 6, 1), end_date=date(2026, 6, 30))
         raw = dict(self.raw(1, date(2026, 6, 2), 1, 0), organization_id=2)
         with self.assertRaises(ValueError):
             self.service().compile_organization(query, 1, Baseline(query.start_date), [],

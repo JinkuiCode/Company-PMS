@@ -9,26 +9,22 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.project import PmsProjectArchive
-from app.models.product_line import SysProductLine
+from app.api.inventory_reports import authorized_organizations
 from app.services.authorization import require_permission, enforce_permission
 from app.services.project import get_scoped_archive_query
 from app.services.purchase_connection import purchase_connection
-from app.services.purchase_reader import PurchaseQuery, ProjectOrganizationGrant, load_request, load_chains, list_requests, list_options, REPORT_START_DATE
+from app.services.purchase_reader import PurchaseQuery, OrganizationGrant, load_request, load_chains, list_requests, list_options, REPORT_START_DATE
 from app.services.purchase_fields import report_fields, DOCUMENT_STATUSES, PROGRESS_LABELS
 
 router = APIRouter(prefix='/api/reports/purchase', tags=['采购进度查询'])
 
 
 def project_scope(db, ctx):
-    from app.services.business_data_scope import has_all_business_data, ALL_DATA_SCOPE
-    if has_all_business_data(ctx):
+    from app.services.business_data_scope import ALL_DATA_SCOPE
+    organizations = authorized_organizations(db, ctx)
+    if organizations is ALL_DATA_SCOPE:
         return ALL_DATA_SCOPE
-    return [ProjectOrganizationGrant(code, organization_id)
-            for code, organization_id in get_scoped_archive_query(db, ctx)
-            .join(SysProductLine, SysProductLine.id == PmsProjectArchive.business_product_line_id)
-            .filter(SysProductLine.source_key == 'kingdee')
-            .with_entities(PmsProjectArchive.project_code, SysProductLine.organization_id)
-            .order_by(PmsProjectArchive.project_code).all()]
+    return [OrganizationGrant(value) for value in sorted(set(organizations))]
 
 
 @contextmanager

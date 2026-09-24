@@ -29,6 +29,8 @@ class StockDetailQuery(BaseModel):
 
     @model_validator(mode='after')
     def date_order(self):
+        if self.organization_id is None and not self.organization_ids:
+            raise ValueError('请选择至少一个库存组织后再查询')
         if self.organization_id is not None and self.organization_ids:
             raise ValueError('请勿同时指定单组织和多组织条件')
         if self.start_date > self.end_date:
@@ -40,11 +42,11 @@ def effective_organizations(query, authorized):
     selected = sorted(set(getattr(query, 'organization_ids', []) or
                           ([query.organization_id] if query.organization_id else [])))
     if authorized is ALL_DATA_SCOPE:
-        return selected or ALL_DATA_SCOPE
+        return selected
     ids = sorted({value for value in (authorized or []) if type(value) is int and value > 0})
     if selected:
         return [value for value in selected if value in ids]
-    return ids
+    return []
 
 
 def list_candidates(cursor, kind, keyword, organizations):

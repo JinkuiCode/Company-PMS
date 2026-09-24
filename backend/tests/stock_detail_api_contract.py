@@ -29,7 +29,7 @@ class ApiContract(unittest.TestCase):
         self.addCleanup(self.scope.stop)
 
     def params(self):
-        return dict(material='M1', start_date='2026-06-01', end_date='2026-06-30')
+        return dict(material='M1', start_date='2026-06-01', end_date='2026-06-30', organization_ids=[1])
 
     def test_all_routes_require_current_list_permission(self):
         self.ctx['permissions'] = []
@@ -40,6 +40,12 @@ class ApiContract(unittest.TestCase):
         with patch.object(self.api, 'purchase_connection') as connection:
             for value in ('', '   '):
                 self.assertEqual(self.client.get('/api/reports/stock-detail', params={**self.params(), 'material': value}).status_code, 422)
+            connection.assert_not_called()
+
+    def test_missing_organization_never_opens_erp(self):
+        with patch.object(self.api, 'purchase_connection') as connection:
+            params = {k: v for k, v in self.params().items() if k != 'organization_ids'}
+            self.assertEqual(self.client.get('/api/reports/stock-detail', params=params).status_code, 422)
             connection.assert_not_called()
 
     def test_menu_alone_does_not_grant_business_data(self):
@@ -75,7 +81,7 @@ class ApiContract(unittest.TestCase):
         with patch.object(self.api, 'stock_detail_connection', connection), \
              patch.object(self.api, 'read_dataset', return_value=dict(rows=[], openings={}, labels={})) as read, \
              patch.object(self.api, 'list_candidates', return_value={'items': [], 'has_more': False}) as candidates:
-            params = list(self.params().items()) + [('organization_ids', 1), ('organization_ids', 99)]
+            params = [(k,v) for k,v in self.params().items() if k != 'organization_ids'] + [('organization_ids', 1), ('organization_ids', 99)]
             self.assertEqual(self.client.get('/api/reports/stock-detail', params=params).status_code, 200)
             self.assertEqual(read.call_args.args[2], [1])
             self.assertEqual(self.client.get('/api/reports/stock-detail/options', params=[('field','stock'), ('organization_ids',1), ('organization_ids',99)]).status_code, 200)

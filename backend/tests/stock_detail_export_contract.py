@@ -14,6 +14,12 @@ from app.services.stock_detail_balance import InventoryKey
 
 
 class ExportContract(unittest.TestCase):
+    def test_export_without_organization_is_rejected_before_database_access(self):
+        ctx = {'permissions': ['report:stock-detail:list', 'report:stock-detail:view', 'report:stock-detail:export']}
+        with self.assertRaises(HTTPException) as result:
+            report_export_jobs.create_job(None, ctx, 'stock-detail',
+                {'material': 'M1', 'start_date': '2026-06-01', 'end_date': '2026-06-30'}, ['material_code'])
+        self.assertEqual(result.exception.status_code, 422)
     def test_export_rechecks_multi_organization_scope(self):
         from app.services.report_export_data import write_report
         job = SimpleNamespace(report='stock-detail', parameters='{"material":"M1","start_date":"2026-06-01","end_date":"2026-06-30","organization_ids":[1,2,99]}', columns='["material_code"]')
@@ -26,7 +32,7 @@ class ExportContract(unittest.TestCase):
 
     def test_empty_export_scope_does_not_connect_to_erp(self):
         from app.services.report_export_data import write_report
-        job = SimpleNamespace(report='stock-detail', parameters='{"material":"M1","start_date":"2026-06-01","end_date":"2026-06-30"}', columns='["material_code"]')
+        job = SimpleNamespace(report='stock-detail', parameters='{"material":"M1","start_date":"2026-06-01","end_date":"2026-06-30","organization_ids":[1]}', columns='["material_code"]')
         with tempfile.TemporaryDirectory() as folder, patch('app.api.inventory_reports.authorized_organizations', return_value=[]), patch('app.services.report_export_data.purchase_connection') as connection:
             write_report(None, job, {}, Path(folder) / 'empty.xlsx', lambda count: None)
             connection.assert_not_called()

@@ -14,7 +14,7 @@ class DatasetContract(unittest.TestCase):
     key = InventoryKey(1, 10, 20, 10000, 'BD_OwnerOrg', 1, 10087)
 
     def query(self, **kwargs):
-        return reader.StockDetailQuery(material='PFA', start_date='2026-06-01',
+        return reader.StockDetailQuery(material='PFA', organization_ids=[1], start_date='2026-06-01',
                                        end_date='2026-06-30', **kwargs)
 
     def row(self, entry, day, income='0', issue='0', **kwargs):

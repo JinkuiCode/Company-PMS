@@ -45,6 +45,15 @@ def effective_state(status, cancelled):
 
 
 @dataclass(frozen=True)
+class OrganizationGrant:
+    organization_id: int
+
+    def __post_init__(self):
+        if type(self.organization_id) is not int or self.organization_id <= 0:
+            raise ValueError('invalid_organization_id')
+
+
+@dataclass(frozen=True)
 class ProjectOrganizationGrant:
     project_code: str
     organization_id: int
@@ -62,6 +71,9 @@ def scope_clause(column, grants):
         return '1=1', []
     if not grants:
         return '1=0', []
+    if all(isinstance(grant, OrganizationGrant) for grant in grants):
+        ids = sorted({grant.organization_id for grant in grants})
+        return 'h.FAPPLICATIONORGID IN (' + ','.join(['%s'] * len(ids)) + ')', ids
     if any(not isinstance(grant, ProjectOrganizationGrant) for grant in grants):
         raise ValueError('paired_project_organization_grants_required')
     if len(grants) > 400:
@@ -76,6 +88,8 @@ def _prepare_scope(connection, grants):
     if grants is ALL_DATA_SCOPE:
         return
     scope_clause('a.FNUMBER', grants)
+    if grants and isinstance(grants[0], OrganizationGrant):
+        return
     if not grants or len(grants) <= 400:
         return
     cursor = connection.cursor()

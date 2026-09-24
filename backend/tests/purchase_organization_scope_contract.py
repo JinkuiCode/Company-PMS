@@ -5,6 +5,17 @@ from app.services import purchase_reader as reader
 
 
 class OrganizationScope(unittest.TestCase):
+    def test_authorized_org_includes_unregistered_projects_but_not_other_orgs(self):
+        fixture = fixtures.ReaderContract()
+        self.addCleanup(fixture.doCleanups)
+        db, connection = fixture.classification_fixture()
+        db.execute("UPDATE T_PUR_REQENTRY SET F_TWBJ_ASSISTANT_83G=NULL")
+        db.execute('UPDATE T_PUR_REQUISITION SET FAPPLICATIONORGID=CASE WHEN FID=1 THEN 200 ELSE 100 END')
+        grants = [reader.OrganizationGrant(100)]
+        self.assertEqual(reader.list_requests(connection, reader.PurchaseQuery(), grants)['total'], 8)
+        self.assertIsNone(reader.load_request(connection, 1, grants))
+        self.assertIsNotNone(reader.load_request(connection, 2, grants))
+
     def test_missing_scope_is_not_all_projects(self):
         self.assertEqual(reader.scope_clause('a.FNUMBER', None), ('1=0', []))
 

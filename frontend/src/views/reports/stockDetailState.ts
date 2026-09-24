@@ -39,6 +39,7 @@ export function buildStockDetailQuery(filters: StockDetailFilters, page: number,
   if (!Array.isArray(dates) || dates.length !== 2 || !dates.every(isDate)) throw new Error('请选择完整、有效的起止日期')
   if (dates[0]! > dates[1]!) throw new Error('起始日期不得晚于截止日期')
   const organizations = stockDetailOrganizations(filters)
+  if (!organizations.length) throw new Error('请选择至少一个库存组织后再查询')
   for (const id of [filters.organization_id, filters.stock_id]) {
     if (id != null && (!Number.isSafeInteger(id) || id <= 0)) throw new Error('请重新选择组织或仓库')
   }

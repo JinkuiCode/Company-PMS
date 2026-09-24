@@ -42,7 +42,7 @@ def scope_signature(db, ctx, report):
         scope = sorted((r.id, r.organization_id) for r in scoped_lines(db, ctx))
     else:
         from app.api.purchase_reports import project_scope
-        scope = sorted((r.project_code, r.organization_id) for r in project_scope(db, ctx))
+        scope = {'purchase_organizations': sorted(r.organization_id for r in project_scope(db, ctx))}
     return hashlib.sha256(json.dumps(scope, ensure_ascii=True).encode()).hexdigest()
 
 

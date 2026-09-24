@@ -10,6 +10,11 @@ from app.services.business_data_scope import ALL_DATA_SCOPE
 
 
 class StockDetailQueryContract(unittest.TestCase):
+    def test_organization_is_required_including_all_data_users(self):
+        for changes in ({}, {'organization_ids': []}, {'organization_id': None}):
+            with self.subTest(changes=changes), self.assertRaises(ValidationError):
+                self.reader().StockDetailQuery(material='M1', start_date='2026-06-01', end_date='2026-06-30', **changes)
+
     def reader(self):
         self.assertIsNotNone(importlib.util.find_spec('app.services.stock_detail_reader'))
         from app.services import stock_detail_reader
@@ -17,6 +22,8 @@ class StockDetailQueryContract(unittest.TestCase):
 
     def query(self, **changes):
         args = dict(material='180102020045', start_date='2026-06-01', end_date='2026-09-23')
+        if 'organization_id' not in changes and 'organization_ids' not in changes:
+            args['organization_ids'] = [1, 2]
         args.update(changes)
         return self.reader().StockDetailQuery(**args)
 
@@ -46,7 +53,7 @@ class StockDetailQueryContract(unittest.TestCase):
         self.assertEqual(r.effective_organizations(self.query(), [2, 1, 2, True, -1]), [1, 2])
         self.assertEqual(r.effective_organizations(self.query(organization_id=3), [1, 2]), [])
         self.assertEqual(r.effective_organizations(self.query(organization_id=2), [1, 2]), [2])
-        self.assertIs(r.effective_organizations(self.query(), ALL_DATA_SCOPE), ALL_DATA_SCOPE)
+        self.assertEqual(r.effective_organizations(self.query(), ALL_DATA_SCOPE), [1, 2])
         self.assertEqual(r.effective_organizations(self.query(organization_id=3), ALL_DATA_SCOPE), [3])
 
     def test_public_fields_exclude_prices_and_internal_ids(self):
@@ -63,7 +70,8 @@ class StockDetailQueryContract(unittest.TestCase):
         self.assertEqual(r.effective_organizations(q, [2, 1]), [1, 2])
         self.assertEqual(r.effective_organizations(q, []), [])
         self.assertEqual(r.effective_organizations(q, ALL_DATA_SCOPE), [1, 2, 3])
-        self.assertEqual(r.effective_organizations(self.query(organization_ids=[]), [2]), [2])
+        with self.assertRaises(ValidationError):
+            self.query(organization_ids=[])
         for ids in ([0], [-1], ['bad']):
             with self.assertRaises(ValidationError):
                 self.query(organization_ids=ids)

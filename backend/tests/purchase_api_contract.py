@@ -67,7 +67,7 @@ class ReportApiContract(unittest.TestCase):
         page = self.db.query(SysMenu).filter_by(permission_code='report:purchase:list').one()
         self.assertEqual(self.db.get(SysMenu, page.parent_id).menu_name, '报表中心')
 
-    def test_scope_always_requires_explicit_project_organization_pairs(self):
+    def test_scope_uses_authorized_organizations_without_archive_dependency(self):
         api = self.api()
         line = SysProductLine(source_key='kingdee', organization_id=100, organization_code='100',
             organization_name='100', display_name='100', name_key='100')
@@ -77,8 +77,10 @@ class ReportApiContract(unittest.TestCase):
                          PmsProjectArchive(project_code='B', project_name='B', manager_id=8)])
         self.db.commit()
         self.assertEqual(api.project_scope(self.db, {'data_scope': 4, 'product_category_ids': None}), [])
-        self.assertEqual(api.project_scope(self.db, {'data_scope': 1, 'user_id': 7,
-            'product_line_ids': [line.id]}), [ProjectOrganizationGrant('A', 100)])
+        grants = api.project_scope(self.db, {'data_scope': 1, 'user_id': 99,
+            'product_line_ids': [line.id]})
+        self.assertEqual([g.organization_id for g in grants], [100])
+        self.assertFalse(any(hasattr(g, 'project_code') for g in grants))
         self.assertEqual(api.project_scope(self.db, {'data_scope': 4, 'product_line_ids': []}), [])
 
     def test_export_requires_view_and_export(self):
@@ -89,6 +91,16 @@ class ReportApiContract(unittest.TestCase):
             self.assertEqual(result.exception.status_code, 403)
         api.ensure_export_permission({'permissions': ['report:purchase:view', 'report:purchase:export']})
         self.assertEqual(api.public_row({'requested': Decimal('123456789.1234567890')})['requested'], '123456789.1234567890')
+
+    def test_export_signature_tracks_organization_revocation_not_archive_updates(self):
+        from app.services.report_export_jobs import scope_signature
+        line = self.line()
+        ctx = {'product_line_ids': [line.id], 'data_scope': 1, 'user_id': 7}
+        before = scope_signature(self.db, ctx, 'purchase')
+        self.db.add(PmsProjectArchive(project_code='HISTORY', project_name='历史', manager_id=8))
+        self.db.flush()
+        self.assertEqual(scope_signature(self.db, ctx, 'purchase'), before)
+        self.assertNotEqual(scope_signature(self.db, {**ctx, 'product_line_ids': []}, 'purchase'), before)
 
     def test_detail_out_of_scope_is_404_and_never_loads_children(self):
         api = self.api()
