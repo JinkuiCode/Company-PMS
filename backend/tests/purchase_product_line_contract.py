@@ -55,6 +55,9 @@ class ProductLineApi(unittest.TestCase):
         self.assertEqual(result['organizations'], [{'value': 100, 'label': '8吋半导体'}])
         self.assertEqual(api.metadata(db=self.db, ctx={'product_line_ids': []})['organizations'], [])
         self.assertTrue(any(f['key'] == 'product_line_name' for f in result['fields']))
+        fields = {field['key']: field for field in result['fields']}
+        self.assertEqual(fields['product_line_name']['group'], '采购申请')
+        self.assertEqual(fields['product_line_name']['group'], fields['bill_no']['group'])
 
     def test_names_follow_requisition_org_and_preserve_unconfigured_data(self):
         api = self.api()

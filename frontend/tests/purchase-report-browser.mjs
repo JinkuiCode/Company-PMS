@@ -60,6 +60,31 @@ try {
   await expect(productLine).toBeVisible()
   assert.equal(await productLineControl.evaluate(el => getComputedStyle(el.closest('.pms-form-control')).width), '140px')
   await expect(page.locator('.ag-header-cell[col-id="product_line_name"]')).toBeVisible()
+  await expect(page.locator('.ag-header-group-text').filter({ hasText: /^物料信息$/ })).toHaveCount(1)
+  await expect(page.locator('.ag-header-group-text').filter({ hasText: /^采购申请$/ })).toHaveCount(1)
+  await page.evaluate(() => {
+    const key = 'pms:purchase-report:v1:990'
+    const saved = JSON.parse(localStorage.getItem(key))
+    saved.columns = [
+      { colId: 'project_code', pinned: 'left', width: 150 },
+      { colId: 'material_name', pinned: 'left', width: 190 },
+      { colId: 'bill_no', pinned: null, width: 140 },
+      { colId: 'product_line_name', pinned: null, width: 160 },
+      { colId: 'progress', pinned: 'right', width: 136 },
+      { colId: 'purchase_actions', pinned: 'right', width: 100 },
+    ]
+    localStorage.setItem(key, JSON.stringify(saved))
+  })
+  await page.reload()
+  await expect(productLine).toBeVisible()
+  await expect(page.locator('.ag-header-group-text').filter({ hasText: /^物料信息$/ })).toHaveCount(1)
+  await expect(page.locator('.ag-header-group-text').filter({ hasText: /^采购申请$/ })).toHaveCount(1)
+  assert.deepEqual(await page.locator('.ag-pinned-left-header .ag-header-cell').evaluateAll(els => els.map(el => el.getAttribute('col-id'))), ['project_code', 'material_name'])
+  const productHeader = page.locator('.ag-header-cell[col-id="product_line_name"]')
+  assert.equal(await productHeader.evaluate(el => el.getBoundingClientRect().width), 160)
+  const billHeader = page.locator('.ag-header-cell[col-id="bill_no"]')
+  await expect.poll(async () => (await billHeader.boundingBox()).x < (await productHeader.boundingBox()).x, { message: '恢复用户列顺序' }).toBe(true)
+  await page.screenshot({ path: resolve(root, '.runtime/purchase-product-line-group-fixed.png') })
   await productLineControl.click()
   await page.getByRole('option', { name: '半导体产品线', exact: true }).click()
   await page.getByRole('option', { name: '自动化产品线', exact: true }).click()

@@ -1,11 +1,11 @@
 """Single source of report labels, metadata, export and field-catalog entries."""
 FIELDS = [
-    ('product_line_name', '产品线', 'text', '物料信息', 'T_PUR_REQUISITION', 'FAPPLICATIONORGID', '请购组织匹配 PMS 产品线显示名称；未配置时显示金蝶组织名称并标注未配置产品线，不按项目档案产品线替代'),
     ('project_code', '项目编号', 'text', '物料信息', 'T_BAS_ASSISTANTDATAENTRY', 'FNUMBER', '申请明细项目辅助资料 F_TWBJ_ASSISTANT_83G 对应编码'),
     ('project_name', '项目名称', 'text', '物料信息', 'pms_project_archive', 'project_name', '项目编号精确匹配有权访问的 PMS 档案；无匹配时为空，不回退为金蝶名称'),
     ('material_code', '物料编码', 'text', '物料信息', 'T_BD_MATERIAL', 'FNUMBER', '按申请明细 FMATERIALID 关联'),
     ('material_name', '物料名称', 'text', '物料信息', 'T_BD_MATERIAL_L', 'FNAME', '中文语言 2052'),
     ('specification', '规格型号', 'text', '物料信息', 'T_BD_MATERIAL_L', 'FSPECIFICATION', '中文语言 2052'),
+    ('product_line_name', '产品线', 'text', '采购申请', 'T_PUR_REQUISITION', 'FAPPLICATIONORGID', '请购组织匹配 PMS 产品线显示名称；未配置时显示金蝶组织名称并标注未配置产品线，不按项目档案产品线替代'),
     ('unit_name', '申请单位', 'text', '采购申请', 'T_BD_UNIT_L', 'FNAME', '申请明细 FUNITID；累计数量均换算到此单位'),
     ('bill_no', '申请单编号', 'text', '采购申请', 'T_PUR_REQUISITION', 'FBILLNO', '一行对应一条申请明细，不按物料编码合并'),
     ('line_no', '申请单行号', 'number', '采购申请', 'T_PUR_REQENTRY', 'FSEQ', '单据行号，内部关联使用 FENTRYID'),
