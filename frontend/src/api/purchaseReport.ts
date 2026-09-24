@@ -6,7 +6,7 @@ export interface PurchaseField {
 }
 export interface PurchaseRow {
   id: number; bill_no: string; line_no: number; material_name: string; unit_name: string
-  document_status: string; progress: string; progress_label: string
+  document_status: string; progress: string; progress_label: string; product_line_name: string
   [key: string]: string | number | null
 }
 export interface PurchaseDocument {
@@ -20,11 +20,12 @@ export interface PurchaseDetail {
   summary: { issues: string[]; [key: string]: unknown }; queried_at: string
 }
 export interface PurchaseMetadata {
+  organizations?: { value: number; label: string }[]
   filter_fields?: import('@/report-query/state').ReportField[]
   fields: PurchaseField[]; progress_labels: Record<string, string>
   document_status_labels: Record<string, string>; start_date: string
 }
 export const getPurchaseMetadata = () => request.get<unknown, PurchaseMetadata>('/reports/purchase/metadata')
 export const getPurchaseOptions = (field: 'project' | 'supplier', keyword: string) => request.get<unknown, { items: { value: string; label: string }[]; has_more: boolean }>('/reports/purchase/options', { params: { field, keyword }, timeout: 30000 })
-export const getPurchaseRows = (params: object, signal: AbortSignal) => request.get<unknown, { items: PurchaseRow[]; total: number; queried_at: string }>('/reports/purchase', { params, signal, timeout: 60000 })
+export const getPurchaseRows = (params: { organization_ids: number[] }, signal: AbortSignal) => request.get<unknown, { items: PurchaseRow[]; total: number; queried_at: string }>('/reports/purchase', { params, paramsSerializer: { indexes: null }, signal, timeout: 60000 })
 export const getPurchaseDetail = (id: string, signal: AbortSignal) => request.get<unknown, PurchaseDetail>(`/reports/purchase/${id}`, { signal, timeout: 60000 })

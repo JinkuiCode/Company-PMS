@@ -9,11 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.project import PmsProjectArchive
-from app.api.inventory_reports import authorized_organizations
+from app.models.product_line import SysProductLine
+from app.api.inventory_reports import authorized_organizations, scoped_lines
 from app.services.authorization import require_permission, enforce_permission
 from app.services.project import get_scoped_archive_query
 from app.services.purchase_connection import purchase_connection
-from app.services.purchase_reader import PurchaseQuery, OrganizationGrant, load_request, load_chains, list_requests, list_options, REPORT_START_DATE
+from app.services.purchase_reader import PurchaseQuery, OrganizationGrant, load_request, load_chains, list_requests, list_options, REPORT_START_DATE, _rows
 from app.services.purchase_fields import report_fields, DOCUMENT_STATUSES, PROGRESS_LABELS
 from app.services.report_filters import filter_fields
 
@@ -57,9 +58,28 @@ def enrich_project_names(db, ctx, rows):
         row['project_name'] = names.get(row.get('project_code'))
 
 
+def enrich_product_lines(db, connection, rows):
+    """Label only already-authorized requisitions, including unmapped organizations."""
+    ids = {row['organization_id'] for row in rows if row.get('organization_id')}
+    if not ids:
+        return
+    names = dict(db.query(SysProductLine.organization_id, SysProductLine.display_name).filter(
+        SysProductLine.source_key == 'kingdee', SysProductLine.organization_id.in_(ids)).all())
+    missing = sorted(ids - names.keys())
+    if missing:
+        organizations = _rows(connection,
+            'SELECT FORGID AS id,FNAME AS name FROM dbo.T_ORG_ORGANIZATIONS_L '
+            'WHERE FLOCALEID=2052 AND FORGID IN (' + ','.join(['%s'] * len(missing)) + ')', missing)
+        source_names = {row['id']: row['name'] for row in organizations}
+        names.update({id: f'{source_names.get(id) or "组织 " + str(id)}（未配置产品线）' for id in missing})
+    for row in rows:
+        row['product_line_name'] = names.get(row.get('organization_id'), '未配置产品线')
+
+
 @router.get('/metadata')
-def metadata(ctx: dict = Depends(require_permission('report:purchase:view'))):
+def metadata(db: Session = Depends(get_db), ctx: dict = Depends(require_permission('report:purchase:view'))):
     return dict(fields=report_fields(), filter_fields=filter_fields('purchase'), progress_labels=PROGRESS_LABELS, document_status_labels=DOCUMENT_STATUSES,
+                organizations=[{'value': line.organization_id, 'label': line.display_name} for line in scoped_lines(db, ctx)],
                 start_date=REPORT_START_DATE.isoformat())
 
 
@@ -69,6 +89,7 @@ def listing(query: Annotated[PurchaseQuery, Query()], db: Session = Depends(get_
     codes = project_scope(db, ctx)
     with report_connection() as connection:
         result = list_requests(connection, query, codes)
+        enrich_product_lines(db, connection, result['items'])
     result['items'] = [public_row(row) for row in result['items']]
     enrich_project_names(db, ctx, result['items'])
     result['queried_at'] = datetime.now(timezone.utc).isoformat()
@@ -103,6 +124,7 @@ def detail(request_id: int = Path(ge=1), db: Session = Depends(get_db),
         if not row:
             raise HTTPException(404, '申请明细不存在或无权访问')
         chain = load_chains(connection, [row])[row['id']]
+        enrich_product_lines(db, connection, [row])
     enrich_project_names(db, ctx, [row])
     # Do not expose other requisitions' IDs or source allocations used internally.
     return jsonable_encoder(dict(request=public_row(row), **chain, queried_at=datetime.now(timezone.utc).isoformat()),

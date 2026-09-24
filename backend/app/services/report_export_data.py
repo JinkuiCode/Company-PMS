@@ -7,6 +7,7 @@ from app.services.purchase_fields import DOCUMENT_STATUSES, PROGRESS_LABELS
 from app.services.report_export_jobs import fields_for
 
 PARENT_FIELDS = [('request_bill_no', '申请单编号'), ('request_line_no', '申请单行号'),
+    ('product_line_name', '产品线'),
     ('project_code', '项目编号'), ('material_code', '物料编码'), ('material_name', '物料名称')]
 ORDER_FIELDS = [('bill_no', '采购订单编号'), ('line_no', '订单行号'), ('order_date', '订单日期'),
     ('document_status', '数据状态'), ('cancel_status', '作废状态'), ('close_status', '关闭状态'),
@@ -31,7 +32,7 @@ def labels(row):
 
 def append_purchase(main, orders, receipts, row, chain):
     main.append(labels(row))
-    parent = {key: row.get(key) for key in ('project_code', 'material_code', 'material_name')}
+    parent = {key: row.get(key) for key in ('project_code', 'material_code', 'material_name', 'product_line_name')}
     parent.update(request_bill_no=row.get('bill_no'), request_line_no=row.get('line_no'))
     order_map = {order['id']: order for order in chain['orders']}
     for order in chain['orders']:
@@ -130,7 +131,7 @@ def write_report(db, job, ctx, path, checkpoint):
             checkpoint(count)
         else:
             from app.services.purchase_reader import PurchaseQuery, load_chains, _decorate_rows
-            from app.api.purchase_reports import project_scope, enrich_project_names
+            from app.api.purchase_reports import project_scope, enrich_project_names, enrich_product_lines
             query = PurchaseQuery.model_validate_json(job.parameters)
             orders, receipts = detail_sheets(book)
             for batch in purchase_batches(connection, query, project_scope(db, ctx)):
@@ -138,6 +139,7 @@ def write_report(db, job, ctx, path, checkpoint):
                 chains = load_chains(connection, batch)
                 _decorate_rows(connection, batch, chains=chains)
                 enrich_project_names(db, ctx, batch)
+                enrich_product_lines(db, connection, batch)
                 for row in batch:
                     append_purchase(main, orders, receipts, row, chains[row['id']])
                     count += 1

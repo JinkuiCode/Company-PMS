@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -16,6 +16,7 @@ REPORT_START_DATE = date(2026, 1, 1)
 
 
 class PurchaseQuery(BaseModel):
+    organization_ids: list[Annotated[int, Field(gt=0)]] = Field(default_factory=list, max_length=200)
     filters: str = Field(default='[]', max_length=12000)
     keyword: str = Field(default='', max_length=100)
     project_code: str = Field(default='', max_length=100)
@@ -465,6 +466,10 @@ def request_query(query, project_codes):
     scope, params = scope_clause('a.FNUMBER', project_codes)
     filters = [scope, 'h.FAPPLICATIONDATE >= %s']
     params.append(REPORT_START_DATE)
+    if query.organization_ids:
+        selected = sorted(set(query.organization_ids))
+        filters.append('h.FAPPLICATIONORGID IN (' + _in(selected) + ')')
+        params.extend(selected)
     if query.keyword:
         filters.append("(h.FBILLNO LIKE %s ESCAPE '~' OR m.FNUMBER LIKE %s ESCAPE '~' OR ml.FNAME LIKE %s ESCAPE '~' OR ml.FSPECIFICATION LIKE %s ESCAPE '~')")
         params.extend([_like(query.keyword)] * 4)

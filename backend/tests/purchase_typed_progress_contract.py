@@ -84,6 +84,7 @@ class ProgressFilters(unittest.TestCase):
                      patch('app.services.report_export_data.purchase_connection', return_value=nullcontext(self.connection)), \
                      patch('app.api.purchase_reports.project_scope', return_value=fixture.GRANTS), \
                      patch('app.api.purchase_reports.enrich_project_names'), \
+                     patch('app.api.purchase_reports.enrich_product_lines'), \
                      patch('app.services.report_export_data.ReportWorkbook') as book:
                     book.return_value.__enter__.return_value.sheet.side_effect = [main, orders, receipts]
                     write_report(None, job, {}, Path(folder) / 'test.xlsx', lambda count: None)
