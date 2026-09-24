@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Literal
+from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -10,7 +11,6 @@ from app.core.database import get_db
 from app.services.authorization import require_permission, enforce_permission
 from app.services.purchase_connection import purchase_connection
 from app.api.inventory_reports import authorized_organizations, scoped_lines
-from app.services.inventory_reader import InventoryQuery
 from app.services.stock_detail_fields import report_fields
 from app.services.stock_detail_fetch import read_dataset
 from app.services.stock_detail_engine import quantity_summary
@@ -60,9 +60,13 @@ def listing(query: Annotated[StockDetailQuery, Query()], db: Session = Depends(g
 @router.get('/options')
 def options(field: Literal['material', 'stock'], keyword: str = Query('', max_length=100),
             organization_id: int | None = Query(None, gt=0), db: Session = Depends(get_db),
+            organization_ids: list[Annotated[int, Query(gt=0)]] = Query(default=[], max_length=200),
             ctx=Depends(require_permission('report:stock-detail:list'))):
     enforce_permission(ctx, 'report:stock-detail:view')
-    organizations = effective_organizations(InventoryQuery(organization_id=organization_id), authorized_organizations(db, ctx))
+    if organization_id is not None and organization_ids:
+        raise HTTPException(422, '请勿同时指定单组织和多组织条件')
+    organizations = effective_organizations(SimpleNamespace(organization_id=organization_id,
+        organization_ids=organization_ids), authorized_organizations(db, ctx))
     if organizations == []:
         return {'items': [], 'has_more': False}
     with stock_detail_connection() as connection:

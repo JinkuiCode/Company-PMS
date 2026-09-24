@@ -1,14 +1,15 @@
 export interface StockDetailFilters {
   material: string
   dates: string[]
-  organization_id: number | null
+  organization_id?: number | null
+  organization_ids?: number[]
   stock_id: number | null
 }
 export interface StockDetailParameters {
   material: string
   start_date: string
   end_date: string
-  organization_id?: number
+  organization_ids: number[]
   stock_id?: number
   page: number
   page_size: number
@@ -37,13 +38,21 @@ export function buildStockDetailQuery(filters: StockDetailFilters, page: number,
   const dates = filters.dates
   if (!Array.isArray(dates) || dates.length !== 2 || !dates.every(isDate)) throw new Error('请选择完整、有效的起止日期')
   if (dates[0]! > dates[1]!) throw new Error('起始日期不得晚于截止日期')
+  const organizations = stockDetailOrganizations(filters)
   for (const id of [filters.organization_id, filters.stock_id]) {
     if (id != null && (!Number.isSafeInteger(id) || id <= 0)) throw new Error('请重新选择组织或仓库')
   }
   if (!Number.isSafeInteger(page) || page < 1 || page > 1000000 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 500) throw new Error('分页参数无效')
   return { material, start_date: dates[0]!, end_date: dates[1]!,
-    organization_id: filters.organization_id ?? undefined, stock_id: filters.stock_id ?? undefined,
+    organization_ids: organizations, stock_id: filters.stock_id ?? undefined,
     page, page_size: pageSize }
+}
+
+export function stockDetailOrganizations(filters: StockDetailFilters): number[] {
+  const ids = filters.organization_ids ?? (filters.organization_id == null ? [] : [filters.organization_id])
+  if (!Array.isArray(ids) || ids.length > 200 || ids.some(id => !Number.isSafeInteger(id) || id <= 0)) throw new Error('请重新选择组织')
+  if (ids.length && filters.organization_id != null && filters.organization_ids != null) throw new Error('请勿同时指定单组织和多组织条件')
+  return [...new Set(ids)].sort((a, b) => a - b)
 }
 
 export function createStockDetailRequest(

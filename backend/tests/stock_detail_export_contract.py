@@ -14,6 +14,16 @@ from app.services.stock_detail_balance import InventoryKey
 
 
 class ExportContract(unittest.TestCase):
+    def test_export_rechecks_multi_organization_scope(self):
+        from app.services.report_export_data import write_report
+        job = SimpleNamespace(report='stock-detail', parameters='{"material":"M1","start_date":"2026-06-01","end_date":"2026-06-30","organization_ids":[1,2,99]}', columns='["material_code"]')
+        with tempfile.TemporaryDirectory() as folder, \
+             patch('app.api.inventory_reports.authorized_organizations', return_value=[2]), \
+             patch('app.services.report_export_data.purchase_connection'), \
+             patch('app.services.stock_detail_fetch.read_dataset', return_value=dict(rows=[], openings={}, labels={})) as read:
+            write_report(None, job, {}, Path(folder) / 'scoped.xlsx', lambda count: None)
+            self.assertEqual(read.call_args.args[2], [2])
+
     def test_empty_export_scope_does_not_connect_to_erp(self):
         from app.services.report_export_data import write_report
         job = SimpleNamespace(report='stock-detail', parameters='{"material":"M1","start_date":"2026-06-01","end_date":"2026-06-30"}', columns='["material_code"]')

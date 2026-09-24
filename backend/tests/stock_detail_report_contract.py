@@ -57,6 +57,19 @@ class StockDetailQueryContract(unittest.TestCase):
         self.assertFalse(any(word in str(fields).lower() for word in ['price','amount','cost']))
         self.assertEqual([f['label'] for f in fields if f['key']=='bill_no'], ['单据编号'])
 
+    def test_multiple_organizations_intersect_current_permissions(self):
+        r = self.reader()
+        q = self.query(organization_ids=[3, 2, 2, 1])
+        self.assertEqual(r.effective_organizations(q, [2, 1]), [1, 2])
+        self.assertEqual(r.effective_organizations(q, []), [])
+        self.assertEqual(r.effective_organizations(q, ALL_DATA_SCOPE), [1, 2, 3])
+        self.assertEqual(r.effective_organizations(self.query(organization_ids=[]), [2]), [2])
+        for ids in ([0], [-1], ['bad']):
+            with self.assertRaises(ValidationError):
+                self.query(organization_ids=ids)
+        with self.assertRaises(ValidationError):
+            self.query(organization_ids=[2], organization_id=1)
+
 
 if __name__ == '__main__':
     unittest.main()

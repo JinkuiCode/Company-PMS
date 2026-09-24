@@ -1,5 +1,6 @@
 """Validated request boundary. ERP source execution is not enabled yet."""
 from datetime import date
+from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.services.business_data_scope import ALL_DATA_SCOPE
 from app.services.stock_detail_fields import report_fields
@@ -13,6 +14,7 @@ class StockDetailQuery(BaseModel):
     start_date: date
     end_date: date
     organization_id: int | None = Field(default=None, gt=0)
+    organization_ids: list[Annotated[int, Field(gt=0)]] = Field(default_factory=list, max_length=200)
     stock_id: int | None = Field(default=None, gt=0)
     page: int = Field(default=1, ge=1, le=1000000)
     page_size: int = Field(default=50, ge=1, le=500)
@@ -27,17 +29,21 @@ class StockDetailQuery(BaseModel):
 
     @model_validator(mode='after')
     def date_order(self):
+        if self.organization_id is not None and self.organization_ids:
+            raise ValueError('请勿同时指定单组织和多组织条件')
         if self.start_date > self.end_date:
             raise ValueError('起始日期不得晚于截止日期')
         return self
 
 
 def effective_organizations(query, authorized):
+    selected = sorted(set(getattr(query, 'organization_ids', []) or
+                          ([query.organization_id] if query.organization_id else [])))
     if authorized is ALL_DATA_SCOPE:
-        return [query.organization_id] if query.organization_id else ALL_DATA_SCOPE
+        return selected or ALL_DATA_SCOPE
     ids = sorted({value for value in (authorized or []) if type(value) is int and value > 0})
-    if query.organization_id is not None:
-        return [query.organization_id] if query.organization_id in ids else []
+    if selected:
+        return [value for value in selected if value in ids]
     return ids
 
 

@@ -67,6 +67,21 @@ class ApiContract(unittest.TestCase):
         self.assertEqual(self.client.get('/api/reports/stock-detail', params={**self.params(), 'stock_id': '研发仓'}).status_code, 422)
         self.assertEqual(self.client.get('/api/reports/stock-detail/options?field=price').status_code, 422)
 
+    def test_repeated_organization_parameters_scope_rows_and_candidates(self):
+        @contextmanager
+        def connection():
+            from unittest.mock import MagicMock
+            yield MagicMock()
+        with patch.object(self.api, 'stock_detail_connection', connection), \
+             patch.object(self.api, 'read_dataset', return_value=dict(rows=[], openings={}, labels={})) as read, \
+             patch.object(self.api, 'list_candidates', return_value={'items': [], 'has_more': False}) as candidates:
+            params = list(self.params().items()) + [('organization_ids', 1), ('organization_ids', 99)]
+            self.assertEqual(self.client.get('/api/reports/stock-detail', params=params).status_code, 200)
+            self.assertEqual(read.call_args.args[2], [1])
+            self.assertEqual(self.client.get('/api/reports/stock-detail/options', params=[('field','stock'), ('organization_ids',1), ('organization_ids',99)]).status_code, 200)
+            self.assertEqual(candidates.call_args.args[3], [1])
+        self.assertEqual(self.client.get('/api/reports/stock-detail/options?field=stock&organization_ids=0').status_code, 422)
+
 
 if __name__ == '__main__':
     unittest.main()

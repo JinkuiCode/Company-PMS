@@ -9,8 +9,8 @@ export interface StockDetailMetadata {
 export interface StockCandidate { value: string | number; code: string; label: string }
 export const getStockDetailMetadata = () => request.get<unknown, StockDetailMetadata>('/reports/stock-detail/metadata')
 export const getStockDetailRows = (params: StockDetailParameters, signal: AbortSignal) =>
-  request.get<unknown, StockDetailResult>('/reports/stock-detail', { params, signal, timeout: 60000 })
-export const getStockDetailCandidates = (field: 'material' | 'stock', keyword: string, organizationId?: number) =>
+  request.get<unknown, StockDetailResult>('/reports/stock-detail', { params, paramsSerializer: { indexes: null }, signal, timeout: 60000 })
+export const getStockDetailCandidates = (field: 'material' | 'stock', keyword: string, organizationIds: number[] = []) =>
   request.get<unknown, { items: StockCandidate[]; has_more: boolean }>('/reports/stock-detail/options', {
-    params: { field, keyword, organization_id: organizationId }, timeout: 30000,
+    params: { field, keyword, organization_ids: organizationIds }, paramsSerializer: { indexes: null }, timeout: 30000,
   })

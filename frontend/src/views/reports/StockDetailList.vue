@@ -17,13 +17,14 @@ import { chineseLocaleText } from '@/utils/agGridLocale'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { useAuthStore } from '@/stores/auth'
 import { getStockDetailMetadata, getStockDetailRows, getStockDetailCandidates, type StockDetailMetadata, type StockCandidate } from '@/api/stockDetailReport'
-import { buildStockDetailQuery, createStockDetailRequest, type StockDetailFilters, type StockDetailRow } from './stockDetailState'
+import { buildStockDetailQuery, stockDetailOrganizations, createStockDetailRequest, type StockDetailFilters, type StockDetailRow } from './stockDetailState'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 const auth = useAuthStore()
 const today = new Date()
 const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-const filters = reactive<StockDetailFilters>({ material: '', dates: [localDate(new Date(today.getFullYear(), today.getMonth(), 1)), localDate(today)], organization_id: null, stock_id: null })
+const filters = reactive<StockDetailFilters>({ material: '', dates: [localDate(new Date(today.getFullYear(), today.getMonth(), 1)), localDate(today)], organization_ids: [], stock_id: null })
+const materialMissing = computed(() => !String(filters.material || '').trim())
 const page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), metadata = ref<StockDetailMetadata | null>(null)
 const initializationError = ref(''), initializing = ref(false)
 const listRef = ref<InstanceType<typeof PmsDataList>>()
@@ -107,6 +108,7 @@ async function initialize() {
   finally { if (!disposed) initializing.value = false }
 }
 async function query(resetPage = false) {
+  if (materialMissing.value) return
   if (resetPage) page.value = 1
   closeDetail()
   await request.query({ ...filters, dates: [...(filters.dates || [])] }, page.value, pageSize.value)
@@ -114,7 +116,7 @@ async function query(resetPage = false) {
 }
 function resetFilters() {
   const now = new Date()
-  Object.assign(filters, { material: '', organization_id: null, stock_id: null,
+  Object.assign(filters, { material: '', organization_ids: [], organization_id: undefined, stock_id: null,
     dates: [localDate(new Date(now.getFullYear(), now.getMonth(), 1)), localDate(now)] })
   planSelected.value = ''; page.value = 1
   request.clear(); closeDetail()
@@ -122,7 +124,7 @@ function resetFilters() {
 async function findOptions(kind: 'material' | 'stock', keyword = '') {
   const ticket = ++optionRevision[kind]; optionLoading[kind] = true
   try {
-    const data = await getStockDetailCandidates(kind, keyword, filters.organization_id || undefined)
+    const data = await getStockDetailCandidates(kind, keyword, stockDetailOrganizations(filters))
     if (!disposed && ticket === optionRevision[kind]) candidates[kind] = data.items.map(item => ({ ...item, label: kind === 'material' ? `${item.code} · ${item.label}` : item.label }))
   } catch { if (!disposed && ticket === optionRevision[kind]) { candidates[kind] = []; ElMessage.error('候选数据加载失败，请重试') } }
   finally { if (ticket === optionRevision[kind]) optionLoading[kind] = false }
@@ -131,7 +133,7 @@ function savePlan() {
   const name = planName.value.trim()
   if (!name) return
   try { buildStockDetailQuery(filters, 1, pageSize.value) } catch (error) { ElMessage.warning((error as Error).message); return }
-  const plan: Plan = { name, filters: { ...filters, dates: [...filters.dates] }, size: pageSize.value,
+  const plan: Plan = { name, filters: { ...filters, organization_ids: stockDetailOrganizations(filters), dates: [...filters.dates] }, size: pageSize.value,
     visible: [...visible.value], columns: grid?.getColumnState() || savedColumns.value }
   plans.value = [...plans.value.filter(p => p.name !== name), plan].slice(-30)
   persist(); planSelected.value = name; planOpen.value = false; planName.value = ''; ElMessage.success('查询方案已保存')
@@ -140,14 +142,15 @@ async function loadPlan(value: unknown) {
   const plan = plans.value.find(p => p.name === value)
   if (!plan) return
   try { buildStockDetailQuery(plan.filters, 1, plan.size) } catch { ElMessage.warning('查询方案无效，请重新维护'); return }
-  Object.assign(filters, { ...plan.filters, dates: [...plan.filters.dates] })
+  Object.assign(filters, { ...plan.filters, organization_id: undefined, organization_ids: stockDetailOrganizations(plan.filters), dates: [...plan.filters.dates] })
+  filters.stock_id = plan.filters.stock_id
   pageSize.value = plan.size; page.value = 1
   visible.value = plan.visible.filter(key => defaultKeys.value.includes(key))
   savedColumns.value = sanitizeColumns(plan.columns)
   await nextTick(); restoring = true; grid?.applyColumnState({ state: savedColumns.value, applyOrder: true }); restoring = false
   await query()
 }
-watch(() => filters.organization_id, () => { ++optionRevision.stock; ++optionRevision.material; candidates.stock = []; candidates.material = []; filters.stock_id = null }, { flush: 'sync' })
+watch(() => filters.organization_ids, () => { ++optionRevision.stock; ++optionRevision.material; candidates.stock = []; candidates.material = []; filters.stock_id = null }, { deep: true, flush: 'sync' })
 watch(filters, () => { request.clear(); closeDetail(); page.value = 1 }, { deep: true, flush: 'sync' })
 watch(selected, () => grid?.redrawRows())
 onMounted(initialize)
@@ -167,10 +170,10 @@ onUnmounted(() => { disposed = true; request.clear(); detailSwitch.invalidate();
     <template #filters>
       <PmsListFilters :filters="[]" :fields="[]" :active-count="0">
         <div class="stock-detail-filter stock-detail-material"><PmsTextControl v-model="filters.material" size="compact" clearable :error="result.error && !String(filters.material || '').trim() ? '请填写物料' : ''" placeholder="物料编码 / 名称 / 规格型号（必填）" aria-label="物料（必填）" aria-required="true" @keyup.enter="query(true)" /></div>
-        <div class="stock-detail-filter"><PmsSelectControl v-model="filters.organization_id" :options="metadata?.organizations || []" size="compact" clearable :value-on-clear="null" filterable placeholder="全部授权组织" aria-label="库存组织" /></div>
+        <div class="stock-detail-filter"><PmsSelectControl v-model="filters.organization_ids" :options="metadata?.organizations || []" size="compact" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="全部授权组织" aria-label="库存组织" /></div>
         <div class="stock-detail-dates"><PmsDateControl v-model="filters.dates" type="daterange" size="compact" start-placeholder="起始日期" end-placeholder="截止日期" aria-label="收发日期范围" /></div>
         <div class="stock-detail-filter"><PmsSelectControl v-model="filters.stock_id" :options="candidates.stock" size="compact" clearable :value-on-clear="null" filterable remote :remote-method="(keyword: string) => findOptions('stock', keyword)" :loading="optionLoading.stock" placeholder="全部仓库" aria-label="仓库" @visible-change="(open: boolean) => open && findOptions('stock')" /></div>
-        <el-button type="primary" size="small" :icon="Search" :disabled="!metadata || result.loading" @click="query(true)">查询</el-button>
+        <el-button type="primary" size="small" :icon="Search" :disabled="!metadata || result.loading || materialMissing" @click="query(true)">查询</el-button>
         <el-button size="small" @click="resetFilters">重置</el-button>
       </PmsListFilters>
       <div v-if="result.summary" class="stock-detail-summary" aria-label="完整查询数量汇总">

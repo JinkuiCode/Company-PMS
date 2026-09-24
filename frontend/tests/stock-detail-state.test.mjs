@@ -7,6 +7,11 @@ test('stock-detail state module exists', () => assert.ok(existsSync(source)))
 if (existsSync(source)) {
   const { buildStockDetailQuery, createStockDetailRequest } = await import(source.href)
   const filters = { material: ' PFA ', dates: ['2026-06-01', '2026-09-23'], organization_id: null, stock_id: null }
+  test('multiple organizations and legacy saved plans share a normalized query', () => {
+    assert.deepEqual(buildStockDetailQuery({ ...filters, organization_ids: [2, 1, 2] }, 1, 50).organization_ids, [1, 2])
+    assert.deepEqual(buildStockDetailQuery({ ...filters, organization_id: 3 }, 1, 50).organization_ids, [3])
+    assert.throws(() => buildStockDetailQuery({ ...filters, organization_ids: [0] }, 1, 50))
+  })
   test('blank material and invalid dates fail before network access including restored plans', () => {
     for (const change of [{ material: '　 ' }, { dates: [] }, { dates: ['2026-09-23', '2026-06-01'] },
       { dates: ['2026-02-30', '2026-03-01'] }, { stock_id: '研发仓' }, { organization_id: -1 }]) {

@@ -41,12 +41,12 @@ try {
   await page.route('**/api/reports/stock-detail**', async route => {
     const url = new URL(route.request().url())
     let data
-    if (url.pathname.endsWith('/metadata')) data = { fields, organizations: [{ value: 1, label: '8吋半导体' }] }
+    if (url.pathname.endsWith('/metadata')) data = { fields, organizations: [{ value: 1, label: '8吋半导体' }, { value: 2, label: 'Single' }] }
     else if (url.pathname.endsWith('/options')) data = { items: url.searchParams.get('field') === 'material'
       ? [{ value: '180102020045', code: '180102020045', label: 'PFA管' }]
       : [{ value: 4397043, code: 'CK01', label: '亚电-研发仓' }], has_more: false }
     else {
-      calls++; requests.push(Object.fromEntries(url.searchParams))
+      calls++; requests.push({ ...Object.fromEntries(url.searchParams), organization_ids: url.searchParams.getAll('organization_ids') })
       const current = Number(url.searchParams.get('page')), size = Number(url.searchParams.get('page_size'))
       const items = Array.from({ length: Math.max(0, Math.min(size, 70 - (current - 1) * size)) }, (_, offset) => {
         const id = (current - 1) * size + offset + 1
@@ -63,10 +63,17 @@ try {
   await page.goto('http://127.0.0.1:5190/stock-detail-test')
   const query = page.getByRole('button', { name: '查询', exact: true })
   await query.waitFor({ timeout: 15000 }).catch(error => { console.error(errors); throw error })
-  await query.click()
-  await page.getByRole('alert').filter({ hasText: '请填写物料' }).waitFor()
+  assert.equal(await query.isDisabled(), true, 'empty material must disable query')
+  await page.getByRole('textbox', { name: '物料（必填）', exact: true }).fill('　 ')
+  assert.equal(await query.isDisabled(), true, 'whitespace material must disable query')
+  await page.getByRole('textbox', { name: '物料（必填）', exact: true }).press('Enter')
   assert.equal(calls, 0)
   await page.getByRole('textbox', { name: '物料（必填）', exact: true }).fill('180102020045')
+  assert.equal(await query.isEnabled(), true)
+  await page.locator('.pms-form-control[aria-label="库存组织"]').click()
+  await page.getByRole('option', { name: '8吋半导体', exact: true }).click()
+  await page.getByRole('option', { name: 'Single', exact: true }).click()
+  await page.keyboard.press('Escape')
   await page.locator('.pms-form-control[aria-label="仓库"]').click()
   await page.getByRole('option', { name: '亚电-研发仓', exact: true }).click()
   await query.click()
@@ -77,6 +84,8 @@ try {
   assert.equal(exports.length, 1)
   assert.equal(exports[0].report, 'stock-detail')
   assert.equal(exports[0].parameters.material, '180102020045')
+  assert.deepEqual(exports[0].parameters.organization_ids, [1, 2])
+  assert.deepEqual(requests.at(-1).organization_ids, ['1', '2'])
   assert.equal(exports[0].columns.length, 15)
   await page.getByRole('button', { name: '保存查询方案', exact: true }).hover()
   await page.keyboard.press('Escape')
@@ -104,6 +113,7 @@ try {
   assert.equal(requests.at(-1).material, '180102020045')
   assert.equal(requests.at(-1).stock_id, '4397043')
   assert.equal(requests.at(-1).page, '1')
+  assert.deepEqual(requests.at(-1).organization_ids, ['1', '2'])
   await page.getByRole('button', { name: '打开物料收发明细列设置', exact: true }).click()
   await page.getByRole('spinbutton', { name: '物料名称列宽', exact: true }).fill('180')
   await page.getByRole('spinbutton', { name: '物料名称列宽', exact: true }).press('Tab')
@@ -122,6 +132,7 @@ try {
   assert.equal(await page.getByRole('textbox', { name: '物料（必填）', exact: true }).inputValue(), '')
   assert.equal(await page.getByRole('button', { name: '查看单据 DOC1', exact: true }).count(), 0)
   assert.equal(calls, callsBeforeReset, 'reset must not query without a material')
+  assert.equal(await query.isDisabled(), true)
   console.log('Stock detail browser: required material, warehouse selection, 50-row paging, detail switching, plan restore, column width persistence and responsive widths passed (mock API only).')
 } finally {
   await browser?.close()
