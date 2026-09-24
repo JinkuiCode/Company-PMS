@@ -1,3 +1,13 @@
+const quantityFormat = new Intl.NumberFormat('zh-CN', {
+  minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false,
+})
+export function formatStockQuantity(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-'
+  // Keep decimal strings intact: Intl accepts them without binary float conversion.
+  const formatted = quantityFormat.format(value as number)
+  return formatted === '0.00' || formatted === '-0.00' ? '' : formatted
+}
+
 export interface StockDetailFilters {
   material: string
   dates: string[]

@@ -1,6 +1,6 @@
 """Row-streamed Excel files with explicit strings and automatic sheet rollover."""
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, localcontext, ROUND_HALF_UP
 import xlsxwriter
 
 
@@ -12,8 +12,8 @@ class ReportWorkbook:
         self.row_limit = row_limit
         self.header = self.book.add_format({'bold': True, 'bg_color': '#EEF0F6'})
 
-    def sheet(self, name, fields):
-        return ReportSheet(self, name, fields)
+    def sheet(self, name, fields, *, quantity_keys=()):
+        return ReportSheet(self, name, fields, quantity_keys=quantity_keys)
 
     def __enter__(self):
         return self
@@ -23,8 +23,10 @@ class ReportWorkbook:
 
 
 class ReportSheet:
-    def __init__(self, owner, name, fields):
+    def __init__(self, owner, name, fields, *, quantity_keys=()):
         self.owner, self.name, self.fields = owner, name, fields
+        self.quantity_keys = frozenset(quantity_keys)
+        self.quantity_format = owner.book.add_format({'num_format': '[>=0.005]0.00;[<=-0.005]-0.00;""'}) if self.quantity_keys else None
         self.part = 0
         self._next()
 
@@ -49,9 +51,15 @@ class ReportSheet:
             if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
                 # Preserve long identifiers/decimal precision rather than Excel's 15-digit rounding.
                 if len(str(value).replace('.', '').replace('-', '')) <= 15:
-                    result = self.sheet.write_number(self.row, column, float(value))
+                    result = self.sheet.write_number(self.row, column, float(value), self.quantity_format if key in self.quantity_keys else None)
                 else:
-                    result = self.sheet.write_string(self.row, column, str(value))
+                    if key in self.quantity_keys:
+                        with localcontext() as context:
+                            context.rounding = ROUND_HALF_UP
+                            display = format(Decimal(str(value)), '.2f')
+                        result = self.sheet.write_string(self.row, column, '' if Decimal(display) == 0 else display)
+                    else:
+                        result = self.sheet.write_string(self.row, column, str(value))
             else:
                 result = self.sheet.write_string(self.row, column, str(value))
             if result != 0:

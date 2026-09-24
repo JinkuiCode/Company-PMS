@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, 
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { AgGridVue } from 'ag-grid-vue3'
-import { AllCommunityModule, ModuleRegistry, type ColDef, type ColGroupDef, type ColumnState, type GridApi, type GridReadyEvent, type RowClickedEvent, type ColumnResizedEvent } from 'ag-grid-community'
+import { AllCommunityModule, ModuleRegistry, type ColDef, type ColumnState, type GridApi, type GridReadyEvent, type RowClickedEvent, type ColumnResizedEvent } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import PmsDataList from '@/components/PmsDataList.vue'
@@ -17,7 +17,7 @@ import { chineseLocaleText } from '@/utils/agGridLocale'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { useAuthStore } from '@/stores/auth'
 import { getStockDetailMetadata, getStockDetailRows, getStockDetailCandidates, type StockDetailMetadata, type StockCandidate } from '@/api/stockDetailReport'
-import { buildStockDetailQuery, stockDetailOrganizations, createStockDetailRequest, type StockDetailFilters, type StockDetailRow } from './stockDetailState'
+import { buildStockDetailQuery, stockDetailOrganizations, createStockDetailRequest, formatStockQuantity, type StockDetailFilters, type StockDetailRow } from './stockDetailState'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 const auth = useAuthStore()
@@ -49,13 +49,14 @@ const numberKeys = new Set(['opening_qty', 'income_qty', 'issue_qty', 'balance_q
 const exportParameters = () => buildStockDetailQuery(filters, 1, pageSize.value)
 const exportColumns = () => fields.value.map(field => field.key)
 function text(value: unknown) { return value === null || value === undefined || value === '' ? '-' : String(value) }
-const columns = computed<(ColDef<StockDetailRow> | ColGroupDef<StockDetailRow>)[]>(() => fields.value.map(field => {
+function fieldText(key: string, value: unknown) { return numberKeys.has(key) ? formatStockQuantity(value) : text(value) }
+const columns = computed<ColDef<StockDetailRow>[]>(() => fields.value.map(field => {
   const definition: ColDef<StockDetailRow> = {
-    field: field.key, colId: field.key, headerName: numberKeys.has(field.key) ? '数量（库存）' : field.label,
+    field: field.key, colId: field.key, headerName: field.label,
     headerTooltip: field.label, initialWidth: field.width, minWidth: 65, maxWidth: 800,
     hide: !visible.value.includes(field.key), initialPinned: numberKeys.has(field.key) ? 'right' : undefined,
     cellClass: numberKeys.has(field.key) ? 'stock-detail-number' : undefined,
-    valueFormatter: p => text(p.value), tooltipValueGetter: p => text(p.value),
+    valueFormatter: p => fieldText(field.key, p.value), tooltipValueGetter: p => fieldText(field.key, p.value),
   }
   if (field.key === 'bill_no') definition.cellRenderer = (p: { data?: StockDetailRow; value?: unknown }) => {
     if (!p.data || p.data.row_kind !== 'movement') return ''
@@ -66,7 +67,7 @@ const columns = computed<(ColDef<StockDetailRow> | ColGroupDef<StockDetailRow>)[
     button.addEventListener('click', event => { event.stopPropagation(); openDetail(p.data!) })
     return button
   }
-  return numberKeys.has(field.key) ? { headerName: field.label, groupId: `group:${field.key}`, children: [definition] } : definition
+  return definition
 }))
 const defaultColDef: ColDef = { editable: false, sortable: false, resizable: true, cellStyle: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }
 function closeDetail() { detailSwitch.invalidate(); detailOpen.value = false; selected.value = null }
@@ -180,10 +181,10 @@ onUnmounted(() => { disposed = true; request.clear(); detailSwitch.invalidate();
       </PmsListFilters>
       <div v-if="result.summary" class="stock-detail-summary" aria-label="完整查询数量汇总">
         <span class="stock-detail-summary-material">{{ result.summary.material_name }} <span>{{ result.summary.material_code }} · {{ result.summary.unit_name }}</span></span>
-        <span>期初<strong>{{ result.summary.opening_qty }}</strong></span>
-        <span>收入<strong>{{ result.summary.income_qty }}</strong></span>
-        <span>发出<strong>{{ result.summary.issue_qty }}</strong></span>
-        <span>期末结存<strong>{{ result.summary.balance_qty }}</strong></span>
+        <span>期初<strong>{{ formatStockQuantity(result.summary.opening_qty) }}</strong></span>
+        <span>收入<strong>{{ formatStockQuantity(result.summary.income_qty) }}</strong></span>
+        <span>发出<strong>{{ formatStockQuantity(result.summary.issue_qty) }}</strong></span>
+        <span>期末结存<strong>{{ formatStockQuantity(result.summary.balance_qty) }}</strong></span>
       </div>
       <div v-else-if="result.queried_at && result.openings.length > 1" class="stock-detail-summary">多个库存维度，数量按明细分别展示</div>
     </template>
@@ -195,7 +196,7 @@ onUnmounted(() => { disposed = true; request.clear(); detailSwitch.invalidate();
     <template #pagination><CustomPagination :model-value="page" :page-size="pageSize" :total="result.total" @update:model-value="value => { page = value; query() }" @update:page-size="value => { pageSize = value; query(true) }" /></template>
   </PmsDataList>
   <PmsFormDrawer v-model="detailOpen" title="收发明细" modal-penetrable aria-modal="false" @closed="closeDetail">
-    <dl v-if="selected" class="stock-detail-readonly"><template v-for="field in fields" :key="field.key"><dt>{{ field.label }}</dt><dd>{{ text(selected[field.key]) }}</dd></template></dl>
+    <dl v-if="selected" class="stock-detail-readonly"><template v-for="field in fields" :key="field.key"><dt>{{ field.label }}</dt><dd>{{ fieldText(field.key, selected[field.key]) }}</dd></template></dl>
     <template #footer><el-button @click="closeDetail">关闭</el-button></template>
   </PmsFormDrawer>
   <PmsFormDrawer v-model="planOpen" title="保存查询方案">

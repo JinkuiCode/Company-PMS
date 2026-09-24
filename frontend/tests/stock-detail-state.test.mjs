@@ -5,7 +5,15 @@ import { existsSync } from 'node:fs'
 const source = new URL('../src/views/reports/stockDetailState.ts', import.meta.url)
 test('stock-detail state module exists', () => assert.ok(existsSync(source)))
 if (existsSync(source)) {
-  const { buildStockDetailQuery, createStockDetailRequest } = await import(source.href)
+  const { buildStockDetailQuery, createStockDetailRequest, formatStockQuantity } = await import(source.href)
+  test('quantities have two decimals, hide rounded zero and preserve decimal rounding', () => {
+    assert.equal(typeof formatStockQuantity, 'function')
+    for (const [value, expected] of [['6', '6.00'], ['1.005', '1.01'], ['-1.005', '-1.01'],
+      ['0', ''], ['-0.004', ''], ['0.0049', ''], ['0.005', '0.01'],
+      ['1234567890123456.125', '1234567890123456.13'], [null, '-']]) {
+      assert.equal(formatStockQuantity(value), expected)
+    }
+  })
   const filters = { material: ' PFA ', dates: ['2026-06-01', '2026-09-23'], organization_id: 1, stock_id: null }
   test('organization is required even for a saved plan without selection', () => {
     assert.throws(() => buildStockDetailQuery({ ...filters, organization_id: null }, 1, 50), /组织/)

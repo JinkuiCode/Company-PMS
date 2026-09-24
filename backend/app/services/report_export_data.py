@@ -105,7 +105,8 @@ def write_report(db, job, ctx, path, checkpoint):
     source = nullcontext(None) if stock_organizations == [] else purchase_connection()
     with ReportWorkbook(path) as book, source as connection:
         main = book.sheet({'inventory': '即时库存', 'purchase': '采购申请主表', 'stock-detail': '物料收发明细'}[job.report],
-            [(key, fields[key]['label']) for key in columns])
+            [(key, fields[key]['label']) for key in columns],
+            quantity_keys={'opening_qty', 'income_qty', 'issue_qty', 'balance_qty'} if job.report == 'stock-detail' else ())
         count = 0
         if job.report == 'inventory':
             from app.services.inventory_reader import InventoryQuery
