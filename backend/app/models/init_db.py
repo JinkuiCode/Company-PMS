@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.database import engine, SessionLocal, Base
 from app.core.security import hash_password
 
+from app.models.archive_import import ArchiveImportBatch, ArchiveImportRow
 from app.models.user import SysUser, RememberToken  # noqa: F401
 from app.models.rbac import SysRole, SysMenu, SysDept, SysUserRole, SysRoleMenu  # noqa: F401
 from app.models.project import PmsProject, PmsTask, PmsProgressLog, PmsProjectArchive, ErpSyncLog, PmsProjectSheetDetail  # noqa: F401
@@ -43,6 +44,8 @@ def init_db():
     upgrade_project_archive_lifecycle(engine)
     upgrade_project_archive_initial(engine)
     upgrade_archive_business_fields(engine)
+    from app.services.offline_archive_migration import upgrade_offline_archive
+    upgrade_offline_archive(engine)
     upgrade_product_lines(engine)
     upgrade_role_home(engine)
 
@@ -242,6 +245,8 @@ def init_db():
             {"id": 224, "parent_id": 22, "menu_name": "删除", "menu_type": "B", "permission_code": "project:archive:delete", "sort": 4},
             {"id": 225, "parent_id": 22, "menu_name": "同步", "menu_type": "B", "permission_code": "project:archive:sync", "sort": 5},
             {"id": 226, "parent_id": 22, "menu_name": "启用/禁用", "menu_type": "B", "permission_code": "project:archive:toggle", "sort": 6},
+            {"id": 227, "parent_id": 22, "menu_name": "期初导入", "menu_type": "B", "permission_code": "project:archive:import", "sort": 7},
+            {"id": 228, "parent_id": 22, "menu_name": "批量产品线", "menu_type": "B", "permission_code": "project:archive:assign-line", "sort": 8},
             # 系统管理 按钮权限 (parent_id=1)
             {"id": 111, "parent_id": 11, "menu_name": "查看", "menu_type": "B", "permission_code": "system:user:view", "sort": 1},
             {"id": 112, "parent_id": 11, "menu_name": "新增", "menu_type": "B", "permission_code": "system:user:add", "sort": 2},
@@ -267,7 +272,7 @@ def init_db():
             existing = db.query(SysMenu).filter(SysMenu.id == bm["id"]).first()
             if not existing:
                 db.add(SysMenu(**bm))
-                if bm["id"] in {171, 172, 226}:
+                if bm["id"] in {171, 172, 226, 227, 228}:
                     new_template_permission_ids.add(bm["id"])
             else:
                 for key, value in bm.items():

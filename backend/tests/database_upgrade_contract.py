@@ -52,6 +52,10 @@ def test_upgrade_marks_database_ready_and_can_repeat() -> None:
             check_database_ready(engine)
         with sqlite3.connect(path) as connection:
             assert connection.execute("SELECT COUNT(*) FROM pms_database_revision").fetchone()[0] == 1
+            assert connection.execute("SELECT COUNT(*) FROM pms_archive_import_batch").fetchone()[0] == 0
+            assert connection.execute("SELECT COUNT(*) FROM pms_archive_import_row").fetchone()[0] == 0
+            assert {"erp_sync_policy","quantity","archive_category"}.issubset({row[1] for row in connection.execute("PRAGMA table_info(pms_project_archive)")})
+            assert connection.execute("SELECT COUNT(*) FROM sys_menu WHERE permission_code IN ('project:archive:import','project:archive:assign-line')").fetchone()[0] == 2
             assert connection.execute("SELECT COUNT(*) FROM erp_sync_task").fetchone()[0] == 0
             assert connection.execute("SELECT COUNT(*) FROM pms_report_export_job").fetchone()[0] == 0
             assert connection.execute("SELECT COUNT(*) FROM sys_menu WHERE permission_code LIKE 'system:sync:%'").fetchone()[0] == 3

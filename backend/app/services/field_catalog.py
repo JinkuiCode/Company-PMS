@@ -133,6 +133,8 @@ AUTO_MODEL_MODULES: dict[str, tuple[str, str, str]] = {
     "pms_progress_log": ("progress_history", "进度变更日志", "变更记录字段"),
     "sys_dict": ("enum_definition", "枚举定义", "枚举注册字段"),
     "sys_dict_item": ("enum_item", "枚举值", "枚举值字段"),
+    "pms_archive_import_batch": ("archive_import_batch", "档案导入批次", "导入追溯"),
+    "pms_archive_import_row": ("archive_import_row", "档案导入明细", "导入追溯"),
 }
 
 
@@ -206,6 +208,8 @@ ENUM_BINDINGS: dict[tuple[str, str], tuple[str | None, str]] = {
 
 
 FIELD_METADATA_OVERRIDES: dict[tuple[str, str], dict[str, Any]] = {
+    **{(module, field): {"editable": False, "description": "历史停用字段，仅保留旧值，不参与权限或业务维护"}
+       for module, field in (("project_archive","product_category"),("project_progress","product_category"),("role","product_category_ids"))},
     ("project_archive", "status"): {
         "editable": False,
         "enum_code": None,
@@ -220,6 +224,12 @@ FIELD_METADATA_OVERRIDES: dict[tuple[str, str], dict[str, Any]] = {
     },
 }
 
+
+from app.services.offline_archive_fields import OFFLINE_FIELDS
+for _key,_meta in OFFLINE_FIELDS.items():
+    if _meta["enum_code"]:
+        ENUM_BINDINGS[("project_archive",_key)]=(_meta["enum_code"],"enum")
+ENUM_BINDINGS[("project_archive","erp_sync_policy")]=(None,"system_fixed")
 
 def _schema_fields(schemas: Iterable[type]) -> set[str]:
     fields: set[str] = set()

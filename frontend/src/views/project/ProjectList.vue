@@ -195,8 +195,6 @@
             <div class="drawer-title">{{ selectedProject.project_name || '-' }}</div>
             <div class="drawer-meta">
               {{ selectedProject.project_code || '-' }}
-              <span>·</span>
-              {{ productCategoryLabel(selectedProject.product_category) }}
             </div>
           </div>
           <el-tooltip content="收起项目详情" placement="left">
@@ -960,6 +958,7 @@ function progressPolicy(fieldKey: string) {
 }
 
 function isProgressPolicyVisible(fieldKey: string) {
+  if (fieldKey === 'product_category') return false
   return progressPolicy(fieldKey)?.visible !== false
 }
 

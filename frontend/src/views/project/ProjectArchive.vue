@@ -10,6 +10,7 @@
         scrollbar-label="项目档案表格横向滚动条"
       >
     <template #toolbar-left>
+        <OfflineArchiveTools :selected-rows="selectedRows" @changed="fetchList" />
         <el-button v-if="hasPermission('project:archive:add')" type="primary" size="small" @click="openCreateDialog">
           <el-icon style="margin-right:4px;"><Plus /></el-icon>
           新增档案
@@ -114,10 +115,14 @@
                       :error="archiveCreateServerErrors[field.key]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined"
                       @update:model-value="clearArchiveServerError(archiveCreateServerErrors, field.key)"
                     />
+                    <PmsNumberControl v-else-if="field.value_type === 'number'"
+                      :id="`archive-create-${field.key}`" v-model="form[field.key]"
+                      :disabled="archiveCreateSaving || !archiveFieldEditable(field.key)"
+                      :aria-label="field.label" :error="archiveCreateServerErrors[field.key]" />
                     <PmsTextareaControl
                       v-else-if="field.value_type === 'long_text'"
                       :id="`archive-create-${field.key}`" v-model="form[field.key]"
-                      :autosize="{ minRows: 2, maxRows: 5 }" :maxlength="512"
+                      :autosize="{ minRows: 2, maxRows: 5 }" :maxlength="field.key === 'remarks' ? 4000 : field.key === 'delivery_note' ? 1024 : 512"
                       :placeholder="`请输入${field.label}`" :disabled="archiveCreateSaving || !archiveFieldEditable(field.key)"
                       :error="archiveCreateServerErrors[field.key]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined"
                       @update:model-value="clearArchiveServerError(archiveCreateServerErrors, field.key)"
@@ -171,7 +176,7 @@
             <div class="archive-drawer-meta">
               <span>{{ selectedArchive.project_code || '-' }}</span>
               <span>·</span>
-              <span>{{ enumLabel('product_category', selectedArchive.product_category) }}</span>
+              <span>{{ enumLabel('archive_category', selectedArchive.archive_category) }}</span>
             </div>
           </div>
           <el-tooltip content="关闭档案编辑" placement="left">
@@ -187,7 +192,13 @@
         </div>
       </header>
 
+      <div class="archive-sync-actions">
+      <el-button v-if="hasPermission('project:archive:sync')" size="small"
+        :loading="manualSyncBusy" :disabled="archiveDrawerReadOnly || archivePendingChangeCount || ['queued','pending','review'].includes(selectedArchive.erp_sync_status)"
+        @click="submitArchiveSync">同步金蝶</el-button>
+      <span class="archive-sync-mode">{{ selectedArchive.erp_sync_policy === 'manual' ? '仅手动同步' : '自动同步' }}</span>
       <el-button size="small" text @click="openSyncLog(selectedArchive.id)">同步状态：{{ archiveSyncLabel(selectedArchive.erp_sync_status) }} · 查看日志</el-button>
+      </div>
       <el-form
         ref="archiveDrawerFormRef"
         :model="archiveDrawerForm"
@@ -197,6 +208,7 @@
         @keydown.esc.capture.stop.prevent="cancelArchiveFieldEdit"
       >
         <div class="archive-drawer-body">
+          <OfflineArchiveSource v-if="selectedArchive.data_origin === 'offline_initial'" :archive-id="selectedArchive.id" />
           <section
             v-for="group in archiveDrawerGroups"
             :key="group.key"
@@ -251,10 +263,14 @@
                       @change="commitArchiveFieldEdit"
                       @keydown.esc.stop.prevent="cancelArchiveFieldEdit"
                     />
+                    <PmsNumberControl v-else-if="field.value_type === 'number'"
+                      v-model="archiveDrawerForm[field.key]" size="compact"
+                      :id="`archive-drawer-${field.key}`" :aria-label="field.label"
+                      :error="archiveDrawerServerErrors[field.key]" @change="commitArchiveFieldEdit" />
                     <PmsTextareaControl
                       v-else-if="field.value_type === 'long_text'"
                       v-model="archiveDrawerForm[field.key]" size="compact"
-                      :autosize="{ minRows: 2, maxRows: 5 }" :maxlength="512"
+                      :autosize="{ minRows: 2, maxRows: 5 }" :maxlength="field.key === 'remarks' ? 4000 : field.key === 'delivery_note' ? 1024 : 512"
                       :id="`archive-drawer-${field.key}`" :aria-label="field.label"
                       :error="archiveDrawerServerErrors[field.key]"
                       @keydown.ctrl.enter.prevent="commitArchiveFieldEdit"
@@ -297,6 +313,9 @@
 </template>
 
 <script setup lang="ts">
+import OfflineArchiveSource from './OfflineArchiveSource.vue'
+import OfflineArchiveTools from './OfflineArchiveTools.vue'
+import { offlineArchiveFields, offlineEnumCodes, normalizeOfflineValue } from './offlineArchiveFields'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
 import { ref, reactive, computed, defineComponent, h, nextTick, onMounted, onUnmounted, watch } from 'vue'
@@ -314,6 +333,7 @@ import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN } from '@/config/listUi'
 import PmsListFilters from '@/components/PmsListFilters.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
+  PmsNumberControl,
   PmsDateControl,
   PmsFormField,
   PmsFormDrawer,
@@ -338,6 +358,19 @@ const authStore = useAuthStore()
 const productLines = useProductLineOptions()
 const syncLogVisible = ref(false)
 const syncLogArchiveId = ref<number | null>(null)
+const manualSyncBusy = ref(false)
+async function submitArchiveSync() {
+  const archive = selectedArchive.value
+  if (!archive || manualSyncBusy.value || !hasPermission('project:archive:sync')) return
+  manualSyncBusy.value = true
+  try {
+    const result: any = await request.post('/erp/archives/' + archive.id + '/submit')
+    ElMessage.success(result.msg)
+    if (selectedArchive.value?.id === archive.id) selectedArchive.value.erp_sync_status = 'queued'
+    await fetchList()
+  } catch { /* 统一请求层显示同步失败原因，保留当前档案供用户处理。 */ }
+  finally { manualSyncBusy.value = false }
+}
 function openSyncLog(id: number) { syncLogArchiveId.value = id; syncLogVisible.value = true }
 const hasPermission = authStore.hasPermission
 
@@ -356,7 +389,7 @@ type EffectiveArchiveField = {
   list_available: boolean
 }
 
-type ArchiveDrawerValueType = 'text' | 'select' | 'user' | 'date' | 'datetime' | 'long_text'
+type ArchiveDrawerValueType = 'number' | 'text' | 'select' | 'user' | 'date' | 'datetime' | 'long_text'
 
 type ArchiveDrawerField = {
   key: string
@@ -391,6 +424,7 @@ const ARCHIVE_EXPANSION_GROUPS: Array<{ key: string; label: string; fields: Arch
     { key: 'contact_phone', label: '联系人手机', value_type: 'text', source_type: 'archive' },
   ] },
 ]
+ARCHIVE_EXPANSION_GROUPS.push({ key: 'offline', label: '档案补充信息', fields: offlineArchiveFields })
 const archiveExpansionFields = ARCHIVE_EXPANSION_GROUPS.flatMap(group => group.fields)
 const archiveExpansionKeys = new Set(archiveExpansionFields.map(field => field.key))
 
@@ -515,11 +549,13 @@ function archiveFieldPolicy(fieldKey: string) {
 }
 
 function archiveFieldVisible(fieldKey: string) {
+  if (fieldKey === 'product_category') return false
   const field = archiveFieldPolicy(fieldKey)
   return field?.visible !== false
 }
 
 function archiveFieldEditable(fieldKey: string) {
+  if (fieldKey === 'product_category') return false
   return archiveFieldPolicy(fieldKey)?.editable !== false
 }
 
@@ -531,6 +567,7 @@ function archiveFieldRequired(fieldKey: string, createdAt?: string) {
 }
 
 function archiveColumnListAvailable(columnKey: string) {
+  if (columnKey === 'product_category') return false
   const field = archiveFieldPolicy(archiveColumnPolicyKey[columnKey] || columnKey)
   return field ? field.visible && field.list_available : true
 }
@@ -778,6 +815,7 @@ function archiveRegionLabel(fieldKey: string, value: unknown) {
 }
 
 function archiveDrawerSelectOptions(fieldKey: string, values = archiveDrawerForm): PmsOption[] {
+  if (offlineEnumCodes[fieldKey]) return (dictOptions[offlineEnumCodes[fieldKey]!] || []).map(option => ({ ...option, value: Number(option.value) }))
   if (fieldKey === 'product_line_id') return productLines.options.value
   if (fieldKey === 'address_province') return archiveRegions.value
   if (fieldKey === 'address_city') return archiveRegions.value.find(region => region.value === values.address_province)?.children || []
@@ -815,6 +853,7 @@ function changeArchiveDrawerSelect(fieldKey: string) {
 }
 
 function archiveAddressFieldVisible(fieldKey: string, values: Record<string, any>) {
+  if (fieldKey === 'address_detail' && values.address_detail) return true
   if (fieldKey === 'address_city') return Boolean(values.address_province)
   if (fieldKey === 'address_detail') return Boolean(values.address_province && values.address_city)
   return true
@@ -861,6 +900,7 @@ const archiveUserNameOptions = computed(() => uniqueValueOptions([
 const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
   ...archiveExpansionFields.map(field => ({
     field: field.key, policyKey: field.key, label: field.label, type: field.value_type === 'long_text' ? 'text' : field.value_type,
+    ...(offlineEnumCodes[field.key] ? { options: () => dictFilterOptions(offlineEnumCodes[field.key], true) } : {}),
     ...(field.key === 'product_line_id' ? { options: () => productLines.filterOptions.value } : {}),
     ...(field.key === 'address_province' ? { options: () => archiveRegions.value } : {}),
     ...(field.key === 'address_city' ? { options: () => archiveRegions.value.flatMap(region => region.children) } : {}),
@@ -885,7 +925,7 @@ const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
     options: () => erpSyncStatusOptions,
     getValue: row => row.erp_sync_status || '',
   },
-] as Array<ListFilterField<any> & { policyKey: string }>).filter(field => archiveFieldPolicy(field.policyKey)?.visible !== false))
+] as Array<ListFilterField<any> & { policyKey: string }>).filter(field => field.policyKey !== 'product_category' && archiveFieldPolicy(field.policyKey)?.visible !== false))
 
 const { customFilters, activeCustomFilterCount } = useListFilters(archiveFilterFields)
 
@@ -920,7 +960,7 @@ const form = reactive<Record<string, any>>({
   serial_no: '',
   plan_start_date: '',
   plan_end_date: '',
-  ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, field.key === 'product_line_id' ? null : ''])),
+  ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, field.key === 'product_line_id' || field.value_type === 'number' || (field.value_type === 'select' && !field.key.startsWith('address_')) ? null : ''])),
 })
 const archiveCreateServerErrors = reactive<Record<string, string>>({})
 const archiveDrawerServerErrors = reactive<Record<string, string>>({})
@@ -983,10 +1023,10 @@ function archiveAddressComplete(values: Record<string, any>) {
   return filled.every(Boolean) || filled.every(value => !value)
 }
 
-function buildArchiveRules(values: Record<string, any>, createdAt?: string): FormRules {
-  const nextRules: FormRules = effectiveArchiveFields.value.length ? {} : { ...legacyArchiveRules }
+function buildArchiveRules(values: Record<string, any>, createdAt?: string, historical = false): FormRules {
+  const nextRules: FormRules = effectiveArchiveFields.value.length || historical ? {} : { ...legacyArchiveRules }
   effectiveArchiveFields.value
-    .filter(field => field.visible && archiveFieldRequired(field.field_key, createdAt))
+    .filter(field => field.visible && archiveFieldRequired(field.field_key, createdAt) && !(historical && !values[field.field_key]))
     .forEach((field) => {
       nextRules[field.field_key] = [{
         required: true,
@@ -998,14 +1038,14 @@ function buildArchiveRules(values: Record<string, any>, createdAt?: string): For
     if (!archiveFieldVisible(key) || !archiveFieldEditable(key)) continue
     const existing = nextRules[key]
     nextRules[key] = [...(Array.isArray(existing) ? existing : existing ? [existing] : []), {
-      validator: (_rule, _value, callback) => callback(archiveAddressComplete(values) ? undefined : new Error('请完整填写省份、城市和详细地址')),
+      validator: (_rule, _value, callback) => callback((archiveAddressComplete(values) || (historical && ['address_province', 'address_city', 'address_detail'].every(key => (values[key] ?? '') === (selectedArchive.value?.[key] ?? '')))) ? undefined : new Error('请完整填写省份、城市和详细地址')),
       trigger: ['blur', 'change'],
     }]
   }
   return nextRules
 }
 const rules = computed<FormRules>(() => buildArchiveRules(form))
-const archiveDrawerRules = computed<FormRules>(() => buildArchiveRules(archiveDrawerForm, selectedArchive.value?.created_at))
+const archiveDrawerRules = computed<FormRules>(() => buildArchiveRules(archiveDrawerForm, selectedArchive.value?.created_at, selectedArchive.value?.data_origin === 'offline_initial'))
 
 // ========== AG Grid 列定义 ==========
 function escapeHtml(value: any) {
@@ -1058,11 +1098,11 @@ function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
 const columnDefs = computed<ColDef[]>(() => [
   ...archiveExpansionFields.map(field => ({
     ...archiveColumnVisibility(field.key), field: field.key, headerName: field.label, width: 140, minWidth: 110,
-    valueFormatter: (params: any) => field.key === 'product_line_id' ? enumLabel('product_line', params.value)
+    valueFormatter: (params: any) => offlineEnumCodes[field.key] ? enumLabel(offlineEnumCodes[field.key]!,params.value) : field.key === 'product_line_id' ? enumLabel('product_line', params.value)
       : ['address_province', 'address_city'].includes(field.key) ? archiveRegionLabel(field.key, params.value)
-      : field.value_type === 'date' ? archiveDateValue(params.value) || '-' : params.value || '-',
+      : field.value_type === 'date' ? archiveDateValue(params.value) || '-' : params.value ?? '-',
   })),
-  ...(hasPermission('project:archive:delete') || hasPermission('project:archive:toggle')
+  ...(hasPermission('project:archive:delete') || hasPermission('project:archive:toggle') || hasPermission('project:archive:assign-line')
     ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', lockPosition: 'left', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false } as ColDef]
     : []),
   { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left', hide: !archiveColumnListAvailable('project_code') },
@@ -1101,7 +1141,7 @@ const columnDefs = computed<ColDef[]>(() => [
   { ...archiveColumnVisibility('created_by_name'), field: 'created_by_name', headerName: '创建人', width: 110, minWidth: 96 },
   {
     ...archiveColumnVisibility('data_origin'), field: 'data_origin', headerName: '档案来源', width: 122, minWidth: 112,
-    valueFormatter: (params: any) => ({ kingdee_initial: '金蝶期初', pms: 'PMS新建' } as Record<string, string>)[params.value] || '-',
+    valueFormatter: (params: any) => ({ kingdee_initial: '金蝶期初', offline_initial: '线下期初', pms: 'PMS新建' } as Record<string, string>)[params.value] || '-',
   },
   { ...archiveColumnVisibility('updated_by_name'), field: 'updated_by_name', headerName: '最后编辑人', width: 120, minWidth: 110 },
   {
@@ -1266,7 +1306,7 @@ async function openCreateDialog() {
     serial_no: '',
     plan_start_date: '',
     plan_end_date: '',
-    ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, field.key === 'product_line_id' ? null : ''])),
+    ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, field.key === 'product_line_id' || field.value_type === 'number' || (field.value_type === 'select' && !field.key.startsWith('address_')) ? null : ''])),
   })
   form.product_line_id = productLines.options.value.length === 1 ? productLines.options.value[0]!.value : null
   archiveCreateSnapshot.value = JSON.stringify(form)
@@ -1295,7 +1335,7 @@ function buildArchiveCreatePayload() {
     serial_no: form.serial_no || null,
     plan_start_date: form.plan_start_date || null,
     plan_end_date: form.plan_end_date || null,
-    ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, form[field.key] || null])),
+    ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, normalizeOfflineValue(field.key, form[field.key])])),
   }
   Object.entries(values).forEach(([fieldKey, value]) => {
     if (!archiveFieldVisible(fieldKey) || !archiveFieldEditable(fieldKey)) return
@@ -1311,7 +1351,7 @@ function archiveDateValue(value: unknown) {
 function archiveDrawerValues(row: any) {
   return {
     ...Object.fromEntries(archiveExpansionFields.map(field => [field.key,
-      field.value_type === 'date' ? archiveDateValue(row[field.key]) : row[field.key] ?? (field.key === 'product_line_id' ? null : ''),
+      field.value_type === 'date' ? archiveDateValue(row[field.key]) : field.value_type === 'number' && row[field.key] != null ? Number(row[field.key]) : row[field.key] ?? (field.key === 'product_line_id' || field.value_type === 'number' || (field.value_type === 'select' && !field.key.startsWith('address_')) ? null : ''),
     ])),
     project_code: row.project_code || '',
     project_name: row.project_name || '',
@@ -1323,6 +1363,7 @@ function archiveDrawerValues(row: any) {
     serial_no: row.serial_no || '',
     plan_start_date: archiveDateValue(row.plan_start_date),
     plan_end_date: archiveDateValue(row.plan_end_date),
+    erp_sync_policy: row.erp_sync_policy || 'auto',
     erp_sync_status: row.erp_sync_status || '',
     erp_sync_time: row.erp_sync_time || '',
     erp_sync_by_name: row.erp_sync_by_name || '',
@@ -1406,6 +1447,7 @@ async function closeArchiveDrawer() {
 }
 
 function archiveDrawerFieldRequired(field: ArchiveDrawerField) {
+  if (selectedArchive.value?.data_origin === 'offline_initial' && !archiveDrawerForm[field.key]) return false
   return archiveFieldRequired(field.key, selectedArchive.value?.created_at)
 }
 
@@ -1450,8 +1492,10 @@ function formatArchiveDateTime(value: unknown) {
 
 function formatArchiveDrawerValue(field: ArchiveDrawerField) {
   const value = archiveDrawerCurrentValue(field)
+  if (field.key === 'erp_sync_policy') return value === 'manual' ? '仅手动同步' : '自动同步'
+  if (offlineEnumCodes[field.key]) return enumLabel(offlineEnumCodes[field.key]!, value)
   if (field.key === 'data_origin') {
-    return ({ kingdee_initial: '金蝶期初', pms: 'PMS新建' } as Record<string, string>)[String(value)] || '-'
+    return ({ kingdee_initial: '金蝶期初', offline_initial: '线下期初', pms: 'PMS新建' } as Record<string, string>)[String(value)] || '-'
   }
   if (field.key === 'erp_sync_status') {
     return archiveSyncLabel(value)
@@ -1471,6 +1515,7 @@ function formatArchiveDrawerValue(field: ArchiveDrawerField) {
 }
 
 function normalizeArchiveDrawerValue(field: ArchiveDrawerField, value: unknown) {
+  if (field.key === 'quantity' || offlineEnumCodes[field.key]) return normalizeOfflineValue(field.key, value)
   if (field.key === 'manager_id') return value === '' || value == null ? null : Number(value)
   if (field.value_type === 'date') return value ? archiveDateValue(value) : null
   if (['product_category', 'equipment_series', 'product_line_id'].includes(field.key)) {
@@ -1811,7 +1856,8 @@ onMounted(async () => {
   })
   await Promise.allSettled([
     fetchEffectiveArchiveFields(), productLines.load(),
-    fetchDictOptions('product_category'), fetchDictOptions('equipment_series'),
+    fetchDictOptions('equipment_series'),
+    ...Object.values(offlineEnumCodes).map(code => fetchDictOptions(code)),
     fetchArchiveRegions(),
     resolveArchiveColumnPreferenceOwner(),
   ])
@@ -1922,6 +1968,8 @@ onUnmounted(() => clearInterval(archiveSyncPoll))
   flex: 0 0 auto;
   margin-top: -3px;
 }
+
+.archive-sync-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--pms-border-soft); font-size: 12px; color: var(--pms-text-secondary); }
 
 .archive-drawer-form {
   display: flex;

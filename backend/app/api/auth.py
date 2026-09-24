@@ -92,23 +92,3 @@ def change_password(data: ChangePasswordRequest, request: Request,
         raise HTTPException(403, "请使用密码登录后修改密码；OA-only 账号请联系管理员重置")
     return auth_service.change_password(db, session["user_id"], data, request,
                                         authenticated_version=session["credential_version"])
-
-
-@router.get("/product-categories", summary="获取当前用户允许的产品类别")
-def get_allowed_product_category_ids(
-    scope_ctx: dict = Depends(get_current_user_context),
-    db: Session = Depends(get_db),
-):
-    """返回当前用户允许的产品类别编号，null 表示不限制。"""
-    allowed = scope_ctx.get("product_category_ids")  # None = 不限制
-    # 从统一枚举接口获取全部产品类别编号。
-    from app.services.dict import get_dict_by_code
-    all_categories_data = get_dict_by_code(db, "product_category")
-    all_category_ids = [int(item["value"]) for item in (all_categories_data.get("items", []) if all_categories_data else [])]
-
-    if allowed is None:
-        # 不限制，返回全部
-        return {"unrestricted": True, "items": all_category_ids}
-    else:
-        # 只返回允许的
-        return {"unrestricted": False, "items": allowed}

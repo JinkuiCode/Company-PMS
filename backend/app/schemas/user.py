@@ -44,7 +44,6 @@ class UserInfo(BaseModel):
     home_path: str = "/403"
     permissions: list[str] = []
     data_scope: int = 1
-    product_category_ids: list[int] | None = None
     product_line_ids: list[int] = Field(default_factory=list)
     model_config = {"from_attributes": True}
 

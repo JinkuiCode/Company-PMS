@@ -51,10 +51,15 @@ class ArchiveBusinessFields(unittest.TestCase):
 
     def create(self, **kwargs):
         kwargs.setdefault('product_line_id', 1)
+        legacy_category=kwargs.pop('product_category',None)
         with patch('app.services.product_line_source.get_organization'):
-            return project.create_archive(self.db, ArchiveCreate(
+            result = project.create_archive(self.db, ArchiveCreate(
                 project_code=kwargs.pop('project_code', 'NEW'), project_name='测试', **kwargs),
                 self.user.id, scope_context=self.scope)['id']
+        if legacy_category is not None:
+            self.db.get(PmsProjectArchive,result).product_category=legacy_category
+            self.db.commit()
+        return result
 
     def test_model_schema_contract(self):
         self.assertTrue(FIELDS <= set(PmsProjectArchive.__table__.columns.keys()))

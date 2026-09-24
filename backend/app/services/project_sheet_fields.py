@@ -194,6 +194,10 @@ PROJECT_SHEET_FIELDS = [
 ]
 
 FIELD_BY_KEY = {field["key"]: field for field in PROJECT_SHEET_FIELDS}
+for _retired in PROJECT_SHEET_FIELDS:
+    if _retired["key"]=="product_category":
+        _retired.update(label="产品类别（已停用）",list_available=False,quick_addable=False,editable=False)
+
 GROUP_BY_KEY = {group["key"]: group for group in PROJECT_SHEET_GROUPS}
 DETAIL_EDITABLE_KEYS = {
     field["key"]

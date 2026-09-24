@@ -690,7 +690,9 @@ def create_project(
         _require_archive_name(archive.project_name)
         values["project_code"] = archive.project_code
         values["project_name"] = archive.project_name
-        values["product_category"] = archive.product_category
+    if values.get("product_category") is not None:
+        raise HTTPException(422, detail="产品类别已停用，请维护产品线")
+    values["product_category"] = None
     try:
         if db.query(PmsProject).filter(PmsProject.project_code == values["project_code"]).first():
             raise HTTPException(status_code=409, detail={
@@ -698,21 +700,12 @@ def create_project(
                 "field_key": "archive_id",
                 "message": "该项目档案已经建立项目进度",
             })
-        effective_product_category = (
-            archive.product_category
-            if archive and archive.product_category
-            else values.get("product_category")
-        )
         validate_enum_value(db, "project_status", values.get("status"))
-        if archive and archive.product_category:
-            values["product_category"] = archive.product_category
-        else:
-            validate_enum_value(db, "product_category", values.get("product_category"))
         _ensure_project_assignment_allowed(
             db,
             dept_id=values.get("dept_id"),
             pm_id=values.get("pm_id"),
-            product_category=effective_product_category,
+            product_category=None,
             scope_context=scope_context,
         )
         policy_initial_values = {
@@ -793,7 +786,7 @@ def update_project(
     before = serialize_model(proj)
     update_data = data.model_dump(exclude_unset=True)
     if "product_category" in update_data:
-        raise HTTPException(status_code=400, detail="产品类别来自项目档案，请在项目档案中维护")
+        raise HTTPException(status_code=422, detail="产品类别已停用，请维护产品线")
     if "status" in update_data:
         validate_enum_value(db, "project_status", update_data["status"], current_value=proj.status)
 
@@ -1068,7 +1061,6 @@ def _ensure_archive_unique_values(
 def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
                      keyword: str | None = None, status: int | None = None,
                      product_category: int | None = None,
-                     allowed_category_ids: list[int] | None = None,
                      enabled: bool | None = None,
                      scope_context: dict | None = None,
                      filters: str | None = None, sort: str | None = None,
@@ -1088,8 +1080,6 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
         query = query.filter(PmsProjectArchive.status == status)
     if product_category is not None:
         query = query.filter(PmsProjectArchive.product_category == product_category)
-    if allowed_category_ids is not None:
-        query = query.filter(PmsProjectArchive.product_category.in_(allowed_category_ids))
     if enabled is not None:
         query = query.filter(PmsProjectArchive.is_enabled == int(enabled))
 
@@ -1114,7 +1104,7 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
         syncer = users.get(a.erp_sync_by)
         items.append(ArchiveResponse(
             id=a.id, project_code=a.project_code, project_name=a.project_name,
-            data_origin=a.data_origin,
+            data_origin=a.data_origin, erp_sync_policy=a.erp_sync_policy,
             status=a.status, manager_id=a.manager_id, customer=a.customer,
             equipment_series=a.equipment_series, serial_no=a.serial_no,
             product_category=a.product_category,
@@ -1159,6 +1149,12 @@ def create_archive(
         if manager_policy['editable']:
             values['manager_id'] = user_id
     _ensure_archive_unique_values(db, values)
+    if values.get("product_category") is not None:
+        raise HTTPException(422, "产品类别已停用，请使用产品线和档案类别")
+    from app.services.offline_archive_fields import OFFLINE_FIELDS
+    for key,meta in OFFLINE_FIELDS.items():
+        if meta["enum_code"]:
+            validate_enum_value(db,meta["enum_code"],values.get(key))
     validate_enum_value(db, "archive_status", values.get("status"))
     validate_enum_value(db, "product_category", values.get("product_category"))
     validate_enum_value(db, "equipment_series", values.get("equipment_series"))
@@ -1234,14 +1230,22 @@ def update_archive(
     before = serialize_model(archive)
 
     update_data = _normalize_archive_values(data.model_dump(exclude_unset=True))
-    sync_queued = any(
+    from app.services.offline_archive_fields import OFFLINE_FIELDS
+    if "product_category" in update_data:
+        db.rollback()
+        raise HTTPException(422, "产品类别已停用，请使用产品线和档案类别")
+    for key,meta in OFFLINE_FIELDS.items():
+        if meta["enum_code"] and key in update_data:
+            validate_enum_value(db, meta["enum_code"], update_data[key], current_value=getattr(archive,key))
+    sync_queued = archive.erp_sync_policy == "auto" and any(
         key in update_data and update_data[key] != getattr(archive, key)
         for key in ("project_code", "project_name")
     )
     try:
         if 'project_code' in update_data and update_data['project_code'] != archive.project_code and (archive.erp_synced or archive.data_origin == 'kingdee_initial'):
             raise HTTPException(409, detail={'code': 'ARCHIVE_CODE_LOCKED', 'field_key': 'project_code', 'message': '已同步或金蝶期初档案的项目编号不可修改'})
-        _require_archive_name(update_data.get("project_name", archive.project_name))
+        if archive.data_origin != "offline_initial" or "project_name" in update_data:
+            _require_archive_name(update_data.get("project_name", archive.project_name))
         _ensure_archive_unique_values(db, update_data, exclude_archive_id=archive.id)
         if "status" in update_data:
             validate_enum_value(db, "archive_status", update_data["status"], current_value=archive.status)
@@ -1269,7 +1273,12 @@ def update_archive(
                 })
             _require_archive_product_line(db, scope_context, update_data["product_line_id"])
         from app.services.archive_regions import validate_archive_address
-        validate_archive_address({**serialize_model(archive), **update_data})
+        # Preserve an untouched free-form address from the approved historical workbook.
+        if archive.data_origin != "offline_initial" or any(
+            key in update_data and update_data[key] != getattr(archive, key)
+            for key in ("address_province", "address_city", "address_detail")
+        ):
+            validate_archive_address({**serialize_model(archive), **update_data})
         _ensure_archive_assignment_allowed(
             db,
             manager_id=update_data.get("manager_id", archive.manager_id),
@@ -1285,6 +1294,7 @@ def update_archive(
             updates=update_data,
             entity_created_at=archive.created_at,
             is_create=False,
+            historical_import=archive.data_origin == "offline_initial",
         )
     except Exception:
         db.rollback()
@@ -1295,7 +1305,7 @@ def update_archive(
         archive.updated_by = user_id
         linked_project_updates = {
             source: update_data[source]
-            for source in ("project_code", "project_name", "product_category")
+            for source in ("project_code", "project_name")
             if source in update_data
         }
         if linked_project_updates:
@@ -1340,7 +1350,7 @@ def validate_archive_for_business_operation(db: Session, archive: PmsProjectArch
     from app.models.product_line import SysProductLine
 
     line = db.get(SysProductLine, archive.business_product_line_id) if archive.business_product_line_id else None
-    if line is None or line.source_key != 'kingdee':
+    if line is None or not line.is_enabled or line.source_key != 'kingdee' or not line.organization_id or line.organization_id <= 0:
         raise HTTPException(422, detail={
             'field_key': 'product_line_id', 'message': '项目尚未确认产品线组织归属，不能执行同步',
         })

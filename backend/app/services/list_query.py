@@ -1,6 +1,7 @@
 """Allowlisted archive filters and stable ordering, applied before SQL pagination."""
 import datetime
 import json
+from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -37,6 +38,11 @@ def archive_columns():
         'plan_start_date', 'plan_end_date', 'created_at', 'updated_at', 'erp_sync_time',
         'contract_signed_date', 'contract_ship_date', 'actual_ship_date', 'warranty_end_date',
     )})
+    from app.services.offline_archive_fields import OFFLINE_FIELDS
+    for name, meta in OFFLINE_FIELDS.items():
+        kind = 'number' if meta['enum_code'] else 'date' if name.endswith('_date') else 'decimal' if name == 'quantity' else 'text'
+        fields[name] = (getattr(Archive, name), kind)
+    fields['erp_sync_policy'] = (Archive.erp_sync_policy, 'text')
     for name, foreign_key in (
         ('manager_name', 'manager_id'), ('created_by_name', 'created_by'),
         ('updated_by_name', 'updated_by'), ('erp_sync_by_name', 'erp_sync_by'),
@@ -60,6 +66,7 @@ def apply_list_query(query, columns, filters=None, sort=None, default_order=()):
         column, kind = columns[field]
         allowed = {'text': {'contains', 'equals', 'notEquals'},
                    'number': {'equals', 'notEquals', 'greaterThan', 'lessThan', 'between'},
+                   'decimal': {'equals', 'notEquals', 'greaterThan', 'lessThan', 'between'},
                    'date': {'equals', 'before', 'after', 'between'}}[kind]
         if operator not in allowed:
             raise invalid_query()
@@ -81,7 +88,16 @@ def apply_list_query(query, columns, filters=None, sort=None, default_order=()):
                 else:
                     clause = (column >= value) & (column < end + datetime.timedelta(days=1))
             else:
-                if kind == 'number':
+                if kind == 'decimal':
+                    value = Decimal(str(value))
+                    if not value.is_finite():
+                        raise ValueError()
+                    if operator == 'between':
+                        end = Decimal(str(end))
+                        if not end.is_finite():
+                            raise ValueError()
+                        value, end = sorted((value, end))
+                elif kind == 'number':
                     value = int(value)
                     if operator == 'between':
                         value, end = sorted((value, int(end)))
@@ -101,7 +117,7 @@ def apply_list_query(query, columns, filters=None, sort=None, default_order=()):
                 else:
                     clause = column == value
             query = query.filter(clause)
-        except (ValueError, TypeError, OverflowError):
+        except (ValueError, TypeError, OverflowError, InvalidOperation):
             raise invalid_query()
     ordering = []
     for item in query_items(sort):

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings, validate_runtime_config
 from app.core.database import engine, get_db
 from app.api import auth, users, roles, menus, depts, projects, sso, erp, dicts, operation_logs, field_catalog, field_policies
+from app.api import offline_archives
 from app.api import parameters
 from app.api import product_lines
 from app.api import sync_tasks
@@ -72,6 +73,7 @@ app.add_middleware(
 )
 
 # 注册路由
+app.include_router(offline_archives.router)
 app.include_router(auth.router)
 app.include_router(parameters.router)
 app.include_router(product_lines.router)

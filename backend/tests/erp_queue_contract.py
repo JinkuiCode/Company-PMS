@@ -61,6 +61,25 @@ class QueueContract(unittest.TestCase):
         self.assertEqual(first.status, 'superseded')
         self.assertEqual(second.status, 'queued')
 
+    def test_manual_failed_task_can_be_explicitly_retried(self):
+        task=self.enqueue()
+        self.archive.erp_sync_policy="manual"
+        self.archive.erp_sync_status="failed"
+        task.status="failed"
+        self.db.commit()
+        result=erp_queue.retry(self.db,task.id,self.user.id)
+        self.assertNotEqual(result["id"],task.id)
+        self.assertEqual(self.archive.erp_sync_policy,"manual")
+
+    def test_manual_retry_rejects_disabled_product_line(self):
+        task=self.enqueue()
+        self.archive.erp_sync_policy="manual";self.archive.erp_sync_status="failed"
+        task.status="failed";self.line.is_enabled=0
+        self.db.commit()
+        with self.assertRaises(HTTPException):
+            erp_queue.retry(self.db,task.id,self.user.id)
+        self.assertEqual(self.db.query(ErpSyncTask).count(),1)
+
     def test_success_runs_once(self):
         task = self.enqueue()
         def success(db, archive_id, **kwargs):

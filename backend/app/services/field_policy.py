@@ -67,11 +67,14 @@ ARCHIVE_GROUPS = [
     {"key": "system", "label": "系统信息"},
 ]
 
+from app.services.offline_archive_fields import OFFLINE_FIELDS
+
 ARCHIVE_FIELDS = [
+    *[_registry_field(k, v['label'], 'basic', value_type=('select' if v['enum_code'] else 'date' if v['sql_type']=='DATE' else 'number' if k=='quantity' else 'long_text' if k in {'remarks','delivery_note'} else 'text'), enum_code=v['enum_code']) for k,v in OFFLINE_FIELDS.items()],
     _registry_field("project_code", "项目编号", "basic", required=True, visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("project_name", "项目名称", "basic", required=True, visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("customer", "客户", "basic"),
-    _registry_field("product_category", "产品类别", "basic", value_type="select", enum_code="product_category"),
+    _registry_field("product_category", "产品类别（已停用）", "basic", visible=False, editable=False, list_available=False, visible_locked=True, required_locked=True),
     _registry_field("product_line_id", "产品线", "basic", value_type="select", required=True,
                     visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("manager_id", "负责人", "basic", value_type="user"),
@@ -88,6 +91,7 @@ ARCHIVE_FIELDS = [
     _registry_field("contact_phone", "联系人手机", "contact"),
     _registry_field("plan_start_date", "计划开始", "plan", value_type="date"),
     _registry_field("plan_end_date", "计划结束", "plan", value_type="date"),
+    _registry_field("erp_sync_policy", "同步方式", "erp", source_type="system", editable=False),
     _registry_field("data_origin", "档案来源", "system", source_type="system", editable=False),
     _registry_field("erp_sync_status", "同步状态", "erp", source_type="system", editable=False),
     _registry_field("erp_sync_time", "最后同步时间", "erp", value_type="datetime", source_type="system", editable=False),
@@ -110,6 +114,9 @@ def _progress_fields() -> list[dict[str, Any]]:
     existing = {field["key"] for field in fields}
     for sheet in PROJECT_SHEET_FIELDS:
         if sheet["key"] in existing:
+            continue
+        if sheet["key"] == "product_category":
+            fields.append(_registry_field("product_category","产品类别（已停用）","basic",source_type="archive",visible=False,editable=False,list_available=False,visible_locked=True,required_locked=True))
             continue
         editable = bool(sheet["editable"] and sheet["source_type"] in {"detail", "project"})
         fields.append(_registry_field(
@@ -330,6 +337,7 @@ def validate_business_field_write(
     updates: dict[str, Any],
     entity_created_at: datetime.datetime | None,
     is_create: bool,
+    historical_import: bool = False,
 ) -> dict[str, Any]:
     """校验用户写入与当前字段规则，返回合并后的业务值。"""
     effective = get_effective_field_policies(db, module_code)
@@ -353,6 +361,8 @@ def validate_business_field_write(
         applies = bool(effective_at) and (
             is_create or bool(entity_created_at and entity_created_at >= effective_at)
         )
+        if historical_import and not is_create and policy["field_key"] not in updates:
+            continue
         if applies and _is_empty(merged.get(policy["field_key"])):
             errors.append({"field_key": policy["field_key"], "message": "此字段为必填项"})
 

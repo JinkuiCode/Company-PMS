@@ -30,7 +30,7 @@ test('new fields use shared metadata groups, not default columns', () => {
   }
   assert.match(view, /<PmsFormDrawer[^>]*[\s\S]*?title="新增项目档案"/)
   assert.doesNotMatch(view, /<el-dialog/)
-  assert.match(view, /fetchDictOptions\('product_line'\)/)
+  assert.match(view, /productLines\.load\(/)
   assert.match(view, /baseArchiveColumnKeys\.filter\(key => !archiveExpansionKeys\.has\(key\)\)/)
 })
 
@@ -83,6 +83,7 @@ test('province change clears city; Escape restores both values and preexisting d
   const archivePendingChanges = { value: { address_city: { value: '1101', originalValue: '1102' } } }
   const handlers = functions(['startArchiveFieldEdit', 'changeArchiveProvince', 'cancelArchiveFieldEdit'], {
     archiveDrawerForm, archiveEditingField, archiveEditSnapshot, archivePendingChanges,
+    archiveDrawerSaving: { value: false },
     archiveOriginalValues: { value: { address_province: '11', address_city: '1102' } },
     archiveDrawerReadOnly: { value: false }, archiveDrawerFieldEditable: () => true,
     clearArchiveServerError: () => {}, archiveDrawerServerErrors: {}, commitArchiveFieldEdit: () => {},
@@ -119,16 +120,17 @@ test('region formatter uses names and never leaks unknown codes', () => {
   assert.equal(archiveRegionLabel('address_city', '999'), '-')
 })
 
-test('creation defaults only the authenticated manager; editing preserves the record manager', () => {
+test('creation defaults only the authenticated manager; editing preserves the record manager', async () => {
   const form = {}
   const bindings = {
     form, formRef: { value: null }, hasPermission: () => true,
+    archiveCreateOpening: { value: false }, productLines: { load: async () => {}, failed: { value: false }, options: { value: [{value:7}, {value:8}] } },
     clearArchiveServerErrors: () => {}, archiveCreateServerErrors: {},
     archiveExpansionFields: [{ key: 'product_line_id' }, { key: 'contract_ship_date' }],
     authStore: { user: { id: 42 } }, archiveCreateSnapshot: { value: '' }, dialogVisible: { value: false },
   }
   const { openCreateDialog, archiveDrawerValues, archiveDateValue } = functions(['openCreateDialog', 'archiveDrawerValues', 'archiveDateValue'], bindings)
-  openCreateDialog()
+  await openCreateDialog()
   assert.equal(form.manager_id, 42)
   assert.equal(form.product_line_id, null)
   assert.equal(archiveDrawerValues({ manager_id: 17 }).manager_id, 17)
@@ -140,6 +142,7 @@ test('create payload retains new values, strips noneditable fields and sends dat
     form: { product_line_id: 7, contract_signed_date: '2026-09-20', address_province: '11', contact_phone: '123' },
     archiveExpansionFields: ['product_line_id', 'contract_signed_date', 'address_province', 'contact_phone'].map(key => ({ key })),
     archiveFieldVisible: () => true, archiveFieldEditable: key => key !== 'contact_phone',
+    normalizeOfflineValue: (_key, value) => value === '' || value == null ? null : value,
   })
   const payload = buildArchiveCreatePayload()
   assert.equal(payload.product_line_id, 7)

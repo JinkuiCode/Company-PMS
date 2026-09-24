@@ -115,6 +115,13 @@ ENUM_REGISTRY: dict[str, dict[str, Any]] = {
 }
 
 
+from app.services.offline_archive_fields import OFFLINE_FIELDS
+for _key,_meta in OFFLINE_FIELDS.items():
+    if _meta["enum_code"]:
+        ENUM_REGISTRY[_meta["enum_code"]] = dict(name=_meta["label"],description="项目档案"+_meta["label"],mode="configurable",value_strategy="numeric_sequence",visible=True,sort=30+list(OFFLINE_FIELDS).index(_key),table_name="pms_project_archive",field_name=_key,bindings=["项目档案."+_key],items=[])
+ENUM_REGISTRY["archive_category"]["items"]=[(str(i),v) for i,v in enumerate(["主机","辅机","C类","D类","AS类","BS类","免费","待分类"],1)]
+ENUM_REGISTRY["product_category"]["visible"]=False
+
 MANAGED_ENUM_CODES = {
     code for code, definition in ENUM_REGISTRY.items() if definition["visible"]
 }
@@ -202,6 +209,11 @@ def get_enum_definition(code: str, *, managed_only: bool = False) -> dict[str, A
 
 def count_enum_references(db: Session, code: str, value: str) -> int:
     """按注册绑定统计精确引用数量。"""
+    from app.services.offline_archive_fields import OFFLINE_FIELDS
+    for key, meta in OFFLINE_FIELDS.items():
+        if meta["enum_code"] == code:
+            try:return db.query(PmsProjectArchive).filter(getattr(PmsProjectArchive,key)==int(value)).count()
+            except (TypeError,ValueError):return 0
     integer_value = None
     if code in {"archive_status", "project_status", "task_status", "product_category", "equipment_series", "product_line"}:
         try:

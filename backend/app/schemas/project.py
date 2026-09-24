@@ -1,10 +1,22 @@
 from pydantic import BaseModel, Field
 from datetime import date, datetime
 from typing import Any
+from decimal import Decimal
 
 
 # ========== 项目档案 ==========
 class ArchiveBusinessFields(BaseModel):
+    archive_category: int | None = None
+    customer_full_name: str | None = Field(None, max_length=128)
+    machine_model: int | None = None
+    quantity: Decimal | None = Field(None, max_digits=20, decimal_places=8, allow_inf_nan=False)
+    quantity_unit: int | None = None
+    sales_company: int | None = None
+    legacy_archive_status: int | None = None
+    legacy_code_date: date | None = None
+    legacy_updated_date: date | None = None
+    delivery_note: str | None = Field(None, max_length=1024)
+    remarks: str | None = Field(None, max_length=4000)
     product_line_id: int | None = None
     contract_signed_date: date | None = None
     contract_ship_date: date | None = None
@@ -65,6 +77,7 @@ class ArchiveResponse(ArchiveBusinessFields):
     project_code: str
     project_name: str | None
     data_origin: str = "pms"
+    erp_sync_policy: str = "auto"
     status: int
     manager_id: int | None = None
     customer: str | None = None

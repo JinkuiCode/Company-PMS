@@ -18,7 +18,7 @@ class PmsProjectArchive(Base):
     project_name_key: Mapped[str | None] = mapped_column(NVARCHAR(128), nullable=True, comment="项目名称兼容键")
     data_origin: Mapped[str] = mapped_column(
         NVARCHAR(32), nullable=False, default="pms", server_default=text("'pms'"),
-        comment="档案来源: pms/kingdee_initial",
+        comment="档案来源: pms/kingdee_initial/offline_initial",
     )
     customer: Mapped[str | None] = mapped_column(NVARCHAR(128), default=None, comment="客户")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1未启动 2进行中 3已完结 4暂停")
@@ -30,7 +30,7 @@ class PmsProjectArchive(Base):
         comment="启用状态: 1启用 0禁用",
     )
     manager_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="负责人ID")
-    product_category: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品类别枚举值")
+    product_category: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品类别（历史停用）")
     product_line_id: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品线枚举值")
     business_product_line_id: Mapped[int | None] = mapped_column(Integer, ForeignKey('sys_product_line.id'), nullable=True, comment="组织产品线归属ID")
     contract_signed_date: Mapped[datetime.date | None] = mapped_column(Date, default=None, comment="合同签订日期")
@@ -49,6 +49,18 @@ class PmsProjectArchive(Base):
     plan_end_date: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="计划结束日期")
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="创建人ID")
     updated_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="最后编辑人ID")
+    archive_category: Mapped[object | None] = mapped_column(Integer, nullable=True, comment="档案类别")
+    customer_full_name: Mapped[object | None] = mapped_column(NVARCHAR(128), nullable=True, comment="客户完整名称")
+    machine_model: Mapped[object | None] = mapped_column(Integer, nullable=True, comment="机型")
+    quantity: Mapped[object | None] = mapped_column(DECIMAL(20, 8), nullable=True, comment="数量")
+    quantity_unit: Mapped[object | None] = mapped_column(Integer, nullable=True, comment="单位")
+    sales_company: Mapped[object | None] = mapped_column(Integer, nullable=True, comment="销售公司")
+    legacy_archive_status: Mapped[object | None] = mapped_column(Integer, nullable=True, comment="原台账状态")
+    legacy_code_date: Mapped[object | None] = mapped_column(Date, nullable=True, comment="编码日期")
+    legacy_updated_date: Mapped[object | None] = mapped_column(Date, nullable=True, comment="原台账更新日期")
+    delivery_note: Mapped[object | None] = mapped_column(NVARCHAR(1024), nullable=True, comment="交期说明")
+    remarks: Mapped[object | None] = mapped_column(NVARCHAR(4000), nullable=True, comment="备注")
+    erp_sync_policy: Mapped[str] = mapped_column(NVARCHAR(16), nullable=False, default="auto", server_default=text("'auto'"), comment="同步策略: auto自动/manual手动")
     # ERP 同步字段
     erp_synced: Mapped[int] = mapped_column(Integer, default=0, comment="是否已写入金蝶资料: 0否 1是，完整结果以同步状态为准")
     erp_sync_time: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="最后同步时间")
@@ -94,7 +106,7 @@ class PmsProject(Base):
     project_name: Mapped[str] = mapped_column(NVARCHAR(128), nullable=False, comment="项目名称")
     dept_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_dept.id"), nullable=False, comment="所属部门ID")
     pm_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, comment="项目经理ID")
-    product_category: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品类别枚举值")
+    product_category: Mapped[int | None] = mapped_column(Integer, default=None, comment="产品类别（历史停用）")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1进行中 2已完结 3暂停")
     start_date: Mapped[datetime.date | None] = mapped_column(DateTime, default=None, comment="开始日期")
     end_date: Mapped[datetime.date | None] = mapped_column(DateTime, default=None, comment="结束日期")

@@ -68,3 +68,9 @@ def get_sync_logs(
     ensure_archive_access(db, archive_id, scope_ctx)
     logs = kingdee.get_sync_logs(db, archive_id, limit)
     return {"success": True, "data": logs}
+
+@router.post("/archives/{archive_id}/submit", summary="手动提交项目档案同步")
+def submit_archive_sync(archive_id: int,request: Request,db: Session=Depends(get_db),
+                        scope: dict=Depends(require_permission("project:archive:sync"))):
+    from app.services.offline_archive import request_archive_sync
+    return request_archive_sync(db,archive_id,scope["user_id"],scope,request)

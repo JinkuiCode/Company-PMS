@@ -54,7 +54,9 @@ def _interactive_archive_query(db, user_id):
     return get_scoped_archive_query(db, context)
 
 
-def enqueue(db, archive, operator_id):
+def enqueue(db, archive, operator_id, *, explicit=False):
+    if archive.erp_sync_policy == 'manual' and not explicit:
+        raise HTTPException(409, '此档案仅允许手动同步金蝶')
     # Called inside the archive write transaction, after locking/flushing the row.
     older = db.query(ErpSyncTask).filter(ErpSyncTask.archive_id == archive.id,
                                         ErpSyncTask.status.in_(['queued', 'failed'])).all()
@@ -192,7 +194,9 @@ def retry(db, task_id, user_id, request=None):
         raise HTTPException(409, '禁用档案不能同步')
     if _archive_target(db, archive) is None:
         raise HTTPException(409, '档案尚未关联组织产品线，不能同步')
-    new_task = enqueue(db, archive, user_id)
+    from app.services.project import validate_archive_for_business_operation
+    validate_archive_for_business_operation(db, archive)
+    new_task = enqueue(db, archive, user_id, explicit=True)
     record_operation_log(db, module='同步管理', action='retry', entity_type='pms_project_archive',
         entity_id=archive.id, entity_name=archive.project_name, operator_id=user_id, request=request,
         summary='管理员重试档案同步', after_data={'task_id': new_task.id, 'previous_task_id': task_id})

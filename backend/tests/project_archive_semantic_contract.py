@@ -76,7 +76,7 @@ def test_project_sheet_archive_fields_are_read_only_references():
         "project_code": "项目号",
         "project_name": "项目名称",
         "customer": "客户",
-        "product_category": "产品类别",
+        "product_category": "产品类别（已停用）",
         "equipment_series": "设备系列",
         "serial_no": "序列号",
     }
@@ -99,7 +99,8 @@ def test_archive_field_policy_declares_unique_fields_and_enum_bindings():
     assert fields["project_code"]["editable_locked"] is True
     assert fields["project_name"]["label"] == "项目名称"
     assert fields["customer"]["value_type"] == "text"
-    assert fields["product_category"]["enum_code"] == "product_category"
+    assert fields["product_category"]["default_editable"] is False
+    assert fields["product_category"]["default_visible"] is False
     assert fields["equipment_series"]["enum_code"] == "equipment_series"
     assert fields["serial_no"]["value_type"] == "text"
     assert "product_line" not in fields
@@ -142,7 +143,6 @@ def test_archive_uniqueness_and_linked_project_synchronization():
                 project_code="  ARCH-001  ",
                 project_name="  唯一项目一  ",
                 customer=" 客户 A ",
-                product_category=1,
                 equipment_series=1,
                 serial_no=" SN-001 ",
             ),
@@ -219,14 +219,13 @@ def test_archive_uniqueness_and_linked_project_synchronization():
             ArchiveUpdate(
                 project_code="ARCH-004-NEW",
                 project_name="唯一项目四（新）",
-                product_category=2,
             ),
             user_id=user.id,
         )
         db.refresh(project)
         assert project.project_code == "ARCH-004-NEW"
         assert project.project_name == "唯一项目四（新）"
-        assert project.product_category == 2
+        assert project.product_category == 1  # 历史类别不再跟随档案传播
 
         try:
             update_project(

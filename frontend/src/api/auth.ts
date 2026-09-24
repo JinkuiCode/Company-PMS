@@ -32,7 +32,6 @@ export interface UserInfo {
   home_path?: string
   permissions: string[]
   data_scope: number
-  product_category_ids: number[] | null
   product_line_ids: number[]
 }
 

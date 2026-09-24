@@ -351,8 +351,8 @@ def create_role(db: Session, data: RoleCreate, operator_id: int | None = None, r
         raise HTTPException(status_code=400, detail="角色编码已存在")
     normalized_menu_ids = normalize_role_menu_ids(db, data.menu_ids)
     validate_role_home(db, data.home_menu_id, normalized_menu_ids)
-    for product_category_id in _split_product_category_ids(data.product_category_ids):
-        validate_enum_value(db, "product_category", product_category_id)
+    if data.product_category_ids is not None:
+        raise HTTPException(422,"产品类别已停用，请配置产品线权限")
     try:
         role_data = data.model_dump(exclude={"menu_ids", "product_line_ids"})
         role = SysRole(**role_data)
@@ -405,14 +405,7 @@ def update_role(db: Session, role_id: int, data: RoleUpdate, operator_id: int | 
             except HTTPException:
                 update_data["home_menu_id"] = None
         if "product_category_ids" in update_data:
-            current_category_ids = _split_product_category_ids(role.product_category_ids)
-            for product_category_id in _split_product_category_ids(update_data["product_category_ids"]):
-                validate_enum_value(
-                    db,
-                    "product_category",
-                    product_category_id,
-                    current_value=product_category_id if product_category_id in current_category_ids else None,
-                )
+            raise HTTPException(422,"产品类别已停用，请配置产品线权限")
         for key, val in update_data.items():
             setattr(role, key, val)
 

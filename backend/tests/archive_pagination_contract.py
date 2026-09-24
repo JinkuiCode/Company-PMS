@@ -49,7 +49,7 @@ with SessionLocal() as db:
     assert get_archive_list(db, filters='[{"field":"plan_start_date","operator":"equals","value":"2026-09-18"}]')['total'] == 1040
     assert get_archive_list(db, filters='[{"field":"plan_start_date","operator":"after","value":"2026-09-18"}]')['total'] == 0
     assert get_archive_list(db, scope_context={'data_scope': 1, 'user_id': user.id + 1, 'product_category_ids': None})['total'] == 0
-    assert get_archive_list(db, allowed_category_ids=[2])['total'] == 0
+    assert get_archive_list(db, scope_context={'permissions':['business:data:all'], 'product_category_ids':[2]})['total'] == 1040
     assert get_archive_list(db, archive_id=first['items'][0].id)['total'] == 1
     from fastapi import HTTPException
     try:

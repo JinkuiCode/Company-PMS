@@ -45,7 +45,8 @@ def test_registry_separates_managed_system_and_legacy_definitions():
 
     assert MANAGED_ENUM_CODES == {
         "project_status",
-        "product_category",
+        "archive_category", "archive_machine_model", "archive_quantity_unit",
+        "archive_sales_company", "archive_legacy_archive_status",
         "equipment_series",
         "task_status",
     }
@@ -73,13 +74,13 @@ def test_enum_list_hides_unregistered_and_system_definitions():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        seed_enum(db, "product_category", [("1", "Bench", 1)])
+        seed_enum(db, "archive_machine_model", [("1", "Bench", 1)])
         seed_enum(db, "archive_status", [("1", "未启动", 1)])
         seed_enum(db, "data_scope", [("4", "全部", 1)])
         seed_enum(db, "custom_history", [("A", "历史自建", 1)])
 
         result = get_dict_list(db)
-        assert [item["dict_code"] for item in result] == ["product_category"]
+        assert [item["dict_code"] for item in result] == ["archive_machine_model"]
         assert result[0]["allow_add"] is True
         assert result[0]["mode"] == "configurable"
         assert result[0]["item_count"] == 1
@@ -166,12 +167,12 @@ def test_referenced_configurable_value_cannot_be_deleted():
 
     db = SessionLocal()
     try:
-        definition = seed_enum(db, "product_category", [("1", "Bench", 1)])
+        definition = seed_enum(db, "archive_machine_model", [("1", "Bench", 1)])
         item = db.query(SysDictItem).filter(SysDictItem.dict_id == definition.id).one()
         db.add(PmsProjectArchive(
             project_code="ENUM-REF-001",
             project_name="枚举引用项目",
-            product_category=1,
+            machine_model=1,
             status=1,
         ))
         db.commit()
@@ -281,7 +282,7 @@ def test_configurable_business_enum_allocates_immutable_non_reused_numbers():
 
     db = SessionLocal()
     try:
-        definition = seed_enum(db, "product_category", [("1", "Bench", 1), ("2", "光伏", 1)])
+        definition = seed_enum(db, "archive_machine_model", [("1", "Bench", 1), ("2", "光伏", 1)])
         definition.next_value = 3
         db.commit()
 

@@ -66,7 +66,7 @@ def get_me_context(session=Depends(get_password_session), db: Session = Depends(
     context = build_authorization_context(db, session["user_id"])
     context.update(session)
     if session["must_change_password"]:
-        context.update(permissions=[], role_codes=[], data_scope=1, product_category_ids=[], product_line_ids=[])
+        context.update(permissions=[], role_codes=[], data_scope=1, product_line_ids=[])
     return context
 
 
@@ -100,19 +100,6 @@ def build_authorization_context(db: Session, user_id: int) -> AuthorizationConte
         )
         permissions = {code for (code,) in rows if code}
 
-    product_category_ids: list[int] | None
-    if not roles:
-        product_category_ids = []
-    elif 'business:data:all' in permissions or any(not role.product_category_ids for role in roles):
-        product_category_ids = None
-    else:
-        product_category_ids = sorted({
-            int(value.strip())
-            for role in roles
-            for value in (role.product_category_ids or "").split(",")
-            if value.strip().isdigit()
-        })
-
     return {
         "user_id": user.id,
         "dept_id": user.dept_id,
@@ -122,7 +109,6 @@ def build_authorization_context(db: Session, user_id: int) -> AuthorizationConte
             (role.data_scope if 1 <= role.data_scope <= 4 else 1 for role in roles),
             default=1,
         ),
-        "product_category_ids": product_category_ids,
         "product_line_ids": get_authorized_product_line_ids(db, roles),
     }
 
