@@ -69,15 +69,17 @@ class TypedFilters(unittest.TestCase):
     def test_metadata_is_whitelisted_and_typed(self):
         from app.api.purchase_reports import metadata as purchase_metadata
         from app.api.stock_detail_reports import metadata as stock_metadata
+        with patch('app.api.purchase_reports.scoped_lines', return_value=[]):
+            purchase = purchase_metadata(db=None, ctx={})
         with patch('app.api.stock_detail_reports.scoped_lines', return_value=[]):
             stock = stock_metadata(None, {})
-        for meta in (purchase_metadata({}), stock):
+        for meta in (purchase, stock):
             self.assertIn('filter_fields', meta)
             fields = {f['field']: f for f in meta['filter_fields']}
             self.assertTrue(set(fields) <= {f['key'] for f in meta['fields']})
             self.assertEqual(fields['bill_no']['type'], 'text')
             self.assertIn('contains', fields['bill_no']['operators'])
-        fields = {f['field']: f for f in purchase_metadata({})['filter_fields']}
+        fields = {f['field']: f for f in purchase['filter_fields']}
         self.assertEqual(fields['approved']['type'], 'number')
         self.assertEqual(fields['document_status']['type'], 'enum')
         self.assertIn({'value': 'C', 'label': '已审核'}, fields['document_status']['options'])
