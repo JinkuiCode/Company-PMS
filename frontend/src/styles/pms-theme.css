@@ -1,4 +1,16 @@
 :root {
+  --pms-header-height: 44px;
+  --pms-page-inset: 6px;
+  --pms-panel-inset: 8px;
+  --pms-query-height: 24px;
+  --pms-query-gap: 6px;
+  --pms-query-inset: 4px;
+  --pms-query-radius: 4px;
+  --pms-pagination-height: 26px;
+  --pms-grid-row-height: 32px;
+  --pms-grid-header-height: 30px;
+  --pms-grid-group-height: 26px;
+  --pms-drawer-width: 460px;
   --pms-action-cell-padding: 8px;
   --pms-action-button-width: 40px;
   --pms-action-button-height: 24px;
@@ -29,7 +41,7 @@
   --pms-radius: 8px;
   --pms-radius-lg: 12px;
   --pms-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --pms-font: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  --pms-font: "Noto Sans SC Variable", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
   --pms-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --pms-font-size-xs: 11px;
   --pms-font-size-sm: 12px;
@@ -88,10 +100,10 @@ a {
 
 .pms-page {
   min-height: 100%;
-  padding: 16px;
+  padding: var(--pms-panel-inset);
   background: var(--pms-surface);
   border: 1px solid var(--pms-border-soft);
-  border-radius: var(--pms-radius);
+  border-radius: var(--pms-radius-sm);
   box-shadow: var(--pms-shadow-sm);
 }
 
@@ -122,9 +134,9 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  min-height: 44px;
-  padding: 8px 12px;
+  gap: var(--pms-query-gap);
+  min-height: 32px;
+  padding: var(--pms-query-inset) var(--pms-panel-inset);
   border-bottom: 1px solid var(--pms-border-soft);
 }
 
@@ -166,7 +178,7 @@ a {
 .pms-split-page {
   display: grid;
   grid-template-columns: minmax(184px, 220px) minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--pms-query-gap);
   min-height: 0;
 }
 
@@ -188,9 +200,10 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  min-height: 34px;
-  padding-bottom: 12px;
+  flex-wrap: wrap;
+  gap: var(--pms-query-gap);
+  min-height: 28px;
+  padding-bottom: var(--pms-query-inset);
 }
 
 .pms-toolbar-left,
@@ -198,16 +211,16 @@ a {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--pms-query-gap);
 }
 
 .pms-filter-bar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 0 12px;
-  margin-bottom: 12px;
+  gap: var(--pms-query-gap);
+  padding: var(--pms-query-inset) 0;
+  margin-bottom: var(--pms-query-inset);
   border-top: 1px solid var(--pms-border-soft);
   border-bottom: 1px solid var(--pms-border-soft);
 }
@@ -405,6 +418,15 @@ a {
   font-size: var(--pms-font-size-sm);
 }
 
+:is(.pms-query-density, .pms-system-toolbar, .pms-section-header, .enum-detail-head) .el-button {
+  height: var(--pms-query-height);
+  min-height: var(--pms-query-height);
+  padding: 0 8px;
+  margin-left: 0;
+  border-radius: var(--pms-query-radius);
+  font-size: var(--pms-font-size-sm);
+}
+
 .el-button--primary {
   --el-button-bg-color: var(--pms-primary);
   --el-button-border-color: var(--pms-primary);
@@ -477,7 +499,7 @@ a {
 }
 
 .pms-dense-table.el-table th.el-table__cell {
-  height: 36px;
+  height: var(--pms-grid-header-height);
   padding: 0;
   color: var(--pms-text-secondary);
   background: var(--pms-surface-muted);
@@ -493,14 +515,14 @@ a {
 }
 
 .pms-dense-table.el-table td.el-table__cell {
-  height: 38px;
+  height: var(--pms-grid-row-height);
   padding: 0;
   color: var(--pms-text);
   font-size: var(--pms-font-size-base);
 }
 
 .pms-dense-table.el-table td.el-table__cell > .cell {
-  padding: 7px 10px;
+  padding: 3px 10px;
   line-height: 1.35;
 }
 
@@ -525,8 +547,8 @@ a {
 .wechat-table.ag-theme-alpine {
   --ag-font-family: var(--pms-font);
   --ag-font-size: 13px;
-  --ag-header-height: 36px;
-  --ag-row-height: 38px;
+  --ag-header-height: var(--pms-grid-header-height);
+  --ag-row-height: var(--pms-grid-row-height);
   --ag-border-color: var(--pms-border-soft);
   --ag-row-border-color: var(--pms-border-soft);
   --ag-header-background-color: var(--pms-surface-muted);
@@ -635,6 +657,13 @@ a {
   font-weight: 650;
 }
 
+.pms-ag-grid .ag-header-cell-label,
+.pms-ag-grid .ag-header-group-cell-label,
+.wechat-table .ag-header-cell-label,
+.wechat-table .ag-header-group-cell-label {
+  justify-content: center;
+}
+
 .pms-ag-grid .ag-cell,
 .wechat-table .ag-cell {
   display: flex;
@@ -734,7 +763,7 @@ a {
 
 @media (max-width: 900px) {
   .pms-page {
-    padding: 12px;
+    padding: var(--pms-panel-inset);
   }
 
   .pms-toolbar {

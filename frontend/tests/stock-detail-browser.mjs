@@ -252,7 +252,7 @@ try {
       buttonHeight: style('.pms-report-query-fields .el-button').height,
       buttonFont: style('.pms-report-query-fields .el-button').fontSize }
   })
-  assert.deepEqual(dimensions, { material: '220px', dates: '250px', organization: '140px', plans: '8px', planSelect: '180px', buttonHeight: '32px', buttonFont: '13px' })
+  assert.deepEqual(dimensions, { material: '180px', dates: '220px', organization: '112px', plans: '6px', planSelect: '144px', buttonHeight: '24px', buttonFont: '12px' })
   for (const width of [1600, 1366, 390]) {
     await page.setViewportSize({ width, height: 900 })
     await page.waitForTimeout(250)

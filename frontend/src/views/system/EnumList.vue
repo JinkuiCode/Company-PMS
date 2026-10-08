@@ -1,7 +1,7 @@
 <template>
   <div class="pms-page pms-system-page enum-page">
     <aside class="enum-master">
-      <div class="enum-master-head">
+      <div class="enum-master-head pms-query-density">
         <div>
           <strong>枚举管理</strong>
           <span>{{ filteredDicts.length }} 项</span>
@@ -327,8 +327,8 @@ onMounted(fetchDicts)
 
 .enum-master-head {
   display: grid;
-  gap: 10px;
-  padding: 14px 12px 12px;
+  gap: var(--pms-query-gap);
+  padding: var(--pms-panel-inset);
   border-bottom: 1px solid var(--pms-border);
 }
 
@@ -412,18 +412,18 @@ onMounted(fetchDicts)
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  padding: 14px;
+  padding: var(--pms-panel-inset);
   background: var(--pms-surface);
 }
 
 .enum-detail-head {
   flex-shrink: 0;
   display: flex;
-  min-height: 74px;
+  min-height: 0;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 12px;
+  gap: var(--pms-query-gap);
+  padding-bottom: var(--pms-query-inset);
 }
 
 .enum-title-line {

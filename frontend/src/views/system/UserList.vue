@@ -445,7 +445,7 @@ onMounted(() => {
 }
 
 .user-pagination {
-  padding: 0 12px 12px;
+  padding: 0 var(--pms-panel-inset) var(--pms-query-inset);
 }
 
 /* 右键菜单 */

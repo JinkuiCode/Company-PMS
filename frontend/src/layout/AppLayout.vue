@@ -1,7 +1,7 @@
 <template>
   <el-container class="app-layout app-shell">
     <!-- 左侧菜单 -->
-    <el-aside :width="isCollapse ? '64px' : '184px'" class="app-aside">
+    <el-aside :width="isCollapse ? '64px' : '184px'" class="app-aside" :class="{ 'is-expanded': !isCollapse }" id="pms-navigation">
       <div class="logo">
         <span class="logo-mark">P</span>
         <span v-if="!isCollapse" class="logo-text">PMS 管理系统</span>
@@ -43,9 +43,9 @@
     <el-container>
       <el-header class="app-header">
         <div class="header-left">
-          <el-icon class="collapse-btn" @click="isCollapse = !isCollapse" :size="22">
-            <Fold v-if="!isCollapse" /><Expand v-else />
-          </el-icon>
+          <el-button class="collapse-btn" text aria-label="展开或收起PMS菜单" title="展开或收起PMS菜单" aria-controls="pms-navigation" :aria-expanded="!isCollapse" @click="isCollapse = !isCollapse">
+            <el-icon :size="18"><Fold v-if="!isCollapse" /><Expand v-else /></el-icon>
+          </el-button>
           <span class="header-title">{{ route.meta.title || '项目管理' }}</span>
         </div>
         <div class="header-right">
@@ -73,7 +73,7 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const currentRoute = computed(() => route.path)
-const isCollapse = ref(false)
+const isCollapse = ref(true)
 const menuTree = ref<any[]>([])
 
 type MenuNode = {
@@ -136,6 +136,7 @@ onBeforeUnmount(() => window.removeEventListener('pms:permission-denied', refres
 
 <style scoped>
 .app-layout {
+  position: relative;
   height: 100vh;
   background: var(--pms-bg);
 }
@@ -144,12 +145,11 @@ onBeforeUnmount(() => window.removeEventListener('pms:permission-denied', refres
   background: var(--pms-surface);
   border-right: 1px solid var(--pms-border-soft);
   overflow-y: auto;
-  transition: width 180ms ease-out;
 }
 .app-aside::-webkit-scrollbar { width: 0; }
 
 .logo {
-  height: 56px;
+  height: var(--pms-header-height);
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -162,8 +162,8 @@ onBeforeUnmount(() => window.removeEventListener('pms:permission-denied', refres
 }
 
 .logo-mark {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -190,17 +190,23 @@ onBeforeUnmount(() => window.removeEventListener('pms:permission-denied', refres
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--pms-border-soft);
-  padding: 0 18px;
-  height: 56px;
+  padding: 0 10px;
+  height: var(--pms-header-height);
+  flex-shrink: 0;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .collapse-btn {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
   color: var(--pms-text-secondary);
   cursor: pointer;
 }
@@ -210,6 +216,9 @@ onBeforeUnmount(() => window.removeEventListener('pms:permission-denied', refres
   color: var(--pms-text);
   font-size: 15px;
   font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-right {
@@ -224,8 +233,16 @@ onBeforeUnmount(() => window.removeEventListener('pms:permission-denied', refres
 
 .app-main {
   background: var(--pms-bg);
-  padding: 16px;
+  padding: var(--pms-page-inset);
+  min-width: 0;
   overflow-y: auto;
+}
+
+.app-layout > :deep(.el-container) { min-width: 0; }
+.header-right :deep(.el-button) { height: 24px; min-height: 24px; padding: 0 8px; font-size: 12px; }
+@media (max-width: 700px) {
+  .app-aside.is-expanded { position: absolute; top: var(--pms-header-height); bottom: 0; left: 0; z-index: 60; box-shadow: var(--pms-shadow-sm); }
+  .user-name { display: none; }
 }
 
 .menu-icon {

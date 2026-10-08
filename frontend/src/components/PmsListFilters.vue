@@ -1,5 +1,6 @@
 <template>
-  <div class="pms-list-filter-section">
+  <div class="pms-list-filter-section pms-query-density">
+  <el-config-provider size="small">
     <div class="filter-bar pms-filter-bar pms-list-filter-bar">
       <slot />
       <el-button v-if="fields.length" size="small" plain @click="handleAddFilter">
@@ -133,6 +134,7 @@
         </el-button>
       </div>
     </div>
+  </el-config-provider>
   </div>
 </template>
 
@@ -253,7 +255,7 @@ function removeFilter(id: number) {
 
 <style scoped>
 .pms-list-filter-section {
-  margin-bottom: 12px;
+  margin-bottom: var(--pms-query-inset);
 }
 
 .pms-list-filter-section .pms-filter-bar {
@@ -269,8 +271,8 @@ function removeFilter(id: number) {
 .pms-list-custom-filters {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 0 12px;
+  gap: var(--pms-query-gap);
+  padding: var(--pms-query-inset) 0;
   border-bottom: 1px solid var(--pms-border-soft);
 }
 
@@ -278,8 +280,8 @@ function removeFilter(id: number) {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  min-height: 32px;
+  gap: var(--pms-query-gap);
+  min-height: var(--pms-query-height);
 }
 
 .pms-list-filter-control {

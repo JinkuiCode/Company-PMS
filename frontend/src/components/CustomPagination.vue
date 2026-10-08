@@ -58,19 +58,22 @@ const visiblePages = computed(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 14px;
-  margin-top: 14px;
+  padding-top: var(--pms-query-inset);
+  margin-top: var(--pms-query-inset);
+  min-height: 32px;
+  flex-wrap: wrap;
+  gap: 6px;
   border-top: 1px solid var(--pms-border-soft);
 }
 .pagination-left { display: flex; align-items: center; }
-.pagination-total { font-size: 13px; color: var(--pms-text-secondary); font-weight: 500; }
+.pagination-total { font-size: 12px; color: var(--pms-text-secondary); font-weight: 500; }
 .pagination-center { display: flex; align-items: center; gap: 4px; }
 .pagination-right { display: flex; align-items: center; }
 .page-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 30px; height: 30px; padding: 0 8px;
+  min-width: var(--pms-pagination-height); height: var(--pms-pagination-height); padding: 0 6px;
   border: 1px solid var(--pms-border); border-radius: var(--pms-radius-sm);
-  background: var(--pms-surface); color: var(--pms-text-secondary); font-size: 13px; font-weight: 500;
+  background: var(--pms-surface); color: var(--pms-text-secondary); font-size: 12px; font-weight: 500;
   cursor: pointer;
   transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
   line-height: 1;
@@ -81,9 +84,12 @@ const visiblePages = computed(() => {
 .page-btn.ellipsis { border: none; background: transparent; color: var(--pms-text-muted); cursor: default; min-width: 24px; }
 .page-btn.nav-btn { font-size: 16px; font-weight: 500; min-width: 28px; }
 .page-size-select {
-  height: 30px; padding: 0 28px 0 12px; border: 1px solid var(--pms-border); border-radius: var(--pms-radius-sm);
+  height: var(--pms-pagination-height); padding: 0 24px 0 8px; border: 1px solid var(--pms-border); border-radius: var(--pms-radius-sm);
   background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8.825L1.175 4 2.238 2.938 6 6.7l3.763-3.763L10.825 4z'/%3E%3C/svg%3E") no-repeat right 8px center;
-  color: var(--pms-text-secondary); font-size: 13px; cursor: pointer; outline: none; appearance: none;
+  color: var(--pms-text-secondary); font-size: 12px; cursor: pointer; appearance: none;
 }
 .page-size-select:hover { border-color: #cbd5e1; }
+@media (max-width: 600px) {
+  .pagination-center { order: 3; width: 100%; justify-content: center; }
+}
 </style>

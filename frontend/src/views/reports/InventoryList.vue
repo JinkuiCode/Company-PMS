@@ -197,7 +197,7 @@ onUnmounted(() => { invalidate(); ++stockRevision; grid = null })
       <div v-if="error" class="pms-list-load-error" role="alert">{{ error }}<span v-if="session.applied">，下方保留上次查询结果</span> <el-button size="small" @click="retry">重试</el-button></div>
       <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy"
         :row-data="rows" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS"
-        :locale-text="chineseLocaleText" :loading="loading" :pagination="false" :row-height="36" :suppress-multi-sort="true"
+        :locale-text="chineseLocaleText" :loading="loading" :pagination="false" :suppress-multi-sort="true"
         :overlay-no-rows-template="session.applied ? '<span>没有符合条件的数据</span>' : '<span>设置条件后，点击查询</span>'"
         :enable-cell-text-selection="true" @grid-ready="onGridReady" @column-resized="onColumnResized"
         @column-moved="savePreferences" @column-pinned="savePreferences" @sort-changed="onSortChanged"

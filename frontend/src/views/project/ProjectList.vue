@@ -1968,7 +1968,7 @@ onMounted(async () => {
 .project-progress-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--pms-query-gap);
   height: 100%;
   min-height: 0;
 }

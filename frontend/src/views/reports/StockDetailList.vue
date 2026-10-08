@@ -247,7 +247,7 @@ onUnmounted(() => { disposed = true; request.clear(); detailSwitch.invalidate();
     </template>
     <template #grid>
       <div v-if="initializationError || result.error" role="alert" class="pms-list-load-error">{{ initializationError || result.error }} <el-button size="small" :disabled="result.loading || initializing" @click="initializationError ? initialize() : retry()">重试</el-button></div>
-      <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy" :row-data="result.items" :pinned-top-row-data="result.openings" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS" :locale-text="chineseLocaleText" :loading="result.loading" :row-height="36" :pagination="false" :enable-cell-text-selection="true" :get-row-id="p => p.data.row_id" :get-row-class="p => p.data?.row_id === selected?.row_id ? 'pms-detail-row-active' : ''" @grid-ready="onGridReady" @row-clicked="onRowClicked" @column-resized="onColumnResized" @column-moved="persist" @column-pinned="persist" @grid-size-changed="listRef?.refreshScrollbar()" />
+      <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy" :row-data="result.items" :pinned-top-row-data="result.openings" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS" :locale-text="chineseLocaleText" :loading="result.loading" :pagination="false" :enable-cell-text-selection="true" :get-row-id="p => p.data.row_id" :get-row-class="p => p.data?.row_id === selected?.row_id ? 'pms-detail-row-active' : ''" @grid-ready="onGridReady" @row-clicked="onRowClicked" @column-resized="onColumnResized" @column-moved="persist" @column-pinned="persist" @grid-size-changed="listRef?.refreshScrollbar()" />
       <div v-else-if="initializing" class="stock-detail-loading" role="status">正在加载报表…</div>
     </template>
     <template #pagination><CustomPagination :key="paginationRevision" :model-value="page" :page-size="pageSize" :total="result.total" @update:model-value="value => paginate(value)" @update:page-size="value => paginate(1, value)" /></template>
@@ -265,7 +265,7 @@ onUnmounted(() => { disposed = true; request.clear(); detailSwitch.invalidate();
 <style scoped>
 .stock-detail-loading { padding: 24px; text-align: center; color: var(--pms-text-secondary); }
 .stock-detail-scope-note { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--pms-text-secondary); font-size: 12px; }
-.stock-detail-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 10px 0; color: var(--pms-text-secondary); font-size: 12px; }
+.stock-detail-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 4px 0; color: var(--pms-text-secondary); font-size: 12px; }
 .stock-detail-summary strong { margin-left: 8px; font-weight: 600; color: var(--pms-text); font-variant-numeric: tabular-nums; }
 .stock-detail-summary-material { margin-right: auto; color: var(--pms-text); }
 .stock-detail-summary-material span { margin-left: 8px; color: var(--pms-text-secondary); }

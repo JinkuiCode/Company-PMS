@@ -25,15 +25,15 @@ function save() {
 defineExpose({ clearSelection: () => { selected.value = '' } })
 </script>
 <template>
-  <div class="pms-report-plans">
+  <div class="pms-report-plans pms-query-density">
     <PmsSelectControl v-model="selected" :options="plans.map(p=>({value:p.name,label:p.name}))" size="compact" placeholder="当前查询" clearable :disabled="disabled" aria-label="查询方案" @update:model-value="restore" />
     <el-button size="small" :disabled="disabled" @click="name = selected; opened = true">保存查询方案</el-button>
     <PmsFormDrawer v-model="opened" title="保存查询方案"><PmsFormField field-id="report-plan-name" label="方案名称" required><PmsTextControl id="report-plan-name" v-model="name" :maxlength="60" aria-label="方案名称" /></PmsFormField><p class="pms-report-plan-hint">保存当前条件、显示列、顺序、冻结、列宽和每页条数。加载方案后点击查询生效。</p><template #footer><el-button @click="opened = false">取消</el-button><el-button type="primary" :disabled="!name.trim()" @click="save">保存</el-button></template></PmsFormDrawer>
   </div>
 </template>
 <style scoped>
-.pms-report-plans { display:flex; align-items:center; gap:8px; min-width:0; }
-.pms-report-plans>.pms-form-control { width:180px; min-width:0; }
+.pms-report-plans { display:flex; align-items:center; gap:var(--pms-query-gap); min-width:0; }
+.pms-report-plans>.pms-form-control { width:144px; min-width:0; }
 .pms-report-plan-hint { font-size:12px; line-height:1.8; color:var(--pms-text-muted); }
 @media(max-width:700px) { .pms-report-plans>.pms-form-control { width:140px; } }
 </style>

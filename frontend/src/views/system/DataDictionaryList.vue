@@ -78,8 +78,6 @@
         :default-col-def="defaultColDef"
         :locale-text="localeText"
         :theme="'legacy'"
-        :row-height="36"
-        :header-height="38"
         :pagination="false"
         :always-show-horizontal-scroll="true"
         :enable-cell-text-selection="true"
@@ -286,8 +284,9 @@ onMounted(fetchCatalog)
 .catalog-filters {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 10px;
+  gap: var(--pms-query-gap);
+  flex-wrap: wrap;
+  padding-bottom: var(--pms-query-inset);
 }
 
 .catalog-filter {

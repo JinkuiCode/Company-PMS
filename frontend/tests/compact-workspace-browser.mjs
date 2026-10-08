@@ -1,0 +1,146 @@
+import { chromium, expect } from '@playwright/test'
+import assert from 'node:assert/strict'
+import { resolve } from 'node:path'
+
+const base = 'http://127.0.0.1:5174'
+const statuses = { not_ordered: '未下单', ordering: '部分下单', receiving: '待入库', complete: '已完成', review: '数据待核对' }
+const field = (key, label, group, value_type = 'text') => ({ key, label, group, value_type })
+const fields = [field('project_code', '项目编号', '物料信息'), field('material_name', '物料名称', '物料信息'), field('product_line_name', '产品线', '采购申请'), field('bill_no', '申请单编号', '采购申请'), field('requested', '申请数量', '采购申请', 'number'), field('progress', '采购进度', '进度')]
+const metadata = { fields, organizations: [{ value: 11, label: '8吋Bench' }, { value: 22, label: 'Single' }], progress_labels: statuses, document_status_labels: { C: '已审核' }, filter_fields: [{ field: 'material_name', label: '物料名称', type: 'text' }, { field: 'progress', label: '采购进度', type: 'enum', options: Object.entries(statuses).map(([value, label]) => ({ value, label })) }] }
+const rows = Array.from({ length: 50 }, (_, i) => ({ id: i + 1, project_code: 'A-202638', material_name: `测试物料${i + 1}`, product_line_name: '8吋Bench', bill_no: 'CGSQ001', requested: 50, progress: 'ordering', progress_label: '部分下单' }))
+const browser = await chromium.launch({ channel: 'msedge', headless: true })
+try {
+  const page = await browser.newPage({ viewport: { width: 1366, height: 900 } })
+  const requests = [], errors = [], writes = []
+  let failed = false, exportBody
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => localStorage.setItem('access_token', 'isolated-compact-fixture'))
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url()), path = url.pathname
+    if (!path.startsWith('/api/')) return route.continue()
+    if (route.request().method() !== 'GET') writes.push(path)
+    if (path === '/api/auth/me') return route.fulfill({ json: { id: 990, username: 'fixture', real_name: '界面测试', permissions: ['report:purchase:view', 'report:purchase:export', 'system:user:view', 'system:user:add'] } })
+    if (path === '/api/my-menus') return route.fulfill({ json: [{ id: 1, menu_name: '报表中心', icon: 'Document', children: [{ id: 2, menu_name: '采购进度查询', path: '/reports/purchase-progress' }] }, { id: 3, menu_name: '系统管理', icon: 'Setting', children: [{ id: 4, menu_name: '用户管理', path: '/system/user' }] }] })
+    if (path === '/api/reports/purchase/metadata') return route.fulfill({ json: metadata })
+    if (path === '/api/reports/purchase') {
+      requests.push(Object.fromEntries(url.searchParams))
+      return route.fulfill(failed ? { status: 503, json: { detail: '模拟故障' } } : { json: { items: rows, total: 1000, queried_at: '2026-10-08T00:00:00Z' } })
+    }
+    if (path === '/api/report-exports') {
+      if (route.request().method() === 'POST') { exportBody = route.request().postDataJSON(); return route.fulfill({ json: { id: 'mock', status: 'pending', processed: 0, created_at: '2026-10-08T00:00:00Z' } }) }
+      return route.fulfill({ json: [] })
+    }
+    if (path === '/api/users') return route.fulfill({ json: { items: rows.map(r => ({ id: r.id, username: `A${r.id}`, real_name: '测试人员', email: 'test@example.com', status: 1 })), total: 1000 } })
+    if (path === '/api/depts/tree') return route.fulfill({ json: [] })
+    if (path === '/api/roles' || path === '/api/roles/options') return route.fulfill({ json: [] })
+    if (path === '/api/parameters/initial-password') return route.fulfill({ json: { configured: true } })
+    throw Error(`Unexpected API: ${path}`)
+  })
+  await page.goto(`${base}/reports/purchase-progress`)
+  await expect(page.getByRole('button', { name: '查询', exact: true })).toBeEnabled()
+  await expect(page.locator('.pms-data-list')).toHaveClass(/purchase-page.*pms-report-query-surface/)
+  assert.equal(requests.length, 0)
+  assert.equal(await page.locator('.app-header').evaluate(e => e.getBoundingClientRect().height), 44, 'PMS header matches approved compact mockup')
+  await expect(page.locator('.app-aside')).toBeVisible()
+  assert.equal(await page.locator('.app-aside').evaluate(e => e.getBoundingClientRect().width), 64)
+  await expect(page.locator('.app-menu')).toHaveClass(/el-menu--collapse/)
+  const reportIcon = page.locator('.app-menu > .el-sub-menu').first().locator('.el-sub-menu__title')
+  await expect(reportIcon.locator('.menu-icon')).toBeVisible()
+  await reportIcon.hover()
+  await expect(page.locator('.el-menu--popup:visible').getByRole('menuitem', { name: '采购进度查询' })).toBeVisible()
+  await page.mouse.move(600, 400)
+  await expect(page.locator('.el-menu--popup:visible')).toHaveCount(0)
+  const menu = page.getByRole('button', { name: '展开或收起PMS菜单' })
+  await expect(menu).toHaveAttribute('aria-expanded', 'false')
+  await menu.focus(); await page.keyboard.press('Enter')
+  await expect(page.locator('.app-aside')).toBeVisible()
+  assert.equal(await page.locator('.app-aside').evaluate(e => e.getBoundingClientRect().width), 184)
+  await menu.click()
+  assert.equal(await page.locator('.app-aside').evaluate(e => e.getBoundingClientRect().width), 64)
+  await expect(page.locator('.app-menu')).toHaveClass(/el-menu--collapse/)
+  const shortcuts = page.getByRole('group', { name: '采购进度快捷筛选' })
+  const search = page.getByRole('textbox', { name: '搜索采购明细' })
+  await search.fill('A-202638')
+  for (const [value, label] of Object.entries(statuses)) {
+    await shortcuts.getByRole('button', { name: label, exact: true }).click()
+    await expect.poll(() => JSON.parse(requests.at(-1).filters).find(c => c.field === 'progress')?.value).toBe(value)
+    assert.equal(requests.at(-1).page, '1')
+    assert.equal(requests.at(-1).keyword, 'A-202638')
+    await expect(shortcuts.getByRole('button', { name: label, exact: true })).toHaveAttribute('aria-pressed', 'true')
+  }
+  await page.getByRole('button', { name: /^添加条件/ }).click()
+  await page.getByRole('combobox', { name: '条件1运算符' }).locator('xpath=ancestor::div[contains(@class,"el-select__wrapper")]').click()
+  await page.getByRole('option', { name: '不等于', exact: true }).click()
+  await page.getByRole('combobox', { name: '条件1值', exact: true }).locator('xpath=ancestor::div[contains(@class,"el-select__wrapper")]').click()
+  await page.getByRole('option', { name: '数据待核对', exact: true }).click()
+  await page.getByRole('button', { name: '应用条件', exact: true }).click()
+  await expect(shortcuts.getByText('自定义', { exact: true })).toBeVisible()
+  await shortcuts.getByRole('button', { name: '全部', exact: true }).click()
+  await expect.poll(() => JSON.parse(requests.at(-1).filters).length).toBe(0)
+  await shortcuts.getByRole('button', { name: '部分下单', exact: true }).click()
+  await page.getByRole('button', { name: '保存查询方案', exact: true }).click()
+  const drawer = page.locator('.pms-form-drawer:visible')
+  await expect(drawer).toBeVisible()
+  assert.equal(Math.round((await drawer.boundingBox()).width), 460)
+  assert.equal(Math.round((await drawer.locator('.pms-form-control').boundingBox()).height), 32)
+  await page.getByRole('textbox', { name: '方案名称', exact: true }).fill('部分下单方案')
+  await drawer.getByRole('button', { name: '保存', exact: true }).click()
+  await shortcuts.getByRole('button', { name: '全部', exact: true }).click()
+  const beforeRestore = requests.length
+  await page.getByRole('combobox', { name: '查询方案', exact: true }).locator('xpath=ancestor::div[contains(@class,"el-select__wrapper")]').click()
+  await page.getByRole('option', { name: '当前查询', exact: true }).click()
+  await page.getByRole('combobox', { name: '查询方案', exact: true }).locator('xpath=ancestor::div[contains(@class,"el-select__wrapper")]').click()
+  await page.getByRole('option', { name: '部分下单方案', exact: true }).click()
+  await expect(shortcuts.getByRole('button', { name: '部分下单', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  assert.equal(requests.length, beforeRestore, 'restoring a plan must not query')
+  await page.getByRole('button', { name: '2', exact: true }).click()
+  await expect.poll(() => requests.at(-1).page).toBe('2')
+  assert.equal(JSON.parse(requests.at(-1).filters).length, 0, 'pagination uses the last successful query')
+  await page.getByRole('button', { name: '导出当前筛选', exact: true }).click()
+  await page.getByRole('button', { name: '继续导出', exact: true }).click()
+  await expect.poll(() => !!exportBody).toBe(true)
+  assert.equal(JSON.parse(exportBody.parameters.filters).length, 0)
+  failed = true
+  await shortcuts.getByRole('button', { name: '已完成', exact: true }).click()
+  await expect(page.getByRole('alert').filter({ hasText: '采购数据加载失败' })).toBeVisible()
+  await expect(page.locator('.ag-row').first()).toBeVisible()
+  failed = false
+  await page.getByRole('button', { name: '重试', exact: true }).click()
+  await expect(page.locator('.pms-list-load-error')).toHaveCount(0)
+  const productLine = page.locator('.el-select__wrapper').filter({ has: page.getByRole('combobox', { name: '产品线', exact: true }) })
+  await productLine.click(); await page.getByRole('option', { name: '8吋Bench', exact: true }).click(); await page.keyboard.press('Escape')
+  const tag = await productLine.locator('.el-tag').first().boundingBox(), shell = await productLine.locator('..').boundingBox()
+  assert.ok(tag.y >= shell.y && tag.y + tag.height <= shell.y + shell.height, 'multi-select tags fit within 24px controls')
+  await page.mouse.move(0, 0)
+  await expect(page.locator('.el-select-dropdown:visible')).toHaveCount(0)
+  await expect(page.locator('.el-message')).toHaveCount(0, { timeout: 10000 })
+  for (const width of [1366, 1920, 1182, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.evaluate(() => document.fonts.ready)
+    const sizes = await page.locator('.pms-data-list-toolbar .el-button:visible, .pms-data-list-toolbar .pms-form-control:visible, .pms-report-query-fields .el-button:visible, .pms-report-query-fields .pms-form-control:visible').evaluateAll(els => els.map(el => Math.round(el.getBoundingClientRect().height)))
+    assert.ok(sizes.length > 8 && sizes.every(size => size === 24), JSON.stringify({ width, sizes }))
+    if (width >= 1366) {
+      const tops = await page.locator('.pms-report-query-fields > *:visible').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().top)))
+      assert.equal(new Set(tops).size, 1, 'Desktop query fields stay on one row with aligned controls')
+    }
+    assert.equal(await page.locator('.ag-center-cols-container .ag-row').first().evaluate(e => e.getBoundingClientRect().height), 32)
+    assert.equal(await page.locator('.ag-header-row-column').first().evaluate(e => e.getBoundingClientRect().height), 30)
+    assert.equal(await page.locator('.ag-header-group-cell').first().evaluate(e => e.getBoundingClientRect().height), 26)
+    assert.ok(await page.locator('.ag-header-cell-label').evaluateAll(els => els.every(e => getComputedStyle(e).justifyContent === 'center')), 'All column headers are centered')
+    assert.equal(await page.locator('.ag-header-group-cell-label').first().evaluate(e => getComputedStyle(e).justifyContent), 'center')
+    await expect(page.locator('.ag-cell').first()).toHaveCSS('font-size', '13px')
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `No page overflow at ${width}`)
+    await page.screenshot({ path: resolve(import.meta.dirname, `../../.runtime/compact-formal-purchase-${width}.png`) })
+  }
+  await page.setViewportSize({ width: 1366, height: 900 })
+  await page.locator('.app-menu > .el-sub-menu').nth(1).locator('.el-sub-menu__title').hover()
+  await page.locator('.el-menu--popup:visible').getByRole('menuitem', { name: '用户管理' }).click()
+  await expect(page).toHaveURL(`${base}/system/user`)
+  await expect(page.getByRole('button', { name: '新增用户', exact: true })).toBeVisible()
+  assert.equal(await page.locator('.el-table th').first().evaluate(e => getComputedStyle(e).textAlign), 'center')
+  assert.equal(await page.locator('.el-table tbody tr').first().evaluate(e => e.getBoundingClientRect().height), 32)
+  assert.equal(await page.locator('.page-btn').first().evaluate(e => e.getBoundingClientRect().height), 26)
+  assert.deepEqual(writes, ['/api/report-exports'])
+  assert.deepEqual(errors, [])
+  console.log('PASS: formal compact workspace, canonical quick filters, plans, snapshot paging/export, failure retry, desktop/mobile and system table')
+} finally { await browser.close() }

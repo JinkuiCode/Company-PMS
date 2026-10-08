@@ -8,6 +8,9 @@ export const PMS_ACTION_COLUMN = {
   resizable: false,
 }
 export const PMS_GRID_OPTIONS: GridOptions = {
+  rowHeight: 32,
+  headerHeight: 30,
+  groupHeaderHeight: 26,
   tooltipShowDelay: 200,
   tooltipHideDelay: 10000,
   tooltipInteraction: true,

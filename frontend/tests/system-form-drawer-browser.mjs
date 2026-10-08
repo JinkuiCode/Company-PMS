@@ -35,9 +35,9 @@ try {
   async function checkLayout(name) {
     await expect(drawer).toBeVisible()
     await expect(drawer.getByRole('heading', { name, exact: true })).toBeVisible()
-    await expect.poll(() => drawer.evaluate(el => Math.round(el.getBoundingClientRect().right))).toBe(page.viewportSize().width - 16)
+    await expect.poll(() => drawer.evaluate(el => Math.round(el.getBoundingClientRect().right))).toBe(page.viewportSize().width - 6)
     const geometry = await drawer.evaluate(el => ({ width: el.getBoundingClientRect().width, bottom: el.querySelector('.el-drawer__footer').getBoundingClientRect().bottom, viewport: innerHeight }))
-    assert.equal(Math.round(geometry.width), 492)
+    assert.equal(Math.round(geometry.width), 460)
     assert.ok(geometry.bottom <= geometry.viewport)
   }
   await page.goto('http://127.0.0.1:5174/system/user')

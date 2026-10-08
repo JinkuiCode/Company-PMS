@@ -11,8 +11,11 @@ const columnPicker = read('src/components/PmsListColumnPicker.vue')
 assert.match(
   layout,
   /:width="isCollapse \? '64px' : '184px'"/,
-  'Expanded navigation should use the approved 184px width',
+  'Collapsed navigation keeps the original 64px icon rail and expands to 184px',
 )
+assert.doesNotMatch(layout, /<el-aside[^>]*v-if=/, 'Collapsing must not remove menu icons or hover submenus')
+assert.match(layout, /isCollapse = ref\(true\)/, 'Navigation starts collapsed after login')
+assert.match(layout, /:aria-expanded="!isCollapse"/, 'Menu toggle exposes its expanded state')
 assert.match(
   layout,
   /class="submenu-guide"/,

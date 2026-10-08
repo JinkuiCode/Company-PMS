@@ -1,10 +1,11 @@
 <template>
   <div class="pms-data-list" :class="{ 'pms-page': surface }">
+  <el-config-provider size="small">
     <div v-if="$slots.header" class="pms-data-list-header">
       <slot name="header" />
     </div>
 
-    <div v-if="$slots['toolbar-left'] || $slots['toolbar-right']" class="toolbar pms-toolbar pms-data-list-toolbar">
+    <div v-if="$slots['toolbar-left'] || $slots['toolbar-right']" class="toolbar pms-toolbar pms-data-list-toolbar pms-query-density">
       <div class="toolbar-left pms-toolbar-left">
         <slot name="toolbar-left" />
       </div>
@@ -13,7 +14,7 @@
       </div>
     </div>
 
-    <slot name="filters" />
+    <div v-if="$slots.filters" class="pms-data-list-filters pms-query-density"><slot name="filters" /></div>
 
     <div v-if="$slots.grid" class="pms-data-list-grid-shell" :class="gridShellClass">
       <slot name="grid" />
@@ -25,6 +26,7 @@
     </div>
 
     <slot />
+  </el-config-provider>
   </div>
 </template>
 
@@ -67,11 +69,11 @@ defineExpose({ refreshScrollbar })
 }
 
 .pms-data-list-header {
-  padding-bottom: 12px;
+  padding-bottom: var(--pms-query-inset);
 }
 
 .pms-data-list-toolbar {
-  padding-bottom: 12px;
+  padding-bottom: var(--pms-query-inset);
 }
 
 .pms-data-list-grid-shell {
@@ -126,11 +128,11 @@ defineExpose({ refreshScrollbar })
 }
 
 .pms-data-list-pagination {
-  margin-top: 6px;
+  margin-top: var(--pms-query-inset);
 }
 
 .pms-data-list-pagination :deep(.custom-pagination) {
   margin-top: 0;
-  padding-top: 8px;
+  padding-top: var(--pms-query-inset);
 }
 </style>

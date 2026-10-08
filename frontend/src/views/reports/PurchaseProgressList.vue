@@ -18,6 +18,7 @@ import { useAuthStore } from '@/stores/auth'
 import { getPurchaseMetadata, getPurchaseOptions, getPurchaseRows, getPurchaseDetail, type PurchaseField, type PurchaseRow, type PurchaseDocument, type PurchaseMetadata, type PurchaseDetail } from '@/api/purchaseReport'
 import ReportExportControl from '@/components/ReportExportControl.vue'
 import { createPurchaseDetailState, type PurchaseDetailState } from './purchaseDetailState'
+import { selectedPurchaseProgress, withPurchaseProgress, restorePurchaseProgress } from './purchaseQuickFilter'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 const auth = useAuthStore()
@@ -25,6 +26,14 @@ const filters = reactive({ keyword: '', project_code: '', supplier: '', progress
 const conditions = ref<ReportCondition[]>([])
 const filterFields = computed(() => metadata.value?.filter_fields || [])
 const invalid = computed(() => validateConditions(conditions.value, filterFields.value))
+const progressOptions = computed(() => Object.entries(metadata.value?.progress_labels || {}).map(([value, label]) => ({ value, label })))
+const selectedProgress = computed(() => selectedPurchaseProgress(conditions.value, progressOptions.value.map(option => option.value)))
+function chooseProgress(value: string) {
+  if (!metadata.value || loading.value) return
+  conditions.value = withPurchaseProgress(conditions.value, value)
+  filters.progress = ''
+  void fetchRows(true)
+}
 const dates = ref<string[]>([]), page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), total = ref(0)
 const rows = ref<PurchaseRow[]>([]), metadata = ref<PurchaseMetadata | null>(null)
 const loading = ref(false), error = ref(''), stamp = ref('')
@@ -99,8 +108,7 @@ async function savePlan() {
 async function loadPlan(value: unknown) {
   const plan = plans.value.find(item => item.name === value)
   if (!plan) return
-  const restoredConditions = cloneQuery(plan.conditions || [])
-  if (plan.filters.progress) restoredConditions.push({ id: Date.now(), field: 'progress', operator: 'equals', value: plan.filters.progress, valueEnd: null })
+  const restoredConditions = restorePurchaseProgress(cloneQuery(plan.conditions || []), plan.filters.progress)
   const problem = validateConditions(restoredConditions,filterFields.value)
   if (problem) { ElMessage.warning(problem); return }
   invalidate()
@@ -234,12 +242,17 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
         <div class="query-dates"><PmsDateControl v-model="dates" type="daterange" size="compact" value-format="YYYY-MM-DD" start-placeholder="申请开始日期" end-placeholder="申请结束日期" aria-label="申请日期范围" /></div>
         <PmsSelectControl v-model="filters.supplier" :options="candidates.supplier" :loading="optionLoading.supplier" remote filterable :remote-method="(value: string) => findOptions('supplier', value)" size="compact" clearable placeholder="全部供应商" aria-label="供应商筛选" @visible-change="(open: boolean) => open && findOptions('supplier')" />
       </PmsReportQueryBar>
+      <div class="purchase-shortcuts" role="group" aria-label="采购进度快捷筛选">
+        <button type="button" :aria-pressed="selectedProgress === ''" :disabled="loading || !metadata" @click="chooseProgress('')">全部</button>
+        <button v-for="option in progressOptions" :key="option.value" type="button" :aria-pressed="selectedProgress === option.value" :disabled="loading || !metadata" @click="chooseProgress(option.value)">{{ option.label }}</button>
+        <span v-if="selectedProgress === 'custom'" class="purchase-custom-progress">自定义</span>
+      </div>
     </template>
     <template #grid>
       <div v-if="error" class="pms-list-load-error" role="alert">{{ error }}<span v-if="applied">，下方保留上次查询结果</span> <el-button size="small" @click="retry">重试</el-button></div>
       <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy"
         :row-data="rows" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS"
-        :locale-text="chineseLocaleText" :loading="loading" :pagination="false" :row-height="36"
+        :locale-text="chineseLocaleText" :loading="loading" :pagination="false"
         :overlay-no-rows-template="applied ? '<span>没有符合条件的数据</span>' : '<span>设置条件后，点击查询</span>'"
         :get-row-id="params => String(params.data.id)" :get-row-class="params => String(params.data.id) === detailState.requestId ? 'purchase-selected-row' : ''"
         :enable-cell-text-selection="true" @grid-ready="onGridReady" @cell-focused="onCellFocus"
@@ -290,12 +303,15 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
 .purchase-filter--search { width: 250px; }
 .purchase-filter--dates { width: 280px; }
 .purchase-stamp { color: var(--pms-text-muted); font-size: 11px; }
-.purchase-tabs { display: flex; gap: 20px; flex-wrap: wrap; border-bottom: 1px solid var(--pms-border-soft); margin-bottom: 12px; }
-.purchase-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 10px 0; color: var(--pms-text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
-.purchase-tabs button.selected { color: var(--pms-primary); border-color: var(--pms-primary); }
+.purchase-shortcuts { display: flex; align-items: center; gap: 16px; min-height: 26px; margin-bottom: 2px; overflow-x: auto; border-bottom: 1px solid var(--pms-border-soft); }
+.purchase-shortcuts button { flex: 0 0 auto; height: 24px; border: 0; border-bottom: 2px solid transparent; padding: 0; background: transparent; color: var(--pms-text-secondary); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.purchase-shortcuts button[aria-pressed="true"] { color: var(--pms-primary); border-bottom-color: var(--pms-primary); }
+.purchase-shortcuts button:disabled { cursor: not-allowed; opacity: 0.5; }
+.purchase-shortcuts button:focus-visible { outline-offset: -2px; }
+.purchase-custom-progress { flex: 0 0 auto; font-size: 12px; color: var(--pms-text-secondary); }
 .purchase-scope-note { align-self: center; margin-left: auto; font-size: 11px; color: var(--pms-text-muted); }
 .purchase-loading, .purchase-empty { text-align: center; padding: 28px; color: var(--pms-text-secondary); }
-.purchase-trace { position: fixed; right: 16px; top: 76px; bottom: 16px; width: 760px; max-width: calc(100vw - 32px); background: var(--pms-surface); border: 1px solid var(--pms-border); border-radius: 8px; box-shadow: -4px 0 18px rgb(16 24 40 / 4%); z-index: 50; display: flex; flex-direction: column; font-family: var(--pms-font); }
+.purchase-trace { position: fixed; right: var(--pms-page-inset); top: calc(var(--pms-header-height) + var(--pms-page-inset)); bottom: var(--pms-page-inset); width: 760px; max-width: calc(100vw - 12px); background: var(--pms-surface); border: 1px solid var(--pms-border); border-radius: 8px; box-shadow: -4px 0 18px rgb(16 24 40 / 4%); z-index: 50; display: flex; flex-direction: column; font-family: var(--pms-font); }
 .purchase-trace-header { padding: 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--pms-border-soft); }
 .purchase-trace-header h2 { font-size: 17px; margin: 5px 0; overflow-wrap: anywhere; }
 .purchase-trace-header span, .purchase-trace-header p { font-size: 12px; color: var(--pms-text-secondary); margin: 0; }
@@ -308,8 +324,8 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
 .purchase-detail-scroll { overflow-x: auto; border: 1px solid var(--pms-border-soft); border-radius: 6px; }
 .purchase-detail-table { width: 100%; min-width: 700px; border-collapse: collapse; white-space: nowrap; font-size: 12px; font-variant-numeric: tabular-nums; }
 .purchase-detail-table th, .purchase-detail-table td { padding: 10px 8px; border-bottom: 1px solid var(--pms-border-soft); text-align: left; }
-.purchase-detail-table th { background: var(--pms-bg-soft); color: var(--pms-text-secondary); font-size: 11px; font-weight: 500; }
-.purchase-detail-table .purchase-number { text-align: right; }
+.purchase-detail-table th { background: var(--pms-bg-soft); color: var(--pms-text-secondary); font-size: 11px; font-weight: 500; text-align: center; }
+.purchase-detail-table td.purchase-number { text-align: right; }
 .purchase-detail-table tr.picked { background: var(--pms-primary-soft); }
 .purchase-detail-table tbody tr:hover { background: var(--pms-bg-soft); }
 .purchase-order-link { background: none; border: 0; padding: 0; color: var(--pms-primary); font: inherit; cursor: pointer; }
@@ -322,6 +338,5 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
   .purchase-page { overflow: auto; }
   .purchase-page :deep(.pms-data-list-grid-shell) { flex: none; min-height: 300px; overflow-x: auto; }
   .purchase-page :deep(.pms-ag-grid) { flex: none; width: 700px; min-width: 700px; height: 280px; }
-  .purchase-page :deep(.pms-data-list-pagination) { min-width: 700px; }
 }
 </style>

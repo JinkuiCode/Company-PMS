@@ -30,7 +30,7 @@ await page.route('**/api/**', async route => {
   throw Error(`Unexpected request ${path}`)
 })
 try {
-  await page.goto('http://127.0.0.1:5191/reports/inventory')
+  await page.goto('http://127.0.0.1:5174/reports/inventory')
   await expect(page.getByText('尚未查询', {exact:true})).toBeVisible()
   assert.equal(calls,0)
   await expect(page.getByRole('button',{name:'导出当前筛选',exact:true})).toBeDisabled()

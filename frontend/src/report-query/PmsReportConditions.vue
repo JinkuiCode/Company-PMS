@@ -20,7 +20,7 @@ function apply() { error.value = validateConditions(draft.value, props.fields); 
 <template>
   <el-popover v-model:visible="opened" trigger="click" placement="bottom-end" :width="730" popper-class="pms-report-condition-popper">
     <template #reference><el-button size="small" :icon="Filter" :disabled="disabled" @click="open">{{ triggerLabel }}{{ modelValue.length ? ` (${modelValue.length})` : '' }}</el-button></template>
-    <section ref="popupHost" class="pms-report-conditions" role="dialog" aria-label="更多条件">
+    <section ref="popupHost" class="pms-report-conditions pms-query-density" role="dialog" aria-label="更多条件">
       <header><strong>筛选条件</strong><span>同时满足全部条件</span></header>
       <div class="pms-report-condition-labels"><span>字段</span><span>运算符</span><span>值</span></div>
       <div class="pms-report-condition-rows">
