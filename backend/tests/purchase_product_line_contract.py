@@ -8,6 +8,20 @@ from app.services.business_data_scope import ALL_DATA_SCOPE
 
 
 class ProductLineReader(unittest.TestCase):
+    def test_project_candidates_follow_selected_organizations_and_exact_validation(self):
+        fixture = fixtures.ReaderContract()
+        self.addCleanup(fixture.doCleanups)
+        db, connection = fixture.classification_fixture()
+        db.execute("INSERT INTO T_BAS_ASSISTANTDATAENTRY(FENTRYID,FNUMBER) VALUES ('other','P-2')")
+        db.execute('UPDATE T_PUR_REQUISITION SET FAPPLICATIONORGID=200 WHERE FID IN (1,2)')
+        db.execute("UPDATE T_PUR_REQENTRY SET F_TWBJ_ASSISTANT_83G='other' WHERE FENTRYID=2")
+        selected = reader.PurchaseQuery(organization_ids=[100])
+        self.assertEqual(reader.list_options(connection,'project','P-',ALL_DATA_SCOPE,query=selected)['items'],[{'value':'P-1','label':'P-1'}])
+        selected = reader.PurchaseQuery(organization_ids=[200])
+        self.assertEqual([r['value'] for r in reader.list_options(connection,'project','P-',ALL_DATA_SCOPE,query=selected)['items']],['P-1','P-2'])
+        self.assertEqual(reader.list_options(connection,'project','',[reader.OrganizationGrant(100)],query=selected)['items'],[])
+        self.assertEqual(reader.list_options(connection,'project','',ALL_DATA_SCOPE,query=reader.PurchaseQuery(organization_ids=[100],project_code='P-2'))['items'],[])
+
     def test_selected_organization_intersects_authorization_and_exports(self):
         fixture = fixtures.ReaderContract()
         self.addCleanup(fixture.doCleanups)
@@ -34,6 +48,31 @@ class ProductLineReader(unittest.TestCase):
 
 
 class ProductLineApi(unittest.TestCase):
+    def test_disabled_lines_are_not_selectable_and_http_candidates_keep_scope(self):
+        from contextlib import nullcontext
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.core.database import get_db
+        from app.services.authorization import get_current_user_context
+        from app.models.product_line import SysProductLine
+        api = self.api()
+        line = self.line()
+        disabled=SysProductLine(source_key='kingdee',organization_id=200,organization_code='200',organization_name='旧组织',display_name='停用产品线',name_key='disabled',is_enabled=0)
+        hidden=SysProductLine(source_key='kingdee',organization_id=300,organization_code='300',organization_name='其他组织',display_name='其他产品线',name_key='other',is_enabled=1)
+        self.db.add_all([disabled,hidden]); self.db.flush()
+        ctx={'permissions':['report:purchase:view'],'product_line_ids':[line.id,disabled.id]}
+        self.assertEqual(api.metadata(self.db,ctx)['organizations'],[{'value':100,'label':'100'}])
+        app=FastAPI(); app.include_router(api.router)
+        app.dependency_overrides[get_db]=lambda:self.db
+        app.dependency_overrides[get_current_user_context]=lambda:ctx
+        with TestClient(app) as client, patch.object(api,'purchase_connection',return_value=nullcontext(object())), patch.object(api,'list_options',return_value={'items':[],'has_more':False}) as read:
+            response=client.get('/api/reports/purchase/options?field=project&keyword=P-&organization_ids=100&project_code=P-1')
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertEqual(read.call_args.kwargs['query'].organization_ids,[100])
+            self.assertEqual(read.call_args.kwargs['query'].project_code,'P-1')
+            self.assertEqual([g.organization_id for g in read.call_args.args[3]],[100,200])
+            self.assertEqual(client.get('/api/reports/purchase/options?field=project&organization_ids=-1').status_code,422)
+
     def setUp(self):
         self.fixture = api_fixtures.ReportApiContract()
         self.fixture.setUp()
@@ -56,8 +95,8 @@ class ProductLineApi(unittest.TestCase):
         self.assertEqual(api.metadata(db=self.db, ctx={'product_line_ids': []})['organizations'], [])
         self.assertTrue(any(f['key'] == 'product_line_name' for f in result['fields']))
         fields = {field['key']: field for field in result['fields']}
-        self.assertEqual(fields['product_line_name']['group'], '采购申请')
-        self.assertEqual(fields['product_line_name']['group'], fields['bill_no']['group'])
+        self.assertEqual(fields['product_line_name']['group'], '项目信息')
+        self.assertEqual(fields['product_line_name']['group'], fields['project_code']['group'])
 
     def test_names_follow_requisition_org_and_preserve_unconfigured_data(self):
         api = self.api()

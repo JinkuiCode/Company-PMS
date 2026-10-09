@@ -20,6 +20,7 @@ class PurchaseQuery(BaseModel):
     filters: str = Field(default='[]', max_length=12000)
     keyword: str = Field(default='', max_length=100)
     project_code: str = Field(default='', max_length=100)
+    project_code_is_empty: bool = False
     supplier: str = Field(default='', max_length=100)
     date_from: date | None = None
     date_to: date | None = None
@@ -32,12 +33,20 @@ class PurchaseQuery(BaseModel):
     @model_validator(mode='after')
     def date_range(self):
         self.conditions()
+        if self.project_code and self.project_code_is_empty:
+            raise ValueError('项目编码与空项目限定不能同时使用')
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError('开始日期不能晚于结束日期')
         return self
 
     def conditions(self):
         return parse_filters(self.filters, 'purchase')
+
+
+class PurchaseOverviewQuery(PurchaseQuery):
+    overview_status: Literal['', 'unfinished', 'complete', 'review'] = ''
+    sort: Literal['project_code', 'completion_rate', 'total_lines'] = 'project_code'
+    direction: Literal['asc', 'desc'] = 'asc'
 
 
 def effective_state(status, cancelled):
@@ -476,6 +485,8 @@ def request_query(query, project_codes):
     if query.project_code:
         filters.append('a.FNUMBER=%s')
         params.append(query.project_code)
+    if query.project_code_is_empty:
+        filters.append("(a.FNUMBER IS NULL OR a.FNUMBER='')")
     if query.date_from:
         filters.append('h.FAPPLICATIONDATE >= %s')
         params.append(query.date_from)
@@ -509,7 +520,7 @@ def list_requests(connection, query, project_codes):
 
 
 @contextmanager
-def purchase_selection(connection, query, project_codes):
+def purchase_selection(connection, query, project_codes, *, accounting=False):
     """Share pre-pagination membership and full accounting with export snapshots."""
     import re
     import time
@@ -518,7 +529,7 @@ def purchase_selection(connection, query, project_codes):
     conditions = [condition for condition in query.conditions() if condition.field == 'progress']
     if query.progress:
         conditions.append(Condition('progress', 'equals', 'enum', query.progress))
-    if not conditions:
+    if not conditions and not accounting:
         yield base, params
         return
     deadline = time.monotonic() + 25
@@ -537,13 +548,37 @@ def purchase_selection(connection, query, project_codes):
                            tuple(params) if name == 'q' else ())
             created.append(name)
         where, params = sql_conditions(conditions)
-        yield 'SELECT * FROM #pms_purchase_report AS filter_source WHERE ' + where, params
+        yield 'SELECT * FROM #pms_purchase_report AS filter_source' + (' WHERE ' + where if where else ''), params
     finally:
         try:
             for name in reversed(created):
                 cursor.execute(f'DROP TABLE #pms_purchase_{name}', ())
         finally:
             cursor.close()
+
+
+def list_overview(connection, query, project_codes):
+    """Aggregate authorized lines in SQL before paging project/organization pairs."""
+    import json
+    with purchase_selection(connection, query, project_codes, accounting=True) as (base, params):
+        counts = ','.join(f"SUM(CASE WHEN progress='{state}' THEN 1 ELSE 0 END) AS {state}_lines"
+                          for state in ('not_ordered', 'ordering', 'receiving', 'complete', 'review'))
+        grouped = (f"WITH source AS ({base}), grouped AS (SELECT organization_id,"
+                   f"COALESCE(project_code,'') AS project_code,COUNT(*) AS total_lines,{counts} "
+                   "FROM source GROUP BY organization_id,COALESCE(project_code,'')), "
+                   "projects AS (SELECT *,100.0*complete_lines/total_lines AS completion_rate FROM grouped)")
+        where = {'': '1=1', 'unfinished': 'complete_lines<total_lines',
+                 'complete': 'complete_lines=total_lines', 'review': 'review_lines>0'}[query.overview_status]
+        stats = _rows(connection, grouped + ' SELECT COUNT(*) AS total,COALESCE(SUM(total_lines),0) AS total_lines,'
+                      'COALESCE(SUM(complete_lines),0) AS complete_lines,COALESCE(SUM(review_lines),0) AS review_lines '
+                      'FROM projects WHERE ' + where, params)[0]
+        start = (query.page - 1) * query.page_size
+        order = f'{query.sort} {query.direction},organization_id,project_code'
+        sql = grouped + f', numbered AS (SELECT *,ROW_NUMBER() OVER (ORDER BY {order}) AS row_number FROM projects WHERE {where}) SELECT * FROM numbered WHERE row_number>%s AND row_number<=%s ORDER BY row_number'
+        items = _rows(connection, sql, [*params, start, start + query.page_size]) if stats['total'] else []
+        for row in items:
+            row['id'] = json.dumps([row['organization_id'], row['project_code']], ensure_ascii=False)
+        return dict(items=items, **stats, page=query.page, page_size=query.page_size)
 
 
 def progress_for(summary):
@@ -585,9 +620,9 @@ def _decorate_rows(connection, items, chains=None):
         row['supplier_name'] = '多家供应商' if len(suppliers) > 1 else next(iter(suppliers.values()), None)
 
 
-def list_options(connection, field, keyword, project_codes):
+def list_options(connection, field, keyword, project_codes, *, query=None):
     _prepare_scope(connection, project_codes)
-    base, params = request_query(PurchaseQuery(), project_codes)
+    base, params = request_query(query or PurchaseQuery(), project_codes)
     if field == 'project':
         choices = "SELECT DISTINCT project_code AS value FROM q WHERE project_code IS NOT NULL AND project_code<>'' AND project_code LIKE %s ESCAPE '~'"
     elif field == 'supplier':

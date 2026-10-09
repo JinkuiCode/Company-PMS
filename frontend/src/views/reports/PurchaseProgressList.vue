@@ -15,17 +15,23 @@ import { PmsTextControl, PmsDateControl, PmsSelectControl, PmsFormDrawer, PmsFor
 import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN, PMS_GRID_OPTIONS } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
-import { getPurchaseMetadata, getPurchaseOptions, getPurchaseRows, getPurchaseDetail, type PurchaseField, type PurchaseRow, type PurchaseDocument, type PurchaseMetadata, type PurchaseDetail } from '@/api/purchaseReport'
+import { getPurchaseMetadata, getPurchaseRows, getPurchaseDetail, type PurchaseField, type PurchaseRow, type PurchaseDocument, type PurchaseMetadata, type PurchaseDetail, type PurchaseDetailEntry } from '@/api/purchaseReport'
+import { usePurchaseCandidates } from '@/composables/usePurchaseCandidates'
 import ReportExportControl from '@/components/ReportExportControl.vue'
 import { createPurchaseDetailState, type PurchaseDetailState } from './purchaseDetailState'
 import { selectedPurchaseProgress, withPurchaseProgress, restorePurchaseProgress } from './purchaseQuickFilter'
 
 ModuleRegistry.registerModules([AllCommunityModule])
+const props = defineProps<{ entry?: PurchaseDetailEntry; active?: boolean }>()
+const emit = defineEmits<{ overview: [] }>()
+const projectScope = ref<PurchaseDetailEntry['scope']>()
+const appliedProjectScope = ref<PurchaseDetailEntry['scope']>()
 const auth = useAuthStore()
 const filters = reactive({ keyword: '', project_code: '', supplier: '', progress: '', organization_ids: [] as number[] })
 const conditions = ref<ReportCondition[]>([])
 const filterFields = computed(() => metadata.value?.filter_fields || [])
-const invalid = computed(() => validateConditions(conditions.value, filterFields.value))
+const { candidates, optionLoading, findOptions, organizationsChanged, restoreProject, invalidate: invalidateCandidates, projectChanged, validationError, validating } = usePurchaseCandidates(() => projectScope.value ? [projectScope.value.organization_id] : filters.organization_ids, () => projectScope.value?.project_code ?? filters.project_code, value => { filters.project_code = value })
+const invalid = computed(() => validating.value ? '正在核验项目范围' : validationError.value || validateConditions(conditions.value, filterFields.value))
 const progressOptions = computed(() => Object.entries(metadata.value?.progress_labels || {}).map(([value, label]) => ({ value, label })))
 const selectedProgress = computed(() => selectedPurchaseProgress(conditions.value, progressOptions.value.map(option => option.value)))
 function chooseProgress(value: string) {
@@ -37,15 +43,6 @@ function chooseProgress(value: string) {
 const dates = ref<string[]>([]), page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), total = ref(0)
 const rows = ref<PurchaseRow[]>([]), metadata = ref<PurchaseMetadata | null>(null)
 const loading = ref(false), error = ref(''), stamp = ref('')
-const candidates = reactive({ project: [] as { value: string; label: string }[], supplier: [] as { value: string; label: string }[] })
-const optionLoading = reactive({ project: false, supplier: false })
-const optionRevision = { project: 0, supplier: 0 }
-async function findOptions(field: 'project' | 'supplier', keyword = '') {
-  const serial = ++optionRevision[field]; optionLoading[field] = true
-  try { const data = await getPurchaseOptions(field, keyword); if (serial === optionRevision[field]) candidates[field] = data.items }
-  catch { if (serial === optionRevision[field]) candidates[field] = [] }
-  finally { if (serial === optionRevision[field]) optionLoading[field] = false }
-}
 const listRef = ref<InstanceType<typeof PmsDataList>>()
 let grid: GridApi<PurchaseRow> | null = null
 const visible = ref<string[]>([])
@@ -56,21 +53,35 @@ const detail = createPurchaseDetailState(getPurchaseDetail, state => { detailSta
 const activeRow = computed(() => rows.value.find(row => String(row.id) === detailState.value.requestId))
 const receipts = computed(() => (detailState.value.data?.receipts || []).filter(row => !detailState.value.orderId || String(row.order_id) === detailState.value.orderId))
 const selectedOrder = computed(() => detailState.value.data?.orders.find(row => String(row.id) === detailState.value.orderId))
-const defaultKeys = ['project_code', 'material_name', 'product_line_name', 'unit_name', 'bill_no', 'line_no', 'application_date', 'document_status', 'requested', 'approved', 'last_order_date', 'ordered', 'supplier_name', 'last_stock_date', 'net_received', 'pending_order', 'pending_receipt', 'progress']
+const projectPrefix = ['product_line_name', 'project_code', 'project_name']
+const defaultKeys = [...projectPrefix, 'material_name', 'unit_name', 'bill_no', 'line_no', 'application_date', 'document_status', 'requested', 'approved', 'last_order_date', 'ordered', 'supplier_name', 'last_stock_date', 'net_received', 'pending_order', 'pending_receipt', 'progress']
 const groups = computed(() => [...new Set((metadata.value?.fields || []).map(field => field.group))].map(group => ({
   key: group, label: group, fields: metadata.value!.fields.filter(field => field.group === group).map(field => ({ ...field, quick_addable: true })),
 })))
 const storageKey = computed(() => `pms:purchase-report:v1:${auth.user?.id || 'anonymous'}`)
-type Plan = { name: string; filters: typeof filters; dates: string[]; conditions?: ReportCondition[]; pageSize: number; columns: ColumnState[]; visible: string[]; sort: typeof sort }
+type Plan = { name: string; filters: typeof filters; dates: string[]; conditions?: ReportCondition[]; pageSize: number; columns: ColumnState[]; visible: string[]; sort: typeof sort; scope?: PurchaseDetailEntry['scope'] }
 const plans = ref<Plan[]>([]), planName = ref(''), planOpen = ref(false), activePlan = ref('当前查询')
 const planOptions = computed(() => [{ value: '', label: '当前查询' }, ...plans.value.map(plan => ({ value: plan.name, label: plan.name }))])
 const planSelected = ref('')
 let savedColumns: ColumnState[] = [], restoring = false
 let productLineColumnMigrated = false
+let projectPrefixMigrated = false
 function readPreferences() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey.value) || '{}')
     const keys = new Set(metadata.value?.fields.map(field => field.key))
+    projectPrefixMigrated = saved.projectPrefixMigrated === true
+    const migrateProjectPrefix = !projectPrefixMigrated
+    if (migrateProjectPrefix) {
+      for (const layout of [saved, ...(Array.isArray(saved.plans) ? saved.plans : [])]) {
+        if (Array.isArray(layout.visible)) layout.visible = [...projectPrefix, ...layout.visible.filter((key: string) => !projectPrefix.includes(key))]
+        if (Array.isArray(layout.columns)) layout.columns = [
+          ...projectPrefix.map(colId => ({ ...layout.columns.find((c: ColumnState) => c.colId === colId), colId, hide: false, pinned: 'left' })),
+          ...layout.columns.filter((c: ColumnState) => !projectPrefix.includes(c.colId)).map((c: ColumnState) => ({ ...c, pinned: c.pinned === 'left' ? null : c.pinned })),
+        ]
+      }
+      projectPrefixMigrated = true
+    }
     productLineColumnMigrated = saved.productLineColumnMigrated === true
     // Persist this migration once so subsequent user choices remain authoritative.
     const migrateProductLine = !productLineColumnMigrated && keys.has('product_line_name')
@@ -87,12 +98,12 @@ function readPreferences() {
     const sorting = savedColumns.find(column => column.sort && sortFields[column.colId])
     if (sorting) Object.assign(sort, { sort: sortFields[sorting.colId], direction: sorting.sort })
     plans.value = Array.isArray(saved.plans) ? saved.plans.filter((plan: Plan) => typeof plan?.name === 'string' && plan.filters && Array.isArray(plan.dates) && Array.isArray(plan.visible) && Array.isArray(plan.columns)).slice(0, 30) : []
-    if (migrateProductLine) savePreferences()
+    if (migrateProductLine || migrateProjectPrefix) savePreferences()
   } catch { visible.value = [...defaultKeys]; savedColumns = []; plans.value = [] }
 }
 function savePreferences() {
   if (restoring) return
-  try { localStorage.setItem(storageKey.value, JSON.stringify({ visible: visible.value, columns: grid?.getColumnState() || savedColumns, plans: plans.value, productLineColumnMigrated })) }
+  try { localStorage.setItem(storageKey.value, JSON.stringify({ visible: visible.value, columns: grid?.getColumnState() || savedColumns, plans: plans.value, productLineColumnMigrated, projectPrefixMigrated })) }
   catch { ElMessage.warning('本机设置保存失败，请检查浏览器存储空间') }
   void nextTick(() => listRef.value?.refreshScrollbar())
 }
@@ -100,7 +111,7 @@ async function savePlan() {
   const name = planName.value.trim()
   if (!name) return
   if (invalid.value) { ElMessage.warning(invalid.value); return }
-  const plan: Plan = { name, filters: cloneQuery(filters), dates: [...(dates.value || [])], conditions:cloneQuery(conditions.value), pageSize: pendingPageSize.value ?? pageSize.value, columns: grid?.getColumnState() || [], visible: [...visible.value], sort: { ...sort } }
+  const plan: Plan = { name, filters: cloneQuery(filters), dates: [...(dates.value || [])], conditions:cloneQuery(conditions.value), pageSize: pendingPageSize.value ?? pageSize.value, columns: grid?.getColumnState() || [], visible: [...visible.value], sort: { ...sort }, scope: projectScope.value ? cloneQuery(projectScope.value) : undefined }
   plans.value = [...plans.value.filter(item => item.name !== name), plan].slice(-30)
   activePlan.value = name; planSelected.value = name; planOpen.value = false; planName.value = ''; savePreferences()
   ElMessage.success('查询方案已保存')
@@ -111,7 +122,11 @@ async function loadPlan(value: unknown) {
   const restoredConditions = restorePurchaseProgress(cloneQuery(plan.conditions || []), plan.filters.progress)
   const problem = validateConditions(restoredConditions,filterFields.value)
   if (problem) { ElMessage.warning(problem); return }
+  if (plan.scope && (typeof plan.scope.project_code !== 'string' || !Number.isInteger(plan.scope.organization_id) || plan.scope.organization_id <= 0)) { ElMessage.warning('查询方案项目限定无效'); return }
+  if (!plan.scope && (plan.filters.organization_ids || []).some(id => !metadata.value?.organizations?.some(option => option.value === id))) { ElMessage.warning('查询方案包含不可选产品线，请重新配置方案'); return }
+  if (plan.scope && !auth.hasPermission('business:data:all') && !metadata.value?.organizations?.some(option => option.value === plan.scope!.organization_id)) { ElMessage.warning('查询方案包含不可选产品线，请重新配置方案'); return }
   invalidate()
+  projectScope.value = plan.scope ? cloneQuery(plan.scope) : undefined
   restoring = true
   for (const key of ['keyword', 'project_code', 'supplier', 'progress'] as const) filters[key] = typeof plan.filters[key] === 'string' ? plan.filters[key] : ''
   filters.organization_ids = [...(plan.filters.organization_ids || [])]
@@ -123,8 +138,9 @@ async function loadPlan(value: unknown) {
   activePlan.value = plan.name
   await nextTick(); grid?.applyColumnState({ state: plan.columns, applyOrder: true })
   restoring = false; savePreferences()
+  await restoreProject(!!projectScope.value)
 }
-function reset() { invalidate(); Object.assign(filters, { keyword: '', project_code: '', supplier: '', progress: '', organization_ids: [] }); dates.value = []; conditions.value = []; pendingPageSize.value = null; activePlan.value = '当前查询'; planSelected.value = '' }
+function reset() { invalidate(); invalidateCandidates(); projectScope.value = undefined; Object.assign(filters, { keyword: '', project_code: '', supplier: '', progress: '', organization_ids: [] }); dates.value = []; conditions.value = []; pendingPageSize.value = null; activePlan.value = '当前查询'; planSelected.value = '' }
 const number = (value: unknown) => value === null || value === undefined || value === '' ? '-' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 8 }).format(Number(value))
 const date = (value: unknown) => value ? String(value).slice(0, 10) : '-'
 function display(row: PurchaseRow, field: PurchaseField) {
@@ -139,7 +155,7 @@ const columns = computed<(ColDef<PurchaseRow> | ColGroupDef<PurchaseRow>)[]>(() 
   ...groups.value.map(group => ({ headerName: group.label, groupId: group.key, children: group.fields.map(field => ({
     field: field.key, colId: field.key, headerName: field.label, headerTooltip: field.label,
     initialWidth: field.key === 'material_name' || field.key === 'specification' ? 180 : field.value_type === 'number' ? 125 : 136,
-    initialPinned: ['project_code', 'material_name'].includes(field.key) ? 'left' as const : field.key === 'progress' ? 'right' as const : undefined,
+    initialPinned: projectPrefix.includes(field.key) ? 'left' as const : field.key === 'progress' ? 'right' as const : undefined,
     hide: !visible.value.includes(field.key), minWidth: 80, maxWidth: 800,
     sortable: Boolean(sortFields[field.key]),
     cellClass: field.value_type === 'number' ? 'purchase-number' : undefined,
@@ -172,10 +188,14 @@ let revision = 0, controller: AbortController | null = null
 const draftSnapshot = () => ({...cloneQuery(filters),dates:[...(dates.value || [])],conditions:cloneQuery(conditions.value)})
 type Draft = ReturnType<typeof draftSnapshot>
 const applied = ref<Draft | null>(null), pendingPageSize = ref<number | null>(null)
-const dirty = computed(()=>!!applied.value && (JSON.stringify(draftSnapshot()) !== JSON.stringify(applied.value) || pendingPageSize.value !== null))
-const buildParams = (draft:Draft, submit:boolean) => ({...draft,...sort, dates:undefined, conditions:undefined, date_from:draft.dates[0] || undefined,date_to:draft.dates[1] || undefined,filters:JSON.stringify(draft.conditions.map(({field,operator,value,valueEnd})=>({field,operator,value,valueEnd}))),page:submit?1:page.value,page_size:submit?(pendingPageSize.value??pageSize.value):pageSize.value})
+const dirty = computed(()=>!!applied.value && (JSON.stringify(draftSnapshot()) !== JSON.stringify(applied.value) || JSON.stringify(projectScope.value || null) !== JSON.stringify(appliedProjectScope.value || null) || pendingPageSize.value !== null))
+const resultScopeLabel = computed(() => appliedProjectScope.value ? `${appliedProjectScope.value.product_line_name} · ${appliedProjectScope.value.project_code || '未关联项目'}` : applied.value?.project_code ? `项目编码 ${applied.value.project_code}` : '当前查询范围全部项目')
+const buildParams = (draft:Draft, submit:boolean) => ({...draft,...sort,
+  ...(projectScope.value ? {project_code:projectScope.value.project_code,organization_ids:[projectScope.value.organization_id]} : {}),
+  project_code_is_empty: !!projectScope.value && !projectScope.value.project_code,
+  dates:undefined, conditions:undefined, date_from:draft.dates[0] || undefined,date_to:draft.dates[1] || undefined,filters:JSON.stringify(draft.conditions.map(({field,operator,value,valueEnd})=>({field,operator,value,valueEnd}))),page:submit?1:page.value,page_size:submit?(pendingPageSize.value??pageSize.value):pageSize.value})
 const acceptedParams = ref<ReturnType<typeof buildParams> | null>(null)
-type RequestSnapshot = {draft:Draft; params:ReturnType<typeof buildParams>; submit:boolean}
+type RequestSnapshot = {draft:Draft; params:ReturnType<typeof buildParams>; submit:boolean; scope:PurchaseDetailEntry['scope']}
 let failedRequest: RequestSnapshot | null = null
 const params = () => cloneQuery(acceptedParams.value!)
 function invalidate() { ++revision; controller?.abort(); loading.value=false; failedRequest=null }
@@ -188,9 +208,14 @@ async function fetchRows(submit = false, replay?:RequestSnapshot, applySort = fa
   if (!metadata.value || (!submit && !applied.value)) return
   if (!replay && submit && invalid.value) return
   const draft = cloneQuery(replay?.draft || (submit?draftSnapshot():applied.value!))
+  const scope = replay ? replay.scope : submit ? projectScope.value : appliedProjectScope.value
   const request = replay?cloneQuery(replay.params):buildParams(draft,submit)
   if (!replay && !submit && !applySort && acceptedParams.value) {
     request.sort = acceptedParams.value.sort; request.direction = acceptedParams.value.direction
+  }
+  if (!replay && !submit && acceptedParams.value) {
+    request.project_code = acceptedParams.value.project_code; request.organization_ids = [...acceptedParams.value.organization_ids]
+    request.project_code_is_empty = acceptedParams.value.project_code_is_empty
   }
   const current = ++revision
   controller?.abort(); controller = new AbortController(); loading.value = true; error.value = ''
@@ -198,22 +223,35 @@ async function fetchRows(submit = false, replay?:RequestSnapshot, applySort = fa
     const data = await getPurchaseRows(request, controller.signal)
     if (current !== revision) return
     rows.value = data.items; total.value = data.total; stamp.value = data.queried_at
-    applied.value=draft; acceptedParams.value=cloneQuery(request); failedRequest=null
+    applied.value=draft; appliedProjectScope.value=scope ? cloneQuery(scope) : undefined; acceptedParams.value=cloneQuery(request); failedRequest=null
     restoring=true; page.value=request.page; pageSize.value=request.page_size; restoring=false
     if(submit) pendingPageSize.value=null
     detail.reconcileRows(rows.value.map(row => String(row.id)))
     await nextTick(); listRef.value?.refreshScrollbar()
   } catch { if (current === revision) {
-    failedRequest={draft,params:cloneQuery(request),submit}; error.value='采购数据加载失败，请重试'
+    failedRequest={draft,params:cloneQuery(request),submit,scope:scope ? cloneQuery(scope) : undefined}; error.value='采购数据加载失败，请重试'
     if(acceptedParams.value) { restoring=true; page.value=acceptedParams.value.page; pageSize.value=acceptedParams.value.page_size; restoring=false }
   } }
   finally { if (current === revision) loading.value = false }
 }
 async function initialize() {
   loading.value = true; error.value = ''
-  try { metadata.value = await getPurchaseMetadata(); readPreferences(); await nextTick(); loading.value=false }
+  try { metadata.value = await getPurchaseMetadata(); readPreferences(); await nextTick(); loading.value=false; await applyEntry() }
   catch { error.value = '报表初始化失败，请重试'; loading.value = false }
 }
+async function applyEntry() {
+  if (!metadata.value || !props.entry) return
+  invalidate(); invalidateCandidates(); detail.close(); projectScope.value = props.entry.scope ? cloneQuery(props.entry.scope) : undefined
+  const value = props.entry.draft
+  if (!value) { reset(); return }
+  Object.assign(filters, {keyword:value.keyword,project_code:value.project_code,supplier:value.supplier,progress:'',organization_ids:[...value.organization_ids]})
+  dates.value = [...value.dates]; conditions.value = cloneQuery(value.conditions)
+  if (props.entry.progress) conditions.value = withPurchaseProgress(conditions.value, props.entry.progress)
+  await fetchRows(true)
+}
+function clearProjectScope() { invalidateCandidates(); projectScope.value = undefined; void fetchRows(true) }
+watch(() => props.entry, () => { void applyEntry() })
+watch(() => props.active, value => { if (value === false) { invalidate(); detail.close() } else void nextTick(() => listRef.value?.refreshScrollbar()) })
 const exportColumns = () => grid?.getAllDisplayedColumns().map(column => column.getColId()).filter(key => visible.value.includes(key)) || visible.value
 function stateLabel(row: PurchaseDocument) { return row.cancel_status === 'B' ? '已作废' : metadata.value?.document_status_labels[row.document_status] || '未知状态' }
 function orderLabel(id?: number) { const order = detailState.value.data?.orders.find(row => row.id === id); return order ? `${order.bill_no} / ${order.line_no}` : '-' }
@@ -226,6 +264,7 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
 <template>
   <PmsDataList ref="listRef" class="purchase-page pms-report-query-surface" scrollbar-label="采购进度横向滚动条">
     <template #toolbar-left>
+      <slot name="view-switch" />
       <div class="pms-report-query-plan-select"><PmsSelectControl v-model="planSelected" :options="planOptions" :placeholder="activePlan" size="compact" aria-label="查询方案" @update:model-value="loadPlan" /></div>
       <el-button size="small" @click="planOpen = true">保存查询方案</el-button>
     </template>
@@ -237,8 +276,8 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
     <template #filters>
       <PmsReportQueryBar v-model:conditions="conditions" :fields="filterFields" :loading="loading" :disabled="!metadata" :invalid="invalid" @query="fetchRows(true)" @reset="reset">
         <div class="query-material"><PmsTextControl v-model="filters.keyword" size="compact" :prefix-icon="Search" clearable placeholder="申请单 / 物料编码 / 名称 / 规格" aria-label="搜索采购明细" /></div>
-        <PmsSelectControl v-model="filters.organization_ids" :options="metadata?.organizations || []" size="compact" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="全部产品线" aria-label="产品线" />
-        <PmsSelectControl v-model="filters.project_code" :options="candidates.project" :loading="optionLoading.project" remote filterable :remote-method="(value: string) => findOptions('project', value)" size="compact" clearable placeholder="全部项目" aria-label="项目编号筛选" @visible-change="(open: boolean) => open && findOptions('project')" />
+        <PmsSelectControl v-model="filters.organization_ids" :options="metadata?.organizations || []" :disabled="!!projectScope" size="compact" multiple collapse-tags collapse-tags-tooltip clearable filterable placeholder="全部产品线" aria-label="产品线" @update:model-value="organizationsChanged" />
+        <PmsSelectControl v-model="filters.project_code" :options="candidates.project" :loading="optionLoading.project" :disabled="!!projectScope" remote filterable :remote-method="(value: string) => findOptions('project', value)" size="compact" clearable placeholder="全部项目" aria-label="项目编码筛选" @visible-change="(open: boolean) => open && findOptions('project')" @update:model-value="projectChanged" />
         <div class="query-dates"><PmsDateControl v-model="dates" type="daterange" size="compact" value-format="YYYY-MM-DD" start-placeholder="申请开始日期" end-placeholder="申请结束日期" aria-label="申请日期范围" /></div>
         <PmsSelectControl v-model="filters.supplier" :options="candidates.supplier" :loading="optionLoading.supplier" remote filterable :remote-method="(value: string) => findOptions('supplier', value)" size="compact" clearable placeholder="全部供应商" aria-label="供应商筛选" @visible-change="(open: boolean) => open && findOptions('supplier')" />
       </PmsReportQueryBar>
@@ -247,9 +286,10 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
         <button v-for="option in progressOptions" :key="option.value" type="button" :aria-pressed="selectedProgress === option.value" :disabled="loading || !metadata" @click="chooseProgress(option.value)">{{ option.label }}</button>
         <span v-if="selectedProgress === 'custom'" class="purchase-custom-progress">自定义</span>
       </div>
+      <div v-if="entry" class="purchase-context"><el-button size="small" link type="primary" @click="emit('overview')">返回总进度</el-button><template v-if="projectScope"><span>当前项目限定：{{ projectScope.product_line_name }} · {{ projectScope.project_code || '未关联项目' }}</span><el-button size="small" link type="primary" @click="clearProjectScope">清除项目限定</el-button></template><span v-else>当前查询范围全部项目</span></div>
     </template>
     <template #grid>
-      <div v-if="error" class="pms-list-load-error" role="alert">{{ error }}<span v-if="applied">，下方保留上次查询结果</span> <el-button size="small" @click="retry">重试</el-button></div>
+      <div v-if="error" class="pms-list-load-error" role="alert">{{ error }}<span v-if="applied">，下方保留上次查询结果；上次结果范围：{{ resultScopeLabel }}</span> <el-button size="small" @click="retry">重试</el-button></div>
       <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy"
         :row-data="rows" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS"
         :locale-text="chineseLocaleText" :loading="loading" :pagination="false"
@@ -299,6 +339,7 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
 
 <style scoped>
 .purchase-plan { width: 160px; }
+.purchase-context { display:flex; align-items:center; flex-wrap:wrap; gap:10px; min-height:26px; font-size:12px; color:var(--pms-text-secondary); }
 .purchase-filter { width: 150px; max-width: 100%; }
 .purchase-filter--search { width: 250px; }
 .purchase-filter--dates { width: 280px; }

@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 from decimal import Decimal
+from pydantic import Field
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.encoders import jsonable_encoder
@@ -14,8 +15,8 @@ from app.api.inventory_reports import authorized_organizations, scoped_lines
 from app.services.authorization import require_permission, enforce_permission
 from app.services.project import get_scoped_archive_query
 from app.services.purchase_connection import purchase_connection
-from app.services.purchase_reader import PurchaseQuery, OrganizationGrant, load_request, load_chains, list_requests, list_options, REPORT_START_DATE, _rows
-from app.services.purchase_fields import report_fields, DOCUMENT_STATUSES, PROGRESS_LABELS
+from app.services.purchase_reader import PurchaseQuery, PurchaseOverviewQuery, OrganizationGrant, load_request, load_chains, list_requests, list_overview, list_options, REPORT_START_DATE, _rows
+from app.services.purchase_fields import report_fields, overview_fields, DOCUMENT_STATUSES, PROGRESS_LABELS
 from app.services.report_filters import filter_fields
 
 router = APIRouter(prefix='/api/reports/purchase', tags=['采购进度查询'])
@@ -78,9 +79,26 @@ def enrich_product_lines(db, connection, rows):
 
 @router.get('/metadata')
 def metadata(db: Session = Depends(get_db), ctx: dict = Depends(require_permission('report:purchase:view'))):
-    return dict(fields=report_fields(), filter_fields=filter_fields('purchase'), progress_labels=PROGRESS_LABELS, document_status_labels=DOCUMENT_STATUSES,
-                organizations=[{'value': line.organization_id, 'label': line.display_name} for line in scoped_lines(db, ctx)],
+    return dict(fields=report_fields(), overview_fields=overview_fields(), filter_fields=filter_fields('purchase'), progress_labels=PROGRESS_LABELS, document_status_labels=DOCUMENT_STATUSES,
+                organizations=[{'value': line.organization_id, 'label': line.display_name} for line in scoped_lines(db, ctx) if line.is_enabled],
                 start_date=REPORT_START_DATE.isoformat())
+
+
+@router.get('/overview')
+def overview(query: Annotated[PurchaseOverviewQuery, Query()], db: Session = Depends(get_db),
+             ctx: dict = Depends(require_permission('report:purchase:view'))):
+    with report_connection() as connection:
+        result = list_overview(connection, query, project_scope(db, ctx))
+        enrich_product_lines(db, connection, result['items'])
+        ids = sorted({row['organization_id'] for row in result['items']})
+        names = {row['id']: row['name'] for row in _rows(connection,
+            'SELECT FORGID AS id,FNAME AS name FROM dbo.T_ORG_ORGANIZATIONS_L WHERE FLOCALEID=2052 AND FORGID IN ('
+            + ','.join(['%s'] * len(ids)) + ')', ids)} if ids else {}
+        for row in result['items']:
+            row['organization_name'] = names.get(row['organization_id']) or str(row['organization_id'])
+    enrich_project_names(db, ctx, result['items'])
+    result['queried_at'] = datetime.now(timezone.utc).isoformat()
+    return jsonable_encoder(result, custom_encoder={Decimal: str})
 
 
 @router.get('')
@@ -98,9 +116,12 @@ def listing(query: Annotated[PurchaseQuery, Query()], db: Session = Depends(get_
 
 @router.get('/options')
 def options(field: Literal['project', 'supplier'], keyword: str = Query('', max_length=100),
+            organization_ids: list[Annotated[int, Field(gt=0)]] = Query(default=[], max_length=200),
+            project_code: str = Query('', max_length=100),
             db: Session = Depends(get_db), ctx: dict = Depends(require_permission('report:purchase:view'))):
     with report_connection() as connection:
-        return list_options(connection, field, keyword, project_scope(db, ctx))
+        return list_options(connection, field, keyword, project_scope(db, ctx),
+                            query=PurchaseQuery(organization_ids=organization_ids, project_code=project_code))
 
 
 def ensure_export_permission(ctx):

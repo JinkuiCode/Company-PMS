@@ -142,7 +142,7 @@ class ReportApiContract(unittest.TestCase):
         app.dependency_overrides[get_current_user_context] = lambda: ctx
         app.dependency_overrides[get_db] = lambda: self.db
         with TestClient(app, raise_server_exceptions=False) as client:
-            for path in ('', '/metadata', '/options?field=project', '/1', '/export'):
+            for path in ('', '/overview', '/metadata', '/options?field=project', '/1', '/export'):
                 self.assertEqual(client.get('/api/reports/purchase' + path).status_code, 403)
             ctx['permissions'] = ['report:purchase:view']
             self.assertEqual(client.get('/api/reports/purchase/metadata').status_code, 200)
@@ -151,6 +151,40 @@ class ReportApiContract(unittest.TestCase):
                 response = client.get('/api/reports/purchase')
                 self.assertEqual(response.status_code, 503)
                 self.assertNotIn('PRIVATE', response.text)
+                summary = client.get('/api/reports/purchase/overview')
+                self.assertEqual(summary.status_code, 503)
+                self.assertNotIn('PRIVATE', summary.text)
+
+    def test_overview_http_uses_live_scope_and_labels_without_new_permissions(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.services.authorization import get_current_user_context
+        from app.core.database import get_db
+        api = self.api(); line = self.line()
+        self.db.add(PmsProjectArchive(project_code='A', project_name='PMS 项目', manager_id=7, business_product_line_id=line.id)); self.db.commit()
+        app = FastAPI(); app.include_router(api.router)
+        ctx = {'user_id':7, 'permissions':['report:purchase:view'], 'data_scope':1, 'product_line_ids':[line.id]}
+        app.dependency_overrides[get_current_user_context] = lambda:ctx
+        app.dependency_overrides[get_db] = lambda:self.db
+        @contextmanager
+        def connection():
+            yield object()
+        with TestClient(app) as client, patch.object(api,'purchase_connection',connection), \
+             patch.object(api,'list_overview',return_value={'items':[{'id':'pair','project_code':'A','organization_id':100,'completion_rate':Decimal('25.0')}],'total':1}) as read, \
+             patch.object(api,'_rows',return_value=[{'id':100,'name':'金蝶组织'}]):
+            response = client.get('/api/reports/purchase/overview?organization_ids=100&organization_ids=200')
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(read.call_args.args[1].organization_ids,[100,200])
+            self.assertEqual([grant.organization_id for grant in read.call_args.args[2]],[100])
+            row=response.json()['items'][0]
+            self.assertEqual(row['project_name'],'PMS 项目')
+            self.assertEqual(row['product_line_name'],'100')
+            self.assertEqual(row['organization_name'],'金蝶组织')
+            self.assertEqual(row['completion_rate'],'25.0')
+            for params in ('sort=unknown','overview_status=unknown','project_code=A&project_code_is_empty=true'):
+                self.assertEqual(client.get('/api/reports/purchase/overview?'+params).status_code,422)
+            ctx['permissions']=[]
+            self.assertEqual(client.get('/api/reports/purchase/overview').status_code,403)
 
     def test_legacy_export_is_retired_without_querying_erp(self):
         api = self.api()

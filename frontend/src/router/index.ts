@@ -79,7 +79,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'reports/purchase-progress', name: 'PurchaseProgressList',
-        component: () => import('@/views/reports/PurchaseProgressList.vue'),
+        component: () => import('@/views/reports/PurchaseProgressReport.vue'),
         meta: { title: '采购进度查询', permission: 'report:purchase:view' },
       },
       {
