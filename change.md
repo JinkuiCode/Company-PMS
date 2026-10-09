@@ -1,5 +1,15 @@
 # PMS 变更记录
 
+## 2026-10-09 线下档案同号补充与枚举合并（独立分支，未发布）
+
+- 原因：用户批准空值补齐、13条冲突保留线上名称、枚举近似项合并并保留19条疑点原值。
+- 调整：固定89项原写法到64个目标的服务端映射，一次性枚举准备保留稳定数字及停用状态；原V4及3024个项目编码不变。同号白名单字段仅补空，新记录仍线下期初/手动同步/产品线空，不调用ERP。
+- 调整：服务端签名绑定同号模式和目标版本，按序加锁后二次检查；重复提交返回已有批次。明细保存操作及补充前值，回退分别删除新增和恢复补充；页面显示三类数量，原金蝶来源的同号记录也能回查原表。
+- 升级：本分支目标2026-10-09-archive-02，增加operation/before_values明细列及重复升级验收；生产启动仍只检查版本。旧RBAC测试按产品类别停用基线修订，实际权限逻辑未扩大。
+- 涉及文件：backend/app/models/{archive_import,init_db}.py、schemas/offline_archive.py、services/offline_archive_{enum_mapping,reconciliation,approval,import,migration,workbook}.py、database_revision.py；相关导入/升级/RBAC测试与全量演练；frontend/src/views/project/{OfflineArchiveSource,OfflineArchiveTools,ProjectArchive}.vue及浏览器测试；本批计划、规格、SOP、验收记录和change.md。
+- 验证：16组后端契约、12组前端契约、完整npm run build及隔离Edge页面通过；合并契约45项、签名5项。含旧快照的临时库演练新增2706/补充318/零ERP任务，重复新增0，整批回退删除2706/恢复318；空库3024条导入及回退通过。89项映射与19条疑点逐项通过。审查发现的锁后幂等遗漏已先复现后修复并复核。
+- 边界：快照为9月24日，不能代表当前生产；未修改另一任务报表文件，未升级共享数据库、未生产导入、未写真实金蝶、未推送或合并master；MSSQL现场验证及正式集成待发布阶段。详见docs/releases/PMS线下档案合并验收记录-20261009.md。
+
 ## 2026-09-24 线下历史项目档案（独立分支，未发布）
 
 - 原因：接入用户批准的第四版3024条历史档案，保留产品线权限，停用产品类别，按需手动同步金蝶。

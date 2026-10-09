@@ -29,13 +29,13 @@ try{
   else if(path==='/api/projects/archives/list')body={items:[row],total:1}
   else if(path==='/api/projects/archives/regions')body=[]
   else if(path.startsWith('/api/dicts/code/'))body={items:[{value:1,label:'AS类'}],label_map:{1:'AS类'}}
-  else if(path==='/api/offline-archives/archives/1/source')body={batch_id:5,source_id:'S5-R12',source_sheet:'售后',source_row:12,original_code:'A-DEMO'}
+  else if(path==='/api/offline-archives/archives/1/source')body={batch_id:5,source_id:'S5-R12',source_sheet:'售后',source_row:12,original_code:'A-DEMO',operation:'updated'}
   else if(path==='/api/projects/archives/1'&&req.method()==='PUT'){
    writes.push(req.postDataJSON());Object.assign(row,req.postDataJSON());body={sync_queued:false}
   }
   else if(path==='/api/erp/archives/1/submit'){syncs++;return route.fulfill({status:422,json:{detail:'请先分配产品线后再同步'}})}
   else if(path==='/api/offline-archives/workbook'){uploads++;body={payload:{rows:[]},errors:[]}}
-  else if(path==='/api/offline-archives/preview')body={total:3024,errors:rejected?[{source_id:'S5-R12',message:'项目编号与现有档案重复'}]:[],already_imported:false}
+  else if(path==='/api/offline-archives/preview')body={total:3024,created:2706,updated:318,unchanged:0,errors:rejected?[{source_id:'S5-R12',message:'项目编号与现有档案重复'}]:[],already_imported:false}
   else if(path==='/api/offline-archives/apply'){applied++;body={batch_id:9,created:3024,msg:'已归档，未发送金蝶'}}
   await route.fulfill({json:body})
  })
@@ -66,6 +66,7 @@ try{
  rejected=false
  await imports.locator('input[type=file]').setInputFiles({name:'approved.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('mock2')})
  await expect(imports.getByRole('button',{name:'确认导入',exact:true})).toBeEnabled()
+ await expect(imports).toContainText('新增归档 2706 条，同号补充 318 条，保持不变 0 条')
  await imports.getByRole('button',{name:'确认导入',exact:true}).click()
  await expect(imports).toContainText('导入批次：9')
  await expect(imports.getByRole('button',{name:'确认导入',exact:true})).toBeDisabled()
@@ -78,6 +79,12 @@ try{
  await expect(page.getByRole('button',{name:'分配产品线',exact:true})).toHaveCount(0)
  await page.getByRole('button',{name:'编辑',exact:true}).click()
  await expect(drawer.getByRole('button',{name:'同步金蝶',exact:true})).toHaveCount(0)
+ await drawer.getByRole('button',{name:'关闭档案编辑',exact:true}).click()
+ row.data_origin='kingdee_initial'
+ await page.reload()
+ await page.getByRole('button',{name:'编辑',exact:true}).click()
+ await expect(drawer).toContainText('本批处理：同号补充')
+ await expect(drawer).toContainText('原表第 12 行')
  assert.deepEqual(errors,[])
  console.log('Offline browser passed: empty historical fields, zero, manual sync, source trace, errors, import disable/apply, permissions')
 }finally{await browser.close()}

@@ -16,7 +16,7 @@ async function load(){
 watch(()=>props.archiveId,load,{immediate:true})
 </script>
 <template>
- <section class="archive-source" aria-label="原表来源">
+ <section v-if="loading || failed || source" class="archive-source" aria-label="原表来源">
   <h3 class="archive-source-title">原表来源</h3>
   <p v-if="loading">正在读取来源…</p>
   <p v-else-if="failed" role="alert">来源读取失败。<el-button size="small" @click="load">重试</el-button></p>
@@ -24,6 +24,7 @@ watch(()=>props.archiveId,load,{immediate:true})
    <p>批次 {{ source.batch_id }} · 追溯 ID {{ source.source_id }}</p>
    <p>{{ source.source_sheet }} · 原表第 {{ source.source_row }} 行</p>
    <p>原项目编号：{{ source.original_code }}</p>
+   <p v-if="source.operation">本批处理：{{ source.operation === 'updated' ? '同号补充' : source.operation === 'unchanged' ? '保留原档案' : '新增归档' }}</p>
   </template>
   <p v-else>暂无原表来源记录</p>
  </section>

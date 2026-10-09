@@ -16,9 +16,15 @@ class ImportRow(BaseModel):
     source_row: int=Field(ge=2)
     original_code: str|None=Field(None,max_length=32)
     values: ImportValues
+class ImportTarget(BaseModel):
+    model_config=ConfigDict(extra="forbid")
+    archive_id: int=Field(gt=0)
+    snapshot_hash: str=Field(min_length=64,max_length=64)
 class ImportPayload(BaseModel):
     model_config=ConfigDict(extra="forbid")
     rows: list[ImportRow]=Field(min_length=1,max_length=10000)
+    reconcile_existing: bool=False
+    targets: dict[str,ImportTarget]=Field(default_factory=dict)
 class ApprovedImportPayload(ImportPayload):
     file_hash: str = Field(min_length=64,max_length=64)
     approval_signature: str = Field(min_length=64,max_length=64)

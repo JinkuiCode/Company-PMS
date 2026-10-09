@@ -94,10 +94,13 @@ def prepare_workbook(db,content):
         maps[key]={i.item_label:int(i.item_value) for i in items}
     for row in rows:
         for key,mapping in maps.items():
-            value=row["values"].get(key)
+            from app.services.offline_archive_enum_mapping import normalize_offline_enum
+            value=normalize_offline_enum(key,row["values"].get(key))
             if value is None:continue
             if value not in mapping:
                 missing.add((enum_fields[key],str(value)));row["values"][key]=None
             else:row["values"][key]=mapping[value]
     for code,label in sorted(missing):errors.append({"message":f"请先在枚举管理确认并新增选项：{code} / {label}","enum_code":code,"label":label})
-    return {"payload":None if errors else approve_payload({"rows":rows},file_hash),"errors":errors,"file_hash":file_hash}
+    from app.services.offline_archive_reconciliation import bind_existing_targets
+    payload=None if errors else approve_payload(bind_existing_targets(db,{"rows":rows}),file_hash)
+    return {"payload":payload,"errors":errors,"file_hash":file_hash}

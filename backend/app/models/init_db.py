@@ -25,7 +25,10 @@ def _init_dict_data(db):
     """迁移旧字段分类并初始化开发注册的业务枚举。"""
     from app.services.enum_registry import initialize_enum_definitions
 
-    return initialize_enum_definitions(db)
+    result=initialize_enum_definitions(db)
+    from app.services.offline_archive_enum_mapping import initialize_offline_enum_options
+    initialize_offline_enum_options(db)
+    return result
 
 
 def init_db():

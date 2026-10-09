@@ -18,13 +18,8 @@ content=p.read_bytes()
 rows=read_archive_workbook(content)
 e=create_engine("sqlite://");Base.metadata.create_all(e);db=Session(e)
 initialize_enum_definitions(db)
-for key,code in {**{k:v["enum_code"] for k,v in OFFLINE_FIELDS.items() if v["enum_code"]},"equipment_series":"equipment_series"}.items():
-    d=db.query(SysDict).filter_by(dict_code=code).one()
-    existing=db.query(SysDictItem).filter_by(dict_id=d.id).all()
-    labels={x.item_label for x in existing};n=max([int(x.item_value) for x in existing]+[0])
-    for label in sorted({r["values"][key] for r in rows if r["values"].get(key)}-labels):
-        n+=1;db.add(SysDictItem(dict_id=d.id,item_label=label,item_value=str(n),status=1,sort=n))
-db.commit()
+from app.services.offline_archive_enum_mapping import initialize_offline_enum_options
+initialize_offline_enum_options(db)
 u=SysUser(username="offline-dry-run",password_hash="x",real_name="演练",status=1);db.add(u);db.commit()
 scope={"user_id":u.id,"data_scope":4,"permissions":["business:data:all"]}
 from unittest.mock import patch

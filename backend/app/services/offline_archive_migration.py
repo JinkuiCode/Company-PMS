@@ -11,3 +11,10 @@ def upgrade_offline_archive(engine):
                 c.execute(text(f"ALTER TABLE pms_project_archive ADD {key} {meta['sql_type']} NULL"))
         if "erp_sync_policy" not in existing:
             c.execute(text("ALTER TABLE pms_project_archive ADD erp_sync_policy NVARCHAR(16) NOT NULL DEFAULT 'auto'"))
+
+        if inspector.has_table("pms_archive_import_row"):
+            columns={v["name"] for v in inspect(c).get_columns("pms_archive_import_row")}
+            if "operation" not in columns:
+                c.execute(text("ALTER TABLE pms_archive_import_row ADD operation NVARCHAR(16) NOT NULL DEFAULT 'created'"))
+            if "before_values" not in columns:
+                c.execute(text("ALTER TABLE pms_archive_import_row ADD before_values NVARCHAR(MAX) NULL" if engine.dialect.name=="mssql" else "ALTER TABLE pms_archive_import_row ADD before_values JSON NULL"))

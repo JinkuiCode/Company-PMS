@@ -41,7 +41,7 @@ async function applyImport(){
 }
 async function rollback(){
  if(!batchId.value||busy.value)return
- try{await ElMessageBox.confirm('仅回退本批未修改、未引用、未同步的档案；任何一条不符合条件时整批保留。','回退本次导入',{type:'warning'})}catch{return}
+ try{await ElMessageBox.confirm('新增档案仅在未修改、未引用、未同步时删除；同号补充仅恢复本批补充前的值。任何一条已变更或正在同步时，整批保留。','回退本次导入',{type:'warning'})}catch{return}
  busy.value=true
  try{await request.post('/offline-archives/batches/'+batchId.value+'/rollback');ElMessage.success('该批次已回退');batchId.value=null;preview.value=null;emit('changed')}
  catch(e){errors.value=[errorMessage(e)]}finally{busy.value=false}
@@ -63,11 +63,12 @@ async function assign(){
  <el-button v-if="auth.hasPermission('project:archive:import') && auth.hasPermission('business:data:all')" size="small"  :disabled="busy" @click="assigning=false;importing=true;errors=[]">期初导入</el-button>
  <el-button v-if="auth.hasPermission('project:archive:assign-line') && auth.hasPermission('business:data:all')" size="small" :disabled="!selectedRows.length" @click="openAssign">分配产品线</el-button>
  <PmsFormDrawer v-model="importing" title="期初项目档案导入" :busy="busy">
-  <p>选择已确认的档案修订表。导入后仅归档，不自动同步金蝶。</p>
+  <p>选择已确认的档案修订表。同号档案仅补齐空值，保留已有名称、产品线和金蝶关联；新档案仅归档，不自动同步金蝶。</p>
   <PmsFormField field-id="archive-import-file" label="档案修订表">
    <input id="archive-import-file" type="file" accept=".xlsx" :disabled="busy" @change="chooseFile" />
   </PmsFormField>
   <p v-if="preview">识别 {{ preview.total }} 条记录{{ preview.already_imported ? '，该批次已导入' : '' }}。</p>
+  <p v-if="preview && !preview.already_imported && preview.created !== undefined">新增归档 {{ preview.created }} 条，同号补充 {{ preview.updated }} 条，保持不变 {{ preview.unchanged }} 条。</p>
   <div v-if="errors.length" role="alert"><p>请处理以下问题后重新选择文件：</p><ul><li v-for="(error,i) in errors" :key="i">{{ error }}</li></ul></div>
   <p v-if="batchId">导入批次：{{ batchId }}</p>
   <template #secondary><el-button v-if="batchId" :disabled="busy" @click="rollback">回退本次导入</el-button></template>

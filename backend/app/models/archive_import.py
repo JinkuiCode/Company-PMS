@@ -1,6 +1,6 @@
 """Import provenance is separate from editable business fields."""
 import datetime
-from sqlalchemy import Integer, DateTime, ForeignKey, func
+from sqlalchemy import Integer, DateTime, ForeignKey, func, JSON, text
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
@@ -24,3 +24,5 @@ class ArchiveImportRow(Base):
     archive_id: Mapped[int]=mapped_column(Integer,nullable=False,index=True)
     original_code: Mapped[str]=mapped_column(NVARCHAR(32),nullable=False)
     snapshot_hash: Mapped[str]=mapped_column(NVARCHAR(64),nullable=False)
+    operation: Mapped[str]=mapped_column(NVARCHAR(16),nullable=False,default="created",server_default=text("'created'"),comment="导入动作: created新增/updated补充/unchanged保留")
+    before_values: Mapped[dict | None]=mapped_column(JSON,nullable=True,comment="补充字段的导入前值，仅用于安全回退")

@@ -71,7 +71,8 @@ def test_authorization_context_uses_only_active_roles_and_live_permissions():
         assert context["role_codes"] == ["active-role"]
         assert context["permissions"] == ["project:list:edit"]
         assert context["data_scope"] == 2
-        assert set(context["product_category_ids"]) == {1, 3}
+        assert "product_category_ids" not in context
+        assert context["product_line_ids"] == []
         enforce_permission(context, "project:list:edit")
 
         try:
@@ -167,7 +168,8 @@ def test_multiple_active_roles_merge_permissions_and_widest_scope():
             "project:list:edit:union-test",
         }
         assert context["data_scope"] == 4
-        assert context["product_category_ids"] is None
+        assert "product_category_ids" not in context
+        assert context["product_line_ids"] == []
     finally:
         db.close()
 
@@ -253,9 +255,9 @@ def test_project_scope_denies_missing_department_and_uses_archive_product_line()
                 scope_context=unrestricted_context,
             )
         except HTTPException as exc:
-            assert exc.status_code == 400
+            assert exc.status_code == 422
         else:
-            raise AssertionError("项目编辑权限不得绕过档案权限修改引用产品线")
+            raise AssertionError("项目编辑不得修改已停用的产品类别")
         db.refresh(archive)
         assert archive.product_category == 1
     finally:

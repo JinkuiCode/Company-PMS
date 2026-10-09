@@ -208,7 +208,7 @@
         @keydown.esc.capture.stop.prevent="cancelArchiveFieldEdit"
       >
         <div class="archive-drawer-body">
-          <OfflineArchiveSource v-if="selectedArchive.data_origin === 'offline_initial'" :archive-id="selectedArchive.id" />
+          <OfflineArchiveSource :archive-id="selectedArchive.id" />
           <section
             v-for="group in archiveDrawerGroups"
             :key="group.key"

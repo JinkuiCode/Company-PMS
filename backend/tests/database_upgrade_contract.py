@@ -54,6 +54,8 @@ def test_upgrade_marks_database_ready_and_can_repeat() -> None:
             assert connection.execute("SELECT COUNT(*) FROM pms_database_revision").fetchone()[0] == 1
             assert connection.execute("SELECT COUNT(*) FROM pms_archive_import_batch").fetchone()[0] == 0
             assert connection.execute("SELECT COUNT(*) FROM pms_archive_import_row").fetchone()[0] == 0
+            assert {"operation", "before_values"}.issubset({row[1] for row in connection.execute("PRAGMA table_info(pms_archive_import_row)")})
+            assert connection.execute("SELECT COUNT(*) FROM sys_parameter WHERE code = 'offline_archive_enum_merge_20261009'").fetchone()[0] == 1
             assert {"erp_sync_policy","quantity","archive_category"}.issubset({row[1] for row in connection.execute("PRAGMA table_info(pms_project_archive)")})
             assert connection.execute("SELECT COUNT(*) FROM sys_menu WHERE permission_code IN ('project:archive:import','project:archive:assign-line')").fetchone()[0] == 2
             assert connection.execute("SELECT COUNT(*) FROM erp_sync_task").fetchone()[0] == 0

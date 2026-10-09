@@ -17,6 +17,7 @@ from app.services.project import get_scoped_archive_query
 from app.services.project_archive_lifecycle import claim_archive_lifecycle_rows,archive_not_pending_condition
 from app.services.product_line_scope import require_line_access
 from app.services.field_policy import validate_business_field_write,MODULE_PROJECT_ARCHIVE
+from app.services.offline_archive_reconciliation import bind_existing_targets,build_import_plan,FILLABLE_FIELDS
 
 def require_import_scope(scope):
     if not has_all_business_data(scope):
@@ -26,79 +27,98 @@ def digest(value):
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(",",":"),default=str).encode()).hexdigest()
 
 def _parse(payload):
-    return ImportPayload.model_validate(payload).model_dump(mode="json")
+    data=ImportPayload.model_validate(payload).model_dump(mode="json")
+    if not data["reconcile_existing"] and not data["targets"]:
+        data.pop("reconcile_existing");data.pop("targets")
+    return data
 
 def preview_import(db,payload,scope):
     require_import_scope(scope)
     try:data=_parse(payload)
     except ValidationError as exc:
         return {"total":len(payload.get("rows",[])),"errors":[{"row":list(e["loc"]),"message":e["msg"]} for e in exc.errors()],"content_hash":None,"already_imported":False}
-    fingerprint=digest(data)
+    fingerprint=digest({k:v for k,v in data.items() if k!="targets"})
     existing=db.query(ArchiveImportBatch).filter_by(content_hash=fingerprint).first()
     if existing:
         return {"total":len(data["rows"]),"errors":[] if existing.status=="applied" else [{"message":"此批次已回退，不允许重复执行"}],"content_hash":fingerprint,"already_imported":existing.status=="applied","batch_id":existing.id}
-    # Read one identity snapshot instead of one query per row.
-    codes={str(c).casefold() for (c,) in db.query(PmsProjectArchive.project_code)}
-    serials={str(c).strip().casefold() for (c,) in db.query(PmsProjectArchive.serial_no).filter(PmsProjectArchive.serial_no.isnot(None))}
-    ids={v for (v,) in db.query(ArchiveImportRow.source_id)};errors=[]
-    for row in data["rows"]:
-        values=row["values"];code=values["project_code"].strip()
+    plan,errors=build_import_plan(db,data)
+    ids={v for (v,) in db.query(ArchiveImportRow.source_id)}
+    for row,obj,updates in plan:
+        values=row["values"]
         def error(message,field=None):
-            errors.append({"source_id":row["source_id"],"project_code":code,"field":field,"message":message})
-        if not code:error("项目编号不能为空","project_code")
-        if code.casefold() in codes:error("项目编号与本批或现有档案重复","project_code")
-        codes.add(code.casefold())
-        if row["source_id"] in ids:error("来源ID重复")
-        ids.add(row["source_id"])
-        serial=(values.get("serial_no") or "").strip().casefold()
-        if serial:
-            if serial in serials:error("序列号与本批或现有档案重复","serial_no")
-            serials.add(serial)
+            errors.append({"source_id":row["source_id"],"project_code":values["project_code"],"field":field,"message":message})
+        if not values["project_code"].strip():error("项目编号不能为空","project_code")
+        if row["source_id"] in ids:error("来源ID已被其他批次使用")
         if values.get("product_line_id") is not None:error("期初产品线必须留空","product_line_id")
         quantity=values.get("quantity")
         if quantity is not None:
             q=Decimal(str(quantity))
             if abs(q)>=Decimal("1e12") or q.as_tuple().exponent < -8:error("数量超出12位整数或8位小数精度","quantity")
         for key,meta in {**OFFLINE_FIELDS,"equipment_series":{"enum_code":"equipment_series"}}.items():
-            if meta["enum_code"] and values.get(key) is not None:
-                try:validate_enum_value(db,meta["enum_code"],values[key])
+            if meta["enum_code"] and updates.get(key) is not None:
+                try:validate_enum_value(db,meta["enum_code"],updates[key])
                 except HTTPException:error("枚举选项不存在或已停用",key)
-        # Historical import may leave missing legacy values but cannot write read-only fields.
         try:
-            validate_business_field_write(db,MODULE_PROJECT_ARCHIVE,current_values={},updates={k:v for k,v in values.items() if v is not None},
-                entity_created_at=None,is_create=False,historical_import=True)
+            validate_business_field_write(db,MODULE_PROJECT_ARCHIVE,current_values=serialize_model(obj) if obj else {},
+                updates={k:v for k,v in updates.items() if v is not None},entity_created_at=obj.created_at if obj else None,
+                is_create=False,historical_import=True)
         except HTTPException as exc:error(str(exc.detail))
-    return {"total":len(data["rows"]),"errors":errors,"content_hash":fingerprint,"already_imported":False}
+    return {"total":len(data["rows"]),"errors":errors,"content_hash":fingerprint,"already_imported":False,
+            "created":sum(a is None for _,a,_ in plan),"updated":sum(a is not None and bool(p) for _,a,p in plan),
+            "unchanged":sum(a is not None and not p for _,a,p in plan)}
 
 def _log(db,action,obj,user_id,request,before=None):
     record_operation_log(db,module="项目档案",action=action,entity_type="pms_project_archive",entity_id=obj.id,
         entity_name=obj.project_name or obj.project_code,operator_id=user_id,request=request,
-        summary={"import":"期初档案导入","update":"批量分配产品线","delete":"回退期初档案"}[action],
+        summary={"import":"期初档案导入","update":"更新档案信息","delete":"回退期初档案"}[action],
         before_data=before,after_data=None if action=="delete" else serialize_model(obj))
 
 def apply_import(db,payload,user_id,scope,request=None,*,source_file_hash=None):
     try:
         result=preview_import(db,payload,scope)
         if result["errors"]:raise HTTPException(422,{"message":"预检未通过，未导入任何记录","errors":result["errors"]})
-        if result["already_imported"]:return {"batch_id":result["batch_id"],"created":0,"msg":"该批次已导入"}
-        rows=ImportPayload.model_validate(payload).rows
-        batch=ArchiveImportBatch(content_hash=result["content_hash"],source_file_hash=source_file_hash,row_count=len(rows),created_by=user_id,status="applied")
+        if result["already_imported"]:return {"batch_id":result["batch_id"],"created":0,"updated":0,"unchanged":0,"msg":"该批次已导入"}
+        data=_parse(payload)
+        target_ids=[v["archive_id"] for v in data.get("targets",{}).values()]
+        locked=claim_archive_lifecycle_rows(get_scoped_archive_query(db,scope),target_ids,archive_not_pending_condition())
+        if len(locked)!=len(set(target_ids)):raise HTTPException(409,"线上档案不可访问或正在同步，请重新预检")
+        # Recheck under lifecycle locks. New-code/serial races are guarded by unique indexes.
+        result=preview_import(db,payload,scope)
+        if result["errors"]:raise HTTPException(409,{"message":"线上资料已变化，整批未导入，请重新预检","errors":result["errors"]})
+        if result["already_imported"]:
+            db.rollback()  # Release lifecycle locks acquired by the overlapping request.
+            return {"batch_id":result["batch_id"],"created":0,"updated":0,"unchanged":0,"msg":"该批次已导入"}
+        plan,errors=build_import_plan(db,data)
+        if errors:raise HTTPException(409,{"message":"线上资料已变化，请重新预检","errors":errors})
+        batch=ArchiveImportBatch(content_hash=result["content_hash"],source_file_hash=source_file_hash,row_count=len(plan),created_by=user_id,status="applied")
         db.add(batch);db.flush()
-        for row in rows:
-            values=row.values.model_dump(exclude={"product_line_id"})
-            values["project_code"]=values["project_code"].strip()
-            values["project_name"]=(values["project_name"] or "").strip() or None
-            obj=PmsProjectArchive(**values,data_origin="offline_initial",erp_sync_policy="manual",erp_sync_status=None,
-                created_by=user_id,updated_by=user_id,business_product_line_id=None)
-            db.add(obj);db.flush();db.refresh(obj)
-            db.add(ArchiveImportRow(batch_id=batch.id,source_id=row.source_id,source_sheet=row.source_sheet,source_row=row.source_row,
-                archive_id=obj.id,original_code=row.original_code or obj.project_code,snapshot_hash=digest(serialize_model(obj))))
-            _log(db,"import",obj,user_id,request)
+        created=updated=unchanged=0
+        for row,obj,updates in plan:
+            before=None;previous=None
+            if obj is None:
+                values=ImportPayload.model_validate({"rows":[row]}).rows[0].values.model_dump(exclude={"product_line_id"})
+                values["project_code"]=values["project_code"].strip()
+                values["project_name"]=(values["project_name"] or "").strip() or None
+                obj=PmsProjectArchive(**values,data_origin="offline_initial",erp_sync_policy="manual",erp_sync_status=None,
+                    created_by=user_id,updated_by=user_id,business_product_line_id=None)
+                db.add(obj);operation="created";created+=1
+            elif updates:
+                before=serialize_model(obj);previous={k:getattr(obj,k) for k in updates}
+                typed=ImportPayload.model_validate({"rows":[row]}).rows[0].values.model_dump()
+                for key in updates:setattr(obj,key,typed[key])
+                obj.updated_by=user_id;obj.updated_at=datetime.now();operation="updated";updated+=1
+            else:operation="unchanged";unchanged+=1
+            db.flush();db.refresh(obj)
+            db.add(ArchiveImportRow(batch_id=batch.id,source_id=row["source_id"],source_sheet=row["source_sheet"],source_row=row["source_row"],
+                archive_id=obj.id,original_code=row["original_code"] or obj.project_code,snapshot_hash=digest(serialize_model(obj)),
+                operation=operation,before_values=previous))
+            if operation!="unchanged":_log(db,"import" if operation=="created" else "update",obj,user_id,request,before=before)
         record_operation_log(db,module="项目档案",action="import",entity_type="pms_archive_import_batch",entity_id=batch.id,
             entity_name="期初导入批次",operator_id=user_id,request=request,summary="期初档案整批导入完成",
-            after_data={"row_count":len(rows),"status":"applied","source_file_hash":source_file_hash})
+            after_data={"row_count":len(plan),"created":created,"updated":updated,"unchanged":unchanged,"status":"applied","source_file_hash":source_file_hash})
         db.commit()
-        return {"batch_id":batch.id,"created":len(rows),"msg":"已归档，未发送金蝶"}
+        return {"batch_id":batch.id,"created":created,"updated":updated,"unchanged":unchanged,
+                "msg":f"新增归档{created}条，补充{updated}条，保持不变{unchanged}条；未发送金蝶"}
     except IntegrityError:
         db.rollback()
         raise HTTPException(409,"导入内容与并发写入记录冲突，整批已回滚，请重新预检")
@@ -121,16 +141,26 @@ def rollback_import(db,batch_id,user_id,scope,request=None):
             referenced=(db.query(PmsProject.id).filter_by(archive_id=a.id).first() or
                 db.query(ErpSyncTask.id).filter_by(archive_id=a.id).first() or
                 db.query(ErpSyncLog.id).filter_by(source_id=a.id).first())
-            if a.erp_synced or referenced:blocked.append(row.source_id)
+            if row.operation=="created" and (a.erp_synced or referenced):blocked.append(row.source_id)
+            if row.operation=="updated" and (not row.before_values or set(row.before_values)-FILLABLE_FIELDS):blocked.append(row.source_id)
+            if db.query(ErpSyncTask.id).filter(ErpSyncTask.archive_id==a.id,ErpSyncTask.status.in_(["queued","running","review"])).first():blocked.append(row.source_id)
         if blocked:raise HTTPException(409,{"message":"部分档案已修改、被引用或同步，整批未回退","source_ids":blocked})
-        for a in objects:
-            _log(db,"delete",a,user_id,request,before=serialize_model(a));db.delete(a)
+        deleted=restored=0
+        for row in records:
+            a=byid[row.archive_id]
+            if row.operation=="created":
+                _log(db,"delete",a,user_id,request,before=serialize_model(a));db.delete(a);deleted+=1
+            elif row.operation=="updated":
+                before=serialize_model(a)
+                for key,value in row.before_values.items():setattr(a,key,value)
+                a.updated_by=user_id;a.updated_at=datetime.now();db.flush()
+                _log(db,"update",a,user_id,request,before=before);restored+=1
         batch.status="rolled_back"
         record_operation_log(db,module="项目档案",action="delete",entity_type="pms_archive_import_batch",entity_id=batch.id,
             entity_name="期初导入批次",operator_id=user_id,request=request,summary="期初档案整批回退完成",
             before_data={"status":"applied"},after_data={"status":"rolled_back","row_count":len(objects)})
         db.commit()
-        return {"deleted":len(objects),"batch_id":batch.id}
+        return {"deleted":deleted,"restored":restored,"batch_id":batch.id}
     except Exception:db.rollback();raise
 
 def assign_product_line(db,payload,user_id,scope,request=None):
@@ -160,9 +190,9 @@ def assign_product_line(db,payload,user_id,scope,request=None):
 def get_import_source(db,archive_id,scope):
     if not get_scoped_archive_query(db,scope).filter(PmsProjectArchive.id==archive_id).first():
         raise HTTPException(404,"档案不存在或无权访问")
-    row=db.query(ArchiveImportRow).filter_by(archive_id=archive_id).first()
+    row=db.query(ArchiveImportRow).join(ArchiveImportBatch,ArchiveImportBatch.id==ArchiveImportRow.batch_id).filter(ArchiveImportRow.archive_id==archive_id,ArchiveImportBatch.status=="applied").order_by(ArchiveImportRow.id.desc()).first()
     if row is None:return None
     batch=db.get(ArchiveImportBatch,row.batch_id)
     return {"batch_id":row.batch_id,"source_id":row.source_id,"source_sheet":row.source_sheet,
             "source_row":row.source_row,"original_code":row.original_code,
-            "imported_at":batch.created_at,"source_file_hash":batch.source_file_hash}
+            "imported_at":batch.created_at,"source_file_hash":batch.source_file_hash,"operation":row.operation}

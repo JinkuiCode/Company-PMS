@@ -16,6 +16,12 @@ class ApprovalContract(unittest.TestCase):
         signed=approval.approve_payload(self.payload,approval.APPROVED_FILE_HASH)
         signed["rows"][0]["values"]["project_name"]="tampered"
         with self.assertRaises(HTTPException):approval.verify_payload(ApprovedImportPayload.model_validate(signed))
+    def test_target_version_tampering_rejected(self):
+        self.payload.update(reconcile_existing=True,targets={"test-row":{"archive_id":8,"snapshot_hash":"a"*64}})
+        signed=approval.approve_payload(self.payload,approval.APPROVED_FILE_HASH)
+        self.assertTrue(approval.verify_payload(ApprovedImportPayload.model_validate(signed))["reconcile_existing"])
+        signed["targets"]["test-row"]["snapshot_hash"]="b"*64
+        with self.assertRaises(HTTPException):approval.verify_payload(ApprovedImportPayload.model_validate(signed))
     def test_other_file_rejected(self):
         with self.assertRaises(HTTPException):approval.approve_payload(self.payload,"0"*64)
     def test_missing_server_key_fails_closed(self):
