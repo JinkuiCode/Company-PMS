@@ -294,8 +294,8 @@ onMounted(fetchPolicies)
 }
 
 .field-policy-filters {
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: var(--pms-query-gap);
+  margin-bottom: var(--pms-query-inset);
 }
 
 .field-policy-filter {

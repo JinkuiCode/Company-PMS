@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Download, Refresh } from '@element-plus/icons-vue'
 import { createReportExport, listReportExports, downloadReportExport, type ReportExportJob, type ReportName } from '@/api/reportExport'
 
-const props = defineProps<{ report: ReportName; parameters: () => object; columns: () => string[]; disabled?: boolean }>()
+const props = defineProps<{ report: ReportName; parameters: () => object; columns: () => string[]; disabled?: boolean; beforeExport?: () => Promise<boolean> }>()
 const jobs = ref<ReportExportJob[]>([]), submitting = ref(false), downloading = ref(''), opened = ref(false)
 const pollFailed = ref(false)
 const busy = computed(() => jobs.value.some(job => ['queued', 'running'].includes(job.status)))
@@ -16,8 +16,11 @@ async function refresh() {
   if (!disposed && !pollFailed.value && busy.value) timer = setTimeout(refresh, 3000)
 }
 async function submit() {
+  if (props.disabled || submitting.value || busy.value) return
   submitting.value = true
   try {
+    if (props.beforeExport && !(await props.beforeExport())) return
+    if (props.disabled) return
     const job = await createReportExport(props.report, props.parameters(), props.columns())
     jobs.value = [job, ...jobs.value].slice(0, 20)
     opened.value = true
@@ -31,7 +34,8 @@ async function download(job: ReportExportJob) {
     const blob = await downloadReportExport(job.id)
     const url = URL.createObjectURL(blob), link = document.createElement('a')
     link.href = url
-    link.download = `${props.report === 'purchase' ? '采购进度' : '即时库存'}-${job.id.slice(0, 8)}.xlsx`
+    const reportLabel = { purchase: '采购进度', inventory: '即时库存', 'stock-detail': '物料收发明细' }[props.report]
+    link.download = `${reportLabel}-${job.id.slice(0, 8)}.xlsx`
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch { /* The shared request handler displays the error. */ }

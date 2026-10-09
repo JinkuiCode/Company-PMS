@@ -15,15 +15,19 @@ TTL = timedelta(hours=24)
 
 
 def check_permission(ctx, report):
-    if report not in ('inventory', 'purchase'):
+    if report not in ('inventory', 'purchase', 'stock-detail'):
         raise HTTPException(422, '未知报表')
     enforce_permission(ctx, f'report:{report}:view')
+    if report == 'stock-detail':
+        enforce_permission(ctx, 'report:stock-detail:list')
     enforce_permission(ctx, f'report:{report}:export')
 
 
 def fields_for(report):
     if report == 'inventory':
         from app.services.inventory_fields import report_fields
+    elif report == 'stock-detail':
+        from app.services.stock_detail_fields import report_fields
     else:
         from app.services.purchase_fields import report_fields
     return report_fields()
@@ -33,12 +37,12 @@ def scope_signature(db, ctx, report):
     from app.services.business_data_scope import has_all_business_data
     if has_all_business_data(ctx):
         scope = {'all_business_data': True}
-    elif report == 'inventory':
+    elif report in ('inventory', 'stock-detail'):
         from app.api.inventory_reports import scoped_lines
         scope = sorted((r.id, r.organization_id) for r in scoped_lines(db, ctx))
     else:
         from app.api.purchase_reports import project_scope
-        scope = sorted((r.project_code, r.organization_id) for r in project_scope(db, ctx))
+        scope = {'purchase_organizations': sorted(r.organization_id for r in project_scope(db, ctx))}
     return hashlib.sha256(json.dumps(scope, ensure_ascii=True).encode()).hexdigest()
 
 
@@ -46,9 +50,10 @@ def create_job(db, ctx, report, parameters, columns, request=None):
     check_permission(ctx, report)
     from app.services.inventory_reader import InventoryQuery
     from app.services.purchase_reader import PurchaseQuery
+    from app.services.stock_detail_reader import StockDetailQuery
     from pydantic import ValidationError
     try:
-        query = (InventoryQuery if report == 'inventory' else PurchaseQuery).model_validate(parameters)
+        query = {'inventory': InventoryQuery, 'purchase': PurchaseQuery, 'stock-detail': StockDetailQuery}[report].model_validate(parameters)
     except ValidationError:
         raise HTTPException(422, '导出筛选参数无效') from None
     allowed = {field['key'] for field in fields_for(report)}

@@ -2,11 +2,11 @@
   <div class="dict-page pms-system-page">
     <!-- 左侧：字典分类列表 -->
     <div class="dict-list-panel">
-      <div class="panel-header">
+      <div class="panel-header pms-section-header">
         <span>数据字典</span>
         <el-button v-if="hasPermission('system:dict:add')" type="primary" size="small" @click="openDictDialog()">新增分类</el-button>
       </div>
-      <div class="dict-search">
+      <div class="dict-search pms-query-density">
         <PmsTextControl v-model="searchText" placeholder="搜索分类..." clearable size="compact" aria-label="搜索分类" />
       </div>
       <div class="dict-list-wrap">
@@ -29,7 +29,7 @@
     <div class="dict-items-panel">
       <el-card v-if="selectedDict">
         <template #header>
-          <div class="items-header">
+          <div class="items-header pms-query-density">
             <div>
               <span style="font-weight:600">{{ selectedDict.dict_name }}</span>
               <el-tag size="small" style="margin-left:8px">{{ selectedDict.dict_code }}</el-tag>
@@ -45,7 +45,7 @@
           </div>
         </template>
 
-        <el-table :data="dictItems" border stripe size="small">
+        <el-table :data="dictItems" class="pms-dense-table" border stripe size="small">
           <el-table-column prop="item_label" label="表单字段名" width="140" />
           <el-table-column prop="item_value" label="数据库列名" width="160">
             <template #default="{ row }">
@@ -352,7 +352,7 @@ onMounted(() => fetchDicts())
 </script>
 
 <style scoped>
-.dict-page { display: flex; gap: 16px; height: 100%; }
+.dict-page { display: flex; gap: var(--pms-query-gap); height: 100%; }
 
 .dict-list-panel {
   width: 300px; flex-shrink: 0; background: var(--pms-surface);
@@ -360,11 +360,11 @@ onMounted(() => fetchDicts())
   display: flex; flex-direction: column; overflow: hidden;
 }
 .panel-header {
-  padding: 14px 16px; font-size: 15px; font-weight: 600;
+  padding: var(--pms-query-inset) var(--pms-panel-inset); font-size: 14px; font-weight: 600;
   border-bottom: 1px solid var(--pms-border); color: var(--pms-text);
   display: flex; justify-content: space-between; align-items: center;
 }
-.dict-search { padding: 8px 12px; }
+.dict-search { padding: var(--pms-query-inset) var(--pms-panel-inset); }
 .dict-list-wrap { flex: 1; overflow-y: auto; }
 .dict-item {
   padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--pms-border-soft);

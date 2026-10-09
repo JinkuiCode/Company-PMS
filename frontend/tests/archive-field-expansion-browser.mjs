@@ -27,7 +27,7 @@ try {
     if (url.origin !== origin) return route.abort()
     if (!path.startsWith('/api/')) return route.continue()
     let body = []
-    if (path === '/api/auth/me') body = { id: 42, username: 'test', real_name: '当前用户', permissions: ['project:archive:view', 'project:archive:add', 'project:archive:edit'] }
+    if (path === '/api/auth/me') body = { id: 42, username: 'test', real_name: '当前用户', permissions: ['project:archive:view', 'project:archive:add', 'project:archive:edit', 'project:archive:toggle'] }
     else if (path === '/api/users/options') body = [{ id: 42, real_name: '当前用户' }, { id: 17, real_name: '原负责人' }]
     else if (path === '/api/auth/product-categories') body = { unrestricted: true }
     else if (path === '/api/product-lines/options') {
@@ -51,6 +51,11 @@ try {
   })
   await page.goto(`${origin}/project/archive`)
   await expect(page.getByRole('button', { name: '编辑', exact: true })).toBeVisible()
+  assert.equal(await page.locator('.ag-header-cell[col-id="archive_selection"]').evaluate(el => el.getBoundingClientRect().width), 44)
+  assert.ok(await page.locator('.ag-header-cell-label').evaluateAll(els => els.every(el => getComputedStyle(el).justifyContent === 'center')))
+  assert.equal(await page.locator('.ag-row').first().evaluate(el => el.getBoundingClientRect().height), 32)
+  assert.ok(await page.locator('.pms-list-filter-bar .pms-form-control').evaluateAll(els => els.every(el => el.getBoundingClientRect().height === 24)))
+  await page.screenshot({ path: '../.runtime/compact-formal-archive.png' })
   assert.equal(regionRequests, 1)
   await expect(page.locator('.ag-header-cell[col-id="product_line_id"]')).toHaveCount(0)
   await page.getByRole('button', { name: '新增档案', exact: true }).click()
@@ -59,7 +64,7 @@ try {
   await expect(create.locator('.pms-form-field:has(#archive-create-product_line_id)')).toContainText('Bench')
   await expect(create).toContainText('合同与交付')
   await expect(create).toContainText('项目联系信息')
-  assert.equal(Math.round((await create.boundingBox()).width), 492)
+  assert.equal(Math.round((await create.boundingBox()).width), 460)
   async function assertCreateControlWidths() {
     const measurements = await create.locator('.pms-form-field').evaluateAll(fields => fields.map(field => {
       const section = field.closest('section').getBoundingClientRect()

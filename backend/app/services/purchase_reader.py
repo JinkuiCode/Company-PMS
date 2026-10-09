@@ -1,21 +1,26 @@
 """Fixed, parameterized Kingdee queries through the dedicated read-only identity."""
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from app.services.purchase_progress import summarize_requisition
 from app.services.purchase_fields import DOCUMENT_STATUSES
+from app.services.report_filters import Condition, parse_filters, sql_conditions
 
 REPORT_START_DATE = date(2026, 1, 1)
 
 
 class PurchaseQuery(BaseModel):
+    organization_ids: list[Annotated[int, Field(gt=0)]] = Field(default_factory=list, max_length=200)
+    filters: str = Field(default='[]', max_length=12000)
     keyword: str = Field(default='', max_length=100)
     project_code: str = Field(default='', max_length=100)
+    project_code_is_empty: bool = False
     supplier: str = Field(default='', max_length=100)
     date_from: date | None = None
     date_to: date | None = None
@@ -27,9 +32,21 @@ class PurchaseQuery(BaseModel):
 
     @model_validator(mode='after')
     def date_range(self):
+        self.conditions()
+        if self.project_code and self.project_code_is_empty:
+            raise ValueError('项目编码与空项目限定不能同时使用')
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError('开始日期不能晚于结束日期')
         return self
+
+    def conditions(self):
+        return parse_filters(self.filters, 'purchase')
+
+
+class PurchaseOverviewQuery(PurchaseQuery):
+    overview_status: Literal['', 'unfinished', 'complete', 'review'] = ''
+    sort: Literal['project_code', 'completion_rate', 'total_lines'] = 'project_code'
+    direction: Literal['asc', 'desc'] = 'asc'
 
 
 def effective_state(status, cancelled):
@@ -42,6 +59,15 @@ def effective_state(status, cancelled):
     if status in ('A', 'B', 'D', 'Z'):
         return False
     return None
+
+
+@dataclass(frozen=True)
+class OrganizationGrant:
+    organization_id: int
+
+    def __post_init__(self):
+        if type(self.organization_id) is not int or self.organization_id <= 0:
+            raise ValueError('invalid_organization_id')
 
 
 @dataclass(frozen=True)
@@ -62,6 +88,9 @@ def scope_clause(column, grants):
         return '1=1', []
     if not grants:
         return '1=0', []
+    if all(isinstance(grant, OrganizationGrant) for grant in grants):
+        ids = sorted({grant.organization_id for grant in grants})
+        return 'h.FAPPLICATIONORGID IN (' + ','.join(['%s'] * len(ids)) + ')', ids
     if any(not isinstance(grant, ProjectOrganizationGrant) for grant in grants):
         raise ValueError('paired_project_organization_grants_required')
     if len(grants) > 400:
@@ -76,6 +105,8 @@ def _prepare_scope(connection, grants):
     if grants is ALL_DATA_SCOPE:
         return
     scope_clause('a.FNUMBER', grants)
+    if grants and isinstance(grants[0], OrganizationGrant):
+        return
     if not grants or len(grants) <= 400:
         return
     cursor = connection.cursor()
@@ -444,12 +475,18 @@ def request_query(query, project_codes):
     scope, params = scope_clause('a.FNUMBER', project_codes)
     filters = [scope, 'h.FAPPLICATIONDATE >= %s']
     params.append(REPORT_START_DATE)
+    if query.organization_ids:
+        selected = sorted(set(query.organization_ids))
+        filters.append('h.FAPPLICATIONORGID IN (' + _in(selected) + ')')
+        params.extend(selected)
     if query.keyword:
         filters.append("(h.FBILLNO LIKE %s ESCAPE '~' OR m.FNUMBER LIKE %s ESCAPE '~' OR ml.FNAME LIKE %s ESCAPE '~' OR ml.FSPECIFICATION LIKE %s ESCAPE '~')")
         params.extend([_like(query.keyword)] * 4)
     if query.project_code:
         filters.append('a.FNUMBER=%s')
         params.append(query.project_code)
+    if query.project_code_is_empty:
+        filters.append("(a.FNUMBER IS NULL OR a.FNUMBER='')")
     if query.date_from:
         filters.append('h.FAPPLICATIONDATE >= %s')
         params.append(query.date_from)
@@ -468,16 +505,33 @@ def request_query(query, project_codes):
  AND (SELECT COUNT(*) FROM dbo.T_PUR_POORDERENTRY_LK all_links WHERE all_links.FENTRYID=se.FENTRYID)=1
  AND sn.FNAME LIKE %s ESCAPE '~')""")
         params.append(_like(query.supplier))
-    return REQUEST_SELECT + ' WHERE ' + ' AND '.join(filters), params
+    base = REQUEST_SELECT + ' WHERE ' + ' AND '.join(filters)
+    extra, extra_params = sql_conditions([condition for condition in query.conditions()
+                                          if condition.field != 'progress'])
+    if extra:
+        base = f'SELECT * FROM ({base}) AS filter_source WHERE {extra}'
+        params.extend(extra_params)
+    return base, params
 
 
 def list_requests(connection, query, project_codes):
+    with purchase_selection(connection, query, project_codes) as (base, params):
+        return _page_then_summarize(connection, query, base, params)
+
+
+@contextmanager
+def purchase_selection(connection, query, project_codes, *, accounting=False):
+    """Share pre-pagination membership and full accounting with export snapshots."""
     import re
     import time
     _prepare_scope(connection, project_codes)
     base, params = request_query(query, project_codes)
-    if not query.progress:
-        return _page_then_summarize(connection, query, base, params)
+    conditions = [condition for condition in query.conditions() if condition.field == 'progress']
+    if query.progress:
+        conditions.append(Condition('progress', 'equals', 'enum', query.progress))
+    if not conditions and not accounting:
+        yield base, params
+        return
     deadline = time.monotonic() + 25
     names = ['q', *(name for name, _ in ACCOUNTING_STAGES)]
     # Session-local tempdb worksets avoid SQL Server repeatedly expanding a
@@ -493,23 +547,38 @@ def list_requests(connection, query, project_codes):
             cursor.execute(f'WITH workset AS ({select}) SELECT * INTO #pms_purchase_{name} FROM workset',
                            tuple(params) if name == 'q' else ())
             created.append(name)
-        where = ' WHERE progress=%s' if query.progress else ''
-        params = [query.progress] if query.progress else []
-        total = _rows(connection, 'SELECT COUNT(*) AS total FROM #pms_purchase_report' + where, params)[0]['total']
-        sort = {'date': 'application_date', 'bill_no': 'bill_no', 'project_code': 'project_code',
-                'material_code': 'material_code'}[query.sort]
-        sql = f'WITH numbered AS (SELECT *, ROW_NUMBER() OVER (ORDER BY {sort} {query.direction}, id {query.direction}) AS row_number FROM #pms_purchase_report{where})'
-        start = (query.page - 1) * query.page_size
-        items = _rows(connection, sql + ' SELECT * FROM numbered WHERE row_number>%s AND row_number<=%s ORDER BY row_number',
-                      [*params, start, start + query.page_size]) if total else []
-        _decorate_rows(connection, _with_state(items))
-        return dict(total=total, items=items, page=query.page, page_size=query.page_size)
+        where, params = sql_conditions(conditions)
+        yield 'SELECT * FROM #pms_purchase_report AS filter_source' + (' WHERE ' + where if where else ''), params
     finally:
         try:
             for name in reversed(created):
                 cursor.execute(f'DROP TABLE #pms_purchase_{name}', ())
         finally:
             cursor.close()
+
+
+def list_overview(connection, query, project_codes):
+    """Aggregate authorized lines in SQL before paging project/organization pairs."""
+    import json
+    with purchase_selection(connection, query, project_codes, accounting=True) as (base, params):
+        counts = ','.join(f"SUM(CASE WHEN progress='{state}' THEN 1 ELSE 0 END) AS {state}_lines"
+                          for state in ('not_ordered', 'ordering', 'receiving', 'complete', 'review'))
+        grouped = (f"WITH source AS ({base}), grouped AS (SELECT organization_id,"
+                   f"COALESCE(project_code,'') AS project_code,COUNT(*) AS total_lines,{counts} "
+                   "FROM source GROUP BY organization_id,COALESCE(project_code,'')), "
+                   "projects AS (SELECT *,100.0*complete_lines/total_lines AS completion_rate FROM grouped)")
+        where = {'': '1=1', 'unfinished': 'complete_lines<total_lines',
+                 'complete': 'complete_lines=total_lines', 'review': 'review_lines>0'}[query.overview_status]
+        stats = _rows(connection, grouped + ' SELECT COUNT(*) AS total,COALESCE(SUM(total_lines),0) AS total_lines,'
+                      'COALESCE(SUM(complete_lines),0) AS complete_lines,COALESCE(SUM(review_lines),0) AS review_lines '
+                      'FROM projects WHERE ' + where, params)[0]
+        start = (query.page - 1) * query.page_size
+        order = f'{query.sort} {query.direction},organization_id,project_code'
+        sql = grouped + f', numbered AS (SELECT *,ROW_NUMBER() OVER (ORDER BY {order}) AS row_number FROM projects WHERE {where}) SELECT * FROM numbered WHERE row_number>%s AND row_number<=%s ORDER BY row_number'
+        items = _rows(connection, sql, [*params, start, start + query.page_size]) if stats['total'] else []
+        for row in items:
+            row['id'] = json.dumps([row['organization_id'], row['project_code']], ensure_ascii=False)
+        return dict(items=items, **stats, page=query.page, page_size=query.page_size)
 
 
 def progress_for(summary):
@@ -551,9 +620,9 @@ def _decorate_rows(connection, items, chains=None):
         row['supplier_name'] = '多家供应商' if len(suppliers) > 1 else next(iter(suppliers.values()), None)
 
 
-def list_options(connection, field, keyword, project_codes):
+def list_options(connection, field, keyword, project_codes, *, query=None):
     _prepare_scope(connection, project_codes)
-    base, params = request_query(PurchaseQuery(), project_codes)
+    base, params = request_query(query or PurchaseQuery(), project_codes)
     if field == 'project':
         choices = "SELECT DISTINCT project_code AS value FROM q WHERE project_code IS NOT NULL AND project_code<>'' AND project_code LIKE %s ESCAPE '~'"
     elif field == 'supplier':

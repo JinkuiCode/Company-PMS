@@ -1881,7 +1881,7 @@ onUnmounted(() => clearInterval(archiveSyncPoll))
 .project-archive-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--pms-query-gap);
   height: 100%;
   min-height: 0;
 }
@@ -1905,9 +1905,9 @@ onUnmounted(() => clearInterval(archiveSyncPoll))
   flex: 0 0 auto;
 }
 
-.archive-base-filter--keyword { width: 200px; }
+.archive-base-filter--keyword { width: 180px; }
 .archive-base-filter--enabled { width: 112px; }
-.archive-base-filter--category { width: 140px; }
+.archive-base-filter--category { width: 112px; }
 
 .archive-edit-drawer {
   display: flex;
@@ -1924,7 +1924,7 @@ onUnmounted(() => clearInterval(archiveSyncPoll))
 
 .archive-drawer-head {
   flex: 0 0 auto;
-  padding: 14px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--pms-border-soft);
 }
 
@@ -1983,7 +1983,7 @@ onUnmounted(() => clearInterval(archiveSyncPoll))
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 16px 16px;
+  padding: 4px 12px 12px;
 }
 
 .archive-drawer-section + .archive-drawer-section {
@@ -2023,7 +2023,7 @@ onUnmounted(() => clearInterval(archiveSyncPoll))
   flex: 0 0 auto;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-top: 1px solid var(--pms-border-soft);
   background: var(--pms-surface);
 }

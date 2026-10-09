@@ -19,9 +19,10 @@ try {
     if (!path.startsWith('/api/')) return route.continue()
     let body = []
     if (path === '/api/auth/me') body = { id: 1, username: 'mock', permissions: ['system:role:view', 'system:role:add', 'system:role:edit'] }
-    else if (path === '/api/roles') body = [{ id: 1, role_name: '测试角色', role_code: 'test', data_scope: 4, status: 1, home_menu_id: 10, home_priority: 20, product_category_ids: '101', remark: '保留备注' }]
+    else if (path === '/api/roles') body = [{ id: 1, role_name: '测试角色', role_code: 'test', data_scope: 4, status: 1, home_menu_id: 10, home_priority: 20, product_line_ids: [7], remark: '保留备注' }]
     else if (path === '/api/menus/tree') body = [menu]
     else if (path === '/api/roles/1/menus') body = { menu_ids: [10, 11, 12] }
+    else if (path === '/api/product-lines/role-options') body = { items: [{ value: 7, label: 'Bench' }] }
     else if (path.startsWith('/api/dicts/code/')) body = { items: [{ value: '101', label: '测试类别', status: 1 }], all_items: [{ value: '101', label: '测试类别', status: 1 }], label_map: { 101: '测试类别' } }
     if (['POST', 'PUT'].includes(route.request().method())) {
       writes.push({ path, data: route.request().postDataJSON() })
@@ -34,8 +35,8 @@ try {
   await page.getByRole('button', { name: '新增角色', exact: true }).click()
   const drawer = page.locator('.pms-form-drawer:visible')
   await expect(drawer).toBeVisible()
-  await expect.poll(() => drawer.evaluate(el => Math.round(el.getBoundingClientRect().right))).toBe(1350)
-  assert.equal(Math.round((await drawer.boundingBox()).width), 492)
+  await expect.poll(() => drawer.evaluate(el => Math.round(el.getBoundingClientRect().right))).toBe(1360)
+  assert.equal(Math.round((await drawer.boundingBox()).width), 460)
   await drawer.getByRole('button', { name: '保存', exact: true }).click()
   await expect(drawer.getByText('请输入角色名称', { exact: true })).toBeVisible()
   assert.equal(writes.length, 0)
@@ -63,7 +64,7 @@ try {
   await expect(drawer.locator('.el-select').filter({ has: page.locator('#role-home') })).toContainText('自动选择可访问页面')
   for (const [width, height] of [[1366, 768], [1600, 900]]) {
     await page.setViewportSize({ width, height })
-    await expect.poll(() => drawer.evaluate(el => Math.round(el.getBoundingClientRect().right))).toBe(width - 16)
+    await expect.poll(() => drawer.evaluate(el => Math.round(el.getBoundingClientRect().right))).toBe(width - 6)
     await drawer.locator('.permission-check-all').scrollIntoViewIfNeeded()
     const box = await drawer.getByRole('button', { name: '保存', exact: true }).boundingBox()
     assert.ok(box.y + box.height <= height)
@@ -76,7 +77,7 @@ try {
   const result = writes.at(-1)
   assert.equal(result.path, '/api/roles/1')
   assert.equal(result.data.home_menu_id, null)
-  assert.equal(result.data.product_category_ids, '101')
+  assert.deepEqual(result.data.product_line_ids, [7])
   assert.equal(result.data.remark, '保留备注')
   assert.deepEqual(errors, [])
   console.log('Role drawer checks passed: layout, required, create/edit, retry, permissions/home linkage, payload preservation')

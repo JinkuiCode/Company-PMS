@@ -11,6 +11,23 @@
   --pms-form-control-disabled-bg: #f5f7fa;
 }
 
+/* Query density is separate from business forms and inline/grid editors. */
+.pms-query-density {
+  --pms-form-control-height-compact: var(--pms-query-height);
+  --pms-form-control-height-regular: var(--pms-query-height);
+  --pms-form-control-padding-x: 6px;
+  --pms-form-control-line-height: 18px;
+  --pms-font-size-base: 12px;
+}
+
+.pms-query-density .pms-form-control {
+  border-radius: var(--pms-query-radius);
+}
+
+.pms-query-density .pms-form-control .el-select__wrapper {
+  padding-block: 0;
+}
+
 .pms-form-control {
   position: relative;
   display: flex;

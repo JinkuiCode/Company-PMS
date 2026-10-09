@@ -5,7 +5,7 @@ const page = await browser.newPage({viewport: {width: 1366, height: 768}})
 await page.addInitScript(() => localStorage.setItem('access_token', 'inventory-test'))
 const keys = ['FID','Organization','Stock','MaterialCode','MaterialName','FSPECIFICATION','Brand','Material','SupplierNumber','FBaseQty','Unit']
 const labels = ['库存内码','组织','仓库','物料编码','物料名称','规格型号','品牌','材质','供应商编码','基本单位数量','单位']
-let fail = false, releaseOld, last
+let fail = false, releaseOld, last, calls = 0, exportBody
 const errors = []
 page.on('pageerror', e => errors.push(e.message))
 await page.route('**/api/**', async route => {
@@ -13,10 +13,14 @@ await page.route('**/api/**', async route => {
   if (!path.startsWith('/api/')) return route.continue()
   if(path === '/api/auth/me') return route.fulfill({json:{id:999, username:'test', real_name:'验收用户', permissions:['report:inventory:view','report:inventory:export'],role_codes:[],product_line_ids:[1]}})
   if(path === '/api/my-menus') return route.fulfill({json:[{id:1,menu_name:'报表中心',menu_type:'M',icon:'Document',children:[{id:2,menu_name:'即时库存查询',path:'/reports/inventory',icon:'Document'}]}]})
-  if(path === '/api/report-exports') return route.fulfill({json:[]})
+  if(path === '/api/report-exports') {
+    if(route.request().method() === 'POST') { exportBody = route.request().postDataJSON(); return route.fulfill({json:{id:'test',status:'success',processed:126,created_at:'2026-09-24T00:00:00'}}) }
+    return route.fulfill({json:[]})
+  }
   if(path.endsWith('/metadata')) return route.fulfill({json:{fields:keys.map((key,i)=>({key,label:labels[i],value_type:key==='FBaseQty'?'number':'text',width:i===4?220:140,description:labels[i],list_available:true})).filter(f=>f.key!=='FID'),organizations:[{value:100,label:'8吋半导体'}]}})
   if(path.endsWith('/options')) return route.fulfill({json:{items:[{value:'原料仓',label:'原料仓'}]}})
   if(path === '/api/reports/inventory') {
+    calls++
     last = Object.fromEntries(url.searchParams)
     const keyword = last.keyword, start = (Number(last.page)-1)*Number(last.page_size)
     if(keyword === '旧') await new Promise(resolve => {releaseOld=resolve})
@@ -27,6 +31,11 @@ await page.route('**/api/**', async route => {
 })
 try {
   await page.goto('http://127.0.0.1:5174/reports/inventory')
+  await expect(page.getByText('尚未查询', {exact:true})).toBeVisible()
+  assert.equal(calls,0)
+  await expect(page.getByRole('button',{name:'导出当前筛选',exact:true})).toBeDisabled()
+  const query = page.getByRole('button',{name:'查询',exact:true})
+  await query.click()
   await expect(page.locator('.pagination-total')).toHaveText('共 126 条')
   assert.equal(last.page_size,'50')
   await page.getByRole('button',{name:'2',exact:true}).click()
@@ -35,18 +44,36 @@ try {
   await expect(page.locator('.ag-cell[col-id="FID"]')).toHaveCount(0)
   const search = page.getByRole('textbox',{name:'搜索库存物料'})
   await search.fill('新物料')
+  const before = calls
+  await page.waitForTimeout(400)
+  assert.equal(calls,before)
+  await expect(page.getByText('条件已修改，待查询')).toBeVisible()
+  await page.getByRole('button',{name:'1',exact:true}).click()
+  await expect.poll(()=>last.page).toBe('1')
+  assert.equal(last.keyword,'')
+  await page.getByRole('button',{name:'导出当前筛选',exact:true}).click()
+  await expect(page.getByText('当前条件尚未查询，将导出上次查询结果。是否继续？')).toBeVisible()
+  await page.getByRole('button',{name:'继续导出',exact:true}).click()
+  await expect.poll(()=>!!exportBody).toBe(true)
+  assert.equal(exportBody.parameters.keyword,'')
+  await search.click()
+  await query.click()
   await expect.poll(()=>last.keyword).toBe('新物料')
   assert.equal(last.page,'1')
   await expect(page.locator('.ag-cell[col-id="MaterialName"]').first()).toHaveText('新物料')
   await search.fill('旧')
+  await query.click()
   await expect.poll(()=>!!releaseOld).toBe(true)
   await search.fill('新')
+  await page.getByRole('button',{name:'重置',exact:true}).click()
+  await search.fill('新')
+  await query.click()
   await expect(page.locator('.ag-cell[col-id="MaterialName"]').first()).toHaveText('新')
   releaseOld()
-  await page.getByRole('button',{name:'刷新',exact:true}).click()
+  await query.click()
   await expect(page.locator('.ag-cell[col-id="MaterialName"]').first()).toHaveText('新')
   fail=true
-  await page.getByRole('button',{name:'刷新',exact:true}).click()
+  await query.click()
   await expect(page.getByRole('alert').filter({hasText:'库存数据加载失败'})).toBeVisible()
   await expect(page.locator('.ag-cell[col-id="FID"]')).toHaveCount(0)
   fail=false
@@ -54,7 +81,34 @@ try {
   await expect(page.locator('.pagination-total')).toHaveText('共 126 条')
   await page.locator('.page-size-select').selectOption('20')
   await expect.poll(()=>last.page_size).toBe('20')
+  // Failed navigation must retry its applied request, not the edited draft.
+  await search.fill('未提交')
+  fail = true
+  await page.getByRole('button',{name:'2',exact:true}).click()
+  await expect(page.getByRole('alert').filter({hasText:'库存数据加载失败'})).toBeVisible()
+  fail = false
+  await page.getByRole('button',{name:'重试',exact:true}).click()
+  await expect.poll(()=>last.page).toBe('2')
+  assert.equal(last.keyword,'新')
+  await expect(search).toHaveValue('未提交')
+  // Restoring a saved sort must not emit an automatic business query.
+  await page.locator('.ag-header-cell[col-id="MaterialCode"] .ag-header-cell-label').click()
+  await expect.poll(()=>last.sort).toBe('MaterialCode')
+  await page.getByRole('button',{name:'保存查询方案',exact:true}).click()
+  await page.getByRole('textbox',{name:'方案名称',exact:true}).fill('排序方案')
+  await page.getByRole('button',{name:'保存',exact:true}).click()
+  await page.locator('.ag-header-cell[col-id="MaterialName"] .ag-header-cell-label').click()
+  await expect.poll(()=>last.sort).toBe('MaterialName')
+  await page.getByRole('button',{name:'重置',exact:true}).click()
+  const beforeSortPlan = calls
+  await page.locator('.pms-report-plans .el-select__wrapper').click()
+  await page.getByRole('option',{name:'排序方案',exact:true}).click()
+  await page.waitForTimeout(500)
+  assert.equal(calls,beforeSortPlan,'加载排序方案不得查询')
   assert.equal(last.page,'1')
+  await page.getByRole('button',{name:'2',exact:true}).click()
+  await expect.poll(()=>last.page).toBe('2')
+  assert.equal(last.sort,'MaterialName','未提交方案的排序不得影响翻页')
   await page.getByRole('button',{name:'打开即时库存列设置'}).click()
   await expect(page.locator('.column-picker-panel')).toBeVisible()
   await page.locator('.column-picker-panel').getByRole('button',{name:'保存',exact:true}).click()
@@ -62,6 +116,31 @@ try {
   await expect(page.locator('.el-message')).toHaveCount(0, {timeout: 10000})
   await page.mouse.move(10,10)
   assert.ok(await page.evaluate(()=>JSON.parse(localStorage.getItem('pms:inventory-report:v1:999')).columns.length===10))
+  await page.getByRole('button',{name:'添加条件',exact:true}).click()
+  await page.locator('.pms-report-conditions').getByRole('button',{name:'添加条件',exact:true}).click()
+  await page.getByRole('button',{name:'应用条件',exact:true}).click()
+  await expect(page.getByRole('alert').filter({hasText:'请填写'})).toBeVisible()
+  await page.getByRole('textbox',{name:'条件1值',exact:true}).fill('研发')
+  const beforeApply = calls
+  await page.getByRole('button',{name:'应用条件',exact:true}).click()
+  await page.waitForTimeout(400)
+  assert.equal(calls,beforeApply)
+  await page.getByRole('button',{name:'保存查询方案',exact:true}).click()
+  await page.getByRole('textbox',{name:'方案名称',exact:true}).fill('验收方案')
+  await page.getByRole('button',{name:'保存',exact:true}).click()
+  await page.getByRole('button',{name:'重置',exact:true}).click()
+  await expect(search).toHaveValue('')
+  await page.locator('.page-size-select').selectOption('50')
+  await expect.poll(()=>last.page_size).toBe('50')
+  const beforeRestore = calls
+  await page.locator('.pms-report-plans .el-select__wrapper').click()
+  await page.getByRole('option',{name:'验收方案',exact:true}).click()
+  await expect(search).toHaveValue('未提交')
+  assert.equal(calls,beforeRestore)
+  await expect(page.locator('.page-size-select')).toHaveValue('50')
+  await query.click()
+  await expect.poll(()=>JSON.parse(last.filters).length).toBe(1)
+  await expect.poll(()=>last.page_size).toBe('20')
   for(const width of [1366,1600]) {
     await page.setViewportSize({width,height:900})
     await page.evaluate(()=>document.fonts.ready)
@@ -69,6 +148,13 @@ try {
     const footer=await page.locator('.custom-pagination').boundingBox()
     assert.ok(footer.y+footer.height<=900)
   }
+  await page.setViewportSize({width:390,height:844})
+  await page.locator('.collapse-btn').click()
+  await page.waitForTimeout(350)
+  await expect(page.getByRole('combobox',{name:'库存仓库筛选'})).toBeVisible()
+  await expect(page.getByRole('button',{name:'查询',exact:true})).toBeVisible()
+  assert.ok(await page.locator('.pms-report-query-bar').evaluate(el=>[...el.querySelectorAll('input')].filter(e=>e.getBoundingClientRect().width).every(e=>e.getBoundingClientRect().right<=el.getBoundingClientRect().right+1)), '查询控件必须位于筛选区域内')
+  await page.screenshot({path:'../.runtime/inventory-formal-390.png'})
   assert.deepEqual(errors,[])
   console.log('inventory browser checks passed')
 } finally { await browser.close() }

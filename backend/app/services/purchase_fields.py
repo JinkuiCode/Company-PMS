@@ -1,7 +1,8 @@
 """Single source of report labels, metadata, export and field-catalog entries."""
 FIELDS = [
-    ('project_code', '项目编号', 'text', '物料信息', 'T_BAS_ASSISTANTDATAENTRY', 'FNUMBER', '申请明细项目辅助资料 F_TWBJ_ASSISTANT_83G 对应编码'),
-    ('project_name', '项目名称', 'text', '物料信息', 'pms_project_archive', 'project_name', '项目编号精确匹配有权访问的 PMS 档案；无匹配时为空，不回退为金蝶名称'),
+    ('product_line_name', '产品线', 'text', '项目信息', 'T_PUR_REQUISITION', 'FAPPLICATIONORGID', '请购组织匹配 PMS 产品线显示名称；未配置时显示金蝶组织名称并标注未配置产品线，不按项目档案产品线替代'),
+    ('project_code', '项目编码', 'text', '项目信息', 'T_BAS_ASSISTANTDATAENTRY', 'FNUMBER', '申请明细项目辅助资料 F_TWBJ_ASSISTANT_83G 对应编码'),
+    ('project_name', '项目名称', 'text', '项目信息', 'pms_project_archive', 'project_name', '项目编码精确匹配有权访问的 PMS 档案；无匹配时为空，不回退为金蝶名称'),
     ('material_code', '物料编码', 'text', '物料信息', 'T_BD_MATERIAL', 'FNUMBER', '按申请明细 FMATERIALID 关联'),
     ('material_name', '物料名称', 'text', '物料信息', 'T_BD_MATERIAL_L', 'FNAME', '中文语言 2052'),
     ('specification', '规格型号', 'text', '物料信息', 'T_BD_MATERIAL_L', 'FSPECIFICATION', '中文语言 2052'),
@@ -38,9 +39,34 @@ def report_fields():
             for key, label, kind, group, table, column, description in FIELDS]
 
 
+OVERVIEW_COUNTS = [
+    ('completion_rate', '申请行完成率', '已完成申请行 / 当前查询条件下全部申请行 × 100；待核对计分母、不计分子'),
+    ('total_lines', '申请行数', '当前查询条件下的申请明细行数，按项目编码及请购组织分组'),
+    ('not_ordered_lines', '未下单', '采购进度为未下单的申请行数'),
+    ('ordering_lines', '部分下单', '采购进度为部分下单的申请行数'),
+    ('receiving_lines', '待入库', '采购进度为待入库的申请行数'),
+    ('complete_lines', '已完成', '采购进度为已完成的申请行数'),
+    ('review_lines', '数据待核对', '采购进度为数据待核对的申请行数'),
+]
+
+
+def overview_fields():
+    return [*report_fields()[:3], dict(key='organization_name', label='请购组织', value_type='text',
+            group='项目信息', description='当前组合的金蝶请购组织中文名称', editable=False, list_available=True),
+            *[dict(key=key, label=label, value_type='number', group='申请行进度',
+                   description=description, editable=False, list_available=True)
+              for key, label, description in OVERVIEW_COUNTS]]
+
+
 def catalog_fields():
     return [dict(module='purchase_report', module_name='采购进度查询', group=group,
                  field_name=label, field_code=key, value_type=kind, source_type='system',
                  storage_table=table, storage_column=column, editable=False, computed=table is None,
                  enum_code=None, description=description, catalog_source='PURCHASE_REPORT_FIELDS', sort=100000 + index)
-            for index, (key, label, kind, group, table, column, description) in enumerate(FIELDS)]
+            for index, (key, label, kind, group, table, column, description) in enumerate(FIELDS)] + [
+        dict(module='purchase_overview', module_name='采购总进度', group=field['group'],
+             field_name=field['label'], field_code=field['key'], value_type=field['value_type'],
+             source_type='system', storage_table=None, storage_column=None, editable=False,
+             computed=True, enum_code=None, description=field['description'],
+             catalog_source='PURCHASE_OVERVIEW_FIELDS', sort=101000 + index)
+        for index, field in enumerate(overview_fields())]

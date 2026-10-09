@@ -73,8 +73,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '即时库存查询', permission: 'report:inventory:view' },
       },
       {
+        path: 'reports/stock-detail', name: 'StockDetailList',
+        component: () => import('@/views/reports/StockDetailList.vue'),
+        meta: { title: '物料收发明细', permission: 'report:stock-detail:list' },
+      },
+      {
         path: 'reports/purchase-progress', name: 'PurchaseProgressList',
-        component: () => import('@/views/reports/PurchaseProgressList.vue'),
+        component: () => import('@/views/reports/PurchaseProgressReport.vue'),
         meta: { title: '采购进度查询', permission: 'report:purchase:view' },
       },
       {

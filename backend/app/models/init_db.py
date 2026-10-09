@@ -248,8 +248,6 @@ def init_db():
             {"id": 224, "parent_id": 22, "menu_name": "删除", "menu_type": "B", "permission_code": "project:archive:delete", "sort": 4},
             {"id": 225, "parent_id": 22, "menu_name": "同步", "menu_type": "B", "permission_code": "project:archive:sync", "sort": 5},
             {"id": 226, "parent_id": 22, "menu_name": "启用/禁用", "menu_type": "B", "permission_code": "project:archive:toggle", "sort": 6},
-            {"id": 227, "parent_id": 22, "menu_name": "期初导入", "menu_type": "B", "permission_code": "project:archive:import", "sort": 7},
-            {"id": 228, "parent_id": 22, "menu_name": "批量产品线", "menu_type": "B", "permission_code": "project:archive:assign-line", "sort": 8},
             # 系统管理 按钮权限 (parent_id=1)
             {"id": 111, "parent_id": 11, "menu_name": "查看", "menu_type": "B", "permission_code": "system:user:view", "sort": 1},
             {"id": 112, "parent_id": 11, "menu_name": "新增", "menu_type": "B", "permission_code": "system:user:add", "sort": 2},
@@ -275,12 +273,28 @@ def init_db():
             existing = db.query(SysMenu).filter(SysMenu.id == bm["id"]).first()
             if not existing:
                 db.add(SysMenu(**bm))
-                if bm["id"] in {171, 172, 226, 227, 228}:
+                if bm["id"] in {171, 172, 226}:
                     new_template_permission_ids.add(bm["id"])
             else:
                 for key, value in bm.items():
                     if key != "id":
                         setattr(existing, key, value)
+        db.commit()
+
+        # 新档案按钮按权限代码识别，不能占用既有报表动态分配的菜单编号。
+        for name, code, sort in (
+            ("期初导入", "project:archive:import", 7),
+            ("批量产品线", "project:archive:assign-line", 8),
+        ):
+            existing = db.query(SysMenu).filter_by(permission_code=code).one_or_none()
+            if existing:
+                if existing.parent_id != 22 or existing.menu_type != "B" or existing.path is not None:
+                    raise RuntimeError("档案导入菜单结构冲突，请先核对数据库升级")
+                continue
+            node = SysMenu(parent_id=22, menu_name=name, menu_type="B", permission_code=code, sort=sort)
+            db.add(node)
+            db.flush()
+            new_template_permission_ids.add(node.id)
         db.commit()
 
         initialize_user_security(db, grant_existing_admin=not admin_role_created)
@@ -290,6 +304,8 @@ def init_db():
         initialize_purchase_reports(db, grant_existing_admin=not admin_role_created)
         from app.services.inventory_migration import initialize_inventory_report
         initialize_inventory_report(db, grant_existing_admin=not admin_role_created)
+        from app.services.stock_detail_migration import initialize_stock_detail_report
+        initialize_stock_detail_report(db, grant_existing_admin=not admin_role_created)
         from app.services.product_line_migration import initialize_product_line_management
         initialize_product_line_management(db, grant_existing_admin=not admin_role_created)
         from app.services.all_data_migration import initialize_all_business_data

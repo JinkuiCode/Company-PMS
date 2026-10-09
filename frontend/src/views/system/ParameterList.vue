@@ -65,7 +65,7 @@ onMounted(load)
 
 <template>
   <div class="parameter-page pms-system-page pms-surface-section">
-    <div class="pms-section-header"><span class="pms-section-title">参数设置</span><div class="parameter-filters"><PmsSelectControl :model-value="group" :options="groups" aria-label="参数分组" :disabled="!!editing" @update:model-value="group = String($event ?? '')" /><PmsTextControl v-model="search" placeholder="搜索参数名称 / 编码" aria-label="搜索参数" clearable :disabled="!!editing" /></div></div>
+    <div class="pms-section-header pms-query-density"><span class="pms-section-title">参数设置</span><div class="parameter-filters"><PmsSelectControl :model-value="group" :options="groups" aria-label="参数分组" :disabled="!!editing" @update:model-value="group = String($event ?? '')" /><PmsTextControl v-model="search" placeholder="搜索参数名称 / 编码" aria-label="搜索参数" clearable :disabled="!!editing" /></div></div>
     <div v-if="failed" class="parameter-error" role="alert">参数读取失败 <el-button link type="primary" @click="load">重试</el-button></div>
     <el-table ref="table" :data="filtered" row-key="code" class="pms-dense-table" border height="100%" v-loading="loading" :expand-row-keys="editing ? [editing.code] : []">
       <el-table-column type="expand" width="1"><template #default="{ row }">
@@ -89,9 +89,9 @@ onMounted(load)
 
 <style scoped>
 .parameter-page { display: flex; flex-direction: column; min-height: 0; height: 100%; }
-.pms-section-header { flex: 0 0 auto; gap: 24px; }
+.pms-section-header { flex: 0 0 auto; gap: var(--pms-query-gap); }
 .pms-section-header { flex-wrap: wrap; }
-.parameter-filters { display: flex; gap: 12px; flex-wrap: wrap; max-width: 100%; }
+.parameter-filters { display: flex; gap: var(--pms-query-gap); flex-wrap: wrap; max-width: 100%; }
 .parameter-filters > :first-child { width: 160px; }
 .parameter-filters > :last-child { width: 260px; max-width: 100%; }
 .parameter-name { font-weight: 500; }

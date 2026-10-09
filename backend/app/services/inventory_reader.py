@@ -13,16 +13,20 @@ SOURCE = ' FROM dbo.YD_JIN_INVENTORY v '
 class Condition(BaseModel):
     model_config = ConfigDict(extra='forbid')
     field: str
-    operator: Literal['contains','equals','notEquals','greaterThan','lessThan','between']
-    value: str | int | float
+    operator: Literal['contains','notContains','startsWith','endsWith','equals','notEquals','greaterThan','greaterOrEqual','lessThan','lessOrEqual','between','isEmpty','notEmpty']
+    value: str | int | float | None = None
     valueEnd: str | int | float | None = None
 
     @model_validator(mode='after')
     def validate_condition(self):
         if self.field not in KEYS or self.field == 'FID':
             raise ValueError('未知筛选字段')
+        if self.operator in ('isEmpty','notEmpty'):
+            return self
+        if self.value is None or not str(self.value).strip():
+            raise ValueError('请填写筛选值')
         if self.field == 'FBaseQty':
-            if self.operator not in ('equals','greaterThan','lessThan','between'):
+            if self.operator not in ('equals','notEquals','greaterThan','greaterOrEqual','lessThan','lessOrEqual','between'):
                 raise ValueError('数量筛选操作无效')
             values = [self.value, self.valueEnd] if self.operator == 'between' else [self.value]
             try:
@@ -33,7 +37,7 @@ class Condition(BaseModel):
                 raise ValueError('数量范围无效')
             if len(numbers) == 2 and numbers[0] > numbers[1]:
                 raise ValueError('数量区间顺序无效')
-        elif self.operator not in ('contains','equals','notEquals') or len(str(self.value)) > 256:
+        elif self.operator not in ('contains','notContains','startsWith','endsWith','equals','notEquals') or len(str(self.value)) > 256:
             raise ValueError('文本筛选无效')
         return self
 
@@ -99,13 +103,24 @@ def where_clause(query, organizations):
         parts.append('v.Stock=%s'); params.append(query.stock)
     for f in query.conditions():
         column = f'v.[{f.field}]'
+        if f.operator in ('isEmpty','notEmpty'):
+            is_empty = f.operator == 'isEmpty'
+            if f.field == 'FBaseQty':
+                parts.append(f'{column} IS ' + ('NULL' if is_empty else 'NOT NULL'))
+            else:
+                parts.append(f"({column} IS NULL OR {column}='')" if is_empty else f"({column} IS NOT NULL AND {column}<>'')")
+            continue
         value = Decimal(str(f.value)) if f.field == 'FBaseQty' else str(f.value)
-        if f.operator == 'contains':
-            parts.append(f"{column} LIKE %s ESCAPE '~'"); params.append(like(value))
+        if f.operator in ('contains','notContains','startsWith','endsWith'):
+            pattern = like(value)
+            if f.operator == 'startsWith': pattern = pattern[1:]
+            if f.operator == 'endsWith': pattern = pattern[:-1]
+            comparison = 'NOT LIKE' if f.operator == 'notContains' else 'LIKE'
+            parts.append(f"{column} {comparison} %s ESCAPE '~'"); params.append(pattern)
         elif f.operator == 'between':
             parts.append(f'{column} BETWEEN %s AND %s'); params.extend([value,Decimal(str(f.valueEnd))])
         else:
-            operator = {'equals':'=','notEquals':'<>','greaterThan':'>','lessThan':'<'}[f.operator]
+            operator = {'equals':'=','notEquals':'<>','greaterThan':'>','greaterOrEqual':'>=','lessThan':'<','lessOrEqual':'<='}[f.operator]
             parts.append(f'{column}{operator}%s'); params.append(value)
     return ' WHERE '+' AND '.join(parts), params
 

@@ -205,10 +205,10 @@ defineExpose({ refresh })
 <style scoped>
 .grid-horizontal-scrollbar {
   width: 100%;
-  height: 20px;
+  height: 14px;
   display: flex;
   align-items: center;
-  margin-top: 6px;
+  margin-top: 2px;
   padding: 0 3px;
   cursor: pointer;
   user-select: none;

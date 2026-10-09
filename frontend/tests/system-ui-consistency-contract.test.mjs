@@ -20,7 +20,11 @@ assert.match(
   /@fontsource-variable\/noto-sans-sc\/wght\.css/,
   'The application entry should load the bundled variable font stylesheet',
 )
-assert.match(theme, /--pms-font:\s*"Noto Sans SC"/, 'PMS typography should prefer the bundled Chinese font')
+const fontStylesheet = read('node_modules/@fontsource-variable/noto-sans-sc/wght.css')
+const bundledFontFamily = fontStylesheet.match(/font-family:\s*'([^']+)'/)?.[1]
+const preferredFontFamily = theme.match(/--pms-font:\s*"([^"]+)"/)?.[1]
+assert.ok(bundledFontFamily, 'The imported font stylesheet should declare a font family')
+assert.equal(preferredFontFamily, bundledFontFamily, 'PMS typography must use the actual family declared by the bundled font')
 assert.match(theme, /--el-font-family:\s*var\(--pms-font\)/, 'Element Plus should consume the PMS font token')
 assert.match(theme, /\.pms-dense-table/, 'The global theme should expose one dense Element table standard')
 assert.match(theme, /\.pms-system-page/, 'The global theme should expose a standard system-page surface')
