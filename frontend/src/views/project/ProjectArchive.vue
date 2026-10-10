@@ -55,6 +55,9 @@
         <div class="archive-base-filter archive-base-filter--enabled">
           <PmsSelectControl v-model="archiveQuery.enabled" :options="archiveEnabledFilterOptions" size="compact" aria-label="启用状态" />
         </div>
+        <div v-if="archiveFieldVisible('archive_category')" class="archive-base-filter archive-base-filter--archive-category">
+          <PmsSelectControl v-model="archiveQuery.categories" :options="archiveCategoryFilterOptions" placeholder="全部档案类别" multiple collapse-tags collapse-tags-tooltip :max-collapse-tags="1" size="compact" clearable aria-label="档案类别" />
+        </div>
         <div v-if="archiveFieldVisible('product_category')" class="archive-base-filter archive-base-filter--category">
           <PmsSelectControl v-model="filterProductCategory" :options="archiveProductCategoryOptions" placeholder="全部产品类别" size="compact" clearable aria-label="产品类别筛选" />
         </div>
@@ -694,9 +697,17 @@ function restoreArchiveColumnState() {
   scheduleArchiveScrollbarMetrics()
 }
 
+let archiveInitialSortApplied = false
 function completeArchiveColumnPreferenceRestore() {
   if (!archiveColumnPreferencesReady.value || !gridApi) return
   restoreArchiveColumnState()
+  if (!archiveInitialSortApplied) {
+    archiveInitialSortApplied = true
+    gridApi.applyColumnState({
+      state: [{ colId: 'project_code', sort: 'desc', sortIndex: 0 }],
+      defaultState: { sort: null, sortIndex: null },
+    })
+  }
   archiveColumnPreferenceWritesEnabled.value = true
 }
 
@@ -751,6 +762,7 @@ const pageSize = ref(DEFAULT_PAGE_SIZE)
 const filterProductCategory = ref<number | null>(null)
 const archiveQuery = reactive({
   enabled: 'true' as 'true' | 'false' | 'all',
+  categories: [] as number[],
 })
 const archiveEnabledFilterOptions = [
   { label: '启用', value: 'true' },
@@ -784,6 +796,13 @@ async function fetchEffectiveArchiveFields() {
 }
 
 const filteredProductCategoryOptions = computed(() => dictOptions.product_category || [])
+
+const archiveCategoryFilterOptions = computed<PmsOption[]>(() =>
+  Object.entries(dictLabelMaps.archive_category || {}).map(([value, label]) => ({
+    value: Number(value),
+    label: String(label),
+  })),
+)
 
 const archiveProductCategoryOptions = computed<PmsOption[]>(() => filteredProductCategoryOptions.value.map(item => ({
   value: Number(item.value),
@@ -1190,7 +1209,7 @@ const defaultColDef = {
 // ========== 数据加载 ==========
 const archiveListLoading = ref(true)
 const archiveListError = ref(false)
-const archiveSort = ref<Array<{ colId: string; sort: string }>>([])
+const archiveSort = ref<Array<{ colId: string; sort: string }>>([{ colId: 'project_code', sort: 'desc' }])
 let archiveListRequestSerial = 0
 let archiveQueryReady = false
 let archiveQueryTimer: ReturnType<typeof setTimeout> | undefined
@@ -1210,7 +1229,11 @@ async function fetchList() {
         enabled: archiveQuery.enabled,
         keyword: searchKeyword.value || undefined,
         product_category: filterProductCategory.value ?? undefined,
-        filters: JSON.stringify(customFilters.value),
+        filters: JSON.stringify([
+          ...customFilters.value,
+          ...(archiveFieldVisible('archive_category') && archiveQuery.categories.length
+            ? [{ field: 'archive_category', operator: 'in', value: archiveQuery.categories }] : []),
+        ]),
         sort: JSON.stringify(archiveSort.value),
       },
     })
@@ -1255,7 +1278,7 @@ function handleArchiveSortChanged() {
   scheduleArchiveQuery()
 }
 
-watch([searchKeyword, () => archiveQuery.enabled, filterProductCategory, customFilters], scheduleArchiveQuery, { deep: true })
+watch([searchKeyword, () => archiveQuery.enabled, () => archiveQuery.categories, filterProductCategory, customFilters], scheduleArchiveQuery, { deep: true })
 onUnmounted(() => { clearTimeout(archiveQueryTimer); ++archiveListRequestSerial })
 
 async function fetchUsers() {
@@ -1861,6 +1884,8 @@ onMounted(async () => {
     fetchArchiveRegions(),
     resolveArchiveColumnPreferenceOwner(),
   ])
+  const mainCategory = archiveCategoryFilterOptions.value.find(option => option.label === '主机')
+  archiveQuery.categories = mainCategory ? [Number(mainCategory.value)] : []
   restoreSelectedArchiveColumnKeys()
   archiveColumnPreferencesReady.value = true
   await nextTick()
@@ -1908,6 +1933,7 @@ onUnmounted(() => clearInterval(archiveSyncPoll))
 .archive-base-filter--keyword { width: 180px; }
 .archive-base-filter--enabled { width: 112px; }
 .archive-base-filter--category { width: 112px; }
+.archive-base-filter--archive-category { width: 160px; }
 
 .archive-edit-drawer {
   display: flex;

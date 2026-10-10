@@ -55,7 +55,7 @@ def archive_columns():
 
 
 def apply_archive_list_query(query, filters=None, sort=None):
-    return apply_list_query(query, archive_columns(), filters, sort, (Archive.id.desc(),))
+    return apply_list_query(query, archive_columns(), filters, sort, (Archive.project_code.desc(), Archive.id.desc()))
 
 
 def apply_list_query(query, columns, filters=None, sort=None, default_order=()):
@@ -68,9 +68,16 @@ def apply_list_query(query, columns, filters=None, sort=None, default_order=()):
                    'number': {'equals', 'notEquals', 'greaterThan', 'lessThan', 'between'},
                    'decimal': {'equals', 'notEquals', 'greaterThan', 'lessThan', 'between'},
                    'date': {'equals', 'before', 'after', 'between'}}[kind]
+        if field == 'archive_category':
+            allowed = allowed | {'in'}
         if operator not in allowed:
             raise invalid_query()
         value, end = item.get('value'), item.get('valueEnd')
+        if operator == 'in':
+            if not isinstance(value, list) or not 1 <= len(value) <= 100 or any(type(v) is not int or v <= 0 for v in value):
+                raise invalid_query()
+            query = query.filter(column.in_(value))
+            continue
         if value in (None, '') or (operator == 'between' and end in (None, '')):
             continue
         try:

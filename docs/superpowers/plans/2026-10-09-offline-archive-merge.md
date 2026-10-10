@@ -11,7 +11,7 @@
 - V4文件和3024个编号保持不变，原始值保留在原文件；映射只按批准的89项到64项目标规则进行，疑点保留原值。
 - 同号档案只补空白；名称冲突保留线上，身份、产品线、金蝶关联、同步策略及业务引用保持；不触发ERP。
 - 正式导入前重新预检，不把9月24日的318/2706数量硬编码为当前数据库事实。
-- 不实际升级、导入或写金蝶；GitHub推送、master合并和生产升级保留单独批准边界。
+- 初始开发阶段不实际升级/导入；后续独立维护窗口已另行批准并执行。金蝶业务写入、GitHub推送/master合并仍不在本轮范围。
 
 ## Task 1: 批准的枚举映射
 Files: backend/app/services/offline_archive_enum_mapping.py(new), offline_archive_workbook.py, enum_registry.py, models/init_db.py; tests/offline_archive_merge_contract.py(new).
@@ -61,6 +61,6 @@ Files: frontend/src/views/project/OfflineArchiveTools.vue, OfflineArchiveSource.
 - [x] 独立升级数据库、发布固定程序并通过服务健康、业务基线、配置及配套恢复材料复验。
 - [x] 真实浏览器登录、档案/导入按钮及采购报表只读查询复验。
 - [x] 独立批准仅档案导入接口请求上限4m及一次性SYSTEM加载；原字节备份/显式原代理/平滑加载/限定配置差异验收完成，临时任务已删除。
-- [ ] 批准V4实时签名预检、正式原子导入和零ERP写入验收，更新SOP及实际结果。
+- [x] 批准V4实时签名预检、正式原子导入和零ERP写入验收，更新SOP及实际结果。
 
 正式执行记录：../../releases/PMS线下档案期初导入执行记录-20261009.md。
