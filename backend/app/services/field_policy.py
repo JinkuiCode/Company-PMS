@@ -338,9 +338,12 @@ def validate_business_field_write(
     entity_created_at: datetime.datetime | None,
     is_create: bool,
     historical_import: bool = False,
+    effective_policies: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """校验用户写入与当前字段规则，返回合并后的业务值。"""
-    effective = get_effective_field_policies(db, module_code)
+    """校验写入；内部批次可传入本次校验读取的规则，普通写入仍实时读取。"""
+    effective = effective_policies if effective_policies is not None else get_effective_field_policies(db, module_code)
+    if effective["module_code"] != module_code:
+        raise ValueError("Field policy module mismatch")
     policies = {item["field_key"]: item for item in effective["items"]}
     errors: list[dict[str, str]] = []
     merged = {**current_values, **updates}

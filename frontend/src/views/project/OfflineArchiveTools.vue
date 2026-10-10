@@ -22,10 +22,10 @@ async function chooseFile(event:Event) {
  payload.value=null;preview.value=null;errors.value=[];batchId.value=null;busy.value=true
  try {
   const data=new FormData();data.append('file',file)
-  const prepared:any=await request.post('/offline-archives/workbook',data,{headers:{'Content-Type':'multipart/form-data'}})
+  const prepared:any=await request.post('/offline-archives/workbook',data,{headers:{'Content-Type':'multipart/form-data'},timeout:120000})
   if(prepared.errors.length){errors.value=prepared.errors.map((v:any)=>v.message);return}
   payload.value=prepared.payload
-  preview.value=await request.post('/offline-archives/preview',payload.value)
+  preview.value=await request.post('/offline-archives/preview',payload.value,{timeout:120000})
   if(preview.value.already_imported)batchId.value=preview.value.batch_id
   errors.value=preview.value.errors.map((v:any)=>[v.source_id,v.message].filter(Boolean).join('：'))
  } catch(e){errors.value=[errorMessage(e)]}finally{busy.value=false}
@@ -34,7 +34,7 @@ async function applyImport(){
  if(busy.value||!payload.value||!preview.value||errors.value.length)return
  busy.value=true
  try {
-  const result:any=await request.post('/offline-archives/apply',payload.value)
+  const result:any=await request.post('/offline-archives/apply',payload.value,{timeout:120000})
   batchId.value=result.batch_id;ElMessage.success(result.msg);emit('changed')
   payload.value=null
  }catch(e){errors.value=[errorMessage(e)]}finally{busy.value=false}

@@ -16,7 +16,7 @@ from app.services.enum_registry import validate_enum_value
 from app.services.project import get_scoped_archive_query
 from app.services.project_archive_lifecycle import claim_archive_lifecycle_rows,archive_not_pending_condition
 from app.services.product_line_scope import require_line_access
-from app.services.field_policy import validate_business_field_write,MODULE_PROJECT_ARCHIVE
+from app.services.field_policy import validate_business_field_write,get_effective_field_policies,MODULE_PROJECT_ARCHIVE
 from app.services.offline_archive_reconciliation import bind_existing_targets,build_import_plan,FILLABLE_FIELDS
 
 def require_import_scope(scope):
@@ -43,6 +43,9 @@ def preview_import(db,payload,scope):
         return {"total":len(data["rows"]),"errors":[] if existing.status=="applied" else [{"message":"此批次已回退，不允许重复执行"}],"content_hash":fingerprint,"already_imported":existing.status=="applied","batch_id":existing.id}
     plan,errors=build_import_plan(db,data)
     ids={v for (v,) in db.query(ArchiveImportRow.source_id)}
+    # Reuse metadata only within this preview. Apply calls preview again after locks.
+    effective_policies=get_effective_field_policies(db,MODULE_PROJECT_ARCHIVE)
+    enum_results={}
     for row,obj,updates in plan:
         values=row["values"]
         def error(message,field=None):
@@ -56,12 +59,18 @@ def preview_import(db,payload,scope):
             if abs(q)>=Decimal("1e12") or q.as_tuple().exponent < -8:error("数量超出12位整数或8位小数精度","quantity")
         for key,meta in {**OFFLINE_FIELDS,"equipment_series":{"enum_code":"equipment_series"}}.items():
             if meta["enum_code"] and updates.get(key) is not None:
-                try:validate_enum_value(db,meta["enum_code"],updates[key])
-                except HTTPException:error("枚举选项不存在或已停用",key)
+                enum_key=(meta["enum_code"],str(updates[key]))
+                if enum_key not in enum_results:
+                    try:
+                        validate_enum_value(db,meta["enum_code"],updates[key])
+                        enum_results[enum_key]=True
+                    except HTTPException:
+                        enum_results[enum_key]=False
+                if not enum_results[enum_key]:error("枚举选项不存在或已停用",key)
         try:
             validate_business_field_write(db,MODULE_PROJECT_ARCHIVE,current_values=serialize_model(obj) if obj else {},
                 updates={k:v for k,v in updates.items() if v is not None},entity_created_at=obj.created_at if obj else None,
-                is_create=False,historical_import=True)
+                is_create=False,historical_import=True,effective_policies=effective_policies)
         except HTTPException as exc:error(str(exc.detail))
     return {"total":len(data["rows"]),"errors":errors,"content_hash":fingerprint,"already_imported":False,
             "created":sum(a is None for _,a,_ in plan),"updated":sum(a is not None and bool(p) for _,a,p in plan),
