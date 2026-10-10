@@ -127,10 +127,15 @@ def apply_list_query(query, columns, filters=None, sort=None, default_order=()):
         except (ValueError, TypeError, OverflowError, InvalidOperation):
             raise invalid_query()
     ordering = []
+    ordered_columns = []
     for item in query_items(sort):
         field, direction = item.get('colId'), item.get('sort')
         if field not in columns or direction not in ('asc', 'desc'):
             raise invalid_query()
         column = columns[field][0]
         ordering.append(column.asc() if direction == 'asc' else column.desc())
-    return query.order_by(*ordering, *default_order)
+        ordered_columns.append(column.__clause_element__())
+    # SQL Server requires each ORDER BY column to occur only once.
+    fallback = [clause for clause in default_order
+                if not any(clause.element.compare(column) for column in ordered_columns)]
+    return query.order_by(*ordering, *fallback)

@@ -7,6 +7,8 @@ from app.core.database import Base,engine,SessionLocal
 from app.models import project,rbac
 from app.services.project import get_archive_list
 from fastapi import HTTPException
+from sqlalchemy.dialects import mssql
+from app.services.list_query import apply_archive_list_query
 Base.metadata.create_all(engine)
 with SessionLocal() as db:
  for i in range(42):
@@ -30,4 +32,11 @@ with SessionLocal() as db:
    get_archive_list(db,filters=json.dumps([{'field':'archive_category','operator':'in','value':value}]))
    raise AssertionError('Invalid category input was accepted')
   except HTTPException as e:assert e.status_code==422
+ with_sort=apply_archive_list_query(db.query(project.PmsProjectArchive),sort='[{"colId":"project_code","sort":"desc"}]')
+ order_sql=str(with_sort.statement.compile(dialect=mssql.dialect())).split('ORDER BY')[-1]
+ assert order_sql.count('pms_project_archive.project_code')==1,'SQL Server forbids repeated ORDER BY columns'
+ for field,direction in (('project_code','asc'),('id','desc')):
+  ordered=apply_archive_list_query(db.query(project.PmsProjectArchive),sort=json.dumps([{'colId':field,'sort':direction}]))
+  sql=str(ordered.statement.compile(dialect=mssql.dialect())).split('ORDER BY')[-1]
+  assert sql.count('pms_project_archive.'+field)==1
 print('archive default query contract passed')
