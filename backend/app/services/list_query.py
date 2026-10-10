@@ -134,7 +134,7 @@ def apply_list_query(query, columns, filters=None, sort=None, default_order=()):
             raise invalid_query()
         column = columns[field][0]
         ordering.append(column.asc() if direction == 'asc' else column.desc())
-        ordered_columns.append(column.__clause_element__())
+        ordered_columns.append(ordering[-1].element)
     # SQL Server requires each ORDER BY column to occur only once.
     fallback = [clause for clause in default_order
                 if not any(clause.element.compare(column) for column in ordered_columns)]

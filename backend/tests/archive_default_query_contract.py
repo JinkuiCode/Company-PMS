@@ -8,7 +8,7 @@ from app.models import project,rbac
 from app.services.project import get_archive_list
 from fastapi import HTTPException
 from sqlalchemy.dialects import mssql
-from app.services.list_query import apply_archive_list_query
+from app.services.list_query import apply_archive_list_query,archive_columns
 Base.metadata.create_all(engine)
 with SessionLocal() as db:
  for i in range(42):
@@ -39,4 +39,7 @@ with SessionLocal() as db:
   ordered=apply_archive_list_query(db.query(project.PmsProjectArchive),sort=json.dumps([{'colId':field,'sort':direction}]))
   sql=str(ordered.statement.compile(dialect=mssql.dialect())).split('ORDER BY')[-1]
   assert sql.count('pms_project_archive.'+field)==1
+ for field in archive_columns():
+  ordered=apply_archive_list_query(db.query(project.PmsProjectArchive),sort=json.dumps([{'colId':field,'sort':'asc'}]))
+  str(ordered.statement.compile(dialect=mssql.dialect()))
 print('archive default query contract passed')
