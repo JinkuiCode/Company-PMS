@@ -24,7 +24,14 @@ function confirmReference(value:(string|number)[]){
 }
 const isTextOperator=(c:QueryCondition)=>['contains','notContains','startsWith','endsWith'].includes(c.operator)
 defineExpose({ focus: () => popupHost.value?.focus() })
-watch(() => props.opened, open => { if (open) { draft.value = adaptConditions(props.modelValue); errors.value = {} } }, {immediate:true})
+let application = 0
+watch([() => props.opened, () => props.modelValue], ([open]) => {
+  application++
+  applying.value = false
+  referenceOpened.value = false
+  referenceCondition.value = null
+  if (open) { draft.value = adaptConditions(props.modelValue); errors.value = {} }
+}, { immediate:true, deep:true, flush:'sync' })
 const locked = computed(() => props.disabled || props.readonly || applying.value)
 const controls = computed(() => ({ size:'compact' as const, disabled:props.disabled || applying.value, readonly:props.readonly }))
 const fieldOf = (c: QueryCondition) => props.fields.find(f => f.field === c.field)
@@ -51,22 +58,30 @@ function changeOperator(c: QueryCondition, value: unknown) {
   c.value = ['in','notIn'].includes(c.operator) ? [] : null; c.valueEnd = null; errors.value = {}
 }
 async function apply() {
-  errors.value = validateConditions(draft.value,props.fields)
+  if (!props.opened || locked.value) return
+  const snapshot = cloneQuery(draft.value)
+  errors.value = validateConditions(snapshot,props.fields)
   if (!Object.keys(errors.value).length) {
+    const run = ++application
+    const current = () => run === application && props.opened
+    const failures: Record<number,string> = {}
     applying.value=true
     try{
-      for(const c of draft.value.filter(c=>c.operator==='reference'&&fieldOf(c)?.reference)) {
+      for(const c of snapshot.filter(c=>c.operator==='reference'&&fieldOf(c)?.reference)) {
         const source=fieldOf(c)!.reference!,ids=c.value as (string|number)[],available=new Set<string|number>()
         for(let page=1;;page++) {
-          const result=await source.load({ids,conditions:draft.value,page,pageSize:100})
+          const result=await source.load({ids,conditions:snapshot,page,pageSize:100})
+          if (!current()) return
           result.items.forEach(r=>available.add(r.value))
           if(available.size>=result.total||!result.items.length)break
         }
-        if(ids.some(id=>!available.has(id)))errors.value[c.id]='部分引用记录不在当前产品线或权限范围，请重新选择'
+        if(ids.some(id=>!available.has(id)))failures[c.id]='部分引用记录不在当前产品线或权限范围，请重新选择'
       }
-      if(!Object.keys(errors.value).length)emit('apply',cloneQuery(draft.value))
-    }catch{errors.value[0]='引用校验失败，请重试；原筛选条件保持不变'}
-    finally{applying.value=false}
+      if (!current()) return
+      errors.value = failures
+      if(!Object.keys(failures).length)emit('apply',snapshot)
+    }catch{if (current()) errors.value[0]='引用校验失败，请重试；原筛选条件保持不变'}
+    finally{if (run === application) applying.value=false}
   }
   else { await nextTick(); popupHost.value?.querySelector<HTMLInputElement>('.condition-row:has(.condition-error) input')?.focus() }
 }
