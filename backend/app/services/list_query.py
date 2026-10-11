@@ -4,7 +4,7 @@ import json
 from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, cast, String
 from app.models.project import PmsProjectArchive as Archive
 from app.models.user import SysUser
 
@@ -55,15 +55,82 @@ def archive_columns():
 
 
 def apply_archive_list_query(query, filters=None, sort=None):
-    return apply_list_query(query, archive_columns(), filters, sort, (Archive.project_code.desc(), Archive.id.desc()))
+    columns = archive_columns()
+    from app.services.offline_archive_fields import OFFLINE_FIELDS
+    enum_numbers = {'product_line_id', 'product_category', 'equipment_series', 'is_enabled', 'status'} | {name for name, meta in OFFLINE_FIELDS.items() if meta['enum_code']}
+    enum_text = {'manager_name','created_by_name','updated_by_name','erp_sync_by_name','erp_sync_status','address_province','address_city'}
+    kinds = {name: 'enum_number' if name in enum_numbers else 'enum_text' if name in enum_text else kind for name, (_, kind) in columns.items()}
+    items = query_items(filters)
+    # Bound individual filter payloads before building the complete scoped query.
+    if sum(len(c.get('value')) if isinstance(c.get('value'), list) else 2 for c in items) > 1600:
+        raise invalid_query()
+    remaining = []
+    for item in items:
+        field, operator = item.get('field'), item.get('operator')
+        if item.get('schemaVersion') == 2 and operator == 'reference':
+            if field not in {'project_code','project_name'} | enum_numbers | enum_text:
+                raise invalid_query()
+            values = item.get('value')
+            if not isinstance(values, list) or not 1 <= len(values) <= 1000:
+                raise invalid_query()
+            column, kind = (Archive.id, 'enum_number') if field in {'project_code','project_name'} else (columns[field][0], kinds[field])
+            from app.services.query_conditions import build_query_clause
+            if kind == 'enum_number' and any(type(v) is not int or v < (1 if field in {'project_code','project_name'} else 0) or v > 2147483647 for v in values):
+                raise invalid_query()
+            query = query.filter(build_query_clause(column, kind, {**item,'operator':'in'},membership=True))
+        elif item.get('schemaVersion') == 2 and operator in {'contains','notContains','startsWith','endsWith'} and field in enum_numbers | enum_text:
+            query = query.filter(_archive_label_clause(query.session, field, columns[field][0], item))
+        else:
+            remaining.append(item)
+    query = apply_list_query(query, columns, remaining, sort, (Archive.project_code.desc(), Archive.id.desc()), unified_kinds=kinds, membership_fields={'project_code','project_name'})
+    from sqlalchemy.dialects import mssql
+    compiled = query.statement.compile(dialect=mssql.pyodbc.dialect(paramstyle='qmark'), compile_kwargs={'render_postcompile': True})
+    # Scope predicates also contribute parameters; leave room for paging/count.
+    if len(compiled.positiontup or ()) > 2000:
+        raise HTTPException(422, detail='查询条件与权限范围组合过大，请减少引用数量或拆分查询')
+    return query
 
 
-def apply_list_query(query, columns, filters=None, sort=None, default_order=()):
+def _archive_label_clause(db, field, column, item):
+    from app.services.query_conditions import build_query_clause
+    from app.services.offline_archive_fields import OFFLINE_FIELDS
+    from app.models.dict import SysDict, SysDictItem
+    from app.models.product_line import SysProductLine
+    enum_code = OFFLINE_FIELDS.get(field, {}).get('enum_code') or {'equipment_series':'equipment_series','product_category':'product_category','status':'archive_status'}.get(field)
+    if field == 'product_line_id':
+        return column.in_(select(SysProductLine.id).where(build_query_clause(SysProductLine.display_name,'text',item)))
+    if enum_code:
+        # Include disabled values for historical querying; never enable them for writes.
+        return cast(column,String(64)).in_(select(SysDictItem.item_value).join(SysDict,SysDict.id==SysDictItem.dict_id).where(
+            SysDict.dict_code==enum_code, build_query_clause(SysDictItem.item_label,'text',item)))
+    if field in {'is_enabled','erp_sync_status'}:
+        from app.services.erp_queue import STATUS_LABELS
+        labels = {1:'启用',0:'禁用'} if field=='is_enabled' else {**STATUS_LABELS, 'pending':'同步中','historical':'金蝶历史档案'}
+        from app.services.query_conditions import scalar, invalid
+        try:
+            needle=scalar(item.get('value'),'text')
+        except (ValueError,TypeError):
+            raise invalid()
+        match={'contains':lambda label:needle in label,'notContains':lambda label:needle not in label,
+               'startsWith':lambda label:label.startswith(needle),'endsWith':lambda label:label.endswith(needle)}[item['operator']]
+        return column.in_([key for key,label in labels.items() if match(label.lower())])
+    return build_query_clause(column,'text',item)
+
+
+def apply_list_query(query, columns, filters=None, sort=None, default_order=(), unified_kinds=None, membership_fields=frozenset()):
     for item in query_items(filters):
         field, operator = item.get('field'), item.get('operator')
         if field not in columns:
             raise invalid_query()
         column, kind = columns[field]
+        if item.get('schemaVersion') not in (None, 1, 2) or isinstance(item.get('schemaVersion'), bool):
+            raise invalid_query()
+        if item.get('schemaVersion') == 2:
+            if not unified_kinds:
+                raise invalid_query()
+            from app.services.query_conditions import build_query_clause
+            query = query.filter(build_query_clause(column, unified_kinds[field], item,membership=field in membership_fields))
+            continue
         allowed = {'text': {'contains', 'equals', 'notEquals'},
                    'number': {'equals', 'notEquals', 'greaterThan', 'lessThan', 'between'},
                    'decimal': {'equals', 'notEquals', 'greaterThan', 'lessThan', 'between'},

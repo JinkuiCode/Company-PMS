@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict'
+const core = await import('../src/query-system/core.ts')
+const reference = await import('../src/query-system/reference.ts')
+const adapter = await import('../src/query-system/list-adapter.ts')
+const fields = [{field:'code',label:'编码',type:'text',reference:{title:'档案',keyField:'id',keyType:'number',load:async()=>({items:[],total:0})}},
+ {field:'line',label:'产品线',type:'enum',options:[{value:1,label:'8吋Bench'},{value:2,label:'Single'}]}]
+const c=(field,operator,value)=>({id:1,field,operator,value,valueEnd:null,schemaVersion:2})
+assert.ok(core.operatorsForField(fields[0]).includes('reference'))
+assert.ok(core.operatorsForField(fields[1]).includes('contains'))
+assert.deepEqual(core.validateConditions([c('code','reference',[41,42])],fields),{})
+for(const values of [[],['41'],[true],[-1],[1.5]]) assert.ok(core.validateConditions([c('code','reference',values)],fields)[1])
+assert.equal(core.matchesConditions({id:41,code:'同名'},[c('code','reference',[42])],fields),false)
+assert.equal(core.matchesConditions({id:42,code:'已改名'},[c('code','reference',[42])],fields),true)
+const listFields=[{field:'code',label:'编码',type:'text',reference:fields[0].reference,getValue:r=>r.code}]
+assert.equal(core.matchesConditions(adapter.toQueryRecord({id:42,code:'已改名'},listFields),[c('code','reference',[42])],adapter.toQueryFields(listFields)),true,'本地列表适配不得丢掉引用键')
+assert.equal(core.matchesConditions({line:1},[c('line','contains','Bench')],fields),true)
+assert.equal(core.matchesConditions({line:2},[c('line','reference',[1])],fields),false)
+assert.deepEqual(reference.parseReferenceBatch('001\r\n 002 \n001\n'),{values:['001','002'],duplicates:1})
+assert.throws(()=>reference.parseReferenceBatch('001\tA'),/一列/)
+assert.throws(()=>reference.parseReferenceBatch('\n'),/粘贴/)
+const inputs=Array.from({length:1000},(_,i)=>`项目${i}`)
+const chunks=reference.splitReferenceBatch(inputs)
+assert.deepEqual(chunks.flat(),inputs,'分批不能截断输入')
+assert.ok(chunks.every(c=>c.length<=100&&encodeURIComponent(JSON.stringify(c)).length<=4000))
+const result=reference.referenceBatchReport(['A','B','C'],[{value:1,code:'A',name:'相同'},{value:2,code:'A',name:'相同'},{value:3,code:'B',name:'不同'}],'code')
+assert.deepEqual(result.unmatched,['C']);assert.deepEqual(result.ambiguous,[{value:'A',count:2}])
+assert.deepEqual(reference.referenceBatchReport(['a'],[{value:1,code:'A',name:'项目'}],'code').unmatched,[],'汇总与现有不区分大小写的精确文本谓词一致')
+console.log('reference core passed: stable identity, enum labels, invalid keys, single-column strings, duplicates and ambiguity')

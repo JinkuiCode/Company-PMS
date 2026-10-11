@@ -1,17 +1,12 @@
 import { computed, ref, toValue, type MaybeRefOrGetter } from 'vue'
+import { hasConditionValue, matchesConditions, type QueryCondition, type QueryOperator, type QueryValue, type QueryScalar } from '@/query-system/core'
+import type { QueryReference } from '@/query-system/reference'
+import { toQueryFields, toQueryRecord } from '@/query-system/list-adapter'
 
 export type ListFilterType = 'text' | 'select' | 'date' | 'number'
-export type ListFilterOperator =
-  | 'contains'
-  | 'equals'
-  | 'notEquals'
-  | 'before'
-  | 'after'
-  | 'greaterThan'
-  | 'lessThan'
-  | 'between'
+export type ListFilterOperator = QueryOperator
 
-export type ListFilterValue = string | number | null
+export type ListFilterValue = QueryValue
 
 export type ListFilterOption = {
   label: string
@@ -25,17 +20,13 @@ export type ListFilterField<T = Record<string, any>> = {
   operators?: ListFilterOperator[]
   options?: () => ListFilterOption[]
   getValue?: (row: T) => unknown
+  reference?: QueryReference
 }
 
-export type ListCustomFilter = {
-  id: number
-  field: string
-  operator: ListFilterOperator
-  value: ListFilterValue
-  valueEnd: ListFilterValue
-}
+export type ListCustomFilter = QueryCondition
 
 export const listFilterOperatorLabels: Record<ListFilterOperator, string> = {
+  reference:'引用',
   contains: '包含',
   equals: '等于',
   notEquals: '不等于',
@@ -44,6 +35,8 @@ export const listFilterOperatorLabels: Record<ListFilterOperator, string> = {
   greaterThan: '大于',
   lessThan: '小于',
   between: '介于',
+  notContains:'不包含', startsWith:'左包含', endsWith:'右包含', in:'属于', notIn:'不属于',
+  greaterOrEqual:'大于等于', lessOrEqual:'小于等于', isEmpty:'为空', notEmpty:'不为空',
 }
 
 export function defaultListFilterOperators(type: ListFilterType): ListFilterOperator[] {
@@ -53,7 +46,7 @@ export function defaultListFilterOperators(type: ListFilterType): ListFilterOper
   return ['contains', 'equals']
 }
 
-function emptyListFilterValue(type: ListFilterType): ListFilterValue {
+function emptyListFilterValue(type: ListFilterType): QueryScalar {
   return type === 'number' ? null : ''
 }
 
@@ -83,6 +76,7 @@ export function isEmptyListFilterValue(value: unknown) {
 }
 
 export function hasListFilterValue(filter: ListCustomFilter) {
+  if (filter.schemaVersion === 2) return hasConditionValue(filter)
   if (filter.operator === 'between') {
     return !isEmptyListFilterValue(filter.value) && !isEmptyListFilterValue(filter.valueEnd)
   }
@@ -109,6 +103,9 @@ function getRowFilterValue<T>(row: T, field: ListFilterField<T>) {
 }
 
 export function matchesListFilter<T>(row: T, filter: ListCustomFilter, fields: ListFilterField<T>[]) {
+  if (filter.schemaVersion === 2) return matchesConditions(
+    toQueryRecord(row,fields), [filter], toQueryFields(fields),
+  )
   if (!hasListFilterValue(filter)) return true
 
   const field = getListFilterField(fields, filter.field)

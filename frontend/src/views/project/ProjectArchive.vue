@@ -10,6 +10,7 @@
         scrollbar-label="项目档案表格横向滚动条"
       >
     <template #toolbar-left>
+        <PmsReportPlans ref="archivePlansRef" :storage-key="`pms:archive:query-plans:${authStore.user?.id || 'pending'}`" :snapshot="archivePlanSnapshot" @restore="restoreArchivePlan" />
         <OfflineArchiveTools :selected-rows="selectedRows" @changed="fetchList" />
         <el-button v-if="hasPermission('project:archive:add')" type="primary" size="small" @click="openCreateDialog">
           <el-icon style="margin-right:4px;"><Plus /></el-icon>
@@ -48,6 +49,7 @@
         v-model:filters="customFilters"
         :fields="archiveFilterFields"
         :active-count="activeCustomFilterCount"
+        unified
       >
         <div v-if="archiveFieldVisible('project_code') || archiveFieldVisible('project_name')" class="archive-base-filter archive-base-filter--keyword">
           <PmsTextControl v-model="searchKeyword" placeholder="搜索编号、名称、客户或序列号" size="compact" clearable :prefix-icon="Search" aria-label="搜索项目档案" />
@@ -61,6 +63,8 @@
         <div v-if="archiveFieldVisible('product_category')" class="archive-base-filter archive-base-filter--category">
           <PmsSelectControl v-model="filterProductCategory" :options="archiveProductCategoryOptions" placeholder="全部产品类别" size="compact" clearable aria-label="产品类别筛选" />
         </div>
+        <el-button size="small" :icon="Search" @click="queryArchivePlan">查询</el-button>
+        <span v-if="pendingArchivePlan" class="pms-list-filter-summary">方案已加载，待查询</span>
       </PmsListFilters>
     </template>
 
@@ -99,6 +103,7 @@
         v-model="page"
         v-model:page-size="pageSize"
         :total="total"
+        :inert="Boolean(pendingArchivePlan)"
         @update:model-value="fetchList"
         @update:page-size="() => { page = 1; fetchList() }"
       />
@@ -334,6 +339,9 @@ import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN } from '@/config/listUi'
 import PmsListFilters from '@/components/PmsListFilters.vue'
+import PmsReportPlans from '@/report-query/PmsReportPlans.vue'
+import { adaptConditions, validateConditions, cloneQuery, type QueryCondition } from '@/query-system/core'
+import { toQueryFields } from '@/query-system/list-adapter'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
   PmsNumberControl,
@@ -355,6 +363,7 @@ import { getArchiveRegions, type ArchiveRegion } from '@/api/project'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
+import { archiveReference } from '@/query-system/archive-reference'
 
 const localeText = chineseLocaleText
 const authStore = useAuthStore()
@@ -879,13 +888,8 @@ function archiveAddressFieldVisible(fieldKey: string, values: Record<string, any
 }
 
 const erpSyncStatusOptions: ListFilterOption[] = [
-  { label: '等待同步', value: 'queued' },
-  { label: '同步中', value: 'pending' },
-  { label: '待核查', value: 'review' },
-  { label: '金蝶历史档案', value: 'historical' },
-  { label: '已同步', value: 'success' },
-  { label: '失败', value: 'failed' },
-]
+  'queued', 'pending', 'review', 'historical', 'success', 'failed',
+].map(value => ({ value, label: archiveSyncLabel(value) }))
 
 function dictFilterOptions(code: string, numeric = false): ListFilterOption[] {
   return (dictOptions[code] || []).map(item => ({
@@ -906,8 +910,16 @@ function uniqueValueOptions(values: Array<string | number | null | undefined>): 
   return Array.from(optionMap.values())
 }
 
-const archiveUserNameOptions = computed(() => uniqueValueOptions([
+const archivePersonFilterKeys = new Set(['manager_name','created_by_name','updated_by_name','erp_sync_by_name'])
+function archiveConditionPersonNames(conditions: QueryCondition[]): string[] {
+  return conditions.filter(c => archivePersonFilterKeys.has(c.field))
+    .flatMap(c => Array.isArray(c.value) ? c.value : [c.value])
+    .filter((v): v is string => typeof v === 'string' && Boolean(v.trim()) && v.length <= 256)
+}
+const archiveUserNameOptions = computed((): ListFilterOption[] => uniqueValueOptions([
   ...userList.value.map(user => user.real_name || user.username),
+  // Historical names already selected remain valid when filtered off the page.
+  ...archiveConditionPersonNames(customFilters.value),
   ...rowData.value.flatMap(row => [
     row.manager_name,
     row.created_by_name,
@@ -916,6 +928,7 @@ const archiveUserNameOptions = computed(() => uniqueValueOptions([
   ]),
 ]))
 
+const archiveQueryReference=archiveReference(params=>request.get('/projects/archives/list',{params}) as unknown as Promise<any>,productLines.label,()=>productLines.filterOptions.value)
 const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
   ...archiveExpansionFields.map(field => ({
     field: field.key, policyKey: field.key, label: field.label, type: field.value_type === 'long_text' ? 'text' : field.value_type,
@@ -924,8 +937,8 @@ const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
     ...(field.key === 'address_province' ? { options: () => archiveRegions.value } : {}),
     ...(field.key === 'address_city' ? { options: () => archiveRegions.value.flatMap(region => region.children) } : {}),
   })),
-  { field: 'project_code', policyKey: 'project_code', label: '项目编号', type: 'text' },
-  { field: 'project_name', policyKey: 'project_name', label: '项目名称', type: 'text' },
+  { field: 'project_code', policyKey: 'project_code', label: '项目编号', type: 'text', reference:archiveQueryReference },
+  { field: 'project_name', policyKey: 'project_name', label: '项目名称', type: 'text', reference:archiveQueryReference },
   { field: 'customer', policyKey: 'customer', label: '客户', type: 'text' },
   { field: 'product_category', policyKey: 'product_category', label: '产品类别', type: 'select', options: () => filteredProductCategoryOptions.value.map(item => ({ ...item, value: Number(item.value) })) },
   { field: 'manager_name', policyKey: 'manager_id', label: '负责人', type: 'select', options: () => archiveUserNameOptions.value },
@@ -947,6 +960,67 @@ const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
 ] as Array<ListFilterField<any> & { policyKey: string }>).filter(field => field.policyKey !== 'product_category' && archiveFieldPolicy(field.policyKey)?.visible !== false))
 
 const { customFilters, activeCustomFilterCount } = useListFilters(archiveFilterFields)
+type ArchiveQueryPlan = {
+  conditions: typeof customFilters.value
+  keyword: string
+  enabled: 'true' | 'false' | 'all'
+  categories: number[]
+  productCategory: number | null
+  pageSize: number
+  columns?: ArchiveColumnPreferenceState
+}
+const pendingArchivePlan = ref<ArchiveQueryPlan | null>(null)
+const archivePlansRef = ref<InstanceType<typeof PmsReportPlans> | null>(null)
+function archiveValidationFields(conditions: typeof customFilters.value) {
+  const historicalNames = uniqueValueOptions(archiveConditionPersonNames(conditions))
+  return toQueryFields(archiveFilterFields.value).map(f => archivePersonFilterKeys.has(f.field)
+    ? {...f, options:[...(f.options || []),...historicalNames]} : f)
+}
+function archivePlanSnapshot(): ArchiveQueryPlan {
+  return cloneQuery({ conditions:customFilters.value, keyword:searchKeyword.value, enabled:archiveQuery.enabled,
+    categories:archiveQuery.categories, productCategory:filterProductCategory.value, pageSize:pendingArchivePlan.value?.pageSize ?? pageSize.value,
+    columns:pendingArchivePlan.value?.columns ?? {selected_column_keys:[...selectedArchiveColumnKeys.value],columnState:gridApi?.getColumnState() || []} })
+}
+function restoreArchivePlan(value: unknown) {
+  try {
+    const saved = value as ArchiveQueryPlan
+    const conditions = adaptConditions(saved.conditions)
+    const errors = validateConditions(conditions,archiveValidationFields(conditions))
+    if (Object.keys(errors).length) throw Error(Object.values(errors).join('；'))
+    if (typeof saved.keyword !== 'string' || !['true','false','all'].includes(saved.enabled) ||
+        ![15,20,50,100].includes(saved.pageSize) || !Array.isArray(saved.categories) ||
+        saved.categories.some(v=>!archiveCategoryFilterOptions.value.some(o=>o.value===v)) ||
+        (saved.productCategory != null && !archiveProductCategoryOptions.value.some(o=>o.value===saved.productCategory))) throw Error('查询方案选项已失效')
+    if (saved.columns && (!Array.isArray(saved.columns.columnState) || !Array.isArray(saved.columns.selected_column_keys))) throw Error('列设置格式无效')
+    // Keep the accepted rows, pagination and layout intact until the explicit query.
+    clearTimeout(archiveQueryTimer); ++archiveListRequestSerial
+    archiveListLoading.value = false
+    pendingArchivePlan.value = cloneQuery({...saved,conditions})
+    customFilters.value = conditions; searchKeyword.value = saved.keyword
+    archiveQuery.enabled = saved.enabled; archiveQuery.categories = [...saved.categories]
+    filterProductCategory.value = saved.productCategory
+  } catch (error) { ElMessage.warning(error instanceof Error ? error.message : '查询方案格式无效，未应用') }
+}
+async function queryArchivePlan() {
+  const saved = pendingArchivePlan.value
+  if (saved) {
+    pageSize.value = saved.pageSize
+    if (saved.columns) {
+      const key = archiveColumnPreferenceStorageKey()
+      if (key) localStorage.setItem(key,JSON.stringify(saved.columns))
+      restoreSelectedArchiveColumnKeys()
+      archiveColumnStateRestored.value = false
+      restoringArchiveColumnState.value = true
+      await nextTick()
+      restoreArchiveColumnState()
+      persistArchiveColumnPreferences()
+    }
+    await nextTick()
+    pendingArchivePlan.value = null
+  }
+  page.value = 1
+  await fetchList()
+}
 
 async function fetchDictOptions(code: string) {
   try {
@@ -1215,6 +1289,9 @@ let archiveQueryReady = false
 let archiveQueryTimer: ReturnType<typeof setTimeout> | undefined
 
 async function fetchList() {
+  if (pendingArchivePlan.value) return
+  const errors = validateConditions(customFilters.value,toQueryFields(archiveFilterFields.value))
+  if (Object.keys(errors).length) { ElMessage.warning(Object.values(errors).join('；')); return }
   clearTimeout(archiveQueryTimer)
   const requestSerial = ++archiveListRequestSerial
   archiveListLoading.value = true
@@ -1257,7 +1334,8 @@ async function fetchList() {
 }
 
 function scheduleArchiveQuery() {
-  if (!archiveQueryReady) return
+  if (!archiveQueryReady || pendingArchivePlan.value) return
+  archivePlansRef.value?.clearSelection()
   page.value = 1
   ++archiveListRequestSerial
   archiveListLoading.value = true

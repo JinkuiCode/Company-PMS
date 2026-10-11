@@ -1,5 +1,6 @@
 <template>
-  <div class="pms-list-filter-section pms-query-density">
+  <PmsUnifiedListFilters v-if="unified" :filters="filters" :fields="fields" @update:filters="emit('update:filters',$event)"><slot /></PmsUnifiedListFilters>
+  <div v-else class="pms-list-filter-section pms-query-density">
   <el-config-provider size="small">
     <div class="filter-bar pms-filter-bar pms-list-filter-bar">
       <slot />
@@ -121,7 +122,7 @@
         </template>
         <div v-else class="pms-list-filter-control pms-list-filter-control--text-value">
           <PmsTextControl
-            :model-value="filter.value"
+            :model-value="filter.value as string | number | null"
             size="compact"
             clearable
             placeholder="输入筛选值"
@@ -141,6 +142,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Filter } from '@element-plus/icons-vue'
+import PmsUnifiedListFilters from '@/query-system/PmsUnifiedListFilters.vue'
 import { PmsDateControl, PmsNumberControl, PmsSelectControl, PmsTextControl, type PmsOption } from '@/form-system'
 import {
   createListFilter,
@@ -157,6 +159,7 @@ const props = defineProps<{
   filters: ListCustomFilter[]
   fields: ListFilterField[]
   activeCount?: number
+  unified?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -205,7 +208,7 @@ function patchFilter(id: number, patch: Partial<ListCustomFilter>) {
   )))
 }
 
-function toListFilterValue(value: unknown): ListFilterValue {
+function toListFilterValue(value: unknown): string | number | null {
   if (typeof value === 'string' || typeof value === 'number') return value
   return null
 }
