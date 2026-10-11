@@ -298,6 +298,18 @@ def init_db():
         db.commit()
 
         initialize_user_security(db, grant_existing_admin=not admin_role_created)
+        for parent_id, code in ((22, "project:archive:export"), (21, "project:list:export")):
+            existing = db.query(SysMenu).filter_by(permission_code=code).one_or_none()
+            if existing:
+                if existing.parent_id != parent_id or existing.menu_type != "B" or existing.path is not None:
+                    raise RuntimeError("业务导出菜单结构冲突，请先核对数据库升级")
+                continue
+            node = SysMenu(parent_id=parent_id, menu_name="导出", menu_type="B", permission_code=code, sort=9)
+            db.add(node)
+            db.flush()
+            if role and role.status == 1 and not admin_role_created:
+                db.add(SysRoleMenu(role_id=role.id, menu_id=node.id))
+        db.commit()
         from app.services.erp_queue_migration import initialize_sync_management
         initialize_sync_management(db, grant_existing_admin=not admin_role_created)
         from app.services.purchase_migration import initialize_purchase_reports

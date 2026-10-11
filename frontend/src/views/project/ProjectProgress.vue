@@ -21,6 +21,7 @@
       <el-button v-if="hasPermission('project:list:add')" type="primary" size="small" @click="addTask">新增任务</el-button>
     </template>
     <template #toolbar-right>
+      <BusinessExportControl :resource="{kind:'tasks',projectId}" :snapshot="exportSnapshot" :disabled="!columnContext.ready?.()" />
       <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
         已筛选 {{ filteredRowData.length }} / {{ rowData.length }} 条
       </span>
@@ -28,21 +29,7 @@
     </template>
 
     <template #filters>
-      <PmsListFilters
-        v-model:filters="customFilters"
-        :fields="taskFilterFields"
-        :active-count="activeCustomFilterCount"
-      >
-        <div class="task-base-filter task-base-filter--keyword">
-          <PmsTextControl v-model="filterKeyword" placeholder="搜索任务名称" size="compact" clearable :prefix-icon="Search" aria-label="搜索任务名称" />
-        </div>
-        <div class="task-base-filter task-base-filter--assignee">
-          <PmsSelectControl v-model="filterAssignee" :options="assigneeFilterOptions" placeholder="全部负责人" size="compact" clearable filterable aria-label="负责人筛选" />
-        </div>
-        <div class="task-base-filter task-base-filter--status">
-          <PmsSelectControl v-model="filterStatus" :options="taskStatusOptions" placeholder="全部状态" size="compact" clearable aria-label="任务状态筛选" />
-        </div>
-      </PmsListFilters>
+      <PmsQueryWorkspace v-model="queryDraft" :list-key="`project-tasks-${projectId}`" :fields="queryFields" :defaults="queryDefaults" :loading="tasksLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
     </template>
 
     <template #grid>
@@ -50,7 +37,8 @@
         class="ag-theme-alpine wechat-table pms-ag-grid"
         :class="PMS_AG_GRID_FORM_CLASS"
         :rowData="filteredRowData"
-        :columnDefs="columnDefs"
+        :columnDefs="queryColumnDefs"
+        @grid-ready="gridApi = $event.api"
         :defaultColDef="defaultColDef"
         :localeText="localeText"
         :theme="'legacy'"
@@ -71,6 +59,12 @@
 </template>
 
 <script setup lang="ts">
+import BusinessExportControl from '@/business-export/BusinessExportControl.vue'
+import { businessExportSnapshot } from '@/business-export/snapshot'
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import { useSystemQuery } from '@/query-system/system-adapter'
+import { toQueryFields } from '@/query-system/list-adapter'
+import { decorateQueryColumns } from '@/query-system/column-grid'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -80,14 +74,13 @@ import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type CellValueChangedEvent } from 'ag-grid-community'
 import PmsDataList from '@/components/PmsDataList.vue'
-import PmsListFilters from '@/components/PmsListFilters.vue'
 import {
   PMS_AG_GRID_FORM_CLASS,
   PmsSelectControl,
   PmsTextControl,
   mergePmsAgCellClass,
 } from '@/form-system'
-import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
+import { type ListFilterField, type ListFilterOption } from '@/composables/useListFilters'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
@@ -142,29 +135,21 @@ const assigneeFilterOptions = computed(() => userOptions.value.map(name => ({
 const taskFilterFields = computed<ListFilterField<any>[]>(() => [
   { field: 'task_name', label: '任务名称', type: 'text' },
   { field: 'assignee_name', label: '负责人', type: 'select', options: () => assigneeFilterOptions.value },
-  { field: 'status', label: '状态', type: 'select', options: () => taskStatusOptions.value },
+  { field: 'status', label: '状态', type: 'select', options: () => Object.entries(taskStatusLabelMap.value).map(([value,label]) => ({value:Number(value),label})) },
   { field: 'progress', label: '进度', type: 'number' },
   { field: 'sort', label: '排序', type: 'number' },
   { field: 'start_date', label: '开始日期', type: 'date' },
   { field: 'due_date', label: '截止日期', type: 'date' },
 ])
 
-const { customFilters, activeCustomFilterCount, applyCustomFilters } = useListFilters(taskFilterFields)
-
-const filteredRowData = computed(() => {
-  let result = rowData.value
-  if (filterKeyword.value) {
-    const kw = filterKeyword.value.toLowerCase()
-    result = result.filter(row => String(row.task_name ?? '').toLowerCase().includes(kw))
-  }
-  if (filterAssignee.value) {
-    result = result.filter(row => row.assignee_name === filterAssignee.value)
-  }
-  if (filterStatus.value != null) {
-    result = result.filter(row => row.status === filterStatus.value)
-  }
-  return applyCustomFilters(result)
-})
+const gridApi = ref<any>(null)
+const tasksLoading = ref(true), tasksAccepted = ref(false)
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied: queryApplied, columnFilters, submit: submitQuery, filterRows, clearColumns, columnContext } = useSystemQuery(() => toQueryFields(taskFilterFields.value), ['task_name', 'assignee_name', 'status'], {requireQuery:true,ready:()=>tasksAccepted.value && !tasksLoading.value})
+const filteredRowData = computed(() => filterRows(rowData.value))
+const queryColumnDefs = computed(() => decorateQueryColumns(columnDefs.value, () => columnContext))
+columnContext.sort = (field, direction) => gridApi.value?.applyColumnState({state:[{colId:field,sort:direction}],defaultState:{sort:null}})
+function clearQueryColumns() { clearColumns(); gridApi.value?.setFilterModel(null); gridApi.value?.refreshCells({force:true}) }
+function exportSnapshot() { return businessExportSnapshot(queryApplied.value, columnFilters.value, gridApi.value) }
 
 const columnDefs = computed<ColDef[]>(() => ([
   { field: 'sort', headerName: '排序', width: 70, editable: () => hasPermission('project:list:edit'), type: 'numericColumn' },
@@ -226,8 +211,15 @@ const defaultColDef = {
 }
 
 async function fetchTasks() {
-  rowData.value = (await request.get(`/projects/${projectId}/tasks`)) as any
-  refreshProgressScrollbar()
+  tasksLoading.value = true
+  try {
+    rowData.value = (await request.get(`/projects/${projectId}/tasks`)) as any
+    tasksAccepted.value = true
+    refreshProgressScrollbar()
+  } catch (error) {
+    tasksAccepted.value = false
+    ElMessage.error(error instanceof Error ? error.message : '任务读取失败，请重试')
+  } finally { tasksLoading.value = false }
 }
 
 async function fetchUsers() {

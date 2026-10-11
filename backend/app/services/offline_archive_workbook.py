@@ -81,6 +81,8 @@ def read_archive_workbook(content):
     except (ValueError,KeyError,TypeError,StopIteration,AttributeError,zipfile.BadZipFile,ET.ParseError,OverflowError) as exc:
         raise HTTPException(422,"无法读取档案修订表："+str(exc)) from exc
 def prepare_workbook(db,content):
+    from app.services.parameter import require_archive_initialization
+    require_archive_initialization(db)
     from app.services.offline_archive_approval import APPROVED_FILE_HASH, approve_payload
     file_hash=hashlib.sha256(content).hexdigest()
     if file_hash != APPROVED_FILE_HASH:

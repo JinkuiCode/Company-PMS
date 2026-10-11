@@ -4,7 +4,7 @@ import json
 from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
-from sqlalchemy import func, select, cast, String
+from sqlalchemy import func, select, cast, String, or_, case
 from app.models.project import PmsProjectArchive as Archive
 from app.models.user import SysUser
 
@@ -51,6 +51,9 @@ def archive_columns():
             SysUser.id == getattr(Archive, foreign_key)
         ).scalar_subquery(), 'text')
     fields['erp_sync_status'] = (func.coalesce(Archive.erp_sync_status, ''), 'text')
+    fields['erp_sync_state'] = (func.coalesce(func.nullif(Archive.erp_sync_status, ''), case(
+        (Archive.data_origin == 'kingdee_initial', 'historical'),
+        (Archive.erp_synced == 1, 'success'), else_='')), 'text')
     return fields
 
 
@@ -58,7 +61,7 @@ def apply_archive_list_query(query, filters=None, sort=None):
     columns = archive_columns()
     from app.services.offline_archive_fields import OFFLINE_FIELDS
     enum_numbers = {'product_line_id', 'product_category', 'equipment_series', 'is_enabled', 'status'} | {name for name, meta in OFFLINE_FIELDS.items() if meta['enum_code']}
-    enum_text = {'manager_name','created_by_name','updated_by_name','erp_sync_by_name','erp_sync_status','address_province','address_city'}
+    enum_text = {'manager_name','created_by_name','updated_by_name','erp_sync_by_name','erp_sync_status','erp_sync_state','address_province','address_city'}
     kinds = {name: 'enum_number' if name in enum_numbers else 'enum_text' if name in enum_text else kind for name, (_, kind) in columns.items()}
     items = query_items(filters)
     # Bound individual filter payloads before building the complete scoped query.
@@ -67,7 +70,14 @@ def apply_archive_list_query(query, filters=None, sort=None):
     remaining = []
     for item in items:
         field, operator = item.get('field'), item.get('operator')
-        if item.get('schemaVersion') == 2 and operator == 'reference':
+        if field == 'keyword':
+            # Preserve the former four-field OR search inside the scoped AND query.
+            if item.get('schemaVersion') != 2 or operator != 'contains':
+                raise invalid_query()
+            from app.services.query_conditions import build_query_clause
+            query = query.filter(or_(*(build_query_clause(columns[name][0], 'text', item)
+                for name in ('project_code','project_name','customer','serial_no'))))
+        elif item.get('schemaVersion') == 2 and operator == 'reference':
             if field not in {'project_code','project_name'} | enum_numbers | enum_text:
                 raise invalid_query()
             values = item.get('value')
@@ -103,9 +113,9 @@ def _archive_label_clause(db, field, column, item):
         # Include disabled values for historical querying; never enable them for writes.
         return cast(column,String(64)).in_(select(SysDictItem.item_value).join(SysDict,SysDict.id==SysDictItem.dict_id).where(
             SysDict.dict_code==enum_code, build_query_clause(SysDictItem.item_label,'text',item)))
-    if field in {'is_enabled','erp_sync_status'}:
+    if field in {'is_enabled','erp_sync_status','erp_sync_state'}:
         from app.services.erp_queue import STATUS_LABELS
-        labels = {1:'启用',0:'禁用'} if field=='is_enabled' else {**STATUS_LABELS, 'pending':'同步中','historical':'金蝶历史档案'}
+        labels = {1:'启用',0:'禁用'} if field=='is_enabled' else {**STATUS_LABELS, 'pending':'同步中','historical':'金蝶历史档案', '':'未同步'}
         from app.services.query_conditions import scalar, invalid
         try:
             needle=scalar(item.get('value'),'text')

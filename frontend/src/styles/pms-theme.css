@@ -789,4 +789,42 @@ a {
   margin-top: 16px;
 }
 .pms-detail-switch-actions .el-button + .el-button { margin-left: 0; }
+/* Approved list-toolbar palette. These classes never change business permissions. */
+.pms-button-auxiliary {
+  --el-button-text-color: #59638e;
+  --el-button-bg-color: #fff;
+  --el-button-border-color: var(--pms-border);
+  --el-button-hover-text-color: #59638e;
+  --el-button-hover-bg-color: #f3f4fa;
+  --el-button-hover-border-color: #c7cce0;
+  --el-button-active-text-color: var(--pms-primary);
+  --el-button-active-bg-color: #f3f4fa;
+  --el-button-active-border-color: #c7cce0;
+  color: #59638e;
+  background: #fff;
+}
+.pms-button-auxiliary:hover:not(:disabled) { color: #59638e; background: #f3f4fa; border-color: #c7cce0; }
+.pms-button-export {
+  --el-button-text-color: #23775f;
+  --el-button-bg-color: #f0f8f5;
+  --el-button-border-color: #d2e7de;
+  --el-button-hover-text-color: #23775f;
+  --el-button-hover-bg-color: #e5f3ec;
+  --el-button-hover-border-color: #a7cdbb;
+  --el-button-active-text-color: #23775f;
+  --el-button-active-bg-color: #e5f3ec;
+  --el-button-active-border-color: #a7cdbb;
+}
+.pms-button-dismiss { display:grid; place-items:center; border:0; border-radius:3px; background:transparent; color:#59638e; cursor:pointer; }
+.pms-button-dismiss:hover { background:#f3f4fa; color:var(--pms-primary); }
+.pms-button-dismiss:focus-visible { outline:2px solid var(--pms-primary); outline-offset:2px; }
+.pms-query-utilities { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-left:auto; min-width:0; }
+.pms-query-utilities>.el-button { margin:0; }
+@media(max-width:560px){.pms-query-utilities{margin-left:0;}.pms-query-utilities .pms-report-query-status{display:none;}}
 .pms-ag-grid .pms-detail-row-active { background: var(--pms-primary-soft, #eef0ff); }
+.pms-ag-grid .ag-cell.pms-query-filtered-column,
+.pms-ag-grid .ag-header-cell.pms-query-filtered-column,
+.pms-dense-table.el-table .el-table__body td.el-table__cell.pms-query-filtered-column,
+.pms-dense-table .pms-query-filtered-column {
+  background-color: var(--pms-query-filter-tint, #f0f2ff);
+}

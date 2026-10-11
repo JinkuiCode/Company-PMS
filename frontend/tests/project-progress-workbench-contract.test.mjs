@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import ts from 'typescript'
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
@@ -268,10 +269,12 @@ assert.doesNotMatch(
   'Opening the create dialog must not expose numeric sentinel values as selected labels',
 )
 
-const savedTextFunction = projectList.match(/function setSavedText\([\s\S]*?\n}\n\nasync function openProjectDrawer/)
+const projectScript = projectList.match(/<script setup[^>]*>([\s\S]*?)<\/script>/)?.[1] || ''
+const scriptTree = ts.createSourceFile('ProjectList.ts', projectScript, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+const savedTextFunction = scriptTree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'setSavedText')
 assert.ok(savedTextFunction, 'Project progress workbench should keep auto-save feedback in a dedicated helper')
 assert.doesNotMatch(
-  savedTextFunction[0],
+  savedTextFunction.getText(scriptTree),
   /selectedProject\.value/,
   'Auto-saving a grid cell must not open or replace the explicit detail drawer selection',
 )

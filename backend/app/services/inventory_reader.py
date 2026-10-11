@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.services.inventory_fields import FIELDS, report_fields
 from app.services.business_data_scope import ALL_DATA_SCOPE
+from app.services.report_filters import parse_filters, parse_column_filters, sql_conditions
 
 KEYS = tuple(row[0] for row in FIELDS)
 SOURCE = ' FROM dbo.YD_JIN_INVENTORY v '
@@ -48,6 +49,7 @@ class InventoryQuery(BaseModel):
     organization_id: int | None = Field(default=None, gt=0)
     stock: str = Field(default='', max_length=256)
     filters: str = Field(default='[]', max_length=12000)
+    column_filters: str = Field(default='[]', max_length=12000)
     page: int = Field(default=1, ge=1, le=1000000)
     page_size: int = Field(default=50, ge=1, le=500)
     sort: str = 'FID'
@@ -67,7 +69,14 @@ class InventoryQuery(BaseModel):
             raise ValueError('筛选格式无效') from None
         if not isinstance(values, list) or len(values) > 20:
             raise ValueError('最多20个筛选条件')
-        return [Condition.model_validate(value) for value in values]
+        # Preserve old inventory validation and SQL semantics; only v2 delegates
+        # to the shared query compiler via report field metadata.
+        legacy = [Condition.model_validate({k: v for k, v in value.items() if k not in {'schemaVersion','id'}}
+                  if isinstance(value, dict) and type(value.get('schemaVersion')) is int and value['schemaVersion'] == 1 else value) for value in values
+                  if not isinstance(value, dict) or value.get('schemaVersion') != 2]
+        typed = parse_filters(json.dumps([v for v in values if isinstance(v, dict) and v.get('schemaVersion') == 2]), 'inventory')
+        columns = parse_column_filters(self.column_filters, 'inventory')
+        return [*legacy, *typed, *columns]
 
 
 def public_row(row):
@@ -102,6 +111,11 @@ def where_clause(query, organizations):
     if query.stock:
         parts.append('v.Stock=%s'); params.append(query.stock)
     for f in query.conditions():
+        if getattr(f, 'schemaVersion', 1) == 2:
+            extra, bound = sql_conditions([f], alias='v')
+            parts.append(extra)
+            params.extend(bound)
+            continue
         column = f'v.[{f.field}]'
         if f.operator in ('isEmpty','notEmpty'):
             is_empty = f.operator == 'isEmpty'
@@ -122,6 +136,8 @@ def where_clause(query, organizations):
         else:
             operator = {'equals':'=','notEquals':'<>','greaterThan':'>','greaterOrEqual':'>=','lessThan':'<','lessOrEqual':'<='}[f.operator]
             parts.append(f'{column}{operator}%s'); params.append(value)
+    if len(params) > 2000:
+        raise ValueError('查询参数过多，请缩小范围')
     return ' WHERE '+' AND '.join(parts), params
 
 

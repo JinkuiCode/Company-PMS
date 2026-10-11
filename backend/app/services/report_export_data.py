@@ -86,14 +86,27 @@ def purchase_batches(connection, query, scope):
                 cursor.close()
 
 
+def overview_batches(connection, query, scope):
+    from app.services.purchase_reader import overview_selection
+    with overview_selection(connection, query, scope) as (base, params):
+        cursor = connection.cursor()
+        try:
+            cursor.execute(f'SELECT * FROM ({base}) AS selected ORDER BY {query.sort} {query.direction},organization_id,project_code', tuple(params))
+            while rows := cursor.fetchmany(200):
+                yield rows
+        finally:
+            cursor.close()
+
+
 def matches_progress(query, row):
     return not query.progress or query.progress == row.get('progress')
 
 
 def write_report(db, job, ctx, path, checkpoint):
-    fields = {field['key']: field for field in fields_for(job.report)}
+    overview = job.report == 'purchase' and json.loads(job.parameters).get('view') == 'overview'
+    fields = {field['key']: field for field in fields_for(job.report, overview=overview)}
     columns = json.loads(job.columns)
-    if job.report == 'purchase':
+    if job.report == 'purchase' and not overview:
         # Always retain human-readable linkage, even if hidden in the screen layout.
         columns = list(dict.fromkeys(['bill_no', 'line_no', *columns]))
     stock_organizations = None
@@ -104,7 +117,7 @@ def write_report(db, job, ctx, path, checkpoint):
         stock_organizations = effective_organizations(stock_query, authorized_organizations(db, ctx))
     source = nullcontext(None) if stock_organizations == [] else purchase_connection()
     with ReportWorkbook(path) as book, source as connection:
-        main = book.sheet({'inventory': '即时库存', 'purchase': '采购申请主表', 'stock-detail': '物料收发明细'}[job.report],
+        main = book.sheet('采购总进度' if overview else {'inventory': '即时库存', 'purchase': '采购申请主表', 'stock-detail': '物料收发明细'}[job.report],
             [(key, fields[key]['label']) for key in columns],
             quantity_keys={'opening_qty', 'income_qty', 'issue_qty', 'balance_qty'} if job.report == 'stock-detail' else ())
         count = 0
@@ -123,16 +136,39 @@ def write_report(db, job, ctx, path, checkpoint):
             from app.services.stock_detail_engine import export_rows
             dataset = read_dataset(connection, stock_query, stock_organizations)
             checkpoint(count)
-            for row in export_rows(dataset, stock_query.start_date, conditions=stock_query.conditions()):
+            for row in export_rows(dataset, stock_query.start_date, conditions=stock_query.conditions(),
+                                   column_conditions=stock_query.column_conditions(),
+                                   sort=stock_query.sort, direction=stock_query.direction):
                 main.append(row)
                 count += 1
                 if count % 500 == 0:
                     checkpoint(count)
             checkpoint(count)
+        elif overview:
+            from app.services.purchase_reader import PurchaseOverviewQuery, _rows
+            from app.api.purchase_reports import project_scope, enrich_project_names, enrich_product_lines, resolve_project_references
+            query = PurchaseOverviewQuery.model_validate_json(job.parameters)
+            resolve_project_references(db, ctx, query)
+            from app.services.purchase_query_labels import resolve_query_labels
+            resolve_query_labels(db, ctx, query)
+            for batch in overview_batches(connection, query, project_scope(db, ctx)):
+                checkpoint(count)
+                enrich_project_names(db, ctx, batch)
+                enrich_product_lines(db, connection, batch)
+                ids = sorted({r['organization_id'] for r in batch})
+                names = {r['id']: r['name'] for r in _rows(connection,
+                    'SELECT FORGID AS id,FNAME AS name FROM dbo.T_ORG_ORGANIZATIONS_L WHERE FLOCALEID=2052 AND FORGID IN (' + ','.join(['%s'] * len(ids)) + ')', ids)}
+                for row in batch:
+                    main.append(dict(row, organization_name=names.get(row['organization_id']) or str(row['organization_id'])))
+                count += len(batch)
+                checkpoint(count)
         else:
             from app.services.purchase_reader import PurchaseQuery, load_chains, _decorate_rows
-            from app.api.purchase_reports import project_scope, enrich_project_names, enrich_product_lines
+            from app.api.purchase_reports import project_scope, enrich_project_names, enrich_product_lines, resolve_project_references
             query = PurchaseQuery.model_validate_json(job.parameters)
+            resolve_project_references(db, ctx, query)
+            from app.services.purchase_query_labels import resolve_query_labels
+            resolve_query_labels(db, ctx, query)
             orders, receipts = detail_sheets(book)
             for batch in purchase_batches(connection, query, project_scope(db, ctx)):
                 checkpoint(count)

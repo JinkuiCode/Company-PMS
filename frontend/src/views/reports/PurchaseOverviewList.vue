@@ -1,35 +1,48 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { ElButton, ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { ElButton, ElMessage, ElMessageBox } from 'element-plus'
 import { AgGridVue } from 'ag-grid-vue3'
 import { AllCommunityModule, ModuleRegistry, type ColDef, type ColumnState, type GridApi, type GridReadyEvent } from 'ag-grid-community'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import CustomPagination from '@/components/CustomPagination.vue'
-import PmsReportQueryBar from '@/report-query/PmsReportQueryBar.vue'
-import PmsReportPlans from '@/report-query/PmsReportPlans.vue'
-import { cloneQuery, validateConditions, type ReportCondition } from '@/report-query/state'
-import { PmsTextControl, PmsSelectControl, PmsDateControl } from '@/form-system'
+import ReportExportControl from '@/components/ReportExportControl.vue'
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import { cloneQuery, validateConditions, type QueryCondition } from '@/query-system/core'
+import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, reportPreferences, serializeReportConditions, serializeColumnFilters, reportColumnCandidates, linkReportScope, legacyReportSchemes, purchaseDetailEntry, createReportColumnSort } from '@/query-system/report-adapter'
+import { decorateQueryColumns } from '@/query-system/column-grid'
+import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import { DEFAULT_PAGE_SIZE, PMS_GRID_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
-import { getPurchaseMetadata, getPurchaseOverview, type PurchaseMetadata, type PurchaseOverviewRow, type PurchaseQueryDraft, type PurchaseDetailEntry } from '@/api/purchaseReport'
-import { usePurchaseCandidates } from '@/composables/usePurchaseCandidates'
+import { getPurchaseMetadata, getPurchaseOverview, getPurchaseProjectReference, getPurchaseColumnCandidates, type PurchaseMetadata, type PurchaseOverviewRow, type PurchaseQueryDraft, type PurchaseDetailEntry } from '@/api/purchaseReport'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 const emit = defineEmits<{ detail: [entry: PurchaseDetailEntry] }>()
 const auth = useAuthStore(), metadata = ref<PurchaseMetadata | null>(null)
-const filters = reactive({ keyword: '', project_code: '', supplier: '', progress: '', organization_ids: [] as number[] })
-const dates = ref<string[]>([]), conditions = ref<ReportCondition[]>([]), overviewStatus = ref('')
+const queryDraft = ref<QueryCondition[]>([]), columnFilters = ref<ColumnFilter[]>([]), overviewStatus = ref('')
+const conditions = computed({ get: () => queryDraft.value, set: value => { queryDraft.value = linkReportScope(value, queryDraft.value, 'organization_ids', ['project_code', 'project_name']) } })
 const quickOptions = [{ value: '', label: '全部项目' }, { value: 'unfinished', label: '未完成' }, { value: 'complete', label: '已完成' }, { value: 'review', label: '含待核对' }]
-const filterFields = computed(() => metadata.value?.filter_fields || [])
-const { candidates, optionLoading, findOptions: options, organizationsChanged, restoreProject, invalidate: invalidateCandidates, projectChanged, validationError, validating } = usePurchaseCandidates(() => filters.organization_ids, () => filters.project_code, value => { filters.project_code = value })
-const invalid = computed(() => validating.value ? '正在核验项目范围' : validationError.value || validateConditions(conditions.value, filterFields.value))
+const referenceScope = (q?: { conditions?: QueryCondition[]; line?: number | null }) => {
+  const selected = (reportScope('purchase', q?.conditions || conditions.value).params.organization_ids as number[]) || []
+  if (q?.line != null && selected.length && !selected.includes(q.line)) throw Error('所选项目产品线不在当前查询范围')
+  return { organization_ids: q?.line != null ? [q.line] : selected }
+}
+const projectReference = () => ({ ...reportReference('项目档案', 'id', 'number', getPurchaseProjectReference, referenceScope), lineOptions: () => metadata.value?.organizations || [] })
+const filterFields = computed(() => reportFields(metadata.value?.overview_query_fields || metadata.value?.query_fields || metadata.value?.filter_fields || [], [
+  { field: 'keyword', label: '申请单 / 物料 / 规格', type: 'text', operators: ['contains'] },
+  { field: 'organization_ids', label: '产品线', type: 'enum', options: metadata.value?.organizations || [], operators: ['equals', 'in', 'reference'] },
+  { field: 'project_code', label: '项目编码', type: 'text', reference: projectReference() },
+  { field: 'project_name', label: '项目名称', type: 'text', reference: projectReference() },
+  { field: 'supplier_name', label: '供应商', type: 'text' },
+]))
+const queryDefaults = reportDefaults(['keyword', 'organization_ids', 'project_code', 'application_date', 'supplier_name'])
+const invalid = computed(() => { try { reportScope('purchase', conditions.value); return Object.values(validateConditions(activeReportConditions(conditions.value), filterFields.value))[0] || '' } catch (error) { return (error as Error).message } })
 const rows = ref<PurchaseOverviewRow[]>([]), total = ref(0), totals = reactive({ all: 0, complete: 0, review: 0 })
 const page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), pendingSize = ref<number | null>(null)
 const loading = ref(false), error = ref(''), stamp = ref('')
 const sort = reactive({ sort: 'project_code', direction: 'asc' })
+const sortFields = { project_code: 'project_code', completion_rate: 'completion_rate', total_lines: 'total_lines' }
 const listRef = ref<InstanceType<typeof PmsDataList>>()
 let grid: GridApi<PurchaseOverviewRow> | null = null, restoring = false, serial = 0, controller: AbortController | null = null
 const fields = computed(() => metadata.value?.overview_fields || [])
@@ -44,17 +57,29 @@ function saveLayout() {
   catch { ElMessage.warning('列设置保存失败，请检查浏览器存储空间') }
   void nextTick(() => listRef.value?.refreshScrollbar())
 }
-const draft = (): PurchaseQueryDraft => ({ ...cloneQuery(filters), dates: [...(dates.value || [])], conditions: cloneQuery(conditions.value) })
+const draft = (): PurchaseQueryDraft => {
+  const scope = reportScope('purchase', conditions.value)
+  return { keyword: String(scope.params.keyword || ''), project_code: '', supplier: String(scope.params.supplier || ''), progress: '', organization_ids: (scope.params.organization_ids as number[]) || [], dates: [], conditions: scope.conditions, column_filters: cloneQuery(columnFilters.value) }
+}
 type Selection = { draft: PurchaseQueryDraft; status: string }
 const applied = ref<Selection | null>(null)
-const dirty = computed(() => !!applied.value && (JSON.stringify({ draft: draft(), status: overviewStatus.value }) !== JSON.stringify(applied.value) || pendingSize.value !== null))
+const dirty = computed(() => { if (!applied.value) return false; try { return JSON.stringify({ draft: draft(), status: overviewStatus.value }) !== JSON.stringify(applied.value) || pendingSize.value !== null } catch { return true } })
 function parameters(value: Selection, submit: boolean) {
-  return { ...value.draft, dates: undefined, conditions: undefined, filters: JSON.stringify(value.draft.conditions.map(({field,operator,value,valueEnd}) => ({field,operator,value,valueEnd}))),
+  return { ...value.draft, view: 'overview' as const, dates: undefined, conditions: undefined, filters: serializeReportConditions(value.draft.conditions), column_filters: serializeColumnFilters(value.draft.column_filters || []),
     date_from: value.draft.dates[0] || undefined, date_to: value.draft.dates[1] || undefined,
     overview_status: value.status, ...sort, page: submit ? 1 : page.value, page_size: submit ? pendingSize.value ?? pageSize.value : pageSize.value }
 }
 type Attempt = { selection: Selection; params: ReturnType<typeof parameters>; submit: boolean }
 let accepted: Attempt | null = null, failed: Attempt | null = null
+const exportParameters = () => cloneQuery(accepted!.params)
+const exportColumns = () => grid?.getAllDisplayedColumns().map(column => column.getColId()).filter(key => visible.value.includes(key)) || visible.value
+async function beforeExport() {
+  if (dirty.value) {
+    try { await ElMessageBox.confirm('当前条件尚未查询，将导出上次查询结果。是否继续？', '导出查询结果', { confirmButtonText: '继续导出', cancelButtonText: '取消', type: 'warning' }) }
+    catch { return false }
+  }
+  return !!accepted && !loading.value
+}
 function invalidate() { ++serial; controller?.abort(); loading.value = false; failed = null }
 async function query(submit = false, replay?: Attempt, applySort = false) {
   if (!metadata.value || (!submit && !applied.value) || (submit && invalid.value && !replay)) return
@@ -77,7 +102,7 @@ async function query(submit = false, replay?: Attempt, applySort = false) {
     if (accepted) { restoring = true; page.value = accepted.params.page; pageSize.value = accepted.params.page_size; restoring = false }
   } } finally { if (current === serial) loading.value = false }
 }
-function detailEntry(): PurchaseDetailEntry { return { draft: applied.value ? cloneQuery(applied.value.draft) : null } }
+function detailEntry(): PurchaseDetailEntry { return purchaseDetailEntry(applied.value?.draft || null, metadata.value?.query_fields || metadata.value?.filter_fields || []) }
 function drill(row: PurchaseOverviewRow, progress = '') {
   if (!applied.value || loading.value) return
   emit('detail', { ...detailEntry(), scope: { project_code: row.project_code, organization_id: row.organization_id, product_line_name: row.product_line_name }, progress })
@@ -89,7 +114,23 @@ const Completion = defineComponent({ props: ['params'], setup(props) { return ()
   return h('div', { class: 'overview-completion' }, [h('span', { class: 'overview-track' }, [h('span', { class: { done: value === 100 }, style: { width: `${value}%` } })]), h('span', `${value.toFixed(1)}%`)])
 } } })
 const Count = defineComponent({ props: ['params'], setup(props) { return () => h('button', { type: 'button', class: ['overview-count', { review: props.params.colDef.field === 'review_lines' }], disabled: loading.value, onClick: () => drill(props.params.data, props.params.colDef.field.replace(/_lines$/, '')) }, String(props.params.value)) } })
-const columns = computed<ColDef<PurchaseOverviewRow>[]>(() => [
+const columnFields = computed(() => reportFields(metadata.value?.overview_column_filter_fields || []).filter(f => f.operators?.join() !== 'reference'))
+const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.value, filters: () => columnFilters.value,
+  ready: () => !!accepted && !loading.value,
+  sort: createReportColumnSort({ accepted: () => accepted?.params || null, loading: () => loading.value, fields: () => sortFields, grid: () => grid,
+    changed: value => { Object.assign(sort, value); saveLayout() }, unsupported: () => ElMessage.warning('此列不支持排序'),
+    load: params => query(false, { selection: cloneQuery(accepted!.selection), params, submit: false }),
+  }),
+  load: (field, keyword, targetPage) => reportColumnCandidates(accepted?.params || null, field, keyword, targetPage, params => getPurchaseColumnCandidates(true, params)),
+  apply: (field, filter) => {
+    columnFilters.value = [...columnFilters.value.filter(f => f.field !== field), ...(filter ? [filter] : [])]
+    if (!accepted || loading.value) return
+    const selection = cloneQuery(accepted.selection); selection.draft.column_filters = cloneQuery(columnFilters.value)
+    const params = { ...cloneQuery(accepted.params), page: 1, column_filters: serializeColumnFilters(columnFilters.value) }
+    void query(true, { selection, params, submit: true })
+  },
+})
+const columns = computed<ColDef<PurchaseOverviewRow>[]>(() => decorateQueryColumns<PurchaseOverviewRow>([
   ...fields.value.map(field => ({ field: field.key, headerName: field.label, colId: field.key, hide: !visible.value.includes(field.key), initialWidth: field.key === 'project_name' ? 190 : field.key === 'completion_rate' ? 170 : field.key === 'project_code' ? 125 : field.value_type === 'number' ? 88 : 110, minWidth: 80, maxWidth: 800,
     initialPinned: defaultKeys.slice(0, 3).includes(field.key) ? 'left' as const : undefined,
     initialFlex: defaultKeys.slice(0, 3).includes(field.key) ? undefined : 1,
@@ -99,7 +140,7 @@ const columns = computed<ColDef<PurchaseOverviewRow>[]>(() => [
     tooltipValueGetter: ({value}: {value?: unknown}) => ['project_name', 'organization_name'].includes(field.key) ? String(value || '') : '',
     cellRenderer: field.key === 'completion_rate' ? Completion : field.key.endsWith('_lines') && field.key !== 'total_lines' ? Count : undefined,
   })), { colId: 'purchase_actions', headerName: '操作', pinned: 'right', lockPosition: 'right', ...PMS_ACTION_COLUMN, cellRenderer: Action, cellClass: 'pms-action-cell' },
-])
+], columnContext) as ColDef<PurchaseOverviewRow>[])
 const defaultColDef: ColDef = { resizable: true, sortable: false, comparator: () => 0, editable: false, cellStyle: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }
 function ready(event: GridReadyEvent<PurchaseOverviewRow>) {
   grid = event.api; restoring = true
@@ -113,23 +154,21 @@ function sortChanged(event: { source: string }) {
   restoring = true; page.value = 1; restoring = false; saveLayout(); void query(false, undefined, true)
 }
 function resized(event: { finished: boolean }) { if (event.finished) saveLayout() }
-const planSnapshot = () => ({ ...draft(), overviewStatus: overviewStatus.value, pageSize: pendingSize.value ?? pageSize.value, visible: visible.value, columns: grid?.getColumnState() || savedColumns.value, sort: { ...sort } })
-async function restorePlan(value: unknown) {
-  const plan = value as ReturnType<typeof planSnapshot>
-  if (!plan || !Array.isArray(plan.conditions) || !Array.isArray(plan.dates) || !Array.isArray(plan.organization_ids) || !Array.isArray(plan.columns) || !Array.isArray(plan.visible)) { ElMessage.warning('查询方案格式无效'); return }
-  const problem = validateConditions(plan.conditions, filterFields.value)
-  if (problem) { ElMessage.warning(problem); return }
-  if (plan.organization_ids.some(id => !metadata.value?.organizations?.some(option => option.value === id))) { ElMessage.warning('查询方案包含不可选产品线，请重新配置方案'); return }
-  invalidate(); restoring = true
-  Object.assign(filters, { keyword: plan.keyword || '', project_code: plan.project_code || '', supplier: plan.supplier || '', progress: plan.progress || '', organization_ids: [...plan.organization_ids] })
-  dates.value = [...plan.dates]; conditions.value = cloneQuery(plan.conditions); overviewStatus.value = quickOptions.some(o => o.value === plan.overviewStatus) ? plan.overviewStatus : ''
-  pendingSize.value = [15,50,100,200,500].includes(plan.pageSize) ? plan.pageSize : 50
-  visible.value = plan.visible.filter(k => fields.value.some(f => f.key === k)); savedColumns.value = plan.columns
-  Object.assign(sort, { sort: ['project_code','completion_rate','total_lines'].includes(plan.sort?.sort) ? plan.sort.sort : 'project_code', direction: plan.sort?.direction === 'desc' ? 'desc' : 'asc' })
-  await nextTick(); grid?.applyColumnState({ state: plan.columns, applyOrder: true }); restoring = false; saveLayout()
-  await restoreProject()
+const planSnapshot = () => ({ pageSize: pendingSize.value ?? pageSize.value, visible: [...visible.value], columns: grid?.getColumnState() || savedColumns.value, overviewStatus: overviewStatus.value, sort: { ...sort } })
+function clearColumnFilters() { columnFilters.value = []; overviewStatus.value = ''; invalidate() }
+async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
+  if (invalid.value) { ElMessage.warning(invalid.value); return }
+  const plan = reportPreferences(preferences, fields.value.map(f => f.key))
+  if (plan.overviewStatus !== undefined) overviewStatus.value = plan.overviewStatus
+  restoring = true
+  if (plan.pageSize != null && plan.pageSize !== pageSize.value) pendingSize.value = plan.pageSize
+  if (plan.visible) visible.value = plan.visible
+  if (plan.columns) { savedColumns.value = plan.columns as ColumnState[]; await nextTick(); grid?.applyColumnState({ state: savedColumns.value, applyOrder: true }) }
+  const sorting = grid?.getColumnState().find(c => c.sort && ['project_code','completion_rate','total_lines'].includes(c.colId))
+  if (plan.sort && ['project_code', 'completion_rate', 'total_lines'].includes(plan.sort.sort)) Object.assign(sort, plan.sort)
+  else if (sorting) Object.assign(sort, { sort: sorting.colId, direction: sorting.sort })
+  restoring = false; saveLayout(); await query(true)
 }
-function reset() { invalidate(); invalidateCandidates(); Object.assign(filters, { keyword: '', project_code: '', supplier: '', progress: '', organization_ids: [] }); dates.value = []; conditions.value = []; overviewStatus.value = ''; pendingSize.value = null }
 async function initialize() {
   loading.value = true
   try {
@@ -142,22 +181,21 @@ async function initialize() {
 }
 function retry() { if (!metadata.value) void initialize(); else if (failed) void query(failed.submit, failed) }
 watch(page, () => { if (!restoring) void query() }, { flush: 'sync' })
+watch(columnFilters, () => { grid?.refreshHeader(); grid?.refreshCells({ force: true }) }, { deep: true })
 watch(pageSize, () => { if (!restoring) { restoring = true; page.value = 1; restoring = false; void query() } }, { flush: 'sync' })
 onMounted(initialize)
 onUnmounted(() => { invalidate(); grid = null })
 </script>
 <template>
   <PmsDataList ref="listRef" class="purchase-overview-page pms-report-query-surface" scrollbar-label="采购总进度横向滚动条">
-    <template #toolbar-left><slot name="view-switch" /><PmsReportPlans :storage-key="key + ':plans'" :snapshot="planSnapshot" :disabled="!metadata || !!invalid" @restore="restorePlan" /></template>
-    <template #toolbar-right><span class="pms-report-query-status" :class="{'is-dirty':dirty}">{{ loading ? '正在查询' : dirty ? '条件已修改，待查询' : applied ? '已查询' : '尚未查询' }}<template v-if="stamp"> · {{ new Date(stamp).toLocaleTimeString('zh-CN',{hour12:false}) }}</template></span><PmsListColumnPicker v-if="metadata" v-model="visible" :groups="groups" :default-keys="defaultKeys" :column-definitions="columns" :get-grid-api="() => grid" aria-label="采购总进度列设置" @layout-changed="saveLayout" /></template>
+    <template #toolbar-left><slot name="view-switch" /></template>
+    <template #toolbar-right>
+      <span class="pms-report-query-status" :class="{'is-dirty':dirty}">{{ loading ? '正在查询' : dirty ? '条件已修改，待查询' : applied ? '已查询' : '尚未查询' }}<template v-if="stamp"> · {{ new Date(stamp).toLocaleTimeString('zh-CN',{hour12:false}) }}</template></span>
+      <ReportExportControl v-if="auth.hasPermission('report:purchase:export')" report="purchase" :parameters="exportParameters" :columns="exportColumns" :before-export="beforeExport" :disabled="loading || !applied || !total" />
+      <PmsListColumnPicker v-if="metadata" v-model="visible" :groups="groups" :default-keys="defaultKeys" :column-definitions="columns" :get-grid-api="() => grid" aria-label="采购总进度列设置" @layout-changed="saveLayout" />
+    </template>
     <template #filters>
-      <PmsReportQueryBar v-model:conditions="conditions" :fields="filterFields" :loading="loading" :disabled="!metadata" :invalid="invalid" @query="query(true)" @reset="reset">
-        <div class="query-material"><PmsTextControl v-model="filters.keyword" size="compact" :prefix-icon="Search" clearable placeholder="申请单 / 物料编码 / 名称 / 规格" aria-label="搜索采购明细" /></div>
-        <PmsSelectControl v-model="filters.organization_ids" :options="metadata?.organizations || []" multiple collapse-tags collapse-tags-tooltip filterable clearable size="compact" placeholder="全部产品线" aria-label="产品线" @update:model-value="organizationsChanged" />
-        <PmsSelectControl v-model="filters.project_code" :options="candidates.project" :loading="optionLoading.project" remote filterable :remote-method="(v: string) => options('project',v)" clearable size="compact" placeholder="全部项目" aria-label="项目编码筛选" @visible-change="(v: boolean) => v && options('project')" @update:model-value="projectChanged" />
-        <div class="query-dates"><PmsDateControl v-model="dates" type="daterange" size="compact" value-format="YYYY-MM-DD" start-placeholder="申请开始日期" end-placeholder="申请结束日期" aria-label="申请日期范围" /></div>
-        <PmsSelectControl v-model="filters.supplier" :options="candidates.supplier" :loading="optionLoading.supplier" remote filterable :remote-method="(v: string) => options('supplier',v)" clearable size="compact" placeholder="全部供应商" aria-label="供应商筛选" @visible-change="(v: boolean) => v && options('supplier')" />
-      </PmsReportQueryBar>
+      <PmsQueryWorkspace v-model="conditions" list-key="report-purchase-overview" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata" :loading="loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters" />
       <div class="overview-shortcuts" role="group" aria-label="项目进度快捷筛选"><button v-for="option in quickOptions" :key="option.value" type="button" :aria-pressed="overviewStatus === option.value" :disabled="loading || !metadata" @click="overviewStatus = option.value; query(true)">{{ option.label }}</button><span v-if="applied">{{ total }} 个项目组织组合 · {{ totals.all }} 申请行 · 已完成 {{ totals.complete }} 行 · 待核对 {{ totals.review }} 行</span></div>
     </template>
     <template #grid>

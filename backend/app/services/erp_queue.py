@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from fastapi import HTTPException
-from sqlalchemy import case
+from sqlalchemy import case, func, literal_column
 from app.models.erp_task import ErpSyncTask
 from app.models.project import PmsProjectArchive
 from app.models.user import SysUser
@@ -274,7 +274,7 @@ def _inspect_result(db, task_id, user_id, request, external_request_finished):
     return {'status': task.status, 'message': task.message}
 
 
-def list_tasks(db, *, page=1, page_size=50, keyword='', status='', operator='', start=None, end=None, archive_id=None, scope_context=None):
+def _task_list_query(db, *, keyword='', status='', operator='', start=None, end=None, archive_id=None, scope_context=None):
     query = db.query(ErpSyncTask, SysUser.real_name, SysUser.username).outerjoin(SysUser, SysUser.id == ErpSyncTask.operator_id)
     if scope_context is not None:
         from app.services.project import get_scoped_archive_query
@@ -291,9 +291,39 @@ def list_tasks(db, *, page=1, page_size=50, keyword='', status='', operator='', 
         query = query.filter(ErpSyncTask.created_at <= end)
     if archive_id is not None:
         query = query.filter(ErpSyncTask.archive_id == archive_id)
+    return query
+
+
+def task_list_columns():
+    columns = {field: (getattr(ErpSyncTask, field), 'text') for field in ('project_code', 'project_name', 'message')}
+    columns.update({field: (getattr(ErpSyncTask, field), 'date') for field in ('created_at', 'started_at')})
+    columns['status'] = (ErpSyncTask.status, 'enum_text')
+    columns['attempts'] = (ErpSyncTask.attempts, 'number')
+    columns['operator_name'] = (func.coalesce(func.nullif(SysUser.real_name, literal_column("''")),
+        func.nullif(SysUser.username, literal_column("''"))), 'text')
+    return columns
+
+
+def get_task_column_values(db, *, field, keyword='', page=1, page_size=100, filters=None,
+                           column_filters=None, base_keyword='', **base):
+    from app.services.system_list_query import apply_system_list_query, system_column_values
+    columns = task_list_columns()
+    query = _task_list_query(db, keyword=base_keyword, **base)
+    query = apply_system_list_query(query, columns, filters, column_filters,
+        labels={'status': STATUS_LABELS}, exclude_field=field)
+    return system_column_values(query, columns, field, keyword=keyword, page=page, page_size=page_size,
+        labels={'status': STATUS_LABELS})
+
+
+def list_tasks(db, *, page=1, page_size=50, keyword='', status='', operator='', start=None, end=None,
+               archive_id=None, scope_context=None, filters=None, column_filters=None):
+    from app.services.system_list_query import apply_system_list_query
+    query = _task_list_query(db, keyword=keyword, status=status, operator=operator, start=start, end=end,
+        archive_id=archive_id, scope_context=scope_context)
+    query = apply_system_list_query(query, task_list_columns(), filters, column_filters, labels={'status': STATUS_LABELS})
     total = query.count()
     rows = query.order_by(case((ErpSyncTask.status.in_(['failed', 'review']), 0), else_=1), ErpSyncTask.id.desc()).offset((page-1)*page_size).limit(page_size).all()
-    return {'total': total, 'items': [dict(id=t.id, archive_id=t.archive_id, project_code=t.project_code,
+    return {'total': total, 'query_version': 2, 'items': [dict(id=t.id, archive_id=t.archive_id, project_code=t.project_code,
         project_name=t.project_name, status=t.status, status_label=STATUS_LABELS[t.status], attempts=t.attempts,
         message=t.message, history=json.loads(t.history or '[]'), operator_name=name or code or '-',
         created_at=t.created_at, started_at=t.started_at, finished_at=t.finished_at) for t, name, code in rows]}

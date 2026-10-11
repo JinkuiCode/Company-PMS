@@ -1,6 +1,6 @@
 <template>
   <el-popover v-model:visible="visible" placement="bottom-end" trigger="click" :width="580" popper-class="pms-list-column-picker-popper">
-    <template #reference><el-button size="small" plain class="column-picker-trigger" :aria-label="`打开${ariaLabel}`"><el-icon style="margin-right:4px"><Setting /></el-icon>列设置</el-button></template>
+    <template #reference><el-button size="small" class="column-picker-trigger pms-button-auxiliary" :aria-label="`打开${ariaLabel}`"><el-icon style="margin-right:4px"><Setting /></el-icon>列设置</el-button></template>
     <div class="column-picker-panel" :aria-label="ariaLabel">
       <div class="column-picker-toolbar"><PmsTextControl v-model="keyword" size="compact" clearable placeholder="搜索字段" aria-label="搜索列字段" /><span class="column-picker-count">已选 {{ draft.filter(f => f.visible && !f.locked).length }} 项</span></div>
       <PmsGridLayoutEditor v-model="draft" :keyword="keyword" />

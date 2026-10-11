@@ -43,7 +43,7 @@ for (const path of [
 ]) {
   const source = read(path)
   assert.match(source, /PmsDataList/, `${path} should use the standard list shell`)
-  assert.match(source, /PmsListFilters/, `${path} should use the standard filter component`)
+  assert.match(source, /PmsListFilters|PmsQueryWorkspace/, `${path} should use the shared query component`)
   assert.match(source, /useListFilters/, `${path} should use the shared list filter behavior`)
 }
 

@@ -61,6 +61,7 @@ def test_upgrade_marks_database_ready_and_can_repeat() -> None:
             assert connection.execute("SELECT COUNT(*) FROM erp_sync_task").fetchone()[0] == 0
             assert connection.execute("SELECT COUNT(*) FROM pms_report_export_job").fetchone()[0] == 0
             assert connection.execute("SELECT COUNT(*) FROM sys_menu WHERE permission_code LIKE 'system:sync:%'").fetchone()[0] == 3
+            assert connection.execute("SELECT COUNT(*) FROM sys_menu WHERE permission_code IN ('project:archive:export','project:list:export')").fetchone()[0] == 2
     finally:
         engine.dispose()
         path.unlink(missing_ok=True)

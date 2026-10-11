@@ -6,24 +6,20 @@
     </template>
     <template #toolbar-right><span v-if="!workerEnabled" class="pms-status warning">后台执行器未启用</span></template>
     <template #filters>
-      <PmsListFilters :filters="[]" :fields="[]" :active-count="0">
-        <div class="sync-filter"><PmsTextControl v-model="filters.keyword" size="compact" placeholder="项目编号 / 名称" aria-label="同步项目搜索" clearable /></div>
-        <div class="sync-filter"><PmsSelectControl v-model="filters.status" size="compact" :options="syncStatusOptions" placeholder="全部同步状态" aria-label="同步状态筛选" clearable /></div>
-        <div class="sync-filter"><PmsTextControl v-model="filters.operator" size="compact" placeholder="保存人姓名 / 工号" aria-label="保存人筛选" clearable /></div>
-        <div class="sync-filter sync-filter--date"><PmsDateControl v-model="dates" size="compact" type="daterange" value-format="YYYY-MM-DD" start-placeholder="任务开始日期" end-placeholder="任务结束日期" aria-label="任务时间范围" /></div>
-      </PmsListFilters>
+      <PmsQueryWorkspace v-model="queryDraft" list-key="system-sync-task" :fields="queryFields" :defaults="queryDefaults" :ready="querySupported" :loading="loading" :snapshot="() => ({pageSize})" @query="runQuery" @clear-columns="clearQueryColumns" />
+      <p v-if="!querySupported" role="status">同步任务接口尚未声明查询 v2 支持，统一查询暂不可用；未执行当前页过滤。</p>
     </template>
     <template #grid>
       <el-table v-loading="loading" :data="items" class="pms-dense-table" height="100%" border stripe @selection-change="selected = $event">
         <el-table-column v-if="canRetry" type="selection" width="42" :selectable="(row: any) => row.status === 'failed'" />
-        <el-table-column prop="project_code" label="项目编号" width="145" fixed />
-        <el-table-column prop="project_name" label="项目名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="status_label" label="同步状态" width="145"><template #default="{ row }"><span class="pms-status" :class="statusTone(row.status)">{{ row.status_label }}</span></template></el-table-column>
-        <el-table-column prop="operator_name" label="保存人" width="110" />
-        <el-table-column prop="created_at" label="任务时间" width="170"><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
-        <el-table-column prop="attempts" label="尝试次数" width="90" />
-        <el-table-column prop="started_at" label="最后执行时间" width="170"><template #default="{ row }">{{ formatTime(row.started_at) }}</template></el-table-column>
-        <el-table-column prop="message" label="执行结果 / 异常原因" min-width="260" show-overflow-tooltip />
+        <el-table-column prop="project_code" label="项目编号" width="145" fixed :class-name="queryColumnClass('project_code')" :label-class-name="queryColumnClass('project_code')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'project_code',displayName:'项目编号'}" /><span v-else>项目编号</span></template></el-table-column>
+        <el-table-column prop="project_name" label="项目名称" min-width="180" show-overflow-tooltip :class-name="queryColumnClass('project_name')" :label-class-name="queryColumnClass('project_name')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'project_name',displayName:'项目名称'}" /><span v-else>项目名称</span></template></el-table-column>
+        <el-table-column prop="status_label" label="同步状态" width="145" :class-name="queryColumnClass('status')" :label-class-name="queryColumnClass('status')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'status',displayName:'同步状态'}" /><span v-else>同步状态</span></template><template #default="{ row }"><span class="pms-status" :class="statusTone(row.status)">{{ row.status_label }}</span></template></el-table-column>
+        <el-table-column prop="operator_name" label="保存人" width="110" :class-name="queryColumnClass('operator_name')" :label-class-name="queryColumnClass('operator_name')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'operator_name',displayName:'保存人'}" /><span v-else>保存人</span></template></el-table-column>
+        <el-table-column prop="created_at" label="任务时间" width="170" :class-name="queryColumnClass('created_at')" :label-class-name="queryColumnClass('created_at')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'created_at',displayName:'任务时间'}" /><span v-else>任务时间</span></template><template #default="{ row }">{{ formatTime(row.created_at) }}</template></el-table-column>
+        <el-table-column prop="attempts" label="尝试次数" width="90" :class-name="queryColumnClass('attempts')" :label-class-name="queryColumnClass('attempts')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'attempts',displayName:'尝试次数'}" /><span v-else>尝试次数</span></template></el-table-column>
+        <el-table-column prop="started_at" label="最后执行时间" width="170" :class-name="queryColumnClass('started_at')" :label-class-name="queryColumnClass('started_at')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'started_at',displayName:'最后执行时间'}" /><span v-else>最后执行时间</span></template><template #default="{ row }">{{ formatTime(row.started_at) }}</template></el-table-column>
+        <el-table-column prop="message" label="执行结果 / 异常原因" min-width="260" show-overflow-tooltip :class-name="queryColumnClass('message')" :label-class-name="queryColumnClass('message')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'message',displayName:'执行结果 / 异常原因'}" /><span v-else>执行结果 / 异常原因</span></template></el-table-column>
         <el-table-column label="操作" :width="PMS_ACTION_COLUMN.width" fixed="right">
           <template #default="{ row }">
             <el-button size="small" link type="primary" @click="openLogs(row)">日志</el-button>
@@ -40,10 +36,14 @@
 </template>
 
 <script setup lang="ts">
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import { useSystemQuery, serverQueryParams, requireServerQueryVersion } from '@/query-system/system-adapter'
+import type { QueryCondition } from '@/query-system/core'
+import type { ColumnQueryContext } from '@/query-system/column-filters'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PmsDataList from '@/components/PmsDataList.vue'
-import PmsListFilters from '@/components/PmsListFilters.vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import SyncLogDrawer from '@/components/SyncLogDrawer.vue'
 import { PmsDateControl, PmsSelectControl, PmsTextControl } from '@/form-system'
@@ -53,8 +53,30 @@ import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'
 const auth = useAuthStore()
 const canRetry = computed(() => auth.hasPermission('system:sync:retry'))
-const filters = reactive({ keyword: '', status: '', operator: '' })
-const dates = ref<string[]>([]), page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), total = ref(0)
+const page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), total = ref(0)
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied: queryApplied, submit: submitQuery, clearColumns, columnContext: clientContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
+  {field:'project_code',label:'项目编号',type:'text'},
+  {field:'project_name',label:'项目名称',type:'text'},
+  {field:'status',label:'同步状态',type:'enum',options:syncStatusOptions.map(o => ({value:String(o.value),label:o.label}))},
+  {field:'operator_name',label:'保存人',type:'text'},
+  {field:'created_at',label:'任务时间',type:'date'},
+  {field:'attempts',label:'尝试次数',type:'number'},
+  {field:'started_at',label:'最后执行时间',type:'date'},
+  {field:'message',label:'执行结果 / 异常原因',type:'text'},
+], ['project_code','status','operator_name','created_at'], {requireQuery:true,ready:()=>querySupported.value && !loading.value && !error.value})
+const querySupported = ref(false)
+const columnContext: ColumnQueryContext = {...clientContext, load: async (field, keyword, page) => {
+  if (!clientContext.ready?.()) throw Error('请先完成查询，再使用列筛选')
+  return await request.get('/sync-tasks/column-values', {params:{...serverQueryParams(queryApplied.value,columnFilters.value.filter(f => f.field !== field)),field,keyword,page,page_size:100}}) as any
+}}
+function clearQueryColumns() { clearColumns() }
+function runQuery(conditions: QueryCondition[], preferences: object) {
+  if (!querySupported.value) return
+  submitQuery(conditions)
+  const size = (preferences as {pageSize?:number}).pageSize
+  if (size && Number.isSafeInteger(size) && size > 0) pageSize.value = size
+  page.value = 1
+}
 const items = ref<any[]>([]), selected = ref<any[]>([]), loading = ref(false), busy = ref(false), error = ref('')
 const logVisible = ref(false), archiveId = ref<number | null>(null)
 const workerEnabled = ref(true)
@@ -67,10 +89,9 @@ async function fetchTasks() {
   loading.value = true
   error.value = ''
   try {
-    const data: any = await request.get('/sync-tasks', { params: { ...filters, page: page.value, page_size: pageSize.value,
-      start: dates.value?.[0] ? `${dates.value[0]}T00:00:00` : undefined,
-      end: dates.value?.[1] ? `${dates.value[1]}T23:59:59.999999` : undefined } })
+    const data: any = await request.get('/sync-tasks', { params: { ...serverQueryParams(queryApplied.value,columnFilters.value), page: page.value, page_size: pageSize.value } })
     if (current !== serial) return
+    querySupported.value = requireServerQueryVersion(data, !!queryApplied.value.length || !!columnFilters.value.length)
     items.value = data.items; total.value = data.total; selected.value = []; workerEnabled.value = data.worker_enabled !== false
   } catch { if (current === serial) { items.value = []; total.value = 0; error.value = '任务加载失败，请刷新重试' } }
   finally { if (current === serial) loading.value = false }
@@ -96,8 +117,8 @@ async function inspect(row: any) {
   catch { /* The shared request handler displays the server error. */ }
   finally { busy.value = false }
 }
-watch([filters, dates, pageSize], () => { page.value = 1 }, { deep: true, flush: 'sync' })
-watch([filters, dates, page, pageSize], () => { ++serial; clearTimeout(timer); timer = setTimeout(fetchTasks, 200) }, { deep: true })
+watch([queryApplied, columnFilters, pageSize], () => { page.value = 1; loading.value = true }, { deep: true, flush: 'sync' })
+watch([queryApplied, columnFilters, page, pageSize], () => { ++serial; clearTimeout(timer); timer = setTimeout(fetchTasks, 200) }, { deep: true })
 onMounted(() => { void fetchTasks(); poll = setInterval(() => { if (!busy.value && !loading.value && !selected.value.length && !logVisible.value) void fetchTasks() }, 15000) })
 onUnmounted(() => { ++serial; clearTimeout(timer); clearInterval(poll) })
 </script>

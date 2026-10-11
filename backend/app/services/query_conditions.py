@@ -34,7 +34,7 @@ def scalar(value, kind):
 
 def build_query_clause(column, kind, condition, *, membership=False):
     operator = condition.get('operator')
-    allowed = ({'contains','notContains','equals','notEquals','startsWith','endsWith'} | EMPTY) if kind == 'text' else ({'equals','notEquals','in','notIn'} | EMPTY) if kind.startswith('enum_') else ORDERED
+    allowed = ({'contains','notContains','equals','notEquals','startsWith','endsWith'} | EMPTY) if kind == 'text' else ({'equals','notEquals','in','notIn'} | EMPTY) if kind.startswith('enum_') else set(ORDERED)
     if membership:
         allowed |= {'in','notIn'}
     if condition.get('schemaVersion') != 2 or operator not in allowed:

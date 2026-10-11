@@ -27,7 +27,7 @@ def test_project_update_keeps_archive_product_category_read_only() -> None:
     assert "product_category: int | None = None" in schema
     assert 'product_category: Mapped[int | None] = mapped_column(Integer' in model
     assert 'if "product_category" in update_data' in service
-    assert "产品类别来自项目档案，请在项目档案中维护" in service
+    assert "产品类别已停用，请维护产品线" in service
     assert "PmsProjectArchive" in service
     assert "archive.product_category if archive and archive.product_category else p.product_category" in service
     assert "项目未关联档案，无法更新产品类别" not in service

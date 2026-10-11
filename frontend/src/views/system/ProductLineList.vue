@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import { useSystemQuery, loadCompleteDataset } from '@/query-system/system-adapter'
+import type { QueryCondition } from '@/query-system/core'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
@@ -12,7 +16,25 @@ import { getProductLines, getOrganizations, type ProductLine, type Organization 
 
 const auth = useAuthStore()
 const items = ref<ProductLine[]>([])
-const total = ref(0), page = ref(1), pageSize = ref(50), keyword = ref('')
+const page = ref(1), pageSize = ref(50)
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
+  { field: 'display_name', label: '产品线名称', type: 'text' },
+  { field: 'organization_code', label: '金蝶组织编码', type: 'text' },
+  { field: 'organization_name', label: '金蝶组织名称', type: 'text' },
+  { field: 'sort', label: '排序', type: 'number' },
+  { field: 'is_enabled', label: '状态', type: 'enum', options: [{value:1,label:'启用'},{value:0,label:'禁用'}] },
+], ['display_name', 'is_enabled'], {ready:()=>!loading.value && !failed.value})
+const filteredItems = computed(() => filterRows(items.value, row => ({...row, is_enabled: Number(row.is_enabled)})))
+const total = computed(() => filteredItems.value.length)
+const pagedItems = computed(() => filteredItems.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+function runQuery(conditions: QueryCondition[], preferences: object) {
+  submitQuery(conditions)
+  const size = (preferences as {pageSize?:number}).pageSize
+  if (size && Number.isSafeInteger(size) && size > 0) pageSize.value = size
+  page.value = 1
+}
+function clearQueryColumns() { clearColumns() }
+watch(columnFilters, () => { page.value = 1 }, {deep:true})
 const loading = ref(false), failed = ref(false), saving = ref(false), opened = ref(false)
 const editing = ref<ProductLine | null>(null)
 const organizations = ref<Organization[]>([]), organizationSearch = ref(''), organizationPage = ref(1), organizationTotal = ref(0)
@@ -25,10 +47,10 @@ async function load() {
   const version = ++listVersion
   loading.value = true; failed.value = false
   try {
-    const data = await getProductLines({ keyword: keyword.value, page: page.value, page_size: pageSize.value })
+    const data = await loadCompleteDataset((page, pageSize) => getProductLines({ page, page_size: pageSize }), 500, () => version === listVersion, (row:any) => row.id)
     if (version !== listVersion) return
-    items.value = data.items; total.value = data.total
-    if (page.value > 1 && !items.value.length) page.value = Math.max(1, Math.ceil(total.value / pageSize.value))
+    items.value = data.items
+    page.value = Math.min(page.value, Math.max(1, Math.ceil(total.value / pageSize.value)))
   } catch { if (version === listVersion) failed.value = true }
   finally { if (version === listVersion) loading.value = false }
 }
@@ -83,9 +105,8 @@ async function remove(row: ProductLine) {
   catch { /* The shared request handler displays the rejection; keep the row. */ }
   finally { saving.value = false }
 }
-function search() { if (page.value !== 1) page.value = 1; else void load() }
 function searchOrganizations() { organizationPage.value = 1; void loadOrganizations() }
-watch([page, pageSize], load)
+watch(pageSize, () => { page.value = 1 })
 onBeforeRouteLeave(close)
 onMounted(load)
 </script>
@@ -94,14 +115,14 @@ onMounted(load)
   <PmsDataList :show-scrollbar="false" class="pms-system-page">
     <template #toolbar-left><el-button v-if="auth.hasPermission('system:product-line:add')" type="primary" size="small" :icon="Plus" @click="open()">新增产品线</el-button></template>
     <template #toolbar-right><el-tooltip content="刷新"><el-button :icon="Refresh" size="small" aria-label="刷新产品线" @click="load" /></el-tooltip></template>
-    <template #filters><form class="pms-filter-bar product-line-filters" @submit.prevent="search"><PmsTextControl v-model="keyword" size="compact" placeholder="产品线 / 金蝶组织名称或编码" aria-label="搜索产品线" clearable /><el-button size="small" native-type="submit">查询</el-button></form><div v-if="failed" role="alert">产品线读取失败 <el-button link @click="load">重试</el-button></div></template>
+    <template #filters><PmsQueryWorkspace v-model="queryDraft" list-key="system-product-line" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" /><div v-if="failed" role="alert">产品线未完整读取 <el-button link @click="load">重试</el-button></div></template>
     <template #grid>
-      <el-table v-loading="loading" :data="items" height="100%" row-key="id" border stripe class="pms-dense-table">
-        <el-table-column prop="display_name" label="产品线名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="organization_code" label="金蝶组织编码" width="160" />
-        <el-table-column prop="organization_name" label="金蝶组织名称" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="sort" label="排序" width="80" align="center" />
-        <el-table-column label="状态" width="100"><template #default="{ row }"><span class="pms-status" :class="row.is_enabled ? 'pms-status-success' : 'pms-status-neutral'">{{ row.is_enabled ? '启用' : '禁用' }}</span></template></el-table-column>
+      <el-table v-loading="loading" :data="pagedItems" height="100%" row-key="id" border stripe class="pms-dense-table">
+        <el-table-column prop="display_name" label="产品线名称" min-width="180" show-overflow-tooltip :class-name="queryColumnClass('display_name')" :label-class-name="queryColumnClass('display_name')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'display_name',displayName:'产品线名称'}" /></template></el-table-column>
+        <el-table-column prop="organization_code" label="金蝶组织编码" width="160" :class-name="queryColumnClass('organization_code')" :label-class-name="queryColumnClass('organization_code')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'organization_code',displayName:'金蝶组织编码'}" /></template></el-table-column>
+        <el-table-column prop="organization_name" label="金蝶组织名称" min-width="220" show-overflow-tooltip :class-name="queryColumnClass('organization_name')" :label-class-name="queryColumnClass('organization_name')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'organization_name',displayName:'金蝶组织名称'}" /></template></el-table-column>
+        <el-table-column prop="sort" label="排序" width="80" align="center" :class-name="queryColumnClass('sort')" :label-class-name="queryColumnClass('sort')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'sort',displayName:'排序'}" /></template></el-table-column>
+        <el-table-column label="状态" width="100" :class-name="queryColumnClass('is_enabled')" :label-class-name="queryColumnClass('is_enabled')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'is_enabled',displayName:'状态'}" /></template><template #default="{ row }"><span class="pms-status" :class="row.is_enabled ? 'pms-status-success' : 'pms-status-neutral'">{{ row.is_enabled ? '启用' : '禁用' }}</span></template></el-table-column>
         <el-table-column label="操作" width="120" fixed="right"><template #default="{ row }"><el-button v-if="auth.hasPermission('system:product-line:edit')" link type="primary" :disabled="saving" @click="open(row)">编辑</el-button><el-button v-if="auth.hasPermission('system:product-line:delete')" link type="danger" :disabled="saving" @click="remove(row)">删除</el-button></template></el-table-column>
       </el-table>
     </template>

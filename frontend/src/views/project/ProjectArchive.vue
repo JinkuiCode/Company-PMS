@@ -10,27 +10,21 @@
         scrollbar-label="项目档案表格横向滚动条"
       >
     <template #toolbar-left>
-        <PmsReportPlans ref="archivePlansRef" :storage-key="`pms:archive:query-plans:${authStore.user?.id || 'pending'}`" :snapshot="archivePlanSnapshot" @restore="restoreArchivePlan" />
-        <OfflineArchiveTools :selected-rows="selectedRows" @changed="fetchList" />
         <el-button v-if="hasPermission('project:archive:add')" type="primary" size="small" @click="openCreateDialog">
           <el-icon style="margin-right:4px;"><Plus /></el-icon>
           新增档案
         </el-button>
-        <el-button v-if="hasPermission('project:archive:delete')" type="danger" size="small" plain :disabled="selectedRows.length === 0" @click="handleBatchDelete">
-          <el-icon style="margin-right:4px;"><Delete /></el-icon>
-          批量删除
-          <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
-        </el-button>
-        <el-button v-if="hasPermission('project:archive:toggle')" size="small" :disabled="selectedRows.length === 0" @click="handleBatchEnabledChange(true)">
+        <el-button class="pms-button-auxiliary" v-if="hasPermission('project:archive:toggle')" size="small" :disabled="selectedRows.length === 0" @click="handleBatchEnabledChange(true)">
           批量启用
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
         </el-button>
-        <el-button v-if="hasPermission('project:archive:toggle')" size="small" :disabled="selectedRows.length === 0" @click="handleBatchEnabledChange(false)">
+        <el-button class="pms-button-auxiliary" v-if="hasPermission('project:archive:toggle')" size="small" :disabled="selectedRows.length === 0" @click="handleBatchEnabledChange(false)">
           批量禁用
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
         </el-button>
     </template>
     <template #toolbar-right>
+        <BusinessExportControl :resource="{kind:'archives'}" :snapshot="archiveExportSnapshot" :disabled="archiveListLoading || !archiveHasQueried || !total" />
         <PmsListColumnPicker
           :model-value="selectedArchiveColumnKeys"
           :groups="archiveColumnGroups"
@@ -42,30 +36,11 @@
           @update:model-value="handleArchiveColumnSelection"
           @restore-defaults="restoreArchiveColumnDefaults"
         />
+        <OfflineArchiveTools :selected-rows="selectedRows" @changed="fetchList" />
     </template>
 
     <template #filters>
-      <PmsListFilters
-        v-model:filters="customFilters"
-        :fields="archiveFilterFields"
-        :active-count="activeCustomFilterCount"
-        unified
-      >
-        <div v-if="archiveFieldVisible('project_code') || archiveFieldVisible('project_name')" class="archive-base-filter archive-base-filter--keyword">
-          <PmsTextControl v-model="searchKeyword" placeholder="搜索编号、名称、客户或序列号" size="compact" clearable :prefix-icon="Search" aria-label="搜索项目档案" />
-        </div>
-        <div class="archive-base-filter archive-base-filter--enabled">
-          <PmsSelectControl v-model="archiveQuery.enabled" :options="archiveEnabledFilterOptions" size="compact" aria-label="启用状态" />
-        </div>
-        <div v-if="archiveFieldVisible('archive_category')" class="archive-base-filter archive-base-filter--archive-category">
-          <PmsSelectControl v-model="archiveQuery.categories" :options="archiveCategoryFilterOptions" placeholder="全部档案类别" multiple collapse-tags collapse-tags-tooltip :max-collapse-tags="1" size="compact" clearable aria-label="档案类别" />
-        </div>
-        <div v-if="archiveFieldVisible('product_category')" class="archive-base-filter archive-base-filter--category">
-          <PmsSelectControl v-model="filterProductCategory" :options="archiveProductCategoryOptions" placeholder="全部产品类别" size="compact" clearable aria-label="产品类别筛选" />
-        </div>
-        <el-button size="small" :icon="Search" @click="queryArchivePlan">查询</el-button>
-        <span v-if="pendingArchivePlan" class="pms-list-filter-summary">方案已加载，待查询</span>
-      </PmsListFilters>
+      <PmsQueryWorkspace v-model="customFilters" list-key="project-archive" :fields="archiveQueryFields" :defaults="archiveQueryDefaults" :ready="archiveWorkspaceReady" :loading="archiveListLoading" :snapshot="archivePlanSnapshot" :legacy-schemes="legacyArchiveSchemes" @query="submitArchiveQuery" @clear-columns="clearArchiveColumnFilters" />
     </template>
 
     <template #grid>
@@ -103,7 +78,6 @@
         v-model="page"
         v-model:page-size="pageSize"
         :total="total"
-        :inert="Boolean(pendingArchivePlan)"
         @update:model-value="fetchList"
         @update:page-size="() => { page = 1; fetchList() }"
       />
@@ -329,6 +303,8 @@ import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
 import { ref, reactive, computed, defineComponent, h, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Delete, Search, Close } from '@element-plus/icons-vue'
+import BusinessExportControl from '@/business-export/BusinessExportControl.vue'
+import { businessExportSnapshot } from '@/business-export/snapshot'
 import SyncLogDrawer from '@/components/SyncLogDrawer.vue'
 import { archiveSyncLabel } from '@/config/syncUi'
 import { AgGridVue } from 'ag-grid-vue3'
@@ -338,8 +314,11 @@ import { ModuleRegistry, AllCommunityModule, type ColDef, type ColumnState } fro
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN } from '@/config/listUi'
-import PmsListFilters from '@/components/PmsListFilters.vue'
-import PmsReportPlans from '@/report-query/PmsReportPlans.vue'
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import { legacyArchiveSchemes } from '@/query-system/archive-schemes'
+import type { QueryDefinition } from '@/query-system/workspace'
+import { decorateQueryColumns } from '@/query-system/column-grid'
+import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import { adaptConditions, validateConditions, cloneQuery, type QueryCondition } from '@/query-system/core'
 import { toQueryFields } from '@/query-system/list-adapter'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
@@ -762,22 +741,11 @@ function restoreArchiveColumnDefaults() {
 const rowData = ref<any[]>([])
 const userList = ref<any[]>([])
 const total = ref(0)
-const searchKeyword = ref('')
 const selectedRows = ref<any[]>([])
 const agGridRef = ref()
 const archiveListRef = ref<InstanceType<typeof PmsDataList>>()
 const page = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
-const filterProductCategory = ref<number | null>(null)
-const archiveQuery = reactive({
-  enabled: 'true' as 'true' | 'false' | 'all',
-  categories: [] as number[],
-})
-const archiveEnabledFilterOptions = [
-  { label: '启用', value: 'true' },
-  { label: '已禁用', value: 'false' },
-  { label: '全部', value: 'all' },
-]
 
 // 字典选项
 const dictOptions = reactive<Record<string, any[]>>({
@@ -930,6 +898,7 @@ const archiveUserNameOptions = computed((): ListFilterOption[] => uniqueValueOpt
 
 const archiveQueryReference=archiveReference(params=>request.get('/projects/archives/list',{params}) as unknown as Promise<any>,productLines.label,()=>productLines.filterOptions.value)
 const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
+  { field:'is_enabled',policyKey:'is_enabled',label:'启用状态',type:'select',options:()=>[{value:1,label:'启用'},{value:0,label:'已禁用'}] },
   ...archiveExpansionFields.map(field => ({
     field: field.key, policyKey: field.key, label: field.label, type: field.value_type === 'long_text' ? 'text' : field.value_type,
     ...(offlineEnumCodes[field.key] ? { options: () => dictFilterOptions(offlineEnumCodes[field.key], true) } : {}),
@@ -959,67 +928,61 @@ const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
   },
 ] as Array<ListFilterField<any> & { policyKey: string }>).filter(field => field.policyKey !== 'product_category' && archiveFieldPolicy(field.policyKey)?.visible !== false))
 
-const { customFilters, activeCustomFilterCount } = useListFilters(archiveFilterFields)
-type ArchiveQueryPlan = {
-  conditions: typeof customFilters.value
-  keyword: string
-  enabled: 'true' | 'false' | 'all'
-  categories: number[]
-  productCategory: number | null
-  pageSize: number
-  columns?: ArchiveColumnPreferenceState
+const { customFilters } = useListFilters(archiveFilterFields)
+const archiveWorkspaceReady = ref(false)
+const archiveAppliedFilters = ref<QueryCondition[]>([])
+const archiveHasQueried = ref(false)
+const archiveColumnFilters = ref<ColumnFilter[]>([])
+const archiveColumnContext:ColumnQueryContext = {
+  ready:()=>archiveHasQueried.value && !archiveListLoading.value,
+  fields:()=>archiveQueryFields.value,
+  filters:()=>archiveColumnFilters.value,
+  load:(field,keyword,page)=>request.get('/projects/archives/column-values',{params:{field,keyword,page,filters:JSON.stringify(archiveAppliedFilters.value),column_filters:JSON.stringify(archiveColumnFilters.value.filter(f=>f.field!==field))}}) as unknown as Promise<any>,
+  apply:(field,filter)=>{
+    archiveColumnFilters.value=[...archiveColumnFilters.value.filter(f=>f.field!==field),...(filter?[filter]:[])]
+    gridApi?.refreshHeader();gridApi?.refreshCells({force:true});page.value=1;void fetchList()
+  },
+  sort:(field,direction)=>{gridApi?.applyColumnState({state:[{colId:field,sort:direction}],defaultState:{sort:null}});handleArchiveSortChanged()},
 }
-const pendingArchivePlan = ref<ArchiveQueryPlan | null>(null)
-const archivePlansRef = ref<InstanceType<typeof PmsReportPlans> | null>(null)
+const archiveQueryFields = computed(() => archiveValidationFields(customFilters.value))
+const archiveQueryDefaults = computed<QueryDefinition[]>(() => {
+  const mainCategory = archiveCategoryFilterOptions.value.find(option => option.label === '主机')
+  return [
+    {field:'project_code',shown:true,operator:'contains',value:null,valueEnd:null},
+    {field:'is_enabled',shown:true,operator:'equals',value:1,valueEnd:null},
+    {field:'archive_category',shown:true,operator:'in',value:mainCategory?[mainCategory.value]:[],valueEnd:null},
+  ].filter(d=>archiveQueryFields.value.some(f=>f.field===d.field)) as QueryDefinition[]
+})
 function archiveValidationFields(conditions: typeof customFilters.value) {
   const historicalNames = uniqueValueOptions(archiveConditionPersonNames(conditions))
-  return toQueryFields(archiveFilterFields.value).map(f => archivePersonFilterKeys.has(f.field)
+  return [...toQueryFields(archiveFilterFields.value),
+    {field:'keyword',label:'综合搜索',type:'text' as const,operators:['contains' as const]},
+    {field:'product_category',label:'产品类别（历史）',type:'enum' as const,options:archiveProductCategoryOptions.value.map(o=>({value:Number(o.value),label:o.label}))},
+  ].map(f => archivePersonFilterKeys.has(f.field)
     ? {...f, options:[...(f.options || []),...historicalNames]} : f)
 }
-function archivePlanSnapshot(): ArchiveQueryPlan {
-  return cloneQuery({ conditions:customFilters.value, keyword:searchKeyword.value, enabled:archiveQuery.enabled,
-    categories:archiveQuery.categories, productCategory:filterProductCategory.value, pageSize:pendingArchivePlan.value?.pageSize ?? pageSize.value,
-    columns:pendingArchivePlan.value?.columns ?? {selected_column_keys:[...selectedArchiveColumnKeys.value],columnState:gridApi?.getColumnState() || []} })
+function archivePlanSnapshot() {
+  return cloneQuery({pageSize:pageSize.value,columns:{selected_column_keys:[...selectedArchiveColumnKeys.value],columnState:gridApi?.getColumnState()||[]}})
 }
-function restoreArchivePlan(value: unknown) {
-  try {
-    const saved = value as ArchiveQueryPlan
-    const conditions = adaptConditions(saved.conditions)
-    const errors = validateConditions(conditions,archiveValidationFields(conditions))
-    if (Object.keys(errors).length) throw Error(Object.values(errors).join('；'))
-    if (typeof saved.keyword !== 'string' || !['true','false','all'].includes(saved.enabled) ||
-        ![15,20,50,100].includes(saved.pageSize) || !Array.isArray(saved.categories) ||
-        saved.categories.some(v=>!archiveCategoryFilterOptions.value.some(o=>o.value===v)) ||
-        (saved.productCategory != null && !archiveProductCategoryOptions.value.some(o=>o.value===saved.productCategory))) throw Error('查询方案选项已失效')
-    if (saved.columns && (!Array.isArray(saved.columns.columnState) || !Array.isArray(saved.columns.selected_column_keys))) throw Error('列设置格式无效')
-    // Keep the accepted rows, pagination and layout intact until the explicit query.
-    clearTimeout(archiveQueryTimer); ++archiveListRequestSerial
-    archiveListLoading.value = false
-    pendingArchivePlan.value = cloneQuery({...saved,conditions})
-    customFilters.value = conditions; searchKeyword.value = saved.keyword
-    archiveQuery.enabled = saved.enabled; archiveQuery.categories = [...saved.categories]
-    filterProductCategory.value = saved.productCategory
-  } catch (error) { ElMessage.warning(error instanceof Error ? error.message : '查询方案格式无效，未应用') }
-}
-async function queryArchivePlan() {
-  const saved = pendingArchivePlan.value
-  if (saved) {
-    pageSize.value = saved.pageSize
-    if (saved.columns) {
-      const key = archiveColumnPreferenceStorageKey()
-      if (key) localStorage.setItem(key,JSON.stringify(saved.columns))
-      restoreSelectedArchiveColumnKeys()
-      archiveColumnStateRestored.value = false
-      restoringArchiveColumnState.value = true
-      await nextTick()
-      restoreArchiveColumnState()
-      persistArchiveColumnPreferences()
-    }
-    await nextTick()
-    pendingArchivePlan.value = null
+
+async function submitArchiveQuery(conditions:QueryCondition[], preferences:any) {
+  archiveAppliedFilters.value = cloneQuery(conditions)
+  archiveColumnFilters.value = []
+  if ([15,20,50,100].includes(preferences.pageSize)) pageSize.value = preferences.pageSize
+  if (preferences.columns?.selected_column_keys && preferences.columns?.columnState) {
+    const key = archiveColumnPreferenceStorageKey()
+    if (key) localStorage.setItem(key,JSON.stringify(preferences.columns))
+    restoreSelectedArchiveColumnKeys(); archiveColumnStateRestored.value = false
+    await nextTick(); restoreArchiveColumnState()
   }
   page.value = 1
   await fetchList()
+}
+function clearArchiveColumnFilters() {
+  if (!archiveColumnFilters.value.length) return
+  archiveColumnFilters.value = []; page.value = 1; void fetchList()
+  agGridRef.value?.api?.refreshHeader()
+  agGridRef.value?.api?.refreshCells({ force: true })
 }
 
 async function fetchDictOptions(code: string) {
@@ -1188,7 +1151,7 @@ function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
   }
 }
 
-const columnDefs = computed<ColDef[]>(() => [
+const archiveBusinessColumnDefs = computed<ColDef[]>(() => [
   ...archiveExpansionFields.map(field => ({
     ...archiveColumnVisibility(field.key), field: field.key, headerName: field.label, width: 140, minWidth: 110,
     valueFormatter: (params: any) => offlineEnumCodes[field.key] ? enumLabel(offlineEnumCodes[field.key]!,params.value) : field.key === 'product_line_id' ? enumLabel('product_line', params.value)
@@ -1269,6 +1232,8 @@ const columnDefs = computed<ColDef[]>(() => [
   },
 ])
 
+const columnDefs = computed(() => decorateQueryColumns(archiveBusinessColumnDefs.value,()=>archiveColumnContext) as ColDef[])
+
 const defaultColDef = {
   sortable: true,
   resizable: true,
@@ -1281,16 +1246,16 @@ const defaultColDef = {
 }
 
 // ========== 数据加载 ==========
-const archiveListLoading = ref(true)
+const archiveListLoading = ref(false)
 const archiveListError = ref(false)
 const archiveSort = ref<Array<{ colId: string; sort: string }>>([{ colId: 'project_code', sort: 'desc' }])
+function archiveExportSnapshot(){return businessExportSnapshot(archiveAppliedFilters.value,archiveColumnFilters.value,gridApi,{enabled:'all'})}
 let archiveListRequestSerial = 0
 let archiveQueryReady = false
 let archiveQueryTimer: ReturnType<typeof setTimeout> | undefined
 
 async function fetchList() {
-  if (pendingArchivePlan.value) return
-  const errors = validateConditions(customFilters.value,toQueryFields(archiveFilterFields.value))
+  const errors = validateConditions(archiveAppliedFilters.value,archiveValidationFields(archiveAppliedFilters.value))
   if (Object.keys(errors).length) { ElMessage.warning(Object.values(errors).join('；')); return }
   clearTimeout(archiveQueryTimer)
   const requestSerial = ++archiveListRequestSerial
@@ -1303,14 +1268,11 @@ async function fetchList() {
       params: {
         page: page.value,
         page_size: pageSize.value,
-        enabled: archiveQuery.enabled,
-        keyword: searchKeyword.value || undefined,
-        product_category: filterProductCategory.value ?? undefined,
+        enabled: 'all',
         filters: JSON.stringify([
-          ...customFilters.value,
-          ...(archiveFieldVisible('archive_category') && archiveQuery.categories.length
-            ? [{ field: 'archive_category', operator: 'in', value: archiveQuery.categories }] : []),
+          ...archiveAppliedFilters.value,
         ]),
+        column_filters: JSON.stringify(archiveColumnFilters.value),
         sort: JSON.stringify(archiveSort.value),
       },
     })
@@ -1322,6 +1284,7 @@ async function fetchList() {
       return await fetchList()
     }
     rowData.value = res.items
+    archiveHasQueried.value = true
     scheduleArchiveScrollbarMetrics()
   } catch {
     if (requestSerial !== archiveListRequestSerial) return
@@ -1334,8 +1297,7 @@ async function fetchList() {
 }
 
 function scheduleArchiveQuery() {
-  if (!archiveQueryReady || pendingArchivePlan.value) return
-  archivePlansRef.value?.clearSelection()
+  if (!archiveQueryReady) return
   page.value = 1
   ++archiveListRequestSerial
   archiveListLoading.value = true
@@ -1356,7 +1318,6 @@ function handleArchiveSortChanged() {
   scheduleArchiveQuery()
 }
 
-watch([searchKeyword, () => archiveQuery.enabled, () => archiveQuery.categories, filterProductCategory, customFilters], scheduleArchiveQuery, { deep: true })
 onUnmounted(() => { clearTimeout(archiveQueryTimer); ++archiveListRequestSerial })
 
 async function fetchUsers() {
@@ -1962,15 +1923,13 @@ onMounted(async () => {
     fetchArchiveRegions(),
     resolveArchiveColumnPreferenceOwner(),
   ])
-  const mainCategory = archiveCategoryFilterOptions.value.find(option => option.label === '主机')
-  archiveQuery.categories = mainCategory ? [Number(mainCategory.value)] : []
   restoreSelectedArchiveColumnKeys()
   archiveColumnPreferencesReady.value = true
   await nextTick()
   completeArchiveColumnPreferenceRestore()
   handleArchiveSortChanged()
   archiveQueryReady = true
-  await fetchList()
+  archiveWorkspaceReady.value = true
   scheduleArchiveScrollbarMetrics()
 })
 const archiveSyncPoll = setInterval(() => {

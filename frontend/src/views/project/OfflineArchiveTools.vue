@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import {ref} from 'vue'
+import {ref,computed,onMounted} from 'vue'
+import {MoreFilled,ArrowDown} from '@element-plus/icons-vue'
 import {ElMessage,ElMessageBox} from 'element-plus'
 import {PmsFormDrawer,PmsFormField,PmsSelectControl} from '@/form-system'
 import {useAuthStore} from '@/stores/auth'
@@ -8,6 +9,10 @@ import request from '@/utils/request'
 const props=defineProps<{selectedRows:Array<{id:number;updated_at:string}>}>()
 const emit=defineEmits<{changed:[]}>()
 const auth=useAuthStore(),lines=useProductLineOptions()
+const initialization=ref(false)
+const canImport=computed(()=>auth.hasPermission('project:archive:import')&&auth.hasPermission('business:data:all'))
+const canAssign=computed(()=>auth.hasPermission('project:archive:assign-line')&&auth.hasPermission('business:data:all'))
+onMounted(async()=>{try{const result:any=await request.get('/offline-archives/initialization-status');initialization.value=result.enabled===true}catch{initialization.value=false}})
 const importing=ref(false),assigning=ref(false),busy=ref(false),selectedLine=ref<number|null>(null)
 const payload=ref<any>(null),preview=ref<any>(null),errors=ref<string[]>([]),batchId=ref<number|null>(null)
 const assignmentRows=ref<Array<{id:number;expected_updated_at:string}>>([])
@@ -52,6 +57,7 @@ async function openAssign(){
  assignmentRows.value=props.selectedRows.map(r=>({id:r.id,expected_updated_at:r.updated_at}))
  selectedLine.value=null;errors.value=[];assigning.value=true;await lines.load()
 }
+function chooseTool(command:string|number|object){if(command==='import'){assigning.value=false;importing.value=true;errors.value=[]}else void openAssign()}
 async function assign(){
  if(!selectedLine.value||busy.value)return
  busy.value=true
@@ -60,8 +66,10 @@ async function assign(){
 }
 </script>
 <template>
- <el-button v-if="auth.hasPermission('project:archive:import') && auth.hasPermission('business:data:all')" size="small"  :disabled="busy" @click="assigning=false;importing=true;errors=[]">期初导入</el-button>
- <el-button v-if="auth.hasPermission('project:archive:assign-line') && auth.hasPermission('business:data:all')" size="small" :disabled="!selectedRows.length" @click="openAssign">分配产品线</el-button>
+ <el-dropdown v-if="initialization&&(canImport||canAssign)" trigger="click" @command="chooseTool">
+  <el-button class="pms-button-auxiliary archive-initialization-trigger" text size="small" :disabled="busy"><el-icon><MoreFilled /></el-icon><span>初始化工具</span><el-icon><ArrowDown /></el-icon></el-button>
+  <template #dropdown><el-dropdown-menu><el-dropdown-item v-if="canImport" command="import">期初导入</el-dropdown-item><el-dropdown-item v-if="canAssign" command="assign" :disabled="!selectedRows.length">分配产品线</el-dropdown-item></el-dropdown-menu></template>
+ </el-dropdown>
  <PmsFormDrawer v-model="importing" title="期初项目档案导入" :busy="busy">
   <p>选择已确认的档案修订表。同号档案仅补齐空值，保留已有名称、产品线和金蝶关联；新档案仅归档，不自动同步金蝶。</p>
   <PmsFormField field-id="archive-import-file" label="档案修订表">
@@ -84,3 +92,4 @@ async function assign(){
   <template #footer><el-button :disabled="busy" @click="assigning=false">取消</el-button><el-button type="primary" :disabled="!selectedLine || lines.failed.value" :loading="busy" @click="assign">确认分配</el-button></template>
  </PmsFormDrawer>
 </template>
+<style scoped>.archive-initialization-trigger{gap:4px;}</style>

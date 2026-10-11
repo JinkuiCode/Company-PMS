@@ -11,61 +11,12 @@
       </div>
     </template>
     <template #toolbar-right>
-      <el-button size="small" @click="resetFilters">重置筛选</el-button>
       <el-button size="small" @click="fetchCatalog">刷新</el-button>
     </template>
 
     <template #filters>
-      <div class="pms-filter-bar catalog-filters">
-        <div class="catalog-filter catalog-filter--keyword">
-          <PmsTextControl
-          v-model="filters.keyword"
-          clearable
-          size="compact"
-          placeholder="搜索字段名称、编码或说明"
-          aria-label="搜索字段名称、编码或说明"
-          @change="handleFilterChange"
-          @clear="handleFilterChange"
-          @keyup.enter="handleFilterChange"
-          />
-        </div>
-        <div class="catalog-filter catalog-filter--module">
-          <PmsSelectControl
-          v-model="filters.module"
-          :options="moduleSelectOptions"
-          clearable
-          size="compact"
-          placeholder="全部模块"
-          aria-label="模块"
-          @change="handleFilterChange"
-          />
-        </div>
-        <div class="catalog-filter catalog-filter--type">
-          <PmsSelectControl
-          v-model="filters.valueType"
-          :options="valueTypeOptions"
-          clearable
-          size="compact"
-          placeholder="全部类型"
-          aria-label="字段类型"
-          @change="handleFilterChange"
-          />
-        </div>
-        <div class="catalog-filter catalog-filter--source">
-          <PmsSelectControl
-          v-model="filters.sourceType"
-          :options="sourceTypeOptions"
-          clearable
-          size="compact"
-          placeholder="全部来源"
-          aria-label="字段来源"
-          @change="handleFilterChange"
-          />
-        </div>
-        <PmsCheckboxControl v-model="filters.enumOnly" size="compact" aria-label="仅枚举字段" @change="handleFilterChange">
-          仅枚举字段
-        </PmsCheckboxControl>
-      </div>
+      <PmsQueryWorkspace v-model="queryDraft" list-key="system-data-dictionary" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" />
+      <p v-if="queryError" role="alert">{{ queryError }}</p>
     </template>
 
     <template #grid>
@@ -73,8 +24,9 @@
         v-loading="loading"
         class="ag-theme-alpine pms-ag-grid field-catalog-grid"
         style="width: 100%"
-        :row-data="rows"
-        :column-defs="columnDefs"
+        :row-data="pagedRows"
+        :column-defs="queryColumnDefs"
+        @grid-ready="gridApi = $event.api"
         :default-col-def="defaultColDef"
         :locale-text="localeText"
         :theme="'legacy'"
@@ -92,7 +44,7 @@
         v-model="page"
         v-model:page-size="pageSize"
         :total="total"
-        @update:model-value="fetchCatalog"
+        @update:model-value="refreshScrollbar"
         @update:page-size="handlePageSizeChange"
       />
     </template>
@@ -100,7 +52,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import { useSystemQuery, loadCompleteDataset } from '@/query-system/system-adapter'
+import type { QueryCondition } from '@/query-system/core'
+import { decorateQueryColumns } from '@/query-system/column-grid'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { AgGridVue } from 'ag-grid-vue3'
 import { AllCommunityModule, ModuleRegistry, type ColDef } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
@@ -136,7 +92,7 @@ const localeText = chineseLocaleText
 const dataListRef = ref<InstanceType<typeof PmsDataList>>()
 const loading = ref(false)
 const rows = ref<FieldCatalogRow[]>([])
-const total = ref(0)
+const queryError = ref('')
 const page = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
 const moduleOptions = ref<ModuleOption[]>([])
@@ -144,7 +100,6 @@ const moduleSelectOptions = computed<PmsOption[]>(() => moduleOptions.value.map(
   label: `${item.label} (${item.count})`,
   value: item.value,
 })))
-const filters = reactive({ keyword: '', module: '', valueType: '', sourceType: '', enumOnly: false })
 
 const valueTypeOptions = [
   { label: '文本', value: 'text' },
@@ -171,9 +126,36 @@ const sourceTypeOptions = [
 ]
 
 const sourceLabels = Object.fromEntries(sourceTypeOptions.map(item => [item.value, item.label]))
+const gridApi = ref<any>(null)
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters } = useSystemQuery(() => [
+  { field: 'field_name', label: '字段名称', type: 'text' },
+  { field: 'field_code', label: '字段编码', type: 'text' },
+  { field: 'module', label: '模块', type: 'enum', options: moduleSelectOptions.value.map(o => ({value:String(o.value),label:o.label})) },
+  { field: 'group', label: '分组', type: 'text' },
+  { field: 'value_type', label: '类型', type: 'enum', options: valueTypeOptions },
+  { field: 'source_type', label: '来源', type: 'enum', options: sourceTypeOptions },
+  { field: 'storage_table', label: '存储表', type: 'text' },
+  { field: 'storage_column', label: '存储列', type: 'text' },
+  { field: 'enum_code', label: '枚举编码', type: 'text' },
+  { field: 'description', label: '说明', type: 'text' },
+  { field: 'editable', label: '可编辑', type: 'enum', options:[{value:1,label:'是'},{value:0,label:'否'}] },
+], ['field_name', 'module', 'value_type', 'source_type'], {ready:()=>!loading.value})
+const filteredRows = computed(() => filterRows(rows.value, row => ({...row,editable:Number(row.editable)})))
+const total = computed(() => filteredRows.value.length)
+const pagedRows = computed(() => filteredRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+function runQuery(conditions: QueryCondition[], preferences: object) {
+  submitQuery(conditions)
+  const size = (preferences as {pageSize?:number}).pageSize
+  if (size && Number.isSafeInteger(size) && size > 0) pageSize.value = size
+  page.value = 1
+  refreshScrollbar()
+}
+function clearQueryColumns() { clearColumns(); gridApi.value?.setFilterModel(null); gridApi.value?.refreshCells({force:true}) }
+columnContext.sort = (field, direction) => gridApi.value?.applyColumnState({state:[{colId:field,sort:direction}],defaultState:{sort:null}})
+watch(columnFilters, () => { page.value = 1 }, {deep:true})
 const typeLabels = Object.fromEntries(valueTypeOptions.map(item => [item.value, item.label]))
 const columnDefs: ColDef<FieldCatalogRow>[] = [
-  { field: 'module_name', headerName: '模块', width: 112 },
+  { field: 'module', headerName: '模块', width: 112, valueFormatter: params => params.data?.module_name || params.value },
   { field: 'group', headerName: '分组', width: 120 },
   { field: 'field_name', headerName: '字段名称', width: 156, pinned: 'left' },
   { field: 'field_code', headerName: '字段编码', width: 206, pinned: 'left', cellClass: 'catalog-code' },
@@ -192,49 +174,31 @@ const defaultColDef: ColDef = {
   suppressMovable: false,
   cellStyle: { display: 'flex', alignItems: 'center' },
 }
+const queryColumnDefs = computed(() => decorateQueryColumns(columnDefs, () => columnContext))
 
 let listRequestSerial = 0
 async function fetchCatalog() {
   const requestSerial = ++listRequestSerial
   loading.value = true
+  queryError.value = ''
   try {
-    const response: any = await request.get('/field-catalog', {
-      params: {
-        keyword: filters.keyword || undefined,
-        module: filters.module || undefined,
-        value_type: filters.valueType || undefined,
-        source_type: filters.sourceType || undefined,
-        enum_only: filters.enumOnly || undefined,
-        page: page.value,
-        page_size: pageSize.value,
-      },
-    })
+    const response = await loadCompleteDataset(async (page, pageSize) => await request.get('/field-catalog', { params: { page, page_size: pageSize } }) as any, 200, () => requestSerial === listRequestSerial, (row:any) => `${row.module}:${row.field_code}`)
     if (requestSerial !== listRequestSerial) return
     rows.value = response.items || []
-    total.value = response.total || 0
+    page.value = Math.min(page.value, Math.max(1, Math.ceil(total.value / pageSize.value)))
     moduleOptions.value = response.modules || []
     await nextTick()
     refreshScrollbar()
   } catch {
-    if (requestSerial === listRequestSerial) { rows.value = []; total.value = 0 }
+    if (requestSerial === listRequestSerial) { rows.value = []; queryError.value = '字段目录未完整读取，请刷新重试' }
   } finally {
     if (requestSerial === listRequestSerial) loading.value = false
   }
 }
 
-function handleFilterChange() {
-  page.value = 1
-  fetchCatalog()
-}
-
 function handlePageSizeChange() {
   page.value = 1
-  fetchCatalog()
-}
-
-function resetFilters() {
-  Object.assign(filters, { keyword: '', module: '', valueType: '', sourceType: '', enumOnly: false })
-  handleFilterChange()
+  refreshScrollbar()
 }
 
 function refreshScrollbar() {

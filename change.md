@@ -1,5 +1,30 @@
 # PMS 变更记录
 
+## 2026-10-11 样稿控件等高与引用摘要修订
+
+- 原因：用户指出三页样稿同一行字段框与按钮高度不一，多选引用需要展示缩略信息且不得溢出。
+- 调整：定位样稿缺失查询密度容器导致字段32px、按钮24px、叉号20px；复用pms-query-density将列表工具栏与条件行统一为24px，采购视图切换同高。弹窗搜索框与按钮统一32px。引用显示前3项编码/名称和总条数，内容单行省略，悬停显示完整已选值；不修改既有正式控件或主题。
+- 涉及：frontend/prototypes/list-toolbar/{App,Condition}.vue、model.mjs；frontend/tests/list-toolbar-preview.test.mjs；change.md。
+- 验证：引用摘要空值、去重、三项与多项回归先RED后GREEN；四项必需前端契约、npm run build及git diff --check退出0（构建仅既有大分块警告）。真实浏览器测量三页列表按钮/字段均24px，引用弹窗搜索框/按钮均32px；四项目引用完整title保留，摘要框scrollWidth未超出clientWidth。截图outputs/list-toolbar-preview-20261011/{purchase,inventory}-equal-height.png；仅样稿，无服务器发布、数据库修改、合并或推送。
+
+## 2026-10-11 列表工具栏与配色交互样稿
+
+- 原因：用户要求降低查询区多色干扰、删除条件改为叉号、优化无新增动作页面的列设置位置，并先确认样稿。
+- 调整：新增采购进度、即时库存、项目档案三页独立样稿；查询/新增/保存使用实心靛蓝，辅助动作白底低饱和靛蓝，导出浅青绿，移除条件使用无框叉号。库存将导出/任务/列设置与查询方案合并一行；档案新增优先，初始化工具移到右侧菜单，提供关闭初始化模式隐藏入口的预览开关。
+- 涉及：frontend/prototypes/list-toolbar.html、frontend/prototypes/list-toolbar/{App,Condition}.vue、main.js、model.mjs；frontend/tests/list-toolbar-preview.test.mjs；本日志。
+- 验证：样稿模型测试先RED后GREEN，新增Vue响应式条件克隆回归通过；四项前端风格/列表/系统一致性/档案筛选契约及git diff --check退出0，npm run build退出0（仅既有大分块警告）。真实浏览器验证多选引用跨搜索保留、查询返回4条、库存查询12条、方案保存、初始化工具隐藏；观察到520px与1241px页面宽度下无页面横向溢出，按钮约24px。截图位于outputs/list-toolbar-preview-20261011/。
+- 边界：仅模拟数据与当前页面内存方案，导出只下载模拟CSV；列设置及业务动作仅展示入口。初始化开关尚不是正式系统参数，未新增生产导出权限或接口；不修改正式页面、不部署服务器、不合并或推送Git。
+
+## 2026-10-11 全系统共享查询工作区（开发机）
+
+- 原因：用户要求查询方案成为独立控件，按项目档案、三个报表、其他列表的顺序迁移，后续无需逐页重复维护。
+- 已实施：新增统一工作区/条件行/方案状态/列漏斗与适配层，默认及临时条件均呈现字段、匹配方式和值；个人唯一默认方案、设置内保存、新建方案、重选同一方案恢复条件；复用正式引用弹窗的跨搜索勾选与Excel单列批量匹配。列筛选使用全部已提交结果，整列淡色，尚未查询的业务漏斗不读取全量候选，条纹行也保持同色。
+- 档案及系统：档案服务端列过滤在计数分页前执行，候选排除本列、保留其他条件与既有权限，显示并搜索枚举名称，MSSQL排序去重和完整参数预算；系统/进度13页使用同一工作区，完整客户端数据先过滤后分页，操作日志及同步任务使用真实后端query v2与列候选，不降级为仅过滤当前页。旧档案个人方案保留综合搜索OR语义及历史条件，不删除原存储。
+- 三报表：采购总/明细、即时库存、物料收发共用同一工作区；查询草稿与已提交范围分离，空白默认条件不因查询被删除。产品线/项目引用按当前条件校验，汇总聚合后筛选，下钻保持项目和组织；计算列候选、排序及导出沿用完整已提交范围。收发仍需物料和组织、组织多选、仓库仅引用，先算余额再展示筛选。独立审查修复SQL空值OR括号、计算列候选工作集和SQL Server全NULL CASE类型问题，并关闭方案身份切换/异步响应竞态。
+- 涉及：frontend/src/query-system/{core,workspace,column-filters,column-grid,report-adapter,system-adapter}.ts及共享Vue控件；form-system/components/PmsSelectControl.vue；styles/pms-theme.css；project/system/reports对应列表及API；backend/app/api/{projects,operation_logs,sync_tasks,*_reports}.py与对应查询/报表服务、相关契约测试；docs/PMS-UI-STANDARD.md及本批计划。
+- 验证：共享工作区、档案、漏斗、系统适配/13页迁移契约退出0；最新6组迁移/状态契约及49项引用范围、草稿、身份与旧方案回归通过；四项前端必需契约、数据字典/枚举契约及构建退出0（仅既有大分块警告）。档案列查询、统一条件、授权及分页回归退出0，系统后端19项、报表79项、采购74项、收发88项通过（存在交叉覆盖，不累加总数）。真实开发浏览器验证方案保存/鼠标及键盘重选清除临时条件、整列着色/重置、跨搜索保留两项目、批量去重/未匹配及精确两条查询；用户管理条纹整列同色、日志140条候选、切换枚举恢复18项通过。真实金蝶只读验证库存2到1条；A-202638汇总2组织/1804行，申请行数列筛剩1组织1472行，下钻1472条再筛已完成113条；收发双组织29条筛直接调拨6条、保留原余额和两位数量、零空白。独立审查原问题全部关闭。截图位于outputs/unified-query-20261011/；真实Windows/OA跨平台与正式服务器页面尚未验收。
+- 边界：仅本机程序，不改数据库结构、OA登录、授权或金蝶写路径；不部署服务器、不合并master、不推送GitHub。开发金蝶连接保持只读、后台同步关闭。本批未删除原工作区资料或旧浏览器方案记录。
+
 ## 2026-10-11 档案引用修正版部署与主分支收尾
 
 - 原因：用户明确要求先更新服务器，再合并master，不推送GitHub。
@@ -1590,3 +1615,28 @@
 - 涉及文件：.runtime/reset-local-ael.py、reset-local-ael-contract.py；未改服务器或应用认证代码。
 - 验证：隔离恢复校验先RED（重复密码被拒绝）后GREEN，确认重复允许而基础规则及日常重复策略仍有效。只读核实运行后端使用.runtime/data/pms-dev.db、ael有效且已有5次近期失败；用户完成隐藏输入后，2026-10-11 11:33:44本机回执确认登录200且无需改密，凭据版本4→5。随后数据库只读核对must_change_password=0、local_login_enabled=1，近期失败记录0。
 - 范围：开发机ael密码恢复及验证完成，用户随后自行登录成功。未改变服务器账号、角色权限、数据库结构或全局安全策略，未部署、提交、合并或推送。
+
+### 2026-10-11：共享查询工作区设置草稿身份隔离修复
+- 原因：已批准修复P2问题，设置抽屉打开后切换用户或列表，旧草稿可能保存到新身份的个人方案。
+- 调整：设置会话记录打开时的用户/列表存储键；身份变化同步关闭抽屉并清空名称、原名称、默认标记、字段草稿及错误，取消和保存成功也清空草稿。保存前检查会话仍打开、归属一致、当前身份已初始化且列表就绪，不符合时拒绝写入；身份变化后尚未初始化时禁止打开旧设置。
+- 涉及文件：frontend/src/query-system/PmsQueryWorkspace.vue、frontend/tests/query-workspace-ownership.test.mjs、本日志。未改workspace.ts、档案页、后端或其他共享组件。
+- 验证：真实Vue组件挂载行为测试先RED（node tests/query-workspace-ownership.test.mjs退出1，8项中7项失败，同步切换用户后错误写入1次），修复后GREEN（同命令退出0，8/8通过）。覆盖用户/列表切换、登出、未就绪、同刻保存、迟到回调、关闭清空及同归属正常保存/重新打开；query-workspace.test.mjs、query-workspace-component.test.mjs、style-contract、list-standard-contract、system-ui-consistency-contract均退出0，git diff --check退出0。npm run build退出2，范围外ProjectArchive.vue第47/940/1259行存在PmsOption含boolean与QueryOption类型不兼容，按限定范围未修改。
+- 范围：仅开发机共享工作区修复及回归，保留其他agent和历史未提交工作；未部署、提交、合并或推送。
+
+### 2026-10-11：共享查询工作区身份切换作废旧引用校验
+- 原因：用户追加批准必要竞态修复；身份变化且新列表未就绪时，原key watcher只清设置草稿，没有作废正在等待的引用校验，旧成功响应可能发出查询，旧失败响应可能写入新身份错误。
+- 调整：只在同步身份key watcher中增加run递增及busy立即释放，复用现有异步响应序号校验；不依赖ready或后续load才能作废旧请求。
+- 涉及文件：frontend/src/query-system/PmsQueryWorkspace.vue、frontend/tests/query-workspace-ownership.test.mjs、本日志。未修改archive-schemes.ts、档案页、后端或其他共享组件。
+- 验证：node tests/query-workspace-ownership.test.mjs先RED退出1，原8项通过、新增7项失败，复现旧query事件、旧错误和busy未释放；修复后GREEN退出0，15/15通过，覆盖用户/列表/登出及旧响应成功/失败。query-workspace.test.mjs、query-workspace-component.test.mjs及style/list-standard/system-ui-consistency三项契约均退出0。当前npm run build退出0，仅大分块警告，前批范围外枚举类型报错已由其他agent修复。
+- 范围：仅开发机已批准共享工作区竞态修复与行为回归；未部署、提交、合并或推送。
+
+### 2026-10-11：已确认列表工具栏落地、业务导出与初始化开关
+- 原因：用户确认 list-toolbar 样稿为实施基线，要求同一行按钮/字段等高、引用多选缩略且不溢出、移除条件改叉号、无新增按钮的页面消除空工具栏；另明确系统管理不导出，业务单据与报表均导出，并批准档案初始化模式参数。
+- 调整：共享查询区保留24px控件，方案名称、引用弹窗搜索及按钮32px；查询/新建/保存方案靛蓝，方案设置/重置/添加/引用/列设置白底淡边，导出淡青绿，移除条件用无外框叉号。引用显示前三项及独立总条数/完整提示，来源、元数据或关联条件变更同步作废旧摘要。档案新增位于最前，初始化工具收至最右菜单；库存和收发明细导出/任务/列设置并入方案栏，采购保留总/明细切换及快捷状态。
+- 导出：新增共享 BusinessExportControl、查询快照及三个后端下载入口，接入档案、项目列表及任务列表。后台同时校验独立导出/查看权限、人员/部门和产品线范围；导出已提交条件、列筛选、可见列与排序的全部匹配记录，不导出未提交草稿或仅当前页。500条分批、外部归并排序与常量内存XLSX写入，无行数硬上限，文本不执行Excel公式，临时文件清理并记录脱敏操作日志。系统管理页不增加导出，三个报表沿用原后台导出任务。
+- 初始化：参数 archive.initialization_enabled 默认开启，可维护开启/关闭；关闭隐藏入口并在接口和服务层拒绝工作簿解析、预览、导入及分配产品线，保留已导入批次回退权限和业务校验。数据库版本提升为2026-10-11-business-export-01，导出权限仅首次迁移授予启用管理员，后续不补回撤销授权。
+- 涉及文件：frontend/src/query-system/PmsQueryWorkspace.vue、PmsQueryConditionRow.vue、PmsQueryReference.vue、reference-summary.ts；styles/pms-theme.css、components/ReportExportControl.vue、PmsListColumnPicker.vue、api/businessExport.ts、business-export/；views/project/ProjectArchive.vue、OfflineArchiveTools.vue、ProjectList.vue、ProjectProgress.vue；views/reports/InventoryList.vue、StockDetailList.vue、PurchaseProgressReport.vue；views/system/ParameterList.vue。后端 main.py、api/business_exports.py、offline_archives.py、services/business_export.py、business_list_query.py、parameter.py、project.py、list_query.py、query_conditions.py、offline_archive_import.py、offline_archive_workbook.py、database_revision.py及models/init_db.py；相关前后端契约、docs/PMS-UI-STANDARD.md及实施计划。
+- 导出复核修复：查询匹配按页面查询来源，固定列与动态列分别按显示来源输出；主键上界及稳定游标扫描避免并发增删导致OFFSET分页漏行或重复，外部排序恢复默认/用户排序，不声称数据库一致时点快照。文件响应finally清理覆盖无效Range、发送失败和取消。
+- 验证：新增视觉/摘要/导出/开关测试先RED后GREEN；摘要竞态9项、最终导出/迁移/响应38项、初始化4项通过。最终22项前端契约/行为脚本、规定四项规范检查及npm run build退出0，仅既有大分块警告；后端升级、档案查询/列条件、项目工作台、字段目录、枚举及membership隔离退出0。旧工作台契约因正则跨函数误取详情切换代码失败，改用TypeScript语法树定位自动保存函数后通过，验收要求未放宽。
+- 真实开发机：24px工具栏、32px方案/搜索、7项引用缩略无溢出和窄屏边界已核对；档案页面50条/页，实际下载Excel包含全部102条与当前列顺序，无公式。初始化关闭后入口消失，重新开启后恢复，测试后保持开启。截图位于outputs/approved-toolbar-20261011/。本机SQLite升级前在线备份.runtime/backups/toolbar-20261011-163733.db并校验，升级后102档案、1项目、6任务、3用户及原密码保持，完整性ok；仅重启本机PMS后端，继续金蝶只读、后台同步关闭。
+- 范围：本批开发机实施与验证完成，保留此前及其他任务未提交改动；未部署或升级正式库、未重启SQL Server/OA/服务器、未提交、合并或推送。真实MSSQL导出及Windows/OA新布局尚待后续正式环境验收；大规模同步导出仍受HTTP请求时长和临时磁盘容量约束。

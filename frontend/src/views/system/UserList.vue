@@ -53,18 +53,19 @@
         <el-button v-if="hasPermission('system:user:add')" type="primary" size="small" @click="openUserDialog()">新增用户</el-button>
       </div>
 
-        <el-table class="pms-dense-table" height="100%" :data="userList" v-loading="loading" border stripe size="small">
+        <PmsQueryWorkspace v-model="queryDraft" list-key="system-user" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" />
+        <el-table class="pms-dense-table" height="100%" :data="pagedUsers" v-loading="loading" border stripe size="small">
           <el-table-column prop="id" label="ID" width="70" />
-          <el-table-column prop="username" label="账号（工号）" width="120" />
-          <el-table-column prop="real_name" label="员工姓名" width="100" />
-          <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="mobile" label="手机号" width="125" />
-          <el-table-column prop="dept_name" label="部门" width="110">
+          <el-table-column prop="username" label="账号（工号）" width="120" :class-name="queryColumnClass('username')" :label-class-name="queryColumnClass('username')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'username',displayName:'账号（工号）'}" /></template></el-table-column>
+          <el-table-column prop="real_name" label="员工姓名" width="100" :class-name="queryColumnClass('real_name')" :label-class-name="queryColumnClass('real_name')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'real_name',displayName:'员工姓名'}" /></template></el-table-column>
+          <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip :class-name="queryColumnClass('email')" :label-class-name="queryColumnClass('email')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'email',displayName:'邮箱'}" /></template></el-table-column>
+          <el-table-column prop="mobile" label="手机号" width="125" :class-name="queryColumnClass('mobile')" :label-class-name="queryColumnClass('mobile')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'mobile',displayName:'手机号'}" /></template></el-table-column>
+          <el-table-column prop="dept_name" label="部门" width="110" :class-name="queryColumnClass('dept_id')" :label-class-name="queryColumnClass('dept_id')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'dept_id',displayName:'部门'}" /></template>
             <template #default="{ row }">{{ deptMap[row.dept_id] || '-' }}</template>
           </el-table-column>
-          <el-table-column prop="role_names" label="角色" :formatter="(r: any) => r.role_names?.join('，') || '-'">
+          <el-table-column prop="role_names" label="角色" :formatter="(r: any) => r.role_names?.join('，') || '-'" :class-name="queryColumnClass('role_names')" :label-class-name="queryColumnClass('role_names')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'role_names',displayName:'角色'}" /></template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="70">
+          <el-table-column prop="status" label="状态" width="70" :class-name="queryColumnClass('status')" :label-class-name="queryColumnClass('status')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'status',displayName:'状态'}" /></template>
             <template #default="{ row }">
               <span class="pms-status" :class="row.status === 1 ? 'pms-status-success' : 'pms-status-danger'">
                 <span class="pms-status-dot"></span>
@@ -143,7 +144,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import { useSystemQuery, loadCompleteDataset } from '@/query-system/system-adapter'
+import type { QueryCondition } from '@/query-system/core'
+import { computed, ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { OfficeBuilding } from '@element-plus/icons-vue'
 import CustomPagination from '@/components/CustomPagination.vue'
@@ -325,7 +330,7 @@ async function handleDeleteDept(id: number) {
 }
 
 // ==================== 用户列表 ====================
-const userList = ref([])
+const userList = ref<any[]>([])
 const roleList = ref<any[]>([])
 const roleOptions = computed<PmsOption[]>(() => roleList.value.map(role => ({
   value: Number(role.id),
@@ -335,7 +340,26 @@ const roleOptions = computed<PmsOption[]>(() => roleList.value.map(role => ({
 const loading = ref(false)
 const page = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
-const total = ref(0)
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
+  { field: 'username', label: '账号（工号）', type: 'text' },
+  { field: 'real_name', label: '员工姓名', type: 'text' },
+  { field: 'email', label: '邮箱', type: 'text' },
+  { field: 'mobile', label: '手机号', type: 'text' },
+  { field: 'dept_id', label: '部门', type: 'enum', options: Object.entries(deptMap.value).map(([value,label]) => ({value:Number(value),label})) },
+  { field: 'role_names', label: '角色', type: 'text' },
+  { field: 'status', label: '状态', type: 'enum', options: [{value:1,label:'启用'},{value:0,label:'禁用'}] },
+], ['username', 'real_name', 'status'], {ready:()=>!loading.value})
+const filteredUsers = computed(() => filterRows(userList.value, row => ({...row, role_names: row.role_names?.join('，') || ''})))
+const total = computed(() => filteredUsers.value.length)
+const pagedUsers = computed(() => filteredUsers.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+function runQuery(conditions: QueryCondition[], preferences: object) {
+  submitQuery(conditions)
+  const size = (preferences as {pageSize?:number}).pageSize
+  if (size && Number.isSafeInteger(size) && size > 0) pageSize.value = size
+  page.value = 1
+}
+function clearQueryColumns() { clearColumns() }
+watch(columnFilters, () => { page.value = 1 }, {deep:true})
 
 // 用户弹窗
 const userDialogVisible = ref(false)
@@ -345,15 +369,15 @@ let listRequestSerial = 0
 async function fetchUserList() {
   const requestSerial = ++listRequestSerial
   loading.value = true
-  const params: any = { page: page.value, page_size: pageSize.value }
+  const params: any = {}
   if (selectedDeptId.value !== null) params.dept_id = selectedDeptId.value
   try {
-    const res: any = await request.get('/users', { params })
+    const res = await loadCompleteDataset(async (page, pageSize) => await request.get('/users', { params: { ...params, page, page_size: pageSize } }) as any, 500, () => requestSerial === listRequestSerial, (row:any) => row.id)
     if (requestSerial !== listRequestSerial) return
     userList.value = res.items
-    total.value = res.total
+    page.value = Math.min(page.value, Math.max(1, Math.ceil(total.value / pageSize.value)))
   } catch {
-    if (requestSerial === listRequestSerial) { userList.value = []; total.value = 0 }
+    if (requestSerial === listRequestSerial) { userList.value = []; ElMessage.error('用户数据未完整读取，请刷新重试') }
   } finally {
     if (requestSerial === listRequestSerial) loading.value = false
   }
@@ -361,13 +385,11 @@ async function fetchUserList() {
 
 function handlePageChange(value: number) {
   page.value = value
-  fetchUserList()
 }
 
 function handlePageSizeChange(value: number) {
   pageSize.value = value
   page.value = 1
-  fetchUserList()
 }
 
 async function fetchRoles() {

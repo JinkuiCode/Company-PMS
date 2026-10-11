@@ -47,9 +47,9 @@ onUnmounted(() => { disposed = true; clearTimeout(timer) })
 
 <template>
   <div class="report-export-control">
-    <el-button size="small" :icon="Download" :loading="submitting" :disabled="disabled || busy" @click="submit">导出当前筛选</el-button>
+    <el-button class="pms-button-export" size="small" :icon="Download" :loading="submitting" :disabled="disabled || busy" title="导出当前完整筛选结果" @click="submit">导出数据</el-button>
     <el-popover v-model:visible="opened" trigger="click" placement="bottom-end" :width="380" @show="refresh">
-      <template #reference><el-button size="small">导出任务{{ busy ? ' · 处理中' : '' }}</el-button></template>
+      <template #reference><el-button class="pms-button-auxiliary" size="small">导出任务{{ busy ? ' · 处理中' : '' }}</el-button></template>
       <div class="report-export-heading"><strong>导出任务</strong><el-button :icon="Refresh" link aria-label="刷新导出任务" @click="refresh" /></div>
       <p v-if="pollFailed" role="alert">状态获取失败，请刷新重试。</p>
       <p v-else-if="!jobs.length">暂无导出任务</p>
@@ -65,7 +65,7 @@ onUnmounted(() => { disposed = true; clearTimeout(timer) })
 </template>
 
 <style scoped>
-.report-export-control { display: inline-flex; align-items: center; gap: 8px; }
+.report-export-control { display: inline-flex; align-items: center; gap: 6px; }
 .report-export-control :deep(.el-button + .el-button) { margin-left: 0; }
 .report-export-heading, .report-export-job > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .report-export-jobs { max-height: 360px; overflow-y: auto; }

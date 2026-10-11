@@ -10,6 +10,7 @@ from app.services.inventory_reader import (InventoryQuery, report_fields, list_i
     list_options, effective_organizations)
 from app.services.purchase_connection import purchase_connection
 from app.services.business_data_scope import has_all_business_data, ALL_DATA_SCOPE
+from app.services.report_filters import query_fields
 
 router = APIRouter(prefix='/api/reports/inventory', tags=['即时库存查询'])
 
@@ -38,7 +39,8 @@ def inventory_connection():
 
 @router.get('/metadata')
 def metadata(db: Session=Depends(get_db),ctx=Depends(require_permission('report:inventory:view'))):
-    return {'fields':report_fields(),
+    return {'fields':report_fields(), 'query_fields':query_fields('inventory'),
+        'column_filter_fields':query_fields('inventory'), 'query_schema_version':2,
         'organizations':[{'value':line.organization_id,'label':line.display_name} for line in scoped_lines(db,ctx)]}
 
 
@@ -74,3 +76,21 @@ def export(request: Request,query: Annotated[InventoryQuery,Query()],db: Session
            ctx=Depends(require_permission('report:inventory:export'))):
     enforce_permission(ctx,'report:inventory:view')
     raise HTTPException(410, '导出已升级为后台Excel任务，请刷新页面后使用导出按钮')
+
+
+@router.get('/column-options')
+def column_options(field: str = Query(max_length=100), keyword: str = Query('', max_length=100),
+                   page: int = Query(1, ge=1, le=1000000), page_size: int = Query(50, ge=1, le=200),
+                   parameters: str = Query('{}', max_length=36000), column_filters: str | None = Query(None, max_length=12000),
+                   db: Session = Depends(get_db), ctx=Depends(require_permission('report:inventory:view'))):
+    from app.services.report_column_candidates import request_query, candidate_query, inventory_candidates
+    query = request_query(InventoryQuery, parameters, column_filters)
+    try:
+        candidate_query(query, 'inventory', field, keyword, page, page_size)
+    except ValueError:
+        raise HTTPException(422, '该列尚不支持候选查询或参数无效') from None
+    organizations = effective_organizations(query, authorized_organizations(db, ctx))
+    if organizations == []:
+        return dict(items=[], total=0, page=page, page_size=page_size, has_more=False)
+    with inventory_connection() as connection:
+        return inventory_candidates(connection, query, organizations, field, keyword, page, page_size)

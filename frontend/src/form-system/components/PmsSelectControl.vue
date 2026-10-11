@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, useAttrs } from 'vue'
 import type { PmsControlStateProps, PmsControlValue, PmsOption } from '../types'
 import PmsControlShell from './PmsControlShell.vue'
 
@@ -9,8 +10,21 @@ interface Props extends PmsControlStateProps {
   options: PmsOption[]
 }
 
-defineProps<Props>()
-const emit = defineEmits<{ 'update:modelValue': [value: PmsControlValue] }>()
+const props = defineProps<Props>()
+const emit = defineEmits<{ 'update:modelValue': [value: PmsControlValue]; 'optionSelect': [value: PmsControlValue] }>()
+const attrs = useAttrs()
+let popupVisible = false, keyboardSelection = false
+function selectByKeyboard() {
+  keyboardSelection = popupVisible && !attrs.multiple
+}
+async function visibilityChanged(visible: boolean) {
+  popupVisible = visible
+  if (!visible && keyboardSelection) {
+    keyboardSelection = false
+    await nextTick()
+    emit('optionSelect', props.modelValue)
+  }
+}
 </script>
 
 <template>
@@ -30,6 +44,8 @@ const emit = defineEmits<{ 'update:modelValue': [value: PmsControlValue] }>()
       :loading="loading"
       :aria-label="ariaLabel || undefined"
       @update:model-value="emit('update:modelValue', $event)"
+      @keydown.enter.capture="selectByKeyboard"
+      @visible-change="visibilityChanged"
     >
       <el-option
         v-for="option in options"
@@ -37,6 +53,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: PmsControlValue] }>()
         :label="option.label"
         :value="option.value"
         :disabled="option.disabled"
+        @click="!option.disabled && emit('optionSelect', option.value)"
       />
     </el-select>
   </PmsControlShell>

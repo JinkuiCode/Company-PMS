@@ -10,27 +10,9 @@
     </template>
 
     <template #filters>
-      <PmsListFilters
-        v-model:filters="customFilters"
-        :fields="customFilterFields"
-        :active-count="activeCustomFilterCount"
-      >
-        <div class="operation-log-filter operation-log-filter--date">
-          <PmsDateControl v-model="baseFilters.timeRange" type="daterange" size="compact" value-format="YYYY-MM-DD" start-placeholder="开始时间" end-placeholder="结束时间" aria-label="日志时间范围" @change="handleBaseFilterChange" />
-        </div>
-        <div class="operation-log-filter operation-log-filter--module">
-          <PmsSelectControl v-model="baseFilters.module" :options="moduleOptions" size="compact" clearable placeholder="全部模块" aria-label="日志模块" @change="handleBaseFilterChange" />
-        </div>
-        <div class="operation-log-filter operation-log-filter--action">
-          <PmsSelectControl v-model="baseFilters.action" :options="actionOptions" size="compact" clearable placeholder="全部动作" aria-label="日志动作" @change="handleBaseFilterChange" />
-        </div>
-        <div class="operation-log-filter operation-log-filter--status">
-          <PmsSelectControl v-model="baseFilters.status" :options="statusOptions" size="compact" clearable placeholder="全部状态" aria-label="日志状态" @change="handleBaseFilterChange" />
-        </div>
-        <div class="operation-log-filter operation-log-filter--keyword">
-          <PmsTextControl v-model="baseFilters.keyword" size="compact" clearable placeholder="关键词 / 对象 / 操作者" aria-label="日志关键词" @change="handleBaseFilterChange" @clear="handleBaseFilterChange" />
-        </div>
-      </PmsListFilters>
+      <PmsQueryWorkspace v-model="queryDraft" list-key="system-operation-log" :fields="queryFields" :defaults="queryDefaults" :ready="querySupported" :loading="loading" :snapshot="() => ({pageSize})" @query="runQuery" @clear-columns="clearQueryColumns" />
+      <p v-if="!querySupported" class="operation-log-hint" role="status">操作日志接口尚未声明查询 v2 支持，统一查询暂不可用；未执行当前页过滤。</p>
+      <p v-if="queryError" role="alert">{{queryError}}</p>
     </template>
 
     <template #grid>
@@ -43,22 +25,22 @@
         height="100%"
         empty-text="暂无操作日志"
       >
-        <el-table-column prop="created_at" label="时间" width="168" fixed>
+        <el-table-column prop="created_at" label="时间" width="168" fixed :class-name="queryColumnClass('created_at')" :label-class-name="queryColumnClass('created_at')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'created_at',displayName:'时间'}" /><span v-else>时间</span></template>
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column prop="module" label="模块" width="104" />
-        <el-table-column prop="action" label="动作" width="118">
+        <el-table-column prop="module" label="模块" width="104" :class-name="queryColumnClass('module')" :label-class-name="queryColumnClass('module')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'module',displayName:'模块'}" /><span v-else>模块</span></template></el-table-column>
+        <el-table-column prop="action" label="动作" width="118" :class-name="queryColumnClass('action')" :label-class-name="queryColumnClass('action')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'action',displayName:'动作'}" /><span v-else>动作</span></template>
           <template #default="{ row }">{{ actionLabel(row.action) }}</template>
         </el-table-column>
-        <el-table-column prop="operator_name" label="操作者" width="116">
+        <el-table-column prop="operator_name" label="操作者" width="116" :class-name="queryColumnClass('operator_name')" :label-class-name="queryColumnClass('operator_name')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'operator_name',displayName:'操作者'}" /><span v-else>操作者</span></template>
           <template #default="{ row }">{{ row.operator_name || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="entity_name" label="对象" min-width="180" show-overflow-tooltip>
+        <el-table-column prop="entity_name" label="对象" min-width="180" show-overflow-tooltip :class-name="queryColumnClass('entity_name')" :label-class-name="queryColumnClass('entity_name')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'entity_name',displayName:'对象'}" /><span v-else>对象</span></template>
           <template #default="{ row }">{{ row.entity_name || row.entity_id || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="summary" label="摘要" min-width="260" show-overflow-tooltip />
-        <el-table-column prop="request_path" label="路径" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="88">
+        <el-table-column prop="summary" label="摘要" min-width="260" show-overflow-tooltip :class-name="queryColumnClass('summary')" :label-class-name="queryColumnClass('summary')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'summary',displayName:'摘要'}" /><span v-else>摘要</span></template></el-table-column>
+        <el-table-column prop="request_path" label="路径" min-width="220" show-overflow-tooltip :class-name="queryColumnClass('request_path')" :label-class-name="queryColumnClass('request_path')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'request_path',displayName:'路径'}" /><span v-else>路径</span></template></el-table-column>
+        <el-table-column prop="status" label="状态" width="88" :class-name="queryColumnClass('status')" :label-class-name="queryColumnClass('status')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'status',displayName:'状态'}" /><span v-else>状态</span></template>
           <template #default="{ row }">
             <span class="pms-status" :class="row.status === 'success' ? 'success' : 'danger'">
               <span class="pms-status-dot"></span>
@@ -157,14 +139,18 @@
 </template>
 
 <script setup lang="ts">
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import { useSystemQuery, serverQueryParams, requireServerQueryVersion } from '@/query-system/system-adapter'
+import { toQueryFields } from '@/query-system/list-adapter'
+import type { QueryCondition } from '@/query-system/core'
+import type { ColumnQueryContext } from '@/query-system/column-filters'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
-import PmsListFilters from '@/components/PmsListFilters.vue'
 import { PmsDateControl, PmsSelectControl, PmsTextControl, type PmsOption } from '@/form-system'
 import {
-  useListFilters,
   type ListFilterField,
   type ListFilterOption,
 } from '@/composables/useListFilters'
@@ -244,9 +230,24 @@ const customFilterFields: ListFilterField[] = [
   { field: 'created_at', label: '时间', type: 'date' },
 ]
 
-const { customFilters, activeCustomFilterCount } = useListFilters<OperationLog>(
-  customFilterFields as ListFilterField<OperationLog>[],
-)
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied: queryApplied, submit: submitQuery, clearColumns, columnContext: clientContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
+  ...toQueryFields(customFilterFields),
+  {field:'summary',label:'摘要',type:'text'},
+  {field:'request_path',label:'路径',type:'text'},
+], ['created_at','module','action','operator_name'], {requireQuery:true,ready:()=>querySupported.value && !loading.value && !queryError.value})
+const querySupported = ref(false), queryError = ref('')
+const columnContext: ColumnQueryContext = {...clientContext, load: async (field, keyword, page) => {
+  if (!clientContext.ready?.()) throw Error('请先完成查询，再使用列筛选')
+  return await request.get('/operation-logs/column-values', {params:{...serverQueryParams(queryApplied.value,columnFilters.value.filter(f => f.field !== field)),field,keyword,page,page_size:100}}) as any
+}}
+function clearQueryColumns() { clearColumns() }
+function runQuery(conditions: QueryCondition[], preferences: object) {
+  if (!querySupported.value) return
+  submitQuery(conditions)
+  const size = (preferences as {pageSize?:number}).pageSize
+  if (size && Number.isSafeInteger(size) && size > 0) pageSize.value = size
+  page.value = 1
+}
 
 const loading = ref(false)
 const logs = ref<OperationLog[]>([])
@@ -255,14 +256,6 @@ const page = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
 const detailVisible = ref(false)
 const selectedLog = ref<OperationLog | null>(null)
-
-const baseFilters = reactive({
-  timeRange: [] as string[],
-  module: '',
-  action: '',
-  status: '',
-  keyword: '',
-})
 
 let logRequestSerial = 0
 let logQueryTimer: ReturnType<typeof setTimeout> | undefined
@@ -297,24 +290,20 @@ async function fetchLogs() {
   clearTimeout(logQueryTimer)
   const serial = ++logRequestSerial
   loading.value = true
+  queryError.value = ''
   try {
     const params: Record<string, string | number | undefined> = {
       page: page.value,
       page_size: pageSize.value,
-      module: baseFilters.module || undefined,
-      action: baseFilters.action || undefined,
-      status: baseFilters.status || undefined,
-      keyword: baseFilters.keyword || undefined,
-      start_time: toStartDate(baseFilters.timeRange?.[0]),
-      end_time: toEndDate(baseFilters.timeRange?.[1]),
-      filters: JSON.stringify(customFilters.value),
+      ...serverQueryParams(queryApplied.value, columnFilters.value),
     }
     const data = await request.get('/operation-logs', { params }) as unknown as OperationLogListResponse
     if (serial !== logRequestSerial) return
+    querySupported.value = requireServerQueryVersion(data as {query_version?:number}, !!queryApplied.value.length || !!columnFilters.value.length)
     logs.value = data.items || []
     total.value = data.total || 0
-  } catch {
-    if (serial === logRequestSerial) { logs.value = []; total.value = 0 }
+  } catch (error) {
+    if (serial === logRequestSerial) { queryError.value = error instanceof Error ? error.message : '操作日志查询失败，请重试'; logs.value = []; total.value = 0 }
   } finally {
     if (serial === logRequestSerial) loading.value = false
   }
@@ -367,8 +356,8 @@ function formatPrettyJson(value?: string | null) {
   return JSON.stringify(parsed, null, 2)
 }
 
-watch([baseFilters, customFilters, pageSize], () => { page.value = 1 }, { deep: true, flush: 'sync' })
-watch([page, pageSize, baseFilters, customFilters], () => {
+watch([queryApplied, columnFilters, pageSize], () => { page.value = 1 }, { deep: true, flush: 'sync' })
+watch([page, pageSize, queryApplied, columnFilters], () => {
   ++logRequestSerial
   loading.value = true
   clearTimeout(logQueryTimer)

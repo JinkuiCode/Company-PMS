@@ -4,7 +4,7 @@ export type QueryOperator = 'reference' | 'contains' | 'notContains' | 'equals' 
 export type QueryScalar = string | number | null
 export type QueryValue = QueryScalar | (string | number)[]
 export type QueryOption = { value: string | number; label: string }
-export type QueryField = { field: string; label: string; type: QueryType; options?: QueryOption[]; reference?:QueryReference }
+export type QueryField = { field: string; label: string; type: QueryType; options?: QueryOption[]; reference?:QueryReference; required?:boolean; operators?:QueryOperator[] }
 export type QueryCondition = { id: number; field: string; operator: QueryOperator; value: QueryValue; valueEnd: QueryScalar; schemaVersion?: 1 | 2 }
 export const cloneQuery = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 const emptyOperators: QueryOperator[] = ['isEmpty', 'notEmpty']
@@ -25,6 +25,7 @@ export function hasConditionValue(condition: QueryCondition) {
   return !isEmpty(condition.value) && (condition.operator !== 'between' || !isEmpty(condition.valueEnd))
 }
 export function operatorsForField(field:QueryField):QueryOperator[] {
+  if(field.operators) return [...field.operators]
   const operators=operatorsFor(field.type)
   if(field.type==='enum') operators.unshift('reference','contains','notContains','startsWith','endsWith')
   else if(field.reference) operators.unshift('reference')

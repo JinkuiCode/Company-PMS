@@ -45,26 +45,27 @@
           </div>
         </template>
 
-        <el-table :data="dictItems" class="pms-dense-table" border stripe size="small">
-          <el-table-column prop="item_label" label="表单字段名" width="140" />
-          <el-table-column prop="item_value" label="数据库列名" width="160">
+        <PmsQueryWorkspace v-model="queryDraft" :list-key="`system-menu-fields-${selectedDict.dict_code}`" :fields="queryFields" :defaults="queryDefaults" :loading="itemsLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
+        <el-table :data="filteredItems" class="pms-dense-table" border stripe size="small">
+          <el-table-column prop="item_label" label="表单字段名" width="140" :class-name="queryColumnClass('item_label')" :label-class-name="queryColumnClass('item_label')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'item_label',displayName:'表单字段名'}" /></template></el-table-column>
+          <el-table-column prop="item_value" label="数据库列名" width="160" :class-name="queryColumnClass('item_value')" :label-class-name="queryColumnClass('item_value')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'item_value',displayName:'数据库列名'}" /></template>
             <template #default="{ row }">
               <code>{{ selectedDict.table_name }}.{{ row.item_value }}</code>
             </template>
           </el-table-column>
-          <el-table-column prop="field_type" label="字段类型" width="100">
+          <el-table-column prop="field_type" label="字段类型" width="100" :class-name="queryColumnClass('field_type')" :label-class-name="queryColumnClass('field_type')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'field_type',displayName:'字段类型'}" /></template>
             <template #default="{ row }">
               <el-tag :type="fieldTypeTag(row.field_type)" size="small">{{ fieldTypeLabel(row.field_type) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="description" label="说明" min-width="180">
+          <el-table-column prop="description" label="说明" min-width="180" :class-name="queryColumnClass('description')" :label-class-name="queryColumnClass('description')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'description',displayName:'说明'}" /></template>
             <template #default="{ row }">
               <span v-if="row.description">{{ row.description }}</span>
               <span v-else style="color:#c0c4cc">-</span>
             </template>
           </el-table-column>
-          <el-table-column prop="sort" label="排序" width="70" />
-          <el-table-column prop="status" label="状态" width="70">
+          <el-table-column prop="sort" label="排序" width="70" :class-name="queryColumnClass('sort')" :label-class-name="queryColumnClass('sort')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'sort',displayName:'排序'}" /></template></el-table-column>
+          <el-table-column prop="status" label="状态" width="70" :class-name="queryColumnClass('status')" :label-class-name="queryColumnClass('status')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'status',displayName:'状态'}" /></template>
             <template #default="{ row }">
               <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
                 {{ row.status === 1 ? '启用' : '禁用' }}
@@ -172,6 +173,9 @@
 </template>
 
 <script setup lang="ts">
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import { useSystemQuery } from '@/query-system/system-adapter'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
@@ -283,10 +287,27 @@ async function handleDeleteDict(id: number) {
 
 // ==================== 字段列表 ====================
 const dictItems = ref<any[]>([])
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
+  { field:'item_label', label:'表单字段名', type:'text' },
+  { field:'item_value', label:'数据库列名', type:'text' },
+  { field:'field_type', label:'字段类型', type:'enum', options:fieldTypeOptions.map(o => ({value:String(o.value),label:o.label})) },
+  { field:'description', label:'说明', type:'text' },
+  { field:'sort', label:'排序', type:'number' },
+  { field:'status', label:'状态', type:'enum', options:[{value:1,label:'启用'},{value:0,label:'禁用'}] },
+], ['item_label', 'field_type', 'status'], {ready:()=>!itemsLoading.value})
+const filteredItems = computed(() => filterRows(dictItems.value))
+function clearQueryColumns() { clearColumns() }
+const itemsLoading = ref(true)
+let itemsSerial = 0
 
 async function fetchItems() {
   if (!selectedDict.value) return
-  dictItems.value = (await request.get(`/dicts/${selectedDict.value.id}/items`)) as any
+  const serial = ++itemsSerial
+  itemsLoading.value = true
+  try {
+    const items = await request.get(`/dicts/${selectedDict.value.id}/items`)
+    if (serial === itemsSerial) dictItems.value = items as any
+  } finally { if (serial === itemsSerial) itemsLoading.value = false }
 }
 
 // 字段类型显示

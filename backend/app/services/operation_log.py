@@ -391,11 +391,27 @@ def record_operation_log(
     return log
 
 
-def get_operation_logs(
+OPERATION_ACTION_LABELS = {
+    'create': '新增', 'update': '编辑', 'delete': '删除', 'login': '登录',
+    'auto_login': '自动登录', 'logout': '退出', 'sso_login': 'SSO 登录',
+    'sync': 'ERP 同步', 'batch_sync': '批量同步', 'sso_verify': 'SSO Token',
+    'sso_url_login': 'SSO URL', 'oa_login': 'OA 登录', 'oa_password_login': 'OA 账号登录',
+}
+OPERATION_QUERY_LABELS = {'action': OPERATION_ACTION_LABELS, 'status': {'success': '成功', 'failed': '失败'}}
+
+
+def operation_log_columns():
+    columns = {name: (getattr(SysOperationLog, name), 'text') for name in (
+        'entity_type', 'entity_name', 'operator_name', 'ip_address', 'summary', 'request_path',
+    )}
+    columns.update({name: (getattr(SysOperationLog, name), 'enum_text') for name in ('module', 'action', 'status')})
+    columns['created_at'] = (SysOperationLog.created_at, 'date')
+    return columns
+
+
+def _operation_log_query(
     db: Session,
     *,
-    page: int = 1,
-    page_size: int = 15,
     module: str | None = None,
     action: str | None = None,
     entity_type: str | None = None,
@@ -404,8 +420,7 @@ def get_operation_logs(
     keyword: str | None = None,
     start_time: datetime.datetime | None = None,
     end_time: datetime.datetime | None = None,
-    filters: str | None = None,
-) -> dict[str, Any]:
+):
     query = db.query(SysOperationLog)
 
     if module:
@@ -434,12 +449,24 @@ def get_operation_logs(
             )
         )
 
-    from app.services.list_query import apply_list_query
-    columns = {name: (getattr(SysOperationLog, name), 'text') for name in (
-        'module', 'action', 'entity_type', 'entity_name', 'operator_name', 'ip_address', 'status',
-    )}
-    columns['created_at'] = (SysOperationLog.created_at, 'date')
-    query = apply_list_query(query, columns, filters)
+    return query
+
+
+def get_operation_log_column_values(db, *, field, keyword='', page=1, page_size=100,
+                                    filters=None, column_filters=None, base_keyword=None, **base):
+    from app.services.system_list_query import apply_system_list_query, system_column_values
+    columns = operation_log_columns()
+    query = _operation_log_query(db, keyword=base_keyword, **base)
+    query = apply_system_list_query(query, columns, filters, column_filters,
+        labels=OPERATION_QUERY_LABELS, exclude_field=field)
+    return system_column_values(query, columns, field, keyword=keyword, page=page, page_size=page_size,
+        labels=OPERATION_QUERY_LABELS)
+
+
+def get_operation_logs(db: Session, *, page=1, page_size=15, filters=None, column_filters=None, **base) -> dict[str, Any]:
+    from app.services.system_list_query import apply_system_list_query
+    query = apply_system_list_query(_operation_log_query(db, **base), operation_log_columns(),
+        filters, column_filters, labels=OPERATION_QUERY_LABELS)
     total = query.count()
     logs = (
         query.order_by(SysOperationLog.created_at.desc(), SysOperationLog.id.desc())
@@ -465,4 +492,4 @@ def get_operation_logs(
             enum_maps=enum_maps,
         )
         items.append(log_data)
-    return {"total": total, "items": items}
+    return {"total": total, "items": items, "query_version": 2}

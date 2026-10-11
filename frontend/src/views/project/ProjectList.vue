@@ -14,38 +14,27 @@
             <el-icon style="margin-right:4px;"><Plus /></el-icon>
             新增项目
           </el-button>
-          <PmsListColumnPicker
-            v-model="selectedSheetFieldKeys"
-            :groups="columnPickerGroups"
-            :column-definitions="columnDefs"
-            :default-keys="defaultSelectedSheetFieldKeys"
-            aria-label="项目进度列设置"
-            :get-grid-api="() => gridApi"
-            :field-column-id="sheetColumnId"
-            @layout-changed="handleGridStructureChanged"
-            @restore-defaults="restoreProgressColumnDefaults"
-          />
+        </template>
+
+        <template #toolbar-right>
+          <div class="pms-query-utilities">
+            <BusinessExportControl :resource="{kind:'projects'}" :snapshot="exportSnapshot" :disabled="!columnContext.ready?.()" />
+            <PmsListColumnPicker
+              v-model="selectedSheetFieldKeys"
+              :groups="columnPickerGroups"
+              :column-definitions="columnDefs"
+              :default-keys="defaultSelectedSheetFieldKeys"
+              aria-label="项目进度列设置"
+              :get-grid-api="() => gridApi"
+              :field-column-id="sheetColumnId"
+              @layout-changed="handleGridStructureChanged"
+              @restore-defaults="restoreProgressColumnDefaults"
+            />
+          </div>
         </template>
 
         <template #filters>
-          <PmsListFilters
-            v-model:filters="customFilters"
-            :fields="projectListFilterFieldsForView"
-            :active-count="activeCustomFilterCount"
-          >
-            <div v-if="isProgressPolicyVisible('project_code') || isProgressPolicyVisible('project_name')" class="progress-base-filter progress-base-filter--keyword">
-              <PmsTextControl v-model="filterKeyword" placeholder="搜索项目号 / 项目名" size="compact" clearable :prefix-icon="Search" aria-label="搜索项目进度" />
-            </div>
-            <div v-if="isProgressPolicyVisible('product_category')" class="progress-base-filter progress-base-filter--category">
-              <PmsSelectControl v-model="filterProductCategory" :options="progressProductCategoryOptions" placeholder="产品类别" size="compact" clearable aria-label="产品类别筛选" />
-            </div>
-            <div v-if="isProgressPolicyVisible('node_status')" class="progress-base-filter progress-base-filter--status">
-              <PmsSelectControl v-model="filterStatus" :options="projectStatusSelectOptions" placeholder="节点" size="compact" clearable aria-label="节点筛选" />
-            </div>
-            <div v-if="isProgressPolicyVisible('dept_id')" class="progress-base-filter progress-base-filter--dept">
-              <PmsTreeSelectControl v-model="filterDeptId" :data="deptList" :props="{ label: 'dept_name', value: 'id', children: 'children' }" check-strictly clearable placeholder="负责人部门" size="compact" aria-label="负责人部门筛选" />
-            </div>
-          </PmsListFilters>
+          <PmsQueryWorkspace v-model="queryDraft" list-key="project-progress-list" :fields="queryFields" :defaults="queryDefaults" :ready="columnPreferencesReady" :loading="progressListLoading" :snapshot="querySnapshot" @query="runQuery" @clear-columns="clearQueryColumns" />
         </template>
 
         <template #grid>
@@ -55,7 +44,7 @@
             :class="PMS_AG_GRID_FORM_CLASS"
             :rowData="filteredRowData"
             :loading="progressListLoading"
-            :columnDefs="columnDefs"
+            :columnDefs="queryColumnDefs"
             :defaultColDef="defaultColDef"
             :defaultColGroupDef="defaultColGroupDef"
             :localeText="localeText"
@@ -319,6 +308,13 @@
 </template>
 
 <script setup lang="ts">
+import BusinessExportControl from '@/business-export/BusinessExportControl.vue'
+import { businessExportSnapshot } from '@/business-export/snapshot'
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import { useSystemQuery } from '@/query-system/system-adapter'
+import { toQueryFields, toQueryRecord } from '@/query-system/list-adapter'
+import { decorateQueryColumns } from '@/query-system/column-grid'
+import type { QueryCondition } from '@/query-system/core'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
 import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
@@ -350,7 +346,6 @@ import type { ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN } from '@/config/listUi'
-import PmsListFilters from '@/components/PmsListFilters.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
   PMS_AG_GRID_FORM_CLASS,
@@ -366,7 +361,7 @@ import {
   type PmsOption,
 } from '@/form-system'
 import type { PmsControlValue } from '@/form-system'
-import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
+import { type ListFilterField, type ListFilterOption } from '@/composables/useListFilters'
 import { loadEnumOptions, type EnumDefinition } from '@/composables/useEnumOptions'
 import { useAuthStore } from '@/stores/auth'
 import { chineseLocaleText } from '@/utils/agGridLocale'
@@ -664,11 +659,14 @@ const projectListFilterFields = computed<ListFilterField<ProjectRow>[]>(() => {
   const fixedFields = ([
     { field: 'project_code', policyKey: 'project_code', label: '项目编号', type: 'text' },
     { field: 'project_name', policyKey: 'project_name', label: '项目名称', type: 'text' },
-    { field: 'product_category', policyKey: 'product_category', label: '产品类别', type: 'select', options: () => filteredProductCategoryOptions.value },
-    { field: 'status', policyKey: 'node_status', label: '节点', type: 'select', options: () => projectStatusOptions },
+    { field: 'product_category', policyKey: 'product_category', label: '产品类别', type: 'select', options: () => Object.entries(productCategoryLabelMap).map(([value,label]) => ({value:Number(value),label})) },
+    { field: 'status', policyKey: 'node_status', label: '节点', type: 'select', options: () => Object.entries(projectStatusLabelMap).map(([value,label]) => ({value:Number(value),label})) },
     { field: 'dept_name', policyKey: 'dept_id', label: '所属部门', type: 'select', options: () => deptNameOptions.value },
     { field: 'pm_name', policyKey: 'pm_id', label: '负责人', type: 'select', options: () => userNameFilterOptions.value },
     { field: 'total_progress', label: '总进度', type: 'number' },
+    ...([
+      ['design_progress','设计进度'],['order_progress','下单进度'],['kit_progress','齐套进度'],['frame_progress','框架进度'],['dryer_progress','dryer进度'],['assembly_progress','组装进度'],['test_progress','测试进度'],
+    ] as const).filter(([field]) => isProgressPolicyVisible(field)).map(([field,label]) => ({field,label,type:'number' as const})),
     { field: 'budget', policyKey: 'budget', label: '预算', type: 'number' },
     { field: 'start_date', policyKey: 'project_start_date', label: '立项日期', type: 'date' },
     { field: 'end_date', policyKey: 'original_planned_ship_date', label: '原计划发货', type: 'date' },
@@ -682,7 +680,7 @@ const projectListFilterFields = computed<ListFilterField<ProjectRow>[]>(() => {
     type: toListFilterType(field.value_type),
     getValue: row => row.sheet_fields?.[field.key],
     options: field.value_type === 'select'
-      ? () => sheetFieldFilterOptions(field)
+      ? () => field.enum_code && sheetEnumDefinitions[field.enum_code] ? sheetEnumDefinitions[field.enum_code].all_items : uniqueSheetFieldOptions(field.key)
       : undefined,
   }))
 
@@ -691,11 +689,23 @@ const projectListFilterFields = computed<ListFilterField<ProjectRow>[]>(() => {
 
 const projectListFilterFieldsForView = computed(() => projectListFilterFields.value as unknown as ListFilterField[])
 
-const { customFilters, activeCustomFilterCount, applyCustomFilters } = useListFilters<ProjectRow>(projectListFilterFields)
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied: queryApplied, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters } = useSystemQuery(() => toQueryFields(projectListFilterFields.value), ['project_code', 'project_name', 'status'], {requireQuery:true,ready:()=>columnPreferencesReady.value && progressListAccepted.value && !progressListLoading.value})
+const queryColumnDefs = computed(() => decorateQueryColumns(columnDefs.value, () => columnContext))
+columnContext.sort = (field, direction) => gridApi.value?.applyColumnState({state:[{colId:field,sort:direction}],defaultState:{sort:null}})
+function querySnapshot() { return { pageSize: pageSize.value, selected_sheet_field_keys: selectedSheetFieldKeys.value, columnState: gridApi.value?.getColumnState?.() || [] } }
+function exportSnapshot() { return businessExportSnapshot(queryApplied.value, columnFilters.value, gridApi.value) }
+function runQuery(conditions: QueryCondition[], preferences: object) {
+  submitQuery(conditions)
+  const saved = preferences as Partial<ColumnPreferenceState> & {pageSize?:number}
+  if (saved.pageSize && Number.isSafeInteger(saved.pageSize) && saved.pageSize > 0) pageSize.value = saved.pageSize
+  if (Array.isArray(saved.selected_sheet_field_keys)) selectedSheetFieldKeys.value = saved.selected_sheet_field_keys.filter(key => sheetFieldMetaMap.value.has(key))
+  if (Array.isArray(saved.columnState)) gridApi.value?.applyColumnState({state:saved.columnState,applyOrder:true})
+}
+function clearQueryColumns() { clearColumns(); gridApi.value?.setFilterModel(null); nextTick(() => gridApi.value?.refreshCells({force:true})) }
 
 const currentFilterSheetFieldKeys = computed(() => {
   const keys = new Set<string>()
-  for (const filter of customFilters.value) {
+  for (const filter of [...queryApplied.value, ...columnFilters.value]) {
     if (sheetFieldMetaMap.value.has(filter.field)) {
       keys.add(filter.field)
     }
@@ -711,25 +721,7 @@ const requestedSheetFieldKeys = computed(() => {
 })
 
 const filteredRowData = computed(() => {
-  let result = rowData.value
-  if (filterKeyword.value) {
-    const kw = filterKeyword.value.toLowerCase()
-    result = result.filter(row =>
-      String(row.project_code ?? '').toLowerCase().includes(kw)
-      || String(row.project_name ?? '').toLowerCase().includes(kw)
-      || productCategoryLabel(row.product_category).toLowerCase().includes(kw)
-    )
-  }
-  if (filterStatus.value != null) {
-    result = result.filter(row => normalizeStatus(row.status) === filterStatus.value)
-  }
-  if (filterDeptId.value != null) {
-    result = result.filter(row => row.dept_id === filterDeptId.value)
-  }
-  if (filterProductCategory.value != null) {
-    result = result.filter(row => Number(row.product_category) === filterProductCategory.value)
-  }
-  return applyCustomFilters(result)
+  return filterRows(rowData.value, row => toQueryRecord(row, projectListFilterFields.value))
 })
 
 function goToProgressPage() {
@@ -748,12 +740,13 @@ const orderedDrawerGroups = computed(() => {
   return buildDrawerGroupsFromRow(selectedProject.value)
 })
 
-watch([filterKeyword, filterStatus, filterDeptId, filterProductCategory, customFilters], () => {
+watch([queryApplied, columnFilters], () => {
   page.value = 1
   if (selectedProject.value && !drawerHasPendingChanges.value && !drawerSaving.value && !filteredRowData.value.some(row => row.id === selectedProject.value?.id)) {
     selectedProject.value = null
   }
   nextTick(goToProgressPage)
+  nextTick(() => gridApi.value?.refreshCells({force:true}))
 }, { deep: true })
 
 watch(
@@ -1401,6 +1394,7 @@ function handleColumnResized(event: any) {
 }
 
 const progressListLoading = ref(true)
+const progressListAccepted = ref(false)
 async function fetchList() {
   const requestSerial = ++listRequestSerial.value
   progressListLoading.value = true
@@ -1411,14 +1405,19 @@ async function fetchList() {
   try {
     const res = await request.get('/projects', { params }) as any
     if (requestSerial !== listRequestSerial.value) return
+    if (!Array.isArray(res.items) || res.items.length !== res.total) throw Error('项目未完整读取，不能执行客户端查询')
     rowData.value = res.items.map(normalizeProjectRow)
+    progressListAccepted.value = true
     serverTotal.value = res.total
     if (selectedProject.value && !drawerHasPendingChanges.value && !drawerSaving.value) {
       selectedProject.value = rowData.value.find(row => row.id === selectedProject.value?.id) || null
     }
     refreshListScrollbar()
-  } catch {
-    if (requestSerial === listRequestSerial.value) { rowData.value = []; serverTotal.value = 0 }
+  } catch (error) {
+    if (requestSerial === listRequestSerial.value) {
+      rowData.value = []; serverTotal.value = 0; progressListAccepted.value = false
+      ElMessage.error(error instanceof Error ? error.message : '项目读取失败，请重试')
+    }
   } finally {
     if (requestSerial === listRequestSerial.value) progressListLoading.value = false
   }

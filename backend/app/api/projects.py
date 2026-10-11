@@ -146,6 +146,7 @@ def list_archives(
     product_category: int | None = Query(None),
     enabled: str = Query("true", description="true=仅启用，false=仅禁用，all=全部"),
     filters: str | None = Query(None, max_length=12000),
+    column_filters: str | None = Query(None, max_length=12000),
     sort: str | None = Query(None, max_length=4000),
     archive_id: int | None = Query(None, ge=1),
     db: Session = Depends(get_db),
@@ -160,8 +161,22 @@ def list_archives(
         product_category,
         enabled=_parse_archive_enabled_filter(enabled),
         scope_context=scope_ctx,
-        filters=filters, sort=sort, archive_id=archive_id,
+        filters=filters, sort=sort, archive_id=archive_id, column_filters=column_filters,
     )
+
+
+@router.get("/archives/column-values", summary="项目档案列筛选候选")
+def archive_column_values(
+    field: str = Query(..., max_length=64), keyword: str = Query('', max_length=256),
+    page: int = Query(1, ge=1), page_size: int = Query(100, ge=1, le=100),
+    filters: str | None = Query(None, max_length=12000),
+    column_filters: str | None = Query(None, max_length=12000),
+    db: Session = Depends(get_db),
+    scope_ctx: dict = Depends(require_permission("project:archive:view")),
+):
+    from app.services.archive_column_query import archive_column_candidates
+    return archive_column_candidates(db, field, filters=filters, column_filters=column_filters,
+        keyword=keyword, page=page, page_size=page_size, scope_context=scope_ctx)
 
 
 @router.get("/archives/options", summary="项目档案下拉选项")

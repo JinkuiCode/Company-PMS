@@ -26,18 +26,7 @@
     </template>
 
     <template #filters>
-      <div class="pms-filter-bar field-policy-filters">
-        <div class="field-policy-filter field-policy-filter--keyword">
-          <PmsTextControl v-model="filters.keyword" size="compact" clearable placeholder="搜索字段名称或编码" aria-label="搜索字段名称或编码" />
-        </div>
-        <div class="field-policy-filter field-policy-filter--group">
-          <PmsSelectControl v-model="filters.group" size="compact" :options="groupSelectOptions" clearable placeholder="全部分组" aria-label="字段分组" />
-        </div>
-        <div class="field-policy-filter field-policy-filter--source">
-          <PmsSelectControl v-model="filters.source" size="compact" :options="sourceOptions" clearable placeholder="全部来源" aria-label="字段来源" />
-        </div>
-        <el-button size="small" text @click="resetFilters">清空筛选</el-button>
-      </div>
+      <PmsQueryWorkspace v-model="queryDraft" :list-key="`system-field-policy-${moduleCode}`" :fields="queryFields" :defaults="queryDefaults" :loading="loading" @query="submitQuery" @clear-columns="clearQueryColumns" />
     </template>
 
     <template #grid>
@@ -52,15 +41,15 @@
         class="pms-dense-table field-policy-table"
         empty-text="暂无字段规则"
       >
-        <el-table-column prop="label" label="字段名称" width="150" fixed />
-        <el-table-column prop="field_key" label="字段编码" width="210" fixed show-overflow-tooltip>
+        <el-table-column prop="label" label="字段名称" width="150" fixed :class-name="queryColumnClass('label')" :label-class-name="queryColumnClass('label')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'label',displayName:'字段名称'}" /></template></el-table-column>
+        <el-table-column prop="field_key" label="字段编码" width="210" fixed show-overflow-tooltip :class-name="queryColumnClass('field_key')" :label-class-name="queryColumnClass('field_key')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'field_key',displayName:'字段编码'}" /></template>
           <template #default="{ row }"><code class="pms-code">{{ row.field_key }}</code></template>
         </el-table-column>
-        <el-table-column prop="group_label" label="分组" width="112" />
-        <el-table-column prop="source_type" label="来源" width="104">
+        <el-table-column prop="group_label" label="分组" width="112" :class-name="queryColumnClass('group')" :label-class-name="queryColumnClass('group')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'group',displayName:'分组'}" /></template></el-table-column>
+        <el-table-column prop="source_type" label="来源" width="104" :class-name="queryColumnClass('source_type')" :label-class-name="queryColumnClass('source_type')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'source_type',displayName:'来源'}" /></template>
           <template #default="{ row }">{{ sourceLabel(row.source_type) }}</template>
         </el-table-column>
-        <el-table-column label="业务显示" width="104" align="center">
+        <el-table-column label="业务显示" width="104" align="center" :class-name="queryColumnClass('visible')" :label-class-name="queryColumnClass('visible')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'visible',displayName:'业务显示'}" /></template>
           <template #default="{ row }">
             <PmsSwitchControl
               v-model="row.visible"
@@ -71,7 +60,7 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="允许编辑" width="104" align="center">
+        <el-table-column label="允许编辑" width="104" align="center" :class-name="queryColumnClass('editable')" :label-class-name="queryColumnClass('editable')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'editable',displayName:'允许编辑'}" /></template>
           <template #default="{ row }">
             <PmsSwitchControl
               v-model="row.editable"
@@ -82,7 +71,7 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="必填" width="88" align="center">
+        <el-table-column label="必填" width="88" align="center" :class-name="queryColumnClass('required')" :label-class-name="queryColumnClass('required')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'required',displayName:'必填'}" /></template>
           <template #default="{ row }">
             <PmsSwitchControl
               v-model="row.required"
@@ -93,7 +82,7 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="列表可选" width="104" align="center">
+        <el-table-column label="列表可选" width="104" align="center" :class-name="queryColumnClass('list_available')" :label-class-name="queryColumnClass('list_available')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'list_available',displayName:'列表可选'}" /></template>
           <template #default="{ row }">
             <PmsSwitchControl
               v-model="row.list_available"
@@ -113,6 +102,9 @@
 </template>
 
 <script setup lang="ts">
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import { useSystemQuery } from '@/query-system/system-adapter'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PmsDataList from '@/components/PmsDataList.vue'
@@ -174,15 +166,15 @@ const groupSelectOptions = computed<PmsOption[]>(() => groupOptions.value.map(gr
   value: group.key,
 })))
 const dirtyKeys = reactive(new Set<string>())
-const filters = reactive({ keyword: '', group: '', source: '' })
-
-const filteredRows = computed(() => rows.value.filter((field) => {
-  const keyword = filters.keyword.trim().toLowerCase()
-  if (keyword && !field.label.toLowerCase().includes(keyword) && !field.field_key.toLowerCase().includes(keyword)) return false
-  if (filters.group && field.group !== filters.group) return false
-  if (filters.source && field.source_type !== filters.source) return false
-  return true
-}))
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
+  { field: 'label', label: '字段名称', type: 'text' },
+  { field: 'field_key', label: '字段编码', type: 'text' },
+  { field: 'group', label: '分组', type: 'enum', options: groupSelectOptions.value.map(o => ({value:String(o.value),label:o.label})) },
+  { field: 'source_type', label: '来源', type: 'enum', options: sourceOptions.map(o => ({value:String(o.value),label:o.label})) },
+  ...(['visible','editable','required','list_available'] as const).map(field => ({ field, label: {visible:'业务显示',editable:'允许编辑',required:'必填',list_available:'列表可选'}[field], type:'enum' as const, options:[{value:1,label:'是'},{value:0,label:'否'}] })),
+], ['label', 'group', 'source_type'], {ready:()=>!loading.value})
+const filteredRows = computed(() => filterRows(rows.value, row => ({...row, visible:Number(row.visible),editable:Number(row.editable),required:Number(row.required),list_available:Number(row.list_available)})))
+function clearQueryColumns() { clearColumns() }
 
 function sourceLabel(source: string) {
   return sourceLabelMap[source] || source
@@ -218,10 +210,6 @@ function handleRequiredChange(field: FieldPolicy) {
     field.editable = true
   }
   markDirty(field)
-}
-
-function resetFilters() {
-  Object.assign(filters, { keyword: '', group: '', source: '' })
 }
 
 async function fetchPolicies() {

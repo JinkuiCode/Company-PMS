@@ -23,13 +23,16 @@ def check_permission(ctx, report):
     enforce_permission(ctx, f'report:{report}:export')
 
 
-def fields_for(report):
+def fields_for(report, *, overview=False):
     if report == 'inventory':
         from app.services.inventory_fields import report_fields
     elif report == 'stock-detail':
         from app.services.stock_detail_fields import report_fields
     else:
-        from app.services.purchase_fields import report_fields
+        if overview:
+            from app.services.purchase_fields import overview_fields as report_fields
+        else:
+            from app.services.purchase_fields import report_fields
     return report_fields()
 
 
@@ -49,14 +52,21 @@ def scope_signature(db, ctx, report):
 def create_job(db, ctx, report, parameters, columns, request=None):
     check_permission(ctx, report)
     from app.services.inventory_reader import InventoryQuery
-    from app.services.purchase_reader import PurchaseQuery
+    from app.services.purchase_reader import PurchaseQuery, PurchaseOverviewQuery
     from app.services.stock_detail_reader import StockDetailQuery
     from pydantic import ValidationError
     try:
-        query = {'inventory': InventoryQuery, 'purchase': PurchaseQuery, 'stock-detail': StockDetailQuery}[report].model_validate(parameters)
+        query = {'inventory': InventoryQuery,
+                 'purchase': PurchaseOverviewQuery if parameters.get('view') == 'overview' else PurchaseQuery,
+                 'stock-detail': StockDetailQuery}[report].model_validate(parameters)
     except ValidationError:
         raise HTTPException(422, '导出筛选参数无效') from None
-    allowed = {field['key'] for field in fields_for(report)}
+    if report == 'purchase':
+        from app.api.purchase_reports import resolve_project_references
+        resolve_project_references(db, ctx, query)
+        from app.services.purchase_query_labels import resolve_query_labels
+        resolve_query_labels(db, ctx, query)
+    allowed = {field['key'] for field in fields_for(report, overview=isinstance(query, PurchaseOverviewQuery))}
     if not columns or len(columns) != len(set(columns)) or not set(columns) <= allowed:
         raise HTTPException(422, '导出字段无效，请刷新报表后重试')
     with archive_execution_lock(db, 'report-export-create') as acquired:

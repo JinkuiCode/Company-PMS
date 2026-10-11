@@ -367,15 +367,24 @@ def _project_sheet_projection(values: dict[str, Any], requested_keys: list[str])
 def get_project_list(db: Session, page: int = 1, page_size: int = 15,
                      dept_id: int | None = None, status: int | None = None,
                      sheet_field_keys: str | list[str] | tuple[str, ...] | None = None,
-                     scope_context: dict | None = None, all_rows: bool = False):
+                     scope_context: dict | None = None, all_rows: bool = False, *,
+                     export_scan: bool = False, before_id: int | None = None, upper_id: int | None = None):
     query = _apply_project_scope(db.query(PmsProject), db, scope_context)
     if dept_id:
         query = query.filter(PmsProject.dept_id == dept_id)
     if status:
         query = query.filter(PmsProject.status == status)
 
+    if export_scan:
+        if upper_id is not None:
+            query = query.filter(PmsProject.id <= upper_id)
+        if before_id is not None:
+            query = query.filter(PmsProject.id < before_id)
     ordered = query.order_by(PmsProject.id.desc())
-    if all_rows:
+    if export_scan:
+        total = query.count()
+        projects = ordered.limit(page_size).all()
+    elif all_rows:
         projects = ordered.all()
         total = len(projects)
     else:
@@ -863,10 +872,21 @@ def delete_project(
 
 # ==================== 任务 & 进度 ====================
 def get_tasks(db: Session, project_id: int,
-              scope_context: dict | None = None) -> list[TaskResponse]:
+              scope_context: dict | None = None, *, page: int | None = None, page_size: int = 500,
+              export_scan: bool = False, before_id: int | None = None, upper_id: int | None = None) -> list[TaskResponse]:
     ensure_project_access(db, project_id, scope_context)
     query = db.query(PmsTask).filter(PmsTask.project_id == project_id)
-    tasks = query.order_by(PmsTask.sort, PmsTask.id).all()
+    if export_scan:
+        if upper_id is not None:
+            query = query.filter(PmsTask.id <= upper_id)
+        if before_id is not None:
+            query = query.filter(PmsTask.id < before_id)
+        query = query.order_by(PmsTask.id.desc()).limit(page_size)
+    else:
+        query = query.order_by(PmsTask.sort, PmsTask.id)
+        if page is not None:
+            query = query.offset((page - 1) * page_size).limit(page_size)
+    tasks = query.all()
     result = []
     for t in tasks:
         user = db.query(SysUser).filter(SysUser.id == t.assignee_id).first()
@@ -1064,7 +1084,8 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
                      enabled: bool | None = None,
                      scope_context: dict | None = None,
                      filters: str | None = None, sort: str | None = None,
-                     archive_id: int | None = None):
+                     archive_id: int | None = None, column_filters: str | None = None, *,
+                     export_scan: bool = False, before_id: int | None = None, upper_id: int | None = None):
     """查询项目档案列表"""
     query = _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context)
 
@@ -1087,8 +1108,19 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
         query = query.filter(PmsProjectArchive.id == archive_id)
     from app.services.list_query import apply_archive_list_query
     query = apply_archive_list_query(query, filters, sort)
+    if column_filters:
+        from app.services.archive_column_query import apply_archive_column_filters
+        query = apply_archive_column_filters(query, column_filters)
+        query = apply_archive_list_query(query.order_by(None), sort=sort)
+    if export_scan:
+        if upper_id is not None:
+            query = query.filter(PmsProjectArchive.id <= upper_id)
+        if before_id is not None:
+            query = query.filter(PmsProjectArchive.id < before_id)
+        query = query.order_by(None).order_by(PmsProjectArchive.id.desc())
     total = query.order_by(None).count()
-    rows = query.offset((page - 1) * page_size).limit(page_size).all()
+    rows = (query.limit(page_size) if export_scan else
+            query.offset((page - 1) * page_size).limit(page_size)).all()
     guards = get_archive_delete_guards(db, [archive.id for archive in rows])
     user_ids = {value for row in rows for value in (
         row.manager_id, row.created_by, row.updated_by, row.erp_sync_by,

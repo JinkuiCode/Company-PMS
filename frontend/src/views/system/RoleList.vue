@@ -6,11 +6,12 @@
         <el-button v-if="hasPermission('system:role:add')" type="primary" size="small" :disabled="opening" @click="openDialog()">新增角色</el-button>
       </div>
 
-      <el-table class="pms-dense-table" height="100%" :data="roleList" border stripe size="small">
+      <PmsQueryWorkspace v-model="queryDraft" list-key="system-role" :fields="queryFields" :defaults="queryDefaults" :loading="queryLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
+      <el-table class="pms-dense-table" height="100%" :data="filteredRoles" border stripe size="small">
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="role_name" label="角色名称" width="150" />
-        <el-table-column prop="role_code" label="角色编码" width="150" />
-        <el-table-column prop="data_scope" label="数据权限" width="150">
+        <el-table-column prop="role_name" label="角色名称" width="150" :class-name="queryColumnClass('role_name')" :label-class-name="queryColumnClass('role_name')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'role_name',displayName:'角色名称'}" /></template></el-table-column>
+        <el-table-column prop="role_code" label="角色编码" width="150" :class-name="queryColumnClass('role_code')" :label-class-name="queryColumnClass('role_code')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'role_code',displayName:'角色编码'}" /></template></el-table-column>
+        <el-table-column prop="data_scope" label="数据权限" width="150" :class-name="queryColumnClass('data_scope')" :label-class-name="queryColumnClass('data_scope')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'data_scope',displayName:'数据权限'}" /></template>
           <template #default="{ row }">
             <span class="pms-status pms-status-neutral">{{ ['', '仅本人', '本部门', '本部门及子部门', '全部'][row.data_scope] }}</span>
           </template>
@@ -23,7 +24,7 @@
             <span v-else class="pms-chip">未授权</span>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="80">
+        <el-table-column prop="status" label="状态" width="80" :class-name="queryColumnClass('status')" :label-class-name="queryColumnClass('status')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'status',displayName:'状态'}" /></template>
           <template #default="{ row }">
             <span class="pms-status" :class="row.status === 1 ? 'pms-status-success' : 'pms-status-danger'">
               <span class="pms-status-dot"></span>
@@ -31,7 +32,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" />
+        <el-table-column prop="remark" label="备注" :class-name="queryColumnClass('remark')" :label-class-name="queryColumnClass('remark')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'remark',displayName:'备注'}" /></template></el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button v-if="hasPermission('system:role:edit')" link type="primary" size="small" :disabled="opening" @click="openDialog(row)">编辑</el-button>
@@ -155,6 +156,9 @@
 </template>
 
 <script setup lang="ts">
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import { useSystemQuery } from '@/query-system/system-adapter'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
@@ -179,6 +183,15 @@ const authStore = useAuthStore()
 const hasPermission = authStore.hasPermission
 
 const roleList = ref([])
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
+  { field: 'role_name', label: '角色名称', type: 'text' },
+  { field: 'role_code', label: '角色编码', type: 'text' },
+  { field: 'data_scope', label: '数据权限', type: 'enum', options: dataScopeOptions.map(o => ({value:Number(o.value),label:o.label})) },
+  { field: 'status', label: '状态', type: 'enum', options: [{value:1,label:'启用'},{value:0,label:'禁用'}] },
+  { field: 'remark', label: '备注', type: 'text' },
+], ['role_name', 'status'], {ready:()=>!queryLoading.value})
+const filteredRoles = computed(() => filterRows(roleList.value))
+function clearQueryColumns() { clearColumns() }
 const dialogVisible = ref(false)
 const saving = ref(false)
 const isEdit = ref(false)
@@ -316,8 +329,11 @@ function handleTreeCheck(data: any, state: { checkedKeys: number[] }) {
 }
 
 // ==================== 角色 CRUD ====================
+const queryLoading = ref(true)
 async function fetchList() {
-  roleList.value = (await request.get('/roles')) as any
+  queryLoading.value = true
+  try { roleList.value = (await request.get('/roles')) as any }
+  finally { queryLoading.value = false }
 }
 
 const opening = ref(false)

@@ -24,20 +24,37 @@ def ensure_task_access(db, task_id, ctx):
 @router.get('')
 def list_tasks(page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100),
                keyword: str = '', status: str = '', operator: str = '', start: datetime | None = None,
-               end: datetime | None = None, db: Session = Depends(get_db),
+               end: datetime | None = None, filters: str | None = Query(None, max_length=64000),
+               column_filters: str | None = Query(None, max_length=64000), db: Session = Depends(get_db),
                ctx: dict = Depends(require_permission('system:sync:view'))):
     from app.core.config import settings
     result = erp_queue.list_tasks(db, page=page, page_size=page_size, keyword=keyword, status=status,
-        operator=operator, start=start, end=end, scope_context=ctx)
+        operator=operator, start=start, end=end, scope_context=ctx, filters=filters, column_filters=column_filters)
     result['worker_enabled'] = settings.ERP_SYNC_WORKER_ENABLED
     return result
 
 
+@router.get('/column-values')
+def task_column_values(field: str = Query(..., max_length=64), keyword: str = Query('', max_length=256),
+                       page: int = Query(1, ge=1), page_size: int = Query(100, ge=1, le=100),
+                       filters: str | None = Query(None, max_length=64000),
+                       column_filters: str | None = Query(None, max_length=64000),
+                       status: str = '', operator: str = '', base_keyword: str = '',
+                       start: datetime | None = None, end: datetime | None = None,
+                       db: Session = Depends(get_db), ctx: dict = Depends(require_permission('system:sync:view'))):
+    return erp_queue.get_task_column_values(db, field=field, keyword=keyword, page=page, page_size=page_size,
+        filters=filters, column_filters=column_filters, status=status, operator=operator,
+        base_keyword=base_keyword, start=start, end=end, scope_context=ctx)
+
+
 @router.get('/archive/{archive_id}')
 def archive_tasks(archive_id: int, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100),
+                  filters: str | None = Query(None, max_length=64000),
+                  column_filters: str | None = Query(None, max_length=64000),
                   db: Session = Depends(get_db), ctx: dict = Depends(require_any_permission('project:archive:view', 'system:sync:view'))):
     ensure_archive_access(db, archive_id, ctx)
-    return erp_queue.list_tasks(db, page=page, page_size=page_size, archive_id=archive_id)
+    return erp_queue.list_tasks(db, page=page, page_size=page_size, archive_id=archive_id,
+        filters=filters, column_filters=column_filters)
 
 
 class BatchRetry(BaseModel):

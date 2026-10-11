@@ -1,12 +1,13 @@
 """Combine complete organization datasets before business-row pagination."""
 from decimal import Decimal, localcontext
 
-from app.services.stock_detail_balance import derive_openings, running_balances
+from app.services.stock_detail_balance import derive_openings
 from app.services.stock_detail_fields import report_fields
 from app.services.stock_detail_catalog import row_labels
 from app.services.stock_detail_normalize import inventory_key, normalize_movement, normalize_snapshots
 from app.services.stock_detail_sources import require_source_coverage
 from app.services.report_filters import matches_filters
+from app.services.stock_detail_order import display_movements
 
 
 def validate_registry(rows):
@@ -57,17 +58,15 @@ def compile_organization(query, organization_id, baseline, snapshots, movements,
     return {'rows': period, 'openings': openings, 'labels': labels}
 
 
-def export_rows(dataset, start_date, *, conditions=()):
+def export_rows(dataset, start_date, *, conditions=(), column_conditions=(), sort='bill_date', direction='asc'):
     fields = {field['key'] for field in report_fields()}
     for key, value in dataset['openings'].items():
         row = dict(dataset['labels'].get(key, {}), bill_date=start_date, bill_name='期初',
                    opening_qty=value, balance_qty=value)
-        yield {field: row.get(field) for field in fields}
-    ordered = sorted(dataset['rows'], key=lambda row: (row['bill_date'], row['source_order'],
-        row['created_at'], row['bill_no'], row['bill_seq'], row['row_id']))
-    for row in running_balances(ordered, dataset['openings']):
-        if matches_filters(row, conditions):
+        if matches_filters(row, column_conditions):
             yield {field: row.get(field) for field in fields}
+    for row in display_movements(dataset['rows'], dataset['openings'], conditions=conditions, sort=sort, direction=direction):
+        yield {field: row.get(field) for field in fields}
 
 
 def quantity_summary(dataset):

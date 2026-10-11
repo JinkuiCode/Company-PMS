@@ -25,6 +25,10 @@ with SessionLocal() as db:
     assert ids(c('project_name','startsWith','Pump')) == ['A-1','A-0']
     assert ids(c('project_name','endsWith','Pump')) == ['A-2','A-1']
     assert ids(c('project_name','contains','%_')) == ['A-0']
+    db.query(project.PmsProjectArchive).filter_by(project_code='A-4').update({'customer':'Legacy-0007'})
+    db.commit()
+    assert ids(c('keyword','contains','0007')) == ['A-4'], '旧综合搜索必须覆盖客户而非仅项目编号'
+    assert ids(c('keyword','contains','0007'),c('is_enabled','equals',0)) == [], '综合OR搜索必须受其他AND条件约束'
     assert ids(c('project_name','notContains','Pump')) == [], '否定匹配不自动包含NULL或空字符串'
     assert ids(c('project_name','notEquals','Pump')) == ['A-2','A-0']
     assert ids(c('project_name','notEquals','Pump',version=1)) == ['A-4','A-3','A-2','A-0']

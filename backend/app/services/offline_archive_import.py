@@ -33,6 +33,8 @@ def _parse(payload):
     return data
 
 def preview_import(db,payload,scope):
+    from app.services.parameter import require_archive_initialization
+    require_archive_initialization(db)
     require_import_scope(scope)
     try:data=_parse(payload)
     except ValidationError as exc:
@@ -173,6 +175,8 @@ def rollback_import(db,batch_id,user_id,scope,request=None):
     except Exception:db.rollback();raise
 
 def assign_product_line(db,payload,user_id,scope,request=None):
+    from app.services.parameter import require_archive_initialization
+    require_archive_initialization(db)
     require_import_scope(scope)
     data=ProductLineAssignment.model_validate(payload)
     if len({v.id for v in data.items})!=len(data.items):raise HTTPException(422,"选择的档案重复")

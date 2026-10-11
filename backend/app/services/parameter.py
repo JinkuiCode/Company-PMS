@@ -6,6 +6,7 @@ from app.models.parameter import SysParameter
 from app.services.operation_log import record_operation_log
 
 INITIAL_PASSWORD = "user.initial_password"
+ARCHIVE_INITIALIZATION_ENABLED = "archive.initialization_enabled"
 
 
 def validate_initial_password(value):
@@ -14,8 +15,28 @@ def validate_initial_password(value):
     return value
 
 
-PARAMETERS = {INITIAL_PASSWORD: dict(name="用户初始密码", group="用户管理", description="新增用户和重置密码使用的初始密码",
-                                    sensitive=True, value_type="text", validator=validate_initial_password)}
+def validate_boolean(value):
+    if value not in ('true', 'false'):
+        raise HTTPException(422, "布尔参数只能为 true 或 false")
+    return value
+
+
+PARAMETERS = {
+    INITIAL_PASSWORD: dict(name="用户初始密码", group="用户管理", description="新增用户和重置密码使用的初始密码",
+                          sensitive=True, value_type="text", validator=validate_initial_password),
+    ARCHIVE_INITIALIZATION_ENABLED: dict(name="档案初始化模式", group="项目档案", description="开启期初档案整理与产品线分配；关闭后仍可回退已导入批次",
+                                        sensitive=False, value_type="boolean", default="true", validator=validate_boolean),
+}
+
+
+def archive_initialization_enabled(db):
+    value = db.query(SysParameter.value_text).filter(SysParameter.code == ARCHIVE_INITIALIZATION_ENABLED).scalar()
+    return value is None or value == 'true'
+
+
+def require_archive_initialization(db):
+    if not archive_initialization_enabled(db):
+        raise HTTPException(409, {"code": "ARCHIVE_INITIALIZATION_DISABLED", "message": "档案初始化模式已关闭"})
 
 
 def list_parameters(db):
@@ -24,9 +45,9 @@ def list_parameters(db):
     for code, meta in PARAMETERS.items():
         row = rows.get(code)
         stored = (row.secret_hash if meta["sensitive"] else row.value_text) if row else None
-        items.append(dict(code=code, **{key: meta[key] for key in ("name", "group", "description", "sensitive")},
+        items.append(dict(code=code, **{key: meta[key] for key in ("name", "group", "description", "sensitive", "value_type")},
                           configured=stored is not None, version=row.version if row else 0,
-                          updated_at=row.updated_at if row else None, value=None if meta["sensitive"] else stored))
+                          updated_at=row.updated_at if row else None, value=None if meta["sensitive"] else stored if stored is not None else meta.get('default')))
     return {"items": items}
 
 

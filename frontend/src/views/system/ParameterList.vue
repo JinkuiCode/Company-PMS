@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import { useSystemQuery } from '@/query-system/system-adapter'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onBeforeRouteLeave } from 'vue-router'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import { PmsTextControl, PmsFormField, PmsSelectControl } from '@/form-system'
 
-interface Parameter { code: string; name: string; group: string; description: string; sensitive: boolean; configured: boolean; version: number; updated_at: string | null; value: string | null }
+interface Parameter { code: string; name: string; group: string; description: string; sensitive: boolean; configured: boolean; version: number; updated_at: string | null; value: string | null; value_type?: string }
 const auth = useAuthStore()
 const items = ref<Parameter[]>([])
-const search = ref('')
-const group = ref('')
-const groups = computed(() => [{ label: '全部分组', value: '' }, ...Array.from(new Set(items.value.map(item => item.group))).map(value => ({ label: value, value }))])
+const groups = computed(() => Array.from(new Set(items.value.map(item => item.group))).map(value => ({ label: value, value })))
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
+  { field: 'name', label: '参数名称', type: 'text' },
+  { field: 'code', label: '参数编码', type: 'text' },
+  { field: 'group', label: '分组', type: 'enum', options: groups.value },
+  { field: 'description', label: '用途', type: 'text' },
+  { field: 'configured', label: '设置状态', type: 'enum', options:[{value:1,label:'已设置'},{value:0,label:'未设置'}] },
+], ['name', 'group'], {ready:()=>!loading.value})
+function clearQueryColumns() { clearColumns() }
 const loading = ref(false)
 const failed = ref(false)
 const editing = ref<Parameter | null>(null)
@@ -20,7 +29,7 @@ const revealSecret = ref(false)
 const saving = ref(false)
 const error = ref('')
 const table = ref()
-const filtered = computed(() => items.value.filter(item => (!group.value || item.group === group.value) && `${item.name} ${item.code} ${item.group}`.toLowerCase().includes(search.value.trim().toLowerCase())))
+const filtered = computed(() => filterRows(items.value, row => ({...row,configured:Number(row.configured)})))
 async function focusFirstInvalid() {
   await nextTick()
   if (editing.value && error.value) document.getElementById(`parameter-${editing.value.code}`)?.focus()
@@ -65,23 +74,25 @@ onMounted(load)
 
 <template>
   <div class="parameter-page pms-system-page pms-surface-section">
-    <div class="pms-section-header pms-query-density"><span class="pms-section-title">参数设置</span><div class="parameter-filters"><PmsSelectControl :model-value="group" :options="groups" aria-label="参数分组" :disabled="!!editing" @update:model-value="group = String($event ?? '')" /><PmsTextControl v-model="search" placeholder="搜索参数名称 / 编码" aria-label="搜索参数" clearable :disabled="!!editing" /></div></div>
+    <div class="pms-section-header"><span class="pms-section-title">参数设置</span></div>
+    <PmsQueryWorkspace v-model="queryDraft" list-key="system-parameter" :fields="queryFields" :defaults="queryDefaults" :loading="loading" @query="submitQuery" @clear-columns="clearQueryColumns" />
     <div v-if="failed" class="parameter-error" role="alert">参数读取失败 <el-button link type="primary" @click="load">重试</el-button></div>
     <el-table ref="table" :data="filtered" row-key="code" class="pms-dense-table" border height="100%" v-loading="loading" :expand-row-keys="editing ? [editing.code] : []">
       <el-table-column type="expand" width="1"><template #default="{ row }">
         <form v-if="editing?.code === row.code" class="parameter-editor" @submit.prevent="save">
           <PmsFormField v-slot="{ describedBy, invalid }" :field-id="`parameter-${row.code}`" label="新参数值" required :error="error">
-            <PmsTextControl :id="`parameter-${row.code}`" v-model="value" :aria-describedby="describedBy" :aria-invalid="invalid" aria-required="true" :type="row.sensitive && !revealSecret ? 'password' : 'text'" :error="error" :disabled="saving" maxlength="64" autocomplete="new-password" aria-label="新参数值">
+            <PmsSelectControl v-if="row.value_type === 'boolean'" :id="`parameter-${row.code}`" v-model="value" :options="[{value:'true',label:'开启'},{value:'false',label:'关闭'}]" :aria-describedby="describedBy" :aria-invalid="invalid" aria-required="true" :error="error" :disabled="saving" aria-label="新参数值" />
+            <PmsTextControl v-else :id="`parameter-${row.code}`" v-model="value" :aria-describedby="describedBy" :aria-invalid="invalid" aria-required="true" :type="row.sensitive && !revealSecret ? 'password' : 'text'" :error="error" :disabled="saving" maxlength="64" autocomplete="new-password" aria-label="新参数值">
               <template v-if="row.sensitive" #suffix><el-button text :disabled="saving || !value" :aria-controls="`parameter-${row.code}`" :aria-pressed="revealSecret" :aria-label="revealSecret ? '隐藏新密码' : '显示新密码'" @click="revealSecret = !revealSecret">{{ revealSecret ? '隐藏' : '显示' }}</el-button></template>
             </PmsTextControl>
           </PmsFormField>
           <div class="parameter-editor__actions"><el-button :disabled="saving" @click="discard">取消</el-button><el-button type="primary" native-type="submit" :loading="saving">保存</el-button></div>
         </form>
       </template></el-table-column>
-      <el-table-column label="参数名称" min-width="190"><template #default="{ row }"><div class="parameter-name">{{ row.name }}</div><div class="parameter-code">{{ row.code }}</div></template></el-table-column>
-      <el-table-column prop="group" label="分组" width="120" />
-      <el-table-column label="当前值" width="150"><template #default="{ row }"><span :class="['pms-status', row.configured ? 'pms-status-success' : 'pms-status-warning']">{{ row.configured ? (row.sensitive ? '已设置 · 不回显' : row.value) : '未设置' }}</span></template></el-table-column>
-      <el-table-column prop="description" label="用途" min-width="280" show-overflow-tooltip />
+      <el-table-column label="参数名称" min-width="190" :class-name="queryColumnClass('name')" :label-class-name="queryColumnClass('name')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'name',displayName:'参数名称'}" /></template><template #default="{ row }"><div class="parameter-name">{{ row.name }}</div><div class="parameter-code">{{ row.code }}</div></template></el-table-column>
+      <el-table-column prop="group" label="分组" width="120" :class-name="queryColumnClass('group')" :label-class-name="queryColumnClass('group')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'group',displayName:'分组'}" /></template></el-table-column>
+      <el-table-column label="当前值" width="150" :class-name="queryColumnClass('configured')" :label-class-name="queryColumnClass('configured')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'configured',displayName:'当前值'}" /></template><template #default="{ row }"><span :class="['pms-status', row.configured ? 'pms-status-success' : 'pms-status-warning']">{{ row.configured ? (row.sensitive ? '已设置 · 不回显' : row.value_type === 'boolean' ? (row.value === 'true' ? '开启' : '关闭') : row.value) : '未设置' }}</span></template></el-table-column>
+      <el-table-column prop="description" label="用途" min-width="280" show-overflow-tooltip :class-name="queryColumnClass('description')" :label-class-name="queryColumnClass('description')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'description',displayName:'用途'}" /></template></el-table-column>
       <el-table-column label="操作" width="88" fixed="right"><template #default="{ row }"><el-button v-if="auth.hasPermission('system:parameter:edit')" link type="primary" :disabled="saving" @click="edit(row)">修改</el-button></template></el-table-column>
     </el-table>
   </div>

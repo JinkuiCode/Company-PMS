@@ -52,7 +52,7 @@ for (const [name, source] of [
   ['ProjectProgress.vue', progress],
 ]) {
   assert.match(source, /PmsDataList/, `${name} should use the standard PMS list layout`)
-  assert.match(source, /PmsListFilters/, `${name} should use the standard PMS list filters`)
+  assert.match(source, /PmsListFilters|PmsQueryWorkspace/, `${name} should use the shared PMS query module`)
   assert.match(source, /useListFilters/, `${name} should use reusable custom filter logic`)
   assert.match(source, /pms-ag-grid/, `${name} should use the shared AG Grid styling hook`)
   assert.match(source, /:theme="'legacy'"/, `${name} should opt into AG Grid legacy CSS theme mode`)

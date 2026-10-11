@@ -6,20 +6,31 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from app.services.purchase_progress import summarize_requisition
 from app.services.purchase_fields import DOCUMENT_STATUSES
-from app.services.report_filters import Condition, parse_filters, sql_conditions
+from app.services.report_filters import Condition, parse_filters, parse_column_filters, sql_conditions, query_fields
 
 REPORT_START_DATE = date(2026, 1, 1)
+ACCOUNTED_FIELDS = {'progress', 'ordered', 'received', 'returned', 'net_received',
+                    'pending_order', 'pending_receipt', 'last_order_date', 'last_stock_date'}
+OVERVIEW_ONLY_FIELDS = {'organization_name', 'completion_rate', 'total_lines', 'not_ordered_lines',
+                       'ordering_lines', 'receiving_lines', 'complete_lines', 'review_lines'}
 
 
 class PurchaseQuery(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    _project_references: dict = PrivateAttr(default_factory=dict)
+    _query_labels: dict = PrivateAttr(default_factory=dict)
+    _candidate_field: str = PrivateAttr(default='')
+    view: Literal['detail'] = 'detail'
     organization_ids: list[Annotated[int, Field(gt=0)]] = Field(default_factory=list, max_length=200)
     filters: str = Field(default='[]', max_length=12000)
+    column_filters: str = Field(default='[]', max_length=12000)
     keyword: str = Field(default='', max_length=100)
     project_code: str = Field(default='', max_length=100)
+    project_codes: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(default_factory=list, max_length=1000)
     project_code_is_empty: bool = False
     supplier: str = Field(default='', max_length=100)
     date_from: date | None = None
@@ -33,7 +44,12 @@ class PurchaseQuery(BaseModel):
     @model_validator(mode='after')
     def date_range(self):
         self.conditions()
-        if self.project_code and self.project_code_is_empty:
+        self.column_conditions()
+        if any(not code.strip() for code in self.project_codes):
+            raise ValueError('项目编码不能为空')
+        if self.project_code and self.project_codes:
+            raise ValueError('请勿同时指定单项目和多项目条件')
+        if (self.project_code or self.project_codes) and self.project_code_is_empty:
             raise ValueError('项目编码与空项目限定不能同时使用')
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError('开始日期不能晚于结束日期')
@@ -42,11 +58,21 @@ class PurchaseQuery(BaseModel):
     def conditions(self):
         return parse_filters(self.filters, 'purchase')
 
+    def column_conditions(self):
+        return parse_column_filters(self.column_filters, 'purchase')
+
 
 class PurchaseOverviewQuery(PurchaseQuery):
+    view: Literal['overview'] = 'overview'
     overview_status: Literal['', 'unfinished', 'complete', 'review'] = ''
     sort: Literal['project_code', 'completion_rate', 'total_lines'] = 'project_code'
     direction: Literal['asc', 'desc'] = 'asc'
+
+    def conditions(self):
+        return parse_filters(self.filters, 'purchase', additional_fields=query_fields('purchase-overview'))
+
+    def column_conditions(self):
+        return parse_column_filters(self.column_filters, 'purchase-overview')
 
 
 def effective_state(status, cancelled):
@@ -485,6 +511,10 @@ def request_query(query, project_codes):
     if query.project_code:
         filters.append('a.FNUMBER=%s')
         params.append(query.project_code)
+    if query.project_codes:
+        selected = sorted(set(query.project_codes))
+        filters.append('a.FNUMBER IN (' + _in(selected) + ')')
+        params.extend(selected)
     if query.project_code_is_empty:
         filters.append("(a.FNUMBER IS NULL OR a.FNUMBER='')")
     if query.date_from:
@@ -506,11 +536,19 @@ def request_query(query, project_codes):
  AND sn.FNAME LIKE %s ESCAPE '~')""")
         params.append(_like(query.supplier))
     base = REQUEST_SELECT + ' WHERE ' + ' AND '.join(filters)
-    extra, extra_params = sql_conditions([condition for condition in query.conditions()
-                                          if condition.field != 'progress'])
+    source_conditions = [c for c in query.conditions() if c.field not in OVERVIEW_ONLY_FIELDS]
+    if not isinstance(query, PurchaseOverviewQuery):
+        source_conditions += query.column_conditions()
+    from app.services.purchase_query_labels import label_source
+    base, params = label_source(base, params, query, source_conditions)
+    extra, extra_params = sql_conditions([condition for condition in source_conditions
+                                          if condition.field not in ACCOUNTED_FIELDS],
+                                        project_references=query._project_references)
     if extra:
         base = f'SELECT * FROM ({base}) AS filter_source WHERE {extra}'
         params.extend(extra_params)
+    if len(params) > 2000:
+        raise ValueError('查询参数过多，请缩小范围')
     return base, params
 
 
@@ -526,7 +564,9 @@ def purchase_selection(connection, query, project_codes, *, accounting=False):
     import time
     _prepare_scope(connection, project_codes)
     base, params = request_query(query, project_codes)
-    conditions = [condition for condition in query.conditions() if condition.field == 'progress']
+    conditions = [condition for condition in query.conditions() if condition.field in ACCOUNTED_FIELDS]
+    if not isinstance(query, PurchaseOverviewQuery):
+        conditions += [c for c in query.column_conditions() if c.field in ACCOUNTED_FIELDS]
     if query.progress:
         conditions.append(Condition('progress', 'equals', 'enum', query.progress))
     if not conditions and not accounting:
@@ -543,11 +583,15 @@ def purchase_selection(connection, query, project_codes, *, accounting=False):
         for name, select in [('q', base), *ACCOUNTING_STAGES]:
             if time.monotonic() > deadline:
                 raise TimeoutError('report_budget_exceeded')
+            if name == 'base_amounts' and 'AS [supplier_name]' in base:
+                select = select.replace(', t.supplier_name', '')
             select = reference.sub(lambda match: '#pms_purchase_' + match.group(0), select)
             cursor.execute(f'WITH workset AS ({select}) SELECT * INTO #pms_purchase_{name} FROM workset',
                            tuple(params) if name == 'q' else ())
             created.append(name)
-        where, params = sql_conditions(conditions)
+        where, params = sql_conditions(conditions, project_references=query._project_references)
+        if len(params) > 2000:
+            raise ValueError('查询参数过多，请缩小范围')
         yield 'SELECT * FROM #pms_purchase_report AS filter_source' + (' WHERE ' + where if where else ''), params
     finally:
         try:
@@ -557,24 +601,42 @@ def purchase_selection(connection, query, project_codes, *, accounting=False):
             cursor.close()
 
 
-def list_overview(connection, query, project_codes):
-    """Aggregate authorized lines in SQL before paging project/organization pairs."""
-    import json
+@contextmanager
+def overview_selection(connection, query, project_codes):
+    """One final aggregate scope for overview rows and distinct candidates."""
     with purchase_selection(connection, query, project_codes, accounting=True) as (base, params):
         counts = ','.join(f"SUM(CASE WHEN progress='{state}' THEN 1 ELSE 0 END) AS {state}_lines"
                           for state in ('not_ordered', 'ordering', 'receiving', 'complete', 'review'))
-        grouped = (f"WITH source AS ({base}), grouped AS (SELECT organization_id,"
-                   f"COALESCE(project_code,'') AS project_code,COUNT(*) AS total_lines,{counts} "
-                   "FROM source GROUP BY organization_id,COALESCE(project_code,'')), "
-                   "projects AS (SELECT *,100.0*complete_lines/total_lines AS completion_rate FROM grouped)")
         where = {'': '1=1', 'unfinished': 'complete_lines<total_lines',
                  'complete': 'complete_lines=total_lines', 'review': 'review_lines>0'}[query.overview_status]
-        stats = _rows(connection, grouped + ' SELECT COUNT(*) AS total,COALESCE(SUM(total_lines),0) AS total_lines,'
+        final_conditions = [*query.column_conditions(), *[c for c in query.conditions() if c.field in OVERVIEW_ONLY_FIELDS]]
+        extra, extra_params = sql_conditions(final_conditions, alias='projects',
+                                            project_references=query._project_references)
+        if extra:
+            where += ' AND ' + extra
+            params = [*params, *extra_params]
+        if len(params) > 2000:
+            raise ValueError('查询参数过多，请缩小范围')
+        # Use a derived table rather than nesting a WITH query in callers' CTEs.
+        aggregate = (f"SELECT organization_id,COALESCE(project_code,'') AS project_code,"
+                     f"COUNT(*) AS total_lines,{counts} FROM ({base}) AS source "
+                     "GROUP BY organization_id,COALESCE(project_code,'')")
+        projects = f'SELECT *,100.0*complete_lines/total_lines AS completion_rate FROM ({aggregate}) AS grouped'
+        from app.services.purchase_query_labels import label_source
+        projects, params = label_source(projects, params, query, final_conditions, final_overview=True)
+        yield f'SELECT * FROM ({projects}) AS projects WHERE {where}', params
+
+
+def list_overview(connection, query, project_codes):
+    """Aggregate authorized lines in SQL before paging project/organization pairs."""
+    import json
+    with overview_selection(connection, query, project_codes) as (base, params):
+        stats = _rows(connection, 'WITH selected AS (' + base + ') SELECT COUNT(*) AS total,COALESCE(SUM(total_lines),0) AS total_lines,'
                       'COALESCE(SUM(complete_lines),0) AS complete_lines,COALESCE(SUM(review_lines),0) AS review_lines '
-                      'FROM projects WHERE ' + where, params)[0]
+                      'FROM selected', params)[0]
         start = (query.page - 1) * query.page_size
         order = f'{query.sort} {query.direction},organization_id,project_code'
-        sql = grouped + f', numbered AS (SELECT *,ROW_NUMBER() OVER (ORDER BY {order}) AS row_number FROM projects WHERE {where}) SELECT * FROM numbered WHERE row_number>%s AND row_number<=%s ORDER BY row_number'
+        sql = f'WITH selected AS ({base}), numbered AS (SELECT *,ROW_NUMBER() OVER (ORDER BY {order}) AS row_number FROM selected) SELECT * FROM numbered WHERE row_number>%s AND row_number<=%s ORDER BY row_number'
         items = _rows(connection, sql, [*params, start, start + query.page_size]) if stats['total'] else []
         for row in items:
             row['id'] = json.dumps([row['organization_id'], row['project_code']], ensure_ascii=False)

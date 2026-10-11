@@ -48,9 +48,11 @@
           </el-button>
         </header>
 
+        <PmsQueryWorkspace :key="activeEnumIdentity" v-model="queryDraft" :list-key="`system-enum-values-${selectedDict.dict_code}`" :fields="queryFields" :defaults="queryDefaults" :loading="itemsLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
         <el-table
+          :key="activeEnumIdentity"
           v-loading="itemsLoading"
-          :data="dictItems"
+          :data="filteredItems"
           border
           stripe
           size="small"
@@ -58,17 +60,17 @@
           empty-text="暂无枚举值"
           class="pms-dense-table enum-value-table"
         >
-          <el-table-column prop="item_value" label="存储值" min-width="140" fixed>
+          <el-table-column prop="item_value" label="存储值" min-width="140" fixed :class-name="queryColumnClass('item_value')" :label-class-name="queryColumnClass('item_value')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'item_value',displayName:'存储值'}" /></template>
             <template #default="{ row }"><code class="pms-code">{{ row.item_value }}</code></template>
           </el-table-column>
-          <el-table-column prop="item_label" label="显示名称" min-width="180" />
-          <el-table-column prop="sort" label="排序" width="76" align="center" />
-          <el-table-column prop="reference_count" label="引用数" width="86" align="center">
+          <el-table-column prop="item_label" label="显示名称" min-width="180" :class-name="queryColumnClass('item_label')" :label-class-name="queryColumnClass('item_label')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'item_label',displayName:'显示名称'}" /></template></el-table-column>
+          <el-table-column prop="sort" label="排序" width="76" align="center" :class-name="queryColumnClass('sort')" :label-class-name="queryColumnClass('sort')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'sort',displayName:'排序'}" /></template></el-table-column>
+          <el-table-column prop="reference_count" label="引用数" width="86" align="center" :class-name="queryColumnClass('reference_count')" :label-class-name="queryColumnClass('reference_count')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'reference_count',displayName:'引用数'}" /></template>
             <template #default="{ row }">
               <span :class="{ 'has-reference': row.reference_count > 0 }">{{ row.reference_count }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="92" align="center">
+          <el-table-column prop="status" label="状态" width="92" align="center" :class-name="queryColumnClass('status')" :label-class-name="queryColumnClass('status')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'status',displayName:'状态'}" /></template>
             <template #default="{ row }">
               <span class="pms-status" :class="row.status === 1 ? 'success' : 'neutral'">
                 <span class="pms-status-dot"></span>{{ row.status === 1 ? '启用' : '禁用' }}
@@ -148,7 +150,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import { useSystemQuery } from '@/query-system/system-adapter'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { useAuthStore } from '@/stores/auth'
@@ -185,8 +190,31 @@ const selectedDictId = ref<number | null>(null)
 const dictItems = ref<EnumItem[]>([])
 const searchText = ref('')
 const itemsLoading = ref(false)
-
 const selectedDict = computed(() => dictList.value.find(item => item.id === selectedDictId.value) || null)
+const activeEnumIdentity = computed(() => selectedDict.value ? `${selectedDict.value.id}:${selectedDict.value.dict_code}` : '')
+const acceptedEnumIdentity = ref('')
+let itemsRequestRevision = 0
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied: queryApplied, submitted: querySubmitted, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters, setResultRows, columnClass: queryColumnClass } = useSystemQuery(() => [
+  { field:'item_value', label:'存储值', type:'text' },
+  { field:'item_label', label:'显示名称', type:'text' },
+  { field:'sort', label:'排序', type:'number' },
+  { field:'reference_count', label:'引用数', type:'number' },
+  { field:'status', label:'状态', type:'enum', options:[{value:1,label:'启用'},{value:0,label:'禁用'}] },
+], ['item_label', 'status'], {ready:()=>!!activeEnumIdentity.value && acceptedEnumIdentity.value === activeEnumIdentity.value && !itemsLoading.value})
+const filteredItems = computed(() => filterRows(acceptedEnumIdentity.value === activeEnumIdentity.value ? dictItems.value : []))
+function clearQueryColumns() { clearColumns() }
+
+watch(activeEnumIdentity, () => {
+  ++itemsRequestRevision
+  acceptedEnumIdentity.value = ''
+  dictItems.value = []
+  itemsLoading.value = false
+  queryDraft.value = []
+  queryApplied.value = []
+  querySubmitted.value = false
+  clearColumns()
+  setResultRows([])
+}, {flush:'sync'})
 const filteredDicts = computed(() => {
   const keyword = searchText.value.trim().toLowerCase()
   if (!keyword) return dictList.value
@@ -219,12 +247,21 @@ function selectDict(id: number) {
 }
 
 async function fetchItems() {
-  if (!selectedDictId.value) return
+  const identity = activeEnumIdentity.value
+  const id = selectedDict.value?.id
+  if (!identity || !id) return
+  const revision = ++itemsRequestRevision
+  const isCurrent = () => revision === itemsRequestRevision && identity === activeEnumIdentity.value
   itemsLoading.value = true
   try {
-    dictItems.value = (await request.get(`/dicts/${selectedDictId.value}/items`)) as EnumItem[]
+    const items = (await request.get(`/dicts/${id}/items`)) as EnumItem[]
+    if (!isCurrent()) return
+    dictItems.value = items
+    acceptedEnumIdentity.value = identity
+  } catch {
+    if (isCurrent()) ElMessage.error('枚举值加载失败，请重试')
   } finally {
-    itemsLoading.value = false
+    if (isCurrent()) itemsLoading.value = false
   }
 }
 
@@ -305,6 +342,7 @@ async function handleDeleteItem(row: EnumItem) {
 }
 
 onMounted(fetchDicts)
+onBeforeUnmount(() => { ++itemsRequestRevision })
 </script>
 
 <style scoped>

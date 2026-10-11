@@ -12,7 +12,7 @@ assert.match(listFilters, /PmsSelectControl/, 'Archive custom filters should rec
 assert.match(listFilters, /PmsDateControl/, 'Archive custom filters should receive shared compact date controls')
 assert.match(listFilters, /value-format="YYYY-MM-DD"/, 'Shared date filters should preserve the archive date protocol')
 assert.match(archive, /useListFilters/, 'Project archive should evaluate custom filters through the shared list filter composable')
-assert.match(archive, /PmsListFilters/, 'Project archive should render custom filters through the shared filter component')
+assert.match(archive, /PmsQueryWorkspace/, 'Project archive should render all conditions through the shared query workspace')
 
 for (const field of [
   'project_code',
@@ -27,11 +27,10 @@ for (const field of [
   assert.match(archive, new RegExp(field), `Project archive custom filters should include ${field}`)
 }
 
-assert.match(archive, /v-model="archiveQuery\.enabled"/, 'Project archive should expose the enabled-state filter')
-assert.match(archive, /label:\s*'启用',\s*value:\s*'true'/, 'Enabled-state filter should include enabled records')
-assert.match(archive, /label:\s*'已禁用',\s*value:\s*'false'/, 'Enabled-state filter should include disabled records')
-assert.match(archive, /label:\s*'全部',\s*value:\s*'all'/, 'Enabled-state filter should include all records explicitly')
-assert.doesNotMatch(archive, /archiveEnabledFilterOptions[\s\S]*?value:\s*null/, 'Element Plus select options must not receive null values')
+assert.match(archive, /field:'is_enabled',shown:true,operator:'equals',value:1/, 'Enabled-state default belongs to shared three-part conditions')
+assert.match(archive, /value:1,label:'启用'/, 'Enabled-state filter should include enabled records')
+assert.match(archive, /value:0,label:'已禁用'/, 'Enabled-state filter should include disabled records')
+assert.match(archive, /enabled: 'all'/, 'Backend enabled shortcut must not override shared query conditions')
 const archiveFilterFields = archive.match(/const archiveFilterFields =[\s\S]*?useListFilters\(archiveFilterFields\)/)?.[0] || ''
 assert.doesNotMatch(archiveFilterFields, /field:\s*'status'/, 'Project archive custom filters must not restore the legacy status field')
 

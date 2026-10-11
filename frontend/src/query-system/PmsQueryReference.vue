@@ -5,7 +5,7 @@ import { PmsTextControl, PmsSelectControl, PmsCheckboxControl, PmsTextareaContro
 import CustomPagination from '@/components/CustomPagination.vue'
 import { parseReferenceBatch, referenceBatchReport, splitReferenceBatch, type QueryReference, type ReferenceRecord, type ReferenceRequest } from './reference'
 const props=defineProps<{modelValue:boolean; reference:QueryReference; value:(string|number)[]}>()
-const emit=defineEmits<{'update:modelValue':[value:boolean];confirm:[value:(string|number)[]]}>()
+const emit=defineEmits<{'update:modelValue':[value:boolean];confirm:[value:(string|number)[],records:ReferenceRecord[]]}>()
 const keyword=ref(''),appliedKeyword=ref(''),selected=ref<(string|number)[]>([]),page=ref(1),pageSize=ref(50)
 const line=ref<number|null>(null),appliedLine=ref<number|null>(null)
 const lineOptions=computed(()=>props.reference.lineOptions?.()||[])
@@ -75,7 +75,7 @@ function choose(value:string|number,checked:boolean) {selected.value=checked?[..
 function selectPage(checked:boolean){visible.value.forEach(r=>choose(r.value,checked))}
 function changePage(){if(!batch.value)void loadPage()}
 function close(){emit('update:modelValue',false)}
-function confirm(){if(loading.value||error.value||unavailable.value)return;emit('confirm',[...selected.value]);close()}
+function confirm(){if(loading.value||error.value||unavailable.value)return;emit('confirm',[...selected.value],[...selectedRecords.value]);close()}
 </script>
 <template>
   <el-dialog :model-value="modelValue" :title="`引用${reference.title}`" width="min(820px, calc(100vw - 24px))" class="pms-query-reference-dialog" :style="{maxHeight:'calc(100dvh - 24px)',overflow:'auto'}" align-center append-to-body destroy-on-close :close-on-click-modal="false" @update:model-value="emit('update:modelValue',$event)">
@@ -84,8 +84,8 @@ function confirm(){if(loading.value||error.value||unavailable.value)return;emit(
         <PmsTextControl v-model="keyword" size="compact" clearable :prefix-icon="Search" :placeholder="`搜索${reference.title}编码 / 名称`" aria-label="搜索引用记录" />
         <PmsSelectControl v-if="lineOptions.length" v-model="line" :options="lineOptions" size="compact" clearable placeholder="全部可选产品线" aria-label="引用产品线" />
         <el-button type="primary" :icon="Search" native-type="submit">查询</el-button>
-        <el-button type="warning" plain :icon="RefreshLeft" @click="reset">重置</el-button>
-        <el-button type="primary" plain :icon="DocumentCopy" :aria-pressed="batchOpen" @click="batchOpen=!batchOpen">批量粘贴</el-button>
+        <el-button class="pms-button-auxiliary" :icon="RefreshLeft" @click="reset">重置</el-button>
+        <el-button class="pms-button-auxiliary" :icon="DocumentCopy" :aria-pressed="batchOpen" @click="batchOpen=!batchOpen">批量粘贴</el-button>
       </form>
       <section v-if="batchOpen" class="reference-batch" aria-label="批量粘贴查询">
         <div class="reference-batch-input"><PmsTextareaControl v-model="batchText" :rows="3" aria-label="批量查询数据" placeholder="从 Excel 复制一列编码或名称，每行一个值" :error="batchError" /><div class="reference-batch-tools"><PmsSelectControl v-model="batchField" :options="[{value:'code',label:'编码'},{value:'name',label:'名称'}]" size="compact" aria-label="批量匹配字段" /><el-button type="primary" :icon="Search" @click="queryBatch">批量查询</el-button></div></div>
@@ -105,15 +105,17 @@ function confirm(){if(loading.value||error.value||unavailable.value)return;emit(
         <div v-if="loading" class="reference-empty" role="status">正在加载引用记录…</div><div v-else-if="!visible.length&&!error" class="reference-empty">没有符合条件的引用记录</div>
       </div>
       <CustomPagination v-model="page" v-model:page-size="pageSize" :total="total" @update:model-value="changePage" @update:page-size="page=1;changePage()" />
-      <section class="reference-chosen" aria-label="已选明细"><div class="reference-chosen-heading"><strong>已选明细（{{ selected.length }} 条）</strong><el-button type="warning" text :disabled="!selected.length" @click="selected=[]">清空选择</el-button></div>
+      <section class="reference-chosen" aria-label="已选明细"><div class="reference-chosen-heading"><strong>已选明细（{{ selected.length }} 条）</strong><el-button class="pms-button-auxiliary" text :disabled="!selected.length" @click="selected=[]">清空选择</el-button></div>
         <div v-if="selected.length" class="reference-chosen-scroll"><table class="reference-table" aria-label="已选记录列表"><thead><tr><th>编码</th><th>名称</th><th v-if="hasLine">产品线</th><th class="reference-remove">操作</th></tr></thead><tbody><tr v-for="record in selectedRecords" :key="record.value"><td :title="record.code">{{ record.code }}</td><td :title="record.name">{{ record.name }}</td><td v-if="hasLine">{{ record.lineName }}</td><td class="reference-remove"><el-button type="danger" text :aria-label="`移除${record.code} ${record.name}`" @click="choose(record.value,false)">移除</el-button></td></tr></tbody></table></div><div v-else class="reference-empty-chosen">尚未选择记录</div>
       </section>
     </div>
-    <template #footer><div class="reference-footer"><span>已选 {{ selected.length }} 条</span><div><el-button type="warning" plain @click="close">取消</el-button><el-button type="success" :disabled="loading||!!error||unavailable||selected.length>1000" @click="confirm">确认引用</el-button></div></div></template>
+    <template #footer><div class="reference-footer"><span>已选 {{ selected.length }} 条</span><div><el-button class="pms-button-auxiliary" @click="close">取消</el-button><el-button type="primary" :disabled="loading||!!error||unavailable||selected.length>1000" @click="confirm">确认引用</el-button></div></div></template>
   </el-dialog>
 </template>
 <style scoped>
 .reference-picker{min-width:0}.reference-toolbar{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:8px}.reference-toolbar>.pms-form-control{flex:1 1 200px;min-width:0}.reference-toolbar>.el-button{margin:0}
+.reference-toolbar{--pms-form-control-height-compact:32px;--pms-font-size-base:13px;}.reference-toolbar>.el-button{height:32px;font-size:13px;}
+.reference-footer .el-button{height:32px;}
 .reference-toolbar>.pms-form-control:nth-child(2){flex:0 1 160px}
 .reference-batch{padding-bottom:8px}.reference-batch-input{display:flex;gap:6px}.reference-batch-input>.pms-form-control{flex:1;min-width:0}.reference-batch-tools{display:flex;flex-direction:column;gap:6px;width:112px;flex-shrink:0}.reference-batch-tools>.el-button{margin:0}
 .reference-error{color:var(--pms-danger);font-size:12px;margin:4px 0}.reference-batch-report{font-size:12px;margin-top:6px}.reference-batch-report p{margin:4px 0;max-height:64px;overflow:auto;overflow-wrap:anywhere;color:var(--pms-warning)}

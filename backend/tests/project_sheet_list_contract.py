@@ -148,7 +148,7 @@ def test_normalize_sheet_field_keys_deduplicates_and_ignores_unknown_or_hidden()
     normalized = normalize_sheet_field_keys(
         "customer,customer,last_editor,unknown,progress_notes,product_category"
     )
-    assert normalized == ["customer", "progress_notes", "product_category"]
+    assert normalized == ["customer", "progress_notes"]
 
 
 def test_project_sheet_fields_metadata_endpoint_returns_groups_without_values():
@@ -225,7 +225,6 @@ def test_project_list_sheet_fields_projection_and_backwards_compatibility():
 
         assert item.sheet_fields == {
             "customer": "客户甲",
-            "product_category": 1,
             "difference_days": 5,
             "design_progress": 35,
             "project_code": "PA-001",
