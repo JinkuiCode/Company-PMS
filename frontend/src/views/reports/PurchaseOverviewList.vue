@@ -9,7 +9,8 @@ import CustomPagination from '@/components/CustomPagination.vue'
 import ReportExportControl from '@/components/ReportExportControl.vue'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { cloneQuery, validateConditions, type QueryCondition } from '@/query-system/core'
-import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, reportPreferences, serializeReportConditions, serializeColumnFilters, reportColumnCandidates, linkReportScope, legacyReportSchemes, purchaseDetailEntry, createReportColumnSort } from '@/query-system/report-adapter'
+import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, reportPreferences, saveReportPreferences, serializeReportConditions, serializeColumnFilters, reportColumnCandidates, linkReportScope, legacyReportSchemes, purchaseDetailEntry, createReportColumnSort } from '@/query-system/report-adapter'
+import { migrateOverviewLayout } from './purchase-overview-layout'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import { DEFAULT_PAGE_SIZE, PMS_GRID_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
@@ -42,18 +43,20 @@ const rows = ref<PurchaseOverviewRow[]>([]), total = ref(0), totals = reactive({
 const page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), pendingSize = ref<number | null>(null)
 const loading = ref(false), error = ref(''), stamp = ref('')
 const sort = reactive({ sort: 'project_code', direction: 'asc' })
-const sortFields = { project_code: 'project_code', completion_rate: 'completion_rate', total_lines: 'total_lines' }
+const sortFields = { project_code: 'project_code', completion_rate: 'completion_rate', conversion_rate: 'conversion_rate', total_lines: 'total_lines' }
+const sortableKeys = Object.keys(sortFields)
+const rateKeys = ['completion_rate', 'conversion_rate']
 const listRef = ref<InstanceType<typeof PmsDataList>>()
 let grid: GridApi<PurchaseOverviewRow> | null = null, restoring = false, serial = 0, controller: AbortController | null = null
 const fields = computed(() => metadata.value?.overview_fields || [])
-const defaultKeys = ['product_line_name', 'project_code', 'project_name', 'completion_rate', 'total_lines', 'not_ordered_lines', 'ordering_lines', 'receiving_lines', 'complete_lines', 'review_lines']
+const defaultKeys = ['product_line_name', 'project_code', 'project_name', ...rateKeys, 'total_lines', 'not_ordered_lines', 'ordering_lines', 'receiving_lines', 'complete_lines', 'review_lines']
 const visible = ref([...defaultKeys]), savedColumns = ref<ColumnState[]>([])
 const groups = computed(() => [...new Set(fields.value.map(f => f.group))].map(group => ({ key: group, label: group, fields: fields.value.filter(f => f.group === group).map(f => ({ ...f, quick_addable: true })) })))
 const key = computed(() => `pms:purchase-overview:v1:${auth.user?.id || 'anonymous'}`)
 function saveLayout() {
   if (restoring) return
   savedColumns.value = grid?.getColumnState() || savedColumns.value
-  try { localStorage.setItem(key.value, JSON.stringify({ visible: visible.value, columns: savedColumns.value })) }
+  try { saveReportPreferences(localStorage, key.value, { visible: visible.value, columns: savedColumns.value, metricLayoutVersion: 1 }) }
   catch { ElMessage.warning('列设置保存失败，请检查浏览器存储空间') }
   void nextTick(() => listRef.value?.refreshScrollbar())
 }
@@ -110,7 +113,7 @@ function drill(row: PurchaseOverviewRow, progress = '') {
 defineExpose({ detailEntry })
 const Action = defineComponent({ props: ['params'], setup(props) { return () => h(ElButton, { size: 'small', link: true, type: 'primary', disabled: loading.value, onClick: () => drill(props.params.data) }, () => '明细') } })
 const Completion = defineComponent({ props: ['params'], setup(props) { return () => {
-  const value = Number(props.params.data.completion_rate)
+  const value = Number(props.params.value)
   return h('div', { class: 'overview-completion' }, [h('span', { class: 'overview-track' }, [h('span', { class: { done: value === 100 }, style: { width: `${value}%` } })]), h('span', `${value.toFixed(1)}%`)])
 } } })
 const Count = defineComponent({ props: ['params'], setup(props) { return () => h('button', { type: 'button', class: ['overview-count', { review: props.params.colDef.field === 'review_lines' }], disabled: loading.value, onClick: () => drill(props.params.data, props.params.colDef.field.replace(/_lines$/, '')) }, String(props.params.value)) } })
@@ -131,14 +134,14 @@ const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.va
   },
 })
 const columns = computed<ColDef<PurchaseOverviewRow>[]>(() => decorateQueryColumns<PurchaseOverviewRow>([
-  ...fields.value.map(field => ({ field: field.key, headerName: field.label, colId: field.key, hide: !visible.value.includes(field.key), initialWidth: field.key === 'project_name' ? 190 : field.key === 'completion_rate' ? 170 : field.key === 'project_code' ? 125 : field.value_type === 'number' ? 88 : 110, minWidth: 80, maxWidth: 800,
+  ...fields.value.map(field => ({ field: field.key, headerName: field.label, colId: field.key, hide: !visible.value.includes(field.key), initialWidth: field.key === 'project_name' ? 190 : rateKeys.includes(field.key) ? 170 : field.key === 'project_code' ? 125 : field.value_type === 'number' ? 88 : 110, minWidth: 80, maxWidth: 800,
     initialPinned: defaultKeys.slice(0, 3).includes(field.key) ? 'left' as const : undefined,
     initialFlex: defaultKeys.slice(0, 3).includes(field.key) ? undefined : 1,
-    sortable: ['project_code', 'completion_rate', 'total_lines'].includes(field.key),
+    sortable: sortableKeys.includes(field.key),
     cellClass: field.value_type === 'number' ? 'overview-number' : undefined,
     valueFormatter: ({value}: {value?: unknown}) => value === null || value === undefined || value === '' ? '' : String(value),
     tooltipValueGetter: ({value}: {value?: unknown}) => ['project_name', 'organization_name'].includes(field.key) ? String(value || '') : '',
-    cellRenderer: field.key === 'completion_rate' ? Completion : field.key.endsWith('_lines') && field.key !== 'total_lines' ? Count : undefined,
+    cellRenderer: rateKeys.includes(field.key) ? Completion : field.key.endsWith('_lines') && field.key !== 'total_lines' ? Count : undefined,
   })), { colId: 'purchase_actions', headerName: '操作', pinned: 'right', lockPosition: 'right', ...PMS_ACTION_COLUMN, cellRenderer: Action, cellClass: 'pms-action-cell' },
 ], columnContext) as ColDef<PurchaseOverviewRow>[])
 const defaultColDef: ColDef = { resizable: true, sortable: false, comparator: () => 0, editable: false, cellStyle: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }
@@ -149,32 +152,39 @@ function ready(event: GridReadyEvent<PurchaseOverviewRow>) {
 }
 function sortChanged(event: { source: string }) {
   if (restoring || ['api', 'gridInitializing'].includes(event.source)) return
-  const current = grid?.getColumnState().find(c => c.sort && ['project_code', 'completion_rate', 'total_lines'].includes(c.colId))
+  const current = grid?.getColumnState().find(c => c.sort && sortableKeys.includes(c.colId))
   Object.assign(sort, { sort: current?.colId || 'project_code', direction: current?.sort || 'asc' })
   restoring = true; page.value = 1; restoring = false; saveLayout(); void query(false, undefined, true)
 }
 function resized(event: { finished: boolean }) { if (event.finished) saveLayout() }
-const planSnapshot = () => ({ pageSize: pendingSize.value ?? pageSize.value, visible: [...visible.value], columns: grid?.getColumnState() || savedColumns.value, overviewStatus: overviewStatus.value, sort: { ...sort } })
+const planSnapshot = () => ({ metricLayoutVersion: 1, pageSize: pendingSize.value ?? pageSize.value, visible: [...visible.value], columns: grid?.getColumnState() || savedColumns.value, overviewStatus: overviewStatus.value, sort: { ...sort } })
 function clearColumnFilters() { columnFilters.value = []; overviewStatus.value = ''; invalidate() }
 async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
   if (invalid.value) { ElMessage.warning(invalid.value); return }
-  const plan = reportPreferences(preferences, fields.value.map(f => f.key))
+  const plan = reportPreferences(migrateOverviewLayout(preferences), fields.value.map(f => f.key))
   if (plan.overviewStatus !== undefined) overviewStatus.value = plan.overviewStatus
   restoring = true
   if (plan.pageSize != null && plan.pageSize !== pageSize.value) pendingSize.value = plan.pageSize
   if (plan.visible) visible.value = plan.visible
   if (plan.columns) { savedColumns.value = plan.columns as ColumnState[]; await nextTick(); grid?.applyColumnState({ state: savedColumns.value, applyOrder: true }) }
-  const sorting = grid?.getColumnState().find(c => c.sort && ['project_code','completion_rate','total_lines'].includes(c.colId))
-  if (plan.sort && ['project_code', 'completion_rate', 'total_lines'].includes(plan.sort.sort)) Object.assign(sort, plan.sort)
+  const sorting = grid?.getColumnState().find(c => c.sort && sortableKeys.includes(c.colId))
+  if (plan.sort && sortableKeys.includes(plan.sort.sort)) Object.assign(sort, plan.sort)
   else if (sorting) Object.assign(sort, { sort: sorting.colId, direction: sorting.sort })
+  else if (plan.columns) Object.assign(sort, { sort: 'project_code', direction: 'asc' })
   restoring = false; saveLayout(); await query(true)
 }
 async function initialize() {
   loading.value = true
   try {
     metadata.value = await getPurchaseMetadata()
-    try { const saved = JSON.parse(localStorage.getItem(key.value) || '{}'); if (Array.isArray(saved.visible)) visible.value = saved.visible.filter((k: string) => fields.value.some(f => f.key === k)); if (Array.isArray(saved.columns)) savedColumns.value = saved.columns } catch { /* Ignore invalid local layout, retaining defaults. */ }
-    const sorting = savedColumns.value.find(c => c.sort && ['project_code','completion_rate','total_lines'].includes(c.colId))
+    try {
+      const raw = JSON.parse(localStorage.getItem(key.value) || '{}')
+      const saved = migrateOverviewLayout(raw)
+      if (Array.isArray(saved.visible)) visible.value = saved.visible.filter(k => fields.value.some(f => f.key === k))
+      if (Array.isArray(saved.columns)) savedColumns.value = saved.columns
+      if (raw.metricLayoutVersion !== 1) saveLayout()
+    } catch { /* Ignore invalid local layout, retaining defaults. */ }
+    const sorting = savedColumns.value.find(c => c.sort && sortableKeys.includes(c.colId))
     if (sorting) Object.assign(sort, { sort: sorting.colId, direction: sorting.sort })
     await nextTick()
   } catch { error.value = '总进度初始化失败，请重试' } finally { loading.value = false }

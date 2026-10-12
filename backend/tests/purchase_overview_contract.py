@@ -26,6 +26,7 @@ class OverviewContract(unittest.TestCase):
         self.assertEqual([row[k] for k in ('total_lines', 'not_ordered_lines', 'ordering_lines',
                                          'receiving_lines', 'complete_lines', 'review_lines')], [9, 1, 2, 2, 1, 3])
         self.assertAlmostEqual(float(row['completion_rate']), 100 / 9, places=6)
+        self.assertAlmostEqual(float(row['conversion_rate']), 300 / 9, places=6)
         self.assertEqual(self.db.execute("SELECT name FROM sqlite_temp_master WHERE name LIKE 'temp_pms_purchase_%'").fetchall(), [])
 
     def test_same_code_different_organizations_and_server_pagination(self):
@@ -63,6 +64,27 @@ class OverviewContract(unittest.TestCase):
         expected = [('product_line_name', '产品线'), ('project_code', '项目编码'), ('project_name', '项目名称')]
         self.assertEqual([(f['key'], f['label']) for f in report_fields()[:3]], expected)
         self.assertEqual([(f['key'], f['label']) for f in overview_fields()[:3]], expected)
+        labels = {f['key']: f['label'] for f in overview_fields()}
+        self.assertEqual(labels['completion_rate'], '申请行入库率')
+        self.assertEqual(labels['conversion_rate'], '申请行转单率')
+
+    def test_conversion_only_counts_fully_ordered_valid_lines(self):
+        for bill, expected in [('R1', 0), ('R2', 0), ('R3', 100), ('R4', 100), ('R5', 0)]:
+            with self.subTest(bill=bill):
+                row = self.overview(keyword=bill)['items'][0]
+                self.assertEqual(float(row['conversion_rate']), expected)
+
+    def test_conversion_conditions_filter_after_counting_all_request_lines(self):
+        import json
+        from report_query_v2_contract import Connection, column_condition
+        def condition(limit):
+            return json.dumps([dict(field='conversion_rate', operator='greaterThan',
+                                    value=limit, schemaVersion=2)])
+        connection = Connection(self.db)
+        selected = reader.list_overview(connection, reader.PurchaseOverviewQuery(filters=condition(30)), ALL_DATA_SCOPE)
+        self.assertEqual(selected['items'][0]['total_lines'], 9)
+        self.assertEqual(reader.list_overview(connection,
+            reader.PurchaseOverviewQuery(column_filters=column_condition('conversion_rate', 'greaterThan', 40)), ALL_DATA_SCOPE)['total'], 0)
 
 
 if __name__ == '__main__':

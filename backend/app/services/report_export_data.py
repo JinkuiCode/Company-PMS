@@ -87,11 +87,11 @@ def purchase_batches(connection, query, scope):
 
 
 def overview_batches(connection, query, scope):
-    from app.services.purchase_reader import overview_selection
+    from app.services.purchase_reader import overview_selection, overview_order
     with overview_selection(connection, query, scope) as (base, params):
         cursor = connection.cursor()
         try:
-            cursor.execute(f'SELECT * FROM ({base}) AS selected ORDER BY {query.sort} {query.direction},organization_id,project_code', tuple(params))
+            cursor.execute(f'SELECT * FROM ({base}) AS selected ORDER BY {overview_order(query)}', tuple(params))
             while rows := cursor.fetchmany(200):
                 yield rows
         finally:

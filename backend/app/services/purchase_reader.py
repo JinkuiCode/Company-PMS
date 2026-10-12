@@ -15,7 +15,7 @@ from app.services.report_filters import Condition, parse_filters, parse_column_f
 REPORT_START_DATE = date(2026, 1, 1)
 ACCOUNTED_FIELDS = {'progress', 'ordered', 'received', 'returned', 'net_received',
                     'pending_order', 'pending_receipt', 'last_order_date', 'last_stock_date'}
-OVERVIEW_ONLY_FIELDS = {'organization_name', 'completion_rate', 'total_lines', 'not_ordered_lines',
+OVERVIEW_ONLY_FIELDS = {'organization_name', 'completion_rate', 'conversion_rate', 'total_lines', 'not_ordered_lines',
                        'ordering_lines', 'receiving_lines', 'complete_lines', 'review_lines'}
 
 
@@ -65,7 +65,7 @@ class PurchaseQuery(BaseModel):
 class PurchaseOverviewQuery(PurchaseQuery):
     view: Literal['overview'] = 'overview'
     overview_status: Literal['', 'unfinished', 'complete', 'review'] = ''
-    sort: Literal['project_code', 'completion_rate', 'total_lines'] = 'project_code'
+    sort: Literal['project_code', 'completion_rate', 'conversion_rate', 'total_lines'] = 'project_code'
     direction: Literal['asc', 'desc'] = 'asc'
 
     def conditions(self):
@@ -621,10 +621,18 @@ def overview_selection(connection, query, project_codes):
         aggregate = (f"SELECT organization_id,COALESCE(project_code,'') AS project_code,"
                      f"COUNT(*) AS total_lines,{counts} FROM ({base}) AS source "
                      "GROUP BY organization_id,COALESCE(project_code,'')")
-        projects = f'SELECT *,100.0*complete_lines/total_lines AS completion_rate FROM ({aggregate}) AS grouped'
+        projects = (f'SELECT *,100.0*complete_lines/total_lines AS completion_rate,'
+                    f'100.0*(receiving_lines+complete_lines)/total_lines AS conversion_rate FROM ({aggregate}) AS grouped')
         from app.services.purchase_query_labels import label_source
         projects, params = label_source(projects, params, query, final_conditions, final_overview=True)
         yield f'SELECT * FROM ({projects}) AS projects WHERE {where}', params
+
+
+def overview_order(query):
+    terms = {query.sort: f'{query.sort} {query.direction}'}
+    for field in ('organization_id', 'project_code'):
+        terms.setdefault(field, field)
+    return ','.join(terms.values())
 
 
 def list_overview(connection, query, project_codes):
@@ -635,7 +643,7 @@ def list_overview(connection, query, project_codes):
                       'COALESCE(SUM(complete_lines),0) AS complete_lines,COALESCE(SUM(review_lines),0) AS review_lines '
                       'FROM selected', params)[0]
         start = (query.page - 1) * query.page_size
-        order = f'{query.sort} {query.direction},organization_id,project_code'
+        order = overview_order(query)
         sql = f'WITH selected AS ({base}), numbered AS (SELECT *,ROW_NUMBER() OVER (ORDER BY {order}) AS row_number FROM selected) SELECT * FROM numbered WHERE row_number>%s AND row_number<=%s ORDER BY row_number'
         items = _rows(connection, sql, [*params, start, start + query.page_size]) if stats['total'] else []
         for row in items:

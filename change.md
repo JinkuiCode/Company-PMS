@@ -1,5 +1,21 @@
 # PMS 变更记录
 
+## 2026-10-12 采购总进度入库率、完全转单率与首列产品线（开发机）
+
+- 原因：用户要求原完成率改为申请行入库率、增加申请行转单率，并默认首列显示产品线；明确转单率只计完全转单，不含部分下单。
+- 调整：保持completion_rate接口键及原分子；conversion_rate使用（待入库+已完成）/全部申请行，两率待核对计分母、不计分子。统一字段元数据同步查询/列筛选/排序/导出/字段目录，复用既有百分比进度条。旧个人布局和方案补首列产品线和转单率，保留列宽与其他偏好；保存的新布局标记迁移版本后仍允许自定义。修复审查发现的旧方案新增列残留排序，明确空排序状态，并在无方案排序时恢复项目编码升序。
+- 涉及：backend/app/services/{purchase_fields,purchase_reader,report_export_data}.py；backend/tests/{purchase_overview,purchase_overview_export,report_export}_contract.py；frontend/src/api/purchaseReport.ts、views/reports/{PurchaseOverviewList.vue,purchase-overview-layout.ts}；frontend/tests/purchase-overview-{layout.test,rates-browser}.mjs；docs/采购进度查询报表说明.md、本批规格/计划；change.md。
+- 验证：公式/新增字段与旧布局迁移先RED后GREEN；采购78项、报表查询v2 38项、真实Excel导出11项、前端工作区20项/布局3项通过。四项前端必需契约、数据字典/枚举契约及后端字段目录/枚举契约退出0；最终构建退出0（既有大分块警告）。隔离真实Vue/AG Grid浏览器验证90.7%/96.3%、隐藏产品线旧偏好及旧方案迁移首列/137px宽度、转单率排序、导出字段与已提交范围；排序审查回归在修复前RED，修复后重选旧方案并刷新仍恢复项目编码，1440/1182/390px无页面横溢出。真实金蝶只读A-202503返回组织499413，216申请行/196完成/12待入库，两率90.740740740740%/96.296296296296%。截图outputs/purchase-overview-rates-20261012/。
+- 真实开发机补验：关闭被只读入口复用、未加载配置的旧后端5062后，用户启动的新后端6413已加载既有只读配置，K3_READ_ONLY=true、ERP_SYNC_WORKER_ENABLED=false。实际登录页面查询A-202503成功，当前账号范围内返回3个项目组织组合；12吋Bench行显示216申请行、90.7%入库率、96.3%转单率，产品线首列。真实后台导出任务4f2a79e5完成3条并下载，读取XLSX核对首列及两率完整精度与列表一致。页面截图outputs/purchase-overview-rates-20261012/live-overview.png。
+- 边界：程序仅在当前功能分支，未提交、合并、推送或发布正式环境；无数据库升级、业务数据/权限修改。真实查询和导出仅在开发机验收，不宣称正式环境修复已发布。
+
+## 2026-10-12 采购总进度导出重复排序修复（开发机）
+
+- 原因：正式A000645导出A-202503总进度失败；只读复现SQL Server 169，项目编码在最终ORDER BY重复出现，权限校验通过，并非超时。
+- 调整：分页和后台总进度导出共用去重排序表达式，保留原主排序方向及组织/项目稳定排序；不改统计口径、查询条件或权限。
+- 涉及：backend/app/services/purchase_reader.py、report_export_data.py；backend/tests/purchase_overview_export_contract.py；docs/superpowers/plans/2026-10-12-purchase-overview-export-fix.md；change.md。
+- 验证：模拟SQL Server最终排序唯一约束的真实关系数据回归先RED后GREEN，覆盖三种排序双方向及空授权；采购相关76项与后台导出10项均退出0。真实金蝶只读查询原A-202503条件返回1条，216申请行、196完成行、90.740740740740%；git diff --check通过。未更新正式源码、未生成正式导出任务、未改数据库/权限/业务数据，未合并或推送。追加两项比率与首列调整尚待转单业务口径确认，不记为已完成。
+
 ## 2026-10-11 样稿控件等高与引用摘要修订
 
 - 原因：用户指出三页样稿同一行字段框与按钮高度不一，多选引用需要展示缩略信息且不得溢出。

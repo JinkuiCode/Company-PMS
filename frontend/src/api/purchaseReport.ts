@@ -42,7 +42,7 @@ export interface PurchaseQueryDraft {
 }
 export interface PurchaseOverviewRow {
   id: string; organization_id: number; project_code: string; product_line_name: string; project_name: string | null
-  organization_name: string; total_lines: number; completion_rate: number | string
+  organization_name: string; total_lines: number; completion_rate: number | string; conversion_rate: number | string
   complete_lines: number; review_lines: number
   [key: string]: string | number | null
 }

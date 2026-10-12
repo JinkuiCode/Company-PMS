@@ -13,6 +13,48 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 class WorkbookTests(unittest.TestCase):
+    def test_overview_workbook_exports_both_rates_with_shared_labels(self):
+        from types import SimpleNamespace
+        from contextlib import nullcontext
+        import json
+        import purchase_reader_contract as fixture
+        from purchase_overview_export_contract import SqlServerOrderConnection
+        from app.services.purchase_reader import PurchaseOverviewQuery
+        from app.services.business_data_scope import ALL_DATA_SCOPE
+        from app.services.report_export_data import write_report
+        source = fixture.ReaderContract()
+        self.addCleanup(source.doCleanups)
+        database, _ = source.classification_fixture()
+        database.execute('CREATE TABLE IF NOT EXISTS T_ORG_ORGANIZATIONS_L(FORGID,FLOCALEID,FNAME)')
+        database.execute("INSERT INTO T_ORG_ORGANIZATIONS_L VALUES (100,2052,'测试组织')")
+        job = SimpleNamespace(report='purchase', parameters=PurchaseOverviewQuery(sort='conversion_rate').model_dump_json(),
+            columns=json.dumps(['product_line_name', 'completion_rate', 'conversion_rate', 'total_lines']))
+        def line_names(db, connection, rows):
+            for row in rows:
+                row['product_line_name'] = '测试产品线'
+        with tempfile.TemporaryDirectory() as folder, \
+                patch('app.services.report_export_data.purchase_connection', lambda: nullcontext(SqlServerOrderConnection(database))), \
+                patch('app.api.purchase_reports.project_scope', return_value=ALL_DATA_SCOPE), \
+                patch('app.api.purchase_reports.enrich_project_names'), \
+                patch('app.api.purchase_reports.enrich_product_lines', side_effect=line_names), \
+                patch('app.api.purchase_reports.resolve_project_references'), \
+                patch('app.services.purchase_query_labels.resolve_query_labels'):
+            path = Path(folder) / 'overview.xlsx'
+            checkpoints = []
+            write_report(None, job, {}, path, checkpoints.append)
+            with zipfile.ZipFile(path) as archive:
+                ns = {'x': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+                rows = ET.fromstring(archive.read('xl/worksheets/sheet1.xml')).findall('.//x:row', ns)
+                headers = [c.find('x:is/x:t', ns).text for c in rows[0]]
+                self.assertEqual(headers, ['产品线', '申请行入库率', '申请行转单率', '申请行数'])
+                values = list(rows[1])
+                self.assertEqual(values[0].find('x:is/x:t', ns).text, '测试产品线')
+                def number(cell):
+                    return float(cell.findtext('x:v', namespaces=ns) or cell.findtext('x:is/x:t', namespaces=ns))
+                self.assertAlmostEqual(number(values[1]), 100 / 9)
+                self.assertAlmostEqual(number(values[2]), 300 / 9)
+            self.assertEqual(checkpoints[-1], 1)
+
     def test_purchase_export_indexes_snapshot_and_filters_after_summary(self):
         from app.services.report_export_data import purchase_batches, matches_progress
         from app.services.purchase_reader import PurchaseQuery
