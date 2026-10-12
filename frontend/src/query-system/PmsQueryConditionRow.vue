@@ -13,7 +13,7 @@ const referenceOpen=ref(false)
 const resolved=ref<ReferenceRecord[]>([])
 let resolution=0
 const selectedValues=computed(() => props.condition.operator==='reference'&&Array.isArray(props.condition.value)?props.condition.value:[])
-const summary=computed(() => referenceSummary(selectedValues.value,resolved.value,field.value?.field==='project_code'))
+const summary=computed(() => referenceSummary(selectedValues.value,resolved.value,field.value?.field==='project_code',reference.value?.display==='name'?'名称不可用':undefined))
 const reference=computed(()=>{
   const f=field.value;if(!f)return null
   const source=f.reference||(f.type==='enum'?optionReference(f.label,f.field,f.options||[]):null)

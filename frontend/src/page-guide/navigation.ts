@@ -14,6 +14,10 @@ export const guideDestinations = {
   stock: { permission: 'report:stock-detail:list' },
 } satisfies Record<PageGuideKey, { permission: string }>
 
+export function isPublicGuidePath(path: string): boolean {
+  return Object.keys(guideDestinations).some(page => path === `/page-guide/${page}`)
+}
+
 export function guideTabHref(page: PageGuideKey, state: GuideViewState): string {
   // Guide-only state stays in the fragment, separate from authentication and business queries.
   const hash = new URLSearchParams({ section: state.section, group: state.group, search: state.search })

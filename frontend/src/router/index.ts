@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { rememberLoginDestination, consumeLoginDestination, chooseLoginDestination } from '@/utils/loginDestination'
-import { guideDestinations } from '@/page-guide/navigation'
+import { guideDestinations, isPublicGuidePath } from '@/page-guide/navigation'
 
 const routes: RouteRecordRaw[] = [
   ...Object.entries(guideDestinations).map(([page, destination]): RouteRecordRaw => ({
@@ -167,6 +167,8 @@ const PUBLIC_PATHS = ['/login', '/sso/login', '/sso/start', '/sso/callback']
 
 // 路由守卫：URL 参数 token 自动保存，未登录跳转到登录页
 router.beforeEach(async (to) => {
+  // Only static instructions are public; do not consume tokens or initialize a business session here.
+  if (isPublicGuidePath(to.path)) return true
   if (PUBLIC_PATHS.includes(to.path)) rememberLoginDestination(to.query.redirect)
   // 处理 URL 参数中的 token（来自 SSO 登录页重定向）
   const urlToken = to.query.token as string

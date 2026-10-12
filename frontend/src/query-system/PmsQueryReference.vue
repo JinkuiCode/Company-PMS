@@ -9,6 +9,8 @@ const emit=defineEmits<{'update:modelValue':[value:boolean];confirm:[value:(stri
 const keyword=ref(''),appliedKeyword=ref(''),selected=ref<(string|number)[]>([]),page=ref(1),pageSize=ref(50)
 const line=ref<number|null>(null),appliedLine=ref<number|null>(null)
 const lineOptions=computed(()=>props.reference.lineOptions?.()||[])
+const namesOnly=computed(()=>props.reference.display==='name')
+const recordLabel=(record:ReferenceRecord)=>namesOnly.value?record.name:`${record.code} ${record.name}`
 const rows=ref<ReferenceRecord[]>([]),total=ref(0),cache=ref(new Map<string|number,ReferenceRecord>()),host=ref<HTMLElement|null>(null)
 const loading=ref(false),error=ref(''),batchOpen=ref(false),batchText=ref(''),batchField=ref<'code'|'name'>('code'),batchError=ref('')
 const batch=ref<(ReturnType<typeof referenceBatchReport> & {values:string[];duplicates:number;records:ReferenceRecord[]})|null>(null)
@@ -48,7 +50,7 @@ async function loadPage() {
 }
 async function open() {
   const version=++serial;loading.value=true;error.value='';cache.value.clear();rows.value=[];total.value=0
-  selected.value=[...props.value];keyword.value='';appliedKeyword.value='';line.value=null;appliedLine.value=null;page.value=1;batch.value=null;batchOpen.value=false;batchText.value='';batchError.value=''
+  selected.value=[...props.value];keyword.value='';appliedKeyword.value='';line.value=null;appliedLine.value=null;page.value=1;batch.value=null;batchOpen.value=false;batchText.value='';batchError.value='';batchField.value=namesOnly.value?'name':'code'
   try {
     if(selected.value.length) {const records=await collect({ids:selected.value},version);if(!records)return;remember(records)}
     if(version!==serial)return
@@ -58,7 +60,7 @@ async function open() {
 }
 watch(()=>props.modelValue,opened=>{if(opened)void open();else {++serial;loading.value=false}}, {immediate:true})
 function query(){appliedKeyword.value=keyword.value;appliedLine.value=line.value;batch.value=null;page.value=1;batchError.value='';void loadPage()}
-function reset(){keyword.value='';line.value=null;batchText.value='';batchField.value='code';query()}
+function reset(){keyword.value='';line.value=null;batchText.value='';batchField.value=namesOnly.value?'name':'code';query()}
 async function queryBatch(){
   let input:ReturnType<typeof parseReferenceBatch>
   try{input=parseReferenceBatch(batchText.value)}catch(e){batchError.value=(e as Error).message;return}
@@ -81,14 +83,14 @@ function confirm(){if(loading.value||error.value||unavailable.value)return;emit(
   <el-dialog :model-value="modelValue" :title="`引用${reference.title}`" width="min(820px, calc(100vw - 24px))" class="pms-query-reference-dialog" :style="{maxHeight:'calc(100dvh - 24px)',overflow:'auto'}" align-center append-to-body destroy-on-close :close-on-click-modal="false" @update:model-value="emit('update:modelValue',$event)">
     <div ref="host" class="reference-picker pms-query-density" :aria-busy="loading">
       <form class="reference-toolbar" @submit.prevent="query">
-        <PmsTextControl v-model="keyword" size="compact" clearable :prefix-icon="Search" :placeholder="`搜索${reference.title}编码 / 名称`" aria-label="搜索引用记录" />
-        <PmsSelectControl v-if="lineOptions.length" v-model="line" :options="lineOptions" size="compact" clearable placeholder="全部可选产品线" aria-label="引用产品线" />
+        <PmsTextControl v-model="keyword" size="compact" clearable :prefix-icon="Search" :placeholder="`搜索${reference.title}${namesOnly?'名称':'编码 / 名称'}`" aria-label="搜索引用记录" />
+        <PmsSelectControl v-if="lineOptions.length" v-model="line" :options="lineOptions" :append-to="host" size="compact" clearable placeholder="全部可选产品线" aria-label="引用产品线" />
         <el-button type="primary" :icon="Search" native-type="submit">查询</el-button>
         <el-button class="pms-button-auxiliary" :icon="RefreshLeft" @click="reset">重置</el-button>
         <el-button class="pms-button-auxiliary" :icon="DocumentCopy" :aria-pressed="batchOpen" @click="batchOpen=!batchOpen">批量粘贴</el-button>
       </form>
       <section v-if="batchOpen" class="reference-batch" aria-label="批量粘贴查询">
-        <div class="reference-batch-input"><PmsTextareaControl v-model="batchText" :rows="3" aria-label="批量查询数据" placeholder="从 Excel 复制一列编码或名称，每行一个值" :error="batchError" /><div class="reference-batch-tools"><PmsSelectControl v-model="batchField" :options="[{value:'code',label:'编码'},{value:'name',label:'名称'}]" size="compact" aria-label="批量匹配字段" /><el-button type="primary" :icon="Search" @click="queryBatch">批量查询</el-button></div></div>
+        <div class="reference-batch-input"><PmsTextareaControl v-model="batchText" :rows="3" aria-label="批量查询数据" :placeholder="namesOnly?'从 Excel 复制一列产品线名称，每行一个值':'从 Excel 复制一列编码或名称，每行一个值'" :error="batchError" /><div class="reference-batch-tools"><PmsSelectControl v-if="!namesOnly" v-model="batchField" :options="[{value:'code',label:'编码'},{value:'name',label:'名称'}]" :append-to="host" size="compact" aria-label="批量匹配字段" /><el-button type="primary" :icon="Search" @click="queryBatch">批量查询</el-button></div></div>
         <p v-if="batchError" role="alert" class="reference-error">{{ batchError }}</p>
         <div v-if="batch" class="reference-batch-report" role="status">
           <span>输入 {{ batch.values.length }} 项 · 匹配 {{ batch.records.length }} 条 · 未匹配 {{ batch.unmatched.length }} 项</span><span v-if="batch.duplicates"> · 重复 {{ batch.duplicates }} 项已合并</span>
@@ -99,14 +101,14 @@ function confirm(){if(loading.value||error.value||unavailable.value)return;emit(
       <p v-if="error" class="reference-error" role="alert">{{ error }}</p>
       <p v-if="selected.length>1000" class="reference-error" role="alert">单个引用条件最多1000条，请减少选择或分批查询</p>
       <div class="reference-scroll" :class="{'is-loading':loading}">
-        <table class="reference-table" aria-label="引用记录列表"><thead><tr><th class="reference-selection"><PmsCheckboxControl :model-value="all" :indeterminate="partial" :disabled="loading||!!error" size="compact" aria-label="全选当前页" @update:model-value="selectPage" /></th><th>编码</th><th>名称</th><th v-if="hasLine">产品线</th><th v-if="hasStatus">状态</th></tr></thead>
-          <tbody><tr v-for="record in visible" :key="record.value" :class="{'is-selected':selected.includes(record.value)}"><td class="reference-selection"><PmsCheckboxControl :model-value="selected.includes(record.value)" :disabled="loading||!!error" size="compact" :aria-label="`选择${record.code} ${record.name}`" @update:model-value="choose(record.value,$event)" /></td><td :title="record.code">{{ record.code }}</td><td :title="record.name">{{ record.name }}</td><td v-if="hasLine" :title="record.lineName">{{ record.lineName }}</td><td v-if="hasStatus"><span class="pms-status" :class="record.status==='启用'?'pms-status-success':'pms-status-muted'">{{ record.status }}</span></td></tr></tbody>
+        <table class="reference-table" aria-label="引用记录列表"><thead><tr><th class="reference-selection"><PmsCheckboxControl :model-value="all" :indeterminate="partial" :disabled="loading||!!error" size="compact" aria-label="全选当前页" @update:model-value="selectPage" /></th><th v-if="!namesOnly">编码</th><th>名称</th><th v-if="hasLine">产品线</th><th v-if="hasStatus">状态</th></tr></thead>
+          <tbody><tr v-for="record in visible" :key="record.value" :class="{'is-selected':selected.includes(record.value)}"><td class="reference-selection"><PmsCheckboxControl :model-value="selected.includes(record.value)" :disabled="loading||!!error" size="compact" :aria-label="`选择${recordLabel(record)}`" @update:model-value="choose(record.value,$event)" /></td><td v-if="!namesOnly" :title="record.code">{{ record.code }}</td><td :title="record.name">{{ record.name }}</td><td v-if="hasLine" :title="record.lineName">{{ record.lineName }}</td><td v-if="hasStatus"><span class="pms-status" :class="record.status==='启用'?'pms-status-success':'pms-status-muted'">{{ record.status }}</span></td></tr></tbody>
         </table>
         <div v-if="loading" class="reference-empty" role="status">正在加载引用记录…</div><div v-else-if="!visible.length&&!error" class="reference-empty">没有符合条件的引用记录</div>
       </div>
       <CustomPagination v-model="page" v-model:page-size="pageSize" :total="total" @update:model-value="changePage" @update:page-size="page=1;changePage()" />
       <section class="reference-chosen" aria-label="已选明细"><div class="reference-chosen-heading"><strong>已选明细（{{ selected.length }} 条）</strong><el-button class="pms-button-auxiliary" text :disabled="!selected.length" @click="selected=[]">清空选择</el-button></div>
-        <div v-if="selected.length" class="reference-chosen-scroll"><table class="reference-table" aria-label="已选记录列表"><thead><tr><th>编码</th><th>名称</th><th v-if="hasLine">产品线</th><th class="reference-remove">操作</th></tr></thead><tbody><tr v-for="record in selectedRecords" :key="record.value"><td :title="record.code">{{ record.code }}</td><td :title="record.name">{{ record.name }}</td><td v-if="hasLine">{{ record.lineName }}</td><td class="reference-remove"><el-button type="danger" text :aria-label="`移除${record.code} ${record.name}`" @click="choose(record.value,false)">移除</el-button></td></tr></tbody></table></div><div v-else class="reference-empty-chosen">尚未选择记录</div>
+        <div v-if="selected.length" class="reference-chosen-scroll"><table class="reference-table" aria-label="已选记录列表"><thead><tr><th v-if="!namesOnly">编码</th><th>名称</th><th v-if="hasLine">产品线</th><th class="reference-remove">操作</th></tr></thead><tbody><tr v-for="record in selectedRecords" :key="record.value"><td v-if="!namesOnly" :title="record.code">{{ record.code }}</td><td :title="record.name">{{ record.name }}</td><td v-if="hasLine">{{ record.lineName }}</td><td class="reference-remove"><el-button type="danger" text :aria-label="`移除${recordLabel(record)}`" @click="choose(record.value,false)">移除</el-button></td></tr></tbody></table></div><div v-else class="reference-empty-chosen">尚未选择记录</div>
       </section>
     </div>
     <template #footer><div class="reference-footer"><span>已选 {{ selected.length }} 条</span><div><el-button class="pms-button-auxiliary" @click="close">取消</el-button><el-button type="primary" :disabled="loading||!!error||unavailable||selected.length>1000" @click="confirm">确认引用</el-button></div></div></template>

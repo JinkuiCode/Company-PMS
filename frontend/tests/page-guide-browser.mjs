@@ -190,12 +190,19 @@ try {
   }
   assert.deepEqual(businessCalls, [], '独立说明页签不能触发报表查询')
   const anonymous = await browser.newContext()
+  const anonymousCalls = []
+  anonymous.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/')) anonymousCalls.push(request.url()) })
   const authPage = await anonymous.newPage()
   for (const key of ['archive', 'purchase', 'inventory', 'stock']) {
     await authPage.goto(`${base}/page-guide/${key}`)
-    await expect(authPage).toHaveURL(`${base}/login`)
-    await expect(authPage.locator('.pms-guide-content')).toHaveCount(0)
+    await expect(authPage).toHaveURL(`${base}/page-guide/${key}`)
+    await expect(authPage.locator('.pms-guide-content')).toBeVisible()
+    await authPage.reload()
+    await expect(authPage.locator('.pms-guide-content')).toBeVisible()
   }
+  assert.deepEqual(anonymousCalls, [], '静态说明页不访问认证或业务接口')
+  await authPage.goto(`${base}/project/archive`)
+  await expect(authPage).toHaveURL(`${base}/login`)
   await anonymous.close()
   const denied = await browser.newContext()
   await denied.addInitScript(() => localStorage.setItem('access_token', 'isolated-denied-test'))
@@ -209,13 +216,14 @@ try {
   deniedPage.on('console', message => { if (message.type() === 'error') console.error('Denied console:', message.text()) })
   for (const key of ['archive', 'purchase', 'inventory', 'stock']) {
     await deniedPage.goto(`${base}/page-guide/${key}`)
-    await expect(deniedPage.getByRole('heading', { name: '无权访问此页面' })).toBeVisible()
-    await expect(deniedPage).toHaveURL(`${base}/403`)
-    await expect(deniedPage.locator('.pms-guide-content')).toHaveCount(0)
+    await expect(deniedPage).toHaveURL(`${base}/page-guide/${key}`)
+    await expect(deniedPage.locator('.pms-guide-content')).toBeVisible()
   }
+  await deniedPage.goto(`${base}/reports/purchase-progress`)
+  await expect(deniedPage).toHaveURL(`${base}/403`)
   await denied.close()
   assert.deepEqual(errors, [])
-  console.log('PASS page guide B: four page popups, state/reload/no opener, auth guards, no report queries, compact widths, OA iframe 1366/1024/900/574')
+  console.log('PASS page guide B: four page popups, state/reload/no opener, static public guides, protected business pages, no report queries, compact widths, OA iframe 1366/1024/900/574')
 } catch (error) {
   console.error('Guide failure:', page?.url(), errors, await page?.locator('body').innerText())
   await page?.screenshot({ path: `${output}/implemented-failure.png` })

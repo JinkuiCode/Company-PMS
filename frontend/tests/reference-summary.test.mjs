@@ -10,4 +10,5 @@ assert.deepEqual(referenceSummary([1,2,3,4,1],records), {text:'产品线1、产�
 assert.equal(referenceSummary(['A-202638','A-202640']).text,'A-202638、A-202640')
 assert.equal(referenceSummary([1,2],records.slice(0,1)).text,'产品线1、2')
 assert.equal(referenceSummary([1],[{...records[0],name:'',code:'编号1'}]).text,'编号1')
+assert.deepEqual(referenceSummary([499413], [], false, '名称不可用'), {text:'名称不可用',title:'名称不可用',count:1}, '名称引用在加载或失效时不得泄露编号')
 console.log('reference summary behavior passed')

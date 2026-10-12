@@ -1704,3 +1704,20 @@
 - 涉及文件：frontend/src/page-guide/PmsPageGuide.vue、PmsPageGuideContent.vue、新增PmsPageGuidePage.vue及navigation.ts；frontend/src/router/index.ts；frontend/tests/page-guide-tab.test.mjs、page-guide-browser.mjs；docs/PMS-UI-STANDARD.md及本批实施计划。
 - 验证：先RED后GREEN，说明状态3项、相关前端合计80项、样式/列表/系统UI/档案筛选契约及npm run build退出0，仅既有包体警告。隔离浏览器四页面新页签、分组/搜索/刷新、原页不变、无opener、未登录及无权限拦截、无报表查询通过；模拟OA iframe 1366×768、1024×600、900×420、574×520无越界，按钮24px。实际用户5174页面点击按钮打开独立采购说明，搜索“转单率”与字段逻辑保持，页签已留供验收。截图位于outputs/page-guide-20261012/。测试接口拦截曾误命中源码模块，缩小到实际/api路径后修复，认证代码未改。
 - 边界：只更新开发机，未部署服务器、修改数据库或授权，未提交、合并、推送；真实公司OA新页签效果仍待正式发布后验收。
+
+### 2026-10-12：页面说明与报表显示正式部署
+- 原因：用户验收后要求更新服务器。
+- 调整：将本批已验收说明B/新页签、共享紧凑查询、报表产品线显示及公开字段整理固定为功能分支提交21087c7，独立构建并发布到10.10.1.228；保留旧程序、前端、Git历史/索引及受保护配置，index.html最后原子切换。只停启PMS，数据库版本及业务、权限、基础资料保持。
+- 涉及文件：本批frontend/src/page-guide、query-system、报表/档案页面及backend报表显示/导出服务；.runtime/page-guide-release-20261012/发布脚本、传输和格式回归；docs/superpowers/plans/2026-10-12-page-guide-server-release.md、docs/releases/PMS页面说明与报表显示发布记录-20261012.md及本日志。
+- 验证：固定提交构建、bundle和838项文件清单通过，服务器published-verified/PAGE_GUIDE_PUBLICATION_VERIFIED EXIT_0；健康、实际入口与文件哈希匹配，数据/授权/配置校验不变。限定真实采购查询及1条Excel校验、库存和收发只读查询通过。正式Mac Edge检查4页说明及采购按钮打开新页签，“字段逻辑/转单率”继承，库存/收发产品线首列、库存无组织公开列和326px条件组均核对。截图在outputs/page-guide-server-20261012/。
+- 发布修复：远程输入异常没有执行命令；用户输入后，缺少文本响应类型导致PowerShell将脚本当字节数组，发布未启动。新增传输格式回归先RED后GREEN，修正text/plain;charset=utf-8后重试成功；未改变认证、网络隔离或安全保护。
+- 边界：未升级数据库、修改业务数据或权限，未重启SQL Server/OA/服务器；临时传输已关闭。仅提交功能分支，未合并master、推送GitHub或创建PR；真实OA/Windows业务验收待用户反馈，其他未提交资料保留。
+
+### 2026-10-12：列筛选自动关闭、静态说明免登录及产品线名称引用
+- 原因：用户正式OA实测发现漏斗弹窗可同时保留多个、说明新页签需再次登录，并批准产品线引用隐藏编码；本批先在开发机修复，不自动部署。
+- 调整：共享列筛选增加全页互斥，点击外部、同列标题或另一漏斗关闭；OA嵌入失去窗口焦点时关闭，不访问父级。关闭及卸载销毁内容、移除监听、释放草稿并使旧异步响应失效；未应用修改不生效，既有已应用筛选不变。内部下拉/日期挂载到所属面板，引用弹窗的产品线和批量匹配下拉挂载到引用区域，避免误关外层。
+- 说明边界：仅四个精确静态说明路径免登录读取，不请求认证或业务接口、不消费URL登录凭据、不初始化业务会话；业务页及后端接口原登录/授权校验不变，OA登录回调和ERP接口未修改。保留新页签的说明页签、分组、搜索及刷新状态，继续使用noopener/noreferrer。
+- 引用：产品线共享名称显示模式覆盖候选、已选、可访问标签及摘要；按名称搜索和Excel批量匹配，加载或失效时不回退显示编号。后台仍按稳定产品线/组织编号精确匹配，其他档案保留编码和名称，不改业务数据或数据范围。
+- 涉及文件：frontend/src/query-system/PmsQueryColumnHeader.vue、column-popup.ts、PmsQueryConditionRow.vue、PmsQueryReference.vue、reference.ts、reference-summary.ts；frontend/src/page-guide/navigation.ts、router/index.ts；tests/query-popup-fixes.test.mjs、query-popup-fixes-browser.mjs、fixtures/query-popup.*、page-guide-browser.mjs、reference-summary.test.mjs；docs/PMS-UI-STANDARD.md及本日志。
+- 验证：新增访问白名单、名称查询、互斥管理、未解析摘要及外部点击测试先RED后GREEN；最终相关前端22项、四项必需规范检查、TypeScript及生产构建退出0，仅既有包体警告。隔离真实组件验证五漏斗互斥、外部/同列标题/重复点击/Esc关闭、保留已应用条件、丢弃未应用草稿、晚到响应不恢复弹窗、卸载清理、内部下拉/日期/嵌套引用及其两类下拉、名称跨搜索累计勾选与批量查询、OA iframe外部点击。四静态说明匿名及无页面授权时可阅读/刷新且零API调用，业务页未登录及撤权仍拦截；原说明B多尺寸嵌入及新页签状态回归退出0。独立审查发现嵌套引用下拉传送到body导致误关闭，补回归复现并修复后复核无阻塞项。
+- 实页与边界：用户从只读入口启动后，实际5174产品线候选仅名称；档案样本连续五列打开均只有一个面板，外部点击后为零。证据在outputs/query-popup-fixes-20261012/。未部署正式环境，未改数据库/业务授权/配置、触发金蝶写入、提交、合并master或推送GitHub；正式OA实测留待后续发布验收。
