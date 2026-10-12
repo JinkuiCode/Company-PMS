@@ -212,7 +212,7 @@ def reference_options(field: Literal['project_code', 'project_name'], keyword: s
                       exact_values: str | None = Query(None, max_length=12000),
                       ids: list[Annotated[int, Field(gt=0)]] = Query(default=[], max_length=1000),
                       organization_ids: list[Annotated[int, Field(gt=0)]] = Query(default=[], max_length=200),
-                      page: int = Query(1, ge=1, le=1000000), page_size: int = Query(50, ge=1, le=200),
+                      page: int = Query(1, ge=1, le=1000000), page_size: int = Query(50, ge=1, le=500),
                       db: Session = Depends(get_db), ctx=Depends(require_permission('report:purchase:view'))):
     query = (get_scoped_archive_query(db, ctx)
         .join(SysProductLine, SysProductLine.id == PmsProjectArchive.business_product_line_id)

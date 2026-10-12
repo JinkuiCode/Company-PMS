@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount } from 'vue'
-import { Filter, Search, Sort } from '@element-plus/icons-vue'
+import { Close, Filter, Search, Sort } from '@element-plus/icons-vue'
 import { PmsTextControl, PmsCheckboxControl } from '@/form-system'
 import { cloneQuery, operatorsForField, validateConditions, type QueryCondition } from './core'
 import type { ColumnQueryContext, ColumnCandidate, ColumnFilter } from './column-filters'
@@ -57,18 +57,18 @@ function apply(){
     <el-popover :visible="opened" :persistent="false" placement="bottom" :width="336" trigger="click">
       <template #reference><button ref="trigger" type="button" class="pms-column-filter-trigger" :class="{'is-filtered':applied}" :disabled="context.ready?.()===false" :aria-label="`${field.label}列筛选`" :aria-expanded="opened" @click.stop="opened?close():open()"><el-icon><Filter /></el-icon></button></template>
       <section v-if="opened" ref="panel" class="pms-column-filter-panel pms-query-density" role="dialog" :aria-label="`${field.label}列筛选面板`" @keydown.esc.stop="close">
-        <header><strong>{{field.label}}筛选</strong><el-button type="warning" text @click="close">关闭</el-button></header>
-        <div class="pms-column-filter-sort"><el-button v-if="context.sort" type="primary" plain :icon="Sort" @click="context.sort(field.field,'asc')">升序</el-button><el-button v-if="context.sort" type="primary" plain :icon="Sort" @click="context.sort(field.field,'desc')">降序</el-button><el-button type="warning" text :disabled="!applied" @click="clear">清除此列</el-button></div>
-        <div class="pms-column-filter-tabs"><el-button type="primary" :plain="mode!=='values'" @click="mode='values'">勾选值</el-button><el-button type="primary" :plain="mode!=='condition'" @click="mode='condition'">按条件</el-button></div>
+        <header><strong>{{field.label}}筛选</strong><button type="button" class="pms-button-dismiss pms-column-filter-close" aria-label="关闭筛选" title="关闭筛选" @click="close"><el-icon><Close /></el-icon></button></header>
+        <div class="pms-column-filter-sort"><el-button v-if="context.sort" class="pms-button-auxiliary" :icon="Sort" @click="context.sort(field.field,'asc')">升序</el-button><el-button v-if="context.sort" class="pms-button-auxiliary" :icon="Sort" @click="context.sort(field.field,'desc')">降序</el-button><el-button type="warning" plain :disabled="!applied" @click="clear">清除此列</el-button></div>
+        <div class="pms-column-filter-tabs"><el-button class="pms-button-auxiliary" :class="{'is-active':mode==='values'}" @click="mode='values'">勾选值</el-button><el-button class="pms-button-auxiliary" :class="{'is-active':mode==='condition'}" @click="mode='condition'">按条件</el-button></div>
         <template v-if="mode==='values'">
           <form class="pms-column-search" @submit.prevent="load()"><PmsTextControl v-model="keyword" size="compact" clearable placeholder="搜索筛选值" aria-label="搜索筛选值" /><el-button type="primary" :icon="Search" :loading="loading" @click="load()">查询</el-button></form>
           <PmsCheckboxControl :model-value="items.length>0&&items.every(i=>selected.includes(i.value))" :indeterminate="items.some(i=>selected.includes(i.value))&&!items.every(i=>selected.includes(i.value))" size="compact" @update:model-value="all">全选已加载值</PmsCheckboxControl>
           <div class="pms-column-filter-values"><PmsCheckboxControl v-for="item in items" :key="JSON.stringify(item.value)" :model-value="selected.includes(item.value)" size="compact" @update:model-value="toggle(item.value,$event)"><span :title="item.label">{{item.label}}</span><span v-if="item.count!=null" class="pms-column-filter-count">{{item.count}}</span></PmsCheckboxControl><span v-if="!items.length&&!loading">暂无匹配值</span></div>
-          <el-button v-if="hasMore" type="primary" plain :loading="loading" @click="page++;load(false)">加载更多</el-button>
+          <el-button v-if="hasMore" class="pms-button-auxiliary" :loading="loading" @click="page++;load(false)">加载更多</el-button>
         </template>
         <PmsQueryConditionRow v-else-if="condition" :condition="condition" :fields="[field]" :append-to="panel" fixed-field prefix="列筛选" @update="condition=$event;error=''" />
         <p v-if="error" role="alert" class="pms-query-error">{{error}}</p>
-        <footer><span>本次查询全部结果</span><el-button type="warning" plain @click="close">取消</el-button><el-button type="success" :disabled="loading||!!error" @click="apply">应用</el-button></footer>
+        <footer><span>仅筛选当前页</span><el-button type="warning" plain @click="close">取消</el-button><el-button class="pms-button-export" :disabled="loading||!!error" @click="apply">应用</el-button></footer>
       </section>
     </el-popover>
   </div>
@@ -83,6 +83,8 @@ function apply(){
 .pms-column-filter-sort,.pms-column-filter-tabs,.pms-column-search{display:flex;gap:6px;margin:6px 0;}
 .pms-column-search>.pms-form-control{flex:1;min-width:0;}
 .pms-column-filter-panel .el-button{margin:0;}
+.pms-column-filter-close{width:24px;height:24px;padding:0;}
+.pms-column-filter-tabs .is-active{color:var(--pms-primary);background:var(--pms-primary-soft);border-color:var(--pms-border);}
 .pms-column-filter-values{max-height:230px;min-height:120px;overflow:auto;display:flex;flex-direction:column;gap:4px;padding:6px 0;}
 .pms-column-filter-values span[title]{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .pms-column-filter-count{margin-left:6px;color:var(--pms-text-muted);font-variant-numeric:tabular-nums;}

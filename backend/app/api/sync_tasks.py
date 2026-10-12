@@ -22,7 +22,7 @@ def ensure_task_access(db, task_id, ctx):
 
 
 @router.get('')
-def list_tasks(page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100),
+def list_tasks(page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=500),
                keyword: str = '', status: str = '', operator: str = '', start: datetime | None = None,
                end: datetime | None = None, filters: str | None = Query(None, max_length=64000),
                column_filters: str | None = Query(None, max_length=64000), db: Session = Depends(get_db),
@@ -48,7 +48,7 @@ def task_column_values(field: str = Query(..., max_length=64), keyword: str = Qu
 
 
 @router.get('/archive/{archive_id}')
-def archive_tasks(archive_id: int, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=100),
+def archive_tasks(archive_id: int, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=500),
                   filters: str | None = Query(None, max_length=64000),
                   column_filters: str | None = Query(None, max_length=64000),
                   db: Session = Depends(get_db), ctx: dict = Depends(require_any_permission('project:archive:view', 'system:sync:view'))):

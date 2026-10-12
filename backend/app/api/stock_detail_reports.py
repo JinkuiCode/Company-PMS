@@ -88,7 +88,7 @@ def listing(query: Annotated[StockDetailQuery, Query()], db: Session = Depends(g
 def options(field: Literal['material', 'stock'], keyword: str = Query('', max_length=100),
             organization_id: int | None = Query(None, gt=0), db: Session = Depends(get_db),
             organization_ids: list[Annotated[int, Query(gt=0)]] = Query(default=[], max_length=200),
-            page: int | None = Query(None, ge=1, le=1000000), page_size: int = Query(50, ge=1, le=200),
+            page: int | None = Query(None, ge=1, le=1000000), page_size: int = Query(50, ge=1, le=500),
             ids: list[str] = Query(default=[], max_length=1000),
             batch_field: Literal['code', 'name'] = 'code', batch_values: list[str] = Query(default=[], max_length=1000),
             ctx=Depends(require_permission('report:stock-detail:list'))):

@@ -1,5 +1,6 @@
 """Initialization switch defaults, live gating, and rollback escape hatch."""
 import sys
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -36,7 +37,7 @@ class InitializationParameterContract(unittest.TestCase):
         self.db.commit()
 
     def test_boolean_parameter_default_metadata_and_edit(self):
-        item = next((i for i in parameter.list_parameters(self.db)['items'] if i['code'] == CODE), None)
+        item = next((i for i in json.loads(parameter.list_parameters(self.db).body)['items'] if i['code'] == CODE), None)
         self.assertIsNotNone(item, 'initialization parameter must be registered')
         self.assertEqual((item['value_type'], item['value'], item['version']), ('boolean', 'true', 0))
         parameter.update_parameter(self.db, CODE, 'false', 0, 1)

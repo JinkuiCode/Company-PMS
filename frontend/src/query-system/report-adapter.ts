@@ -3,6 +3,7 @@ import { optionReference, type QueryReference, type ReferenceRequest, type Refer
 import type { ColumnFilter, ColumnCandidate } from './column-filters.ts'
 import type { QueryScheme } from './workspace.ts'
 import type { PurchaseQueryDraft, PurchaseDetailEntry } from '../api/purchaseReport.ts'
+import { PAGE_SIZE_OPTIONS } from '../config/listUi.ts'
 
 export type ReportKind = 'purchase' | 'inventory' | 'stock-detail'
 export type ReportQueryField = QueryField & { operators?: QueryOperator[] }
@@ -159,7 +160,7 @@ export function reportPreferences(value: object, keys: string[]) {
   const result: { visible?: string[]; columns?: { colId: string; [key: string]: unknown }[]; pageSize?: number; sort?: { sort: string; direction: 'asc' | 'desc' }; overviewStatus?: string; scope?: { project_code: string; organization_id: number; product_line_name: string } | null } = {}
   if (Array.isArray(raw.visible)) result.visible = raw.visible.filter((k): k is string => typeof k === 'string' && keys.includes(k))
   if (Array.isArray(raw.columns)) result.columns = raw.columns.filter(c => c && keys.includes(c.colId))
-  if (typeof raw.pageSize === 'number' && [15, 50, 100, 200, 500].includes(raw.pageSize)) result.pageSize = raw.pageSize
+  if (typeof raw.pageSize === 'number' && PAGE_SIZE_OPTIONS.includes(raw.pageSize)) result.pageSize = raw.pageSize
   if (raw.sort && typeof raw.sort.sort === 'string' && ['asc', 'desc'].includes(raw.sort.direction)) result.sort = cloneQuery(raw.sort)
   if (typeof raw.overviewStatus === 'string' && ['', 'unfinished', 'complete', 'review'].includes(raw.overviewStatus)) result.overviewStatus = raw.overviewStatus
   if (raw.scope === null) result.scope = null

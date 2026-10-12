@@ -51,7 +51,7 @@ def update_user(
 
 @router.get("/oa-options")
 def oa_options(keyword: str = Query("", max_length=100), page: int = Query(1, ge=1),
-               page_size: int = Query(20, ge=1, le=100), db: Session = Depends(get_db),
+               page_size: int = Query(20, ge=1, le=500), db: Session = Depends(get_db),
                context=Depends(require_permission("system:user:add"))):
     from app.services.oa_user_options import get_oa_options
     return get_oa_options(db, keyword, page, page_size)

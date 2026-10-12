@@ -66,7 +66,7 @@ class UserSecurityContract(unittest.TestCase):
         self.assertEqual(self.configure().status_code, 200)
         self.assertEqual(self.configure("other").status_code, 409)
         item = self.client.get("/api/parameters", headers=self.headers).json()["items"][0]
-        self.assertEqual((item["version"], item["configured"], item["value"]), (1, True, None))
+        self.assertEqual((item["version"], item["configured"], item["value"]), (1, True, "initial"))
         from app.models.operation_log import SysOperationLog
         logs = repr([vars(row) for row in self.db.query(SysOperationLog).all()])
         self.assertNotIn("$argon2", logs)
@@ -173,7 +173,7 @@ class UserSecurityContract(unittest.TestCase):
         init_db.initialize_user_security(self.db)
         self.assertEqual(self.db.query(SysRoleMenu).filter_by(role_id=admin.id, menu_id=182).count(), 0)
         from app.services.database_revision import CURRENT_DATABASE_REVISION
-        self.assertEqual(CURRENT_DATABASE_REVISION, "2026-10-11-business-export-01")
+        self.assertEqual(CURRENT_DATABASE_REVISION, "2026-10-12-parameter-secret-01")
 
     def test_atomic_create_and_reset_log_failure(self):
         self.configure()

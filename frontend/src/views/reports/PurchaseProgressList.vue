@@ -9,9 +9,10 @@ import 'ag-grid-community/styles/ag-theme-alpine.css'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { cloneQuery, validateConditions, type QueryCondition } from '@/query-system/core'
-import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, purchaseReferenceScope, reportPreferences, serializeReportConditions, purchaseConditions, selectReportProgress, withReportProgress, serializeColumnFilters, reportColumnCandidates, linkReportScope, saveReportPreferences, legacyReportSchemes, purchaseDetailEntry, createReportColumnSort } from '@/query-system/report-adapter'
+import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, purchaseReferenceScope, reportPreferences, serializeReportConditions, purchaseConditions, selectReportProgress, withReportProgress, linkReportScope, saveReportPreferences, legacyReportSchemes, purchaseDetailEntry, createReportColumnSort } from '@/query-system/report-adapter'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
+import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import { migrateReportIdentity, reportIdentityVersion } from './report-identity-layout'
@@ -19,7 +20,7 @@ import CustomPagination from '@/components/CustomPagination.vue'
 import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN, PMS_GRID_OPTIONS } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
-import { getPurchaseMetadata, getPurchaseRows, getPurchaseDetail, getPurchaseProjectReference, getPurchaseColumnCandidates, type PurchaseField, type PurchaseRow, type PurchaseDocument, type PurchaseMetadata, type PurchaseDetail, type PurchaseDetailEntry } from '@/api/purchaseReport'
+import { getPurchaseMetadata, getPurchaseRows, getPurchaseDetail, getPurchaseProjectReference, type PurchaseField, type PurchaseRow, type PurchaseDocument, type PurchaseMetadata, type PurchaseDetail, type PurchaseDetailEntry } from '@/api/purchaseReport'
 import ReportExportControl from '@/components/ReportExportControl.vue'
 import { createPurchaseDetailState, type PurchaseDetailState } from './purchaseDetailState'
 
@@ -94,7 +95,7 @@ function savePreferences() {
   void nextTick(() => listRef.value?.refreshScrollbar())
 }
 const planSnapshot = () => ({ reportIdentityVersion: reportIdentityVersion(fields.value), pageSize: pendingPageSize.value ?? pageSize.value, columns: grid?.getColumnState() || savedColumns, visible: [...visible.value], scope: cloneQuery(projectScope.value || null), sort: { ...sort } })
-function clearColumnFilters() { columnFilters.value = []; invalidate() }
+function clearColumnFilters() { pageColumns.clear(); invalidate() }
 async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
   if (invalid.value) { ElMessage.warning(invalid.value); return }
   const plan = reportPreferences(migrateReportIdentity(preferences), fields.value.map(f => f.key))
@@ -119,20 +120,14 @@ const tone = (progress: string) => progress === 'complete' ? 'success' : progres
 const Actions = defineComponent({ props: ['params'], setup(props) { return () => h(ElButton, { size: 'small', link: true, type: 'primary', onClick: () => void detail.open(String(props.params.data.id)) }, () => '明细') } })
 const Progress = defineComponent({ props: ['params'], setup(props) { return () => h('span', { class: ['pms-status', tone(props.params.data.progress)] }, props.params.data.progress_label) } })
 const columnFields = computed(() => reportFields(metadata.value?.column_filter_fields || []).filter(f => f.field !== 'project_name' && f.operators?.join() !== 'reference'))
-const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.value, filters: () => columnFilters.value,
+const pageColumns = usePageColumnFilter(rows, () => columnFields.value, columnFilters, () => [page.value, pageSize.value], undefined, () => !!acceptedParams.value && !loading.value)
+const visibleRows = pageColumns.visibleRows
+const columnContext = (): ColumnQueryContext => ({ ...pageColumns.context,
   ready: () => !!acceptedParams.value && !loading.value,
   sort: createReportColumnSort({ accepted: () => acceptedParams.value, loading: () => loading.value, fields: () => sortFields, grid: () => grid,
     changed: value => { Object.assign(sort, value); savePreferences() }, unsupported: () => ElMessage.warning('此列不支持排序'),
     load: params => fetchRows(false, { draft: cloneQuery(applied.value!), params, submit: false, scope: appliedProjectScope.value }),
   }),
-  load: (field, keyword, targetPage) => reportColumnCandidates(acceptedParams.value, field, keyword, targetPage, params => getPurchaseColumnCandidates(false, params)),
-  apply: (field, filter) => {
-    columnFilters.value = [...columnFilters.value.filter(f => f.field !== field), ...(filter ? [filter] : [])]
-    if (!acceptedParams.value || !applied.value || loading.value) return
-    const draft = cloneQuery(applied.value); draft.column_filters = cloneQuery(columnFilters.value)
-    const params = { ...cloneQuery(acceptedParams.value), page: 1, column_filters: serializeColumnFilters(columnFilters.value) }
-    void fetchRows(true, { draft, params, submit: true, scope: appliedProjectScope.value })
-  },
 })
 const columns = computed<(ColDef<PurchaseRow> | ColGroupDef<PurchaseRow>)[]>(() => decorateQueryColumns<PurchaseRow>([
   ...groups.value.map(group => ({ headerName: group.label, groupId: group.key, children: group.fields.map(field => ({
@@ -170,7 +165,7 @@ function onSortChanged(event: SortChangedEvent) {
 let revision = 0, controller: AbortController | null = null
 const draftSnapshot = () => {
   const scope = reportScope('purchase', conditions.value)
-  return { keyword: String(scope.params.keyword || ''), project_code: '', supplier: String(scope.params.supplier || ''), progress: '', organization_ids: (scope.params.organization_ids as number[]) || [], dates: [] as string[], conditions: scope.conditions, column_filters: cloneQuery(columnFilters.value) }
+  return { keyword: String(scope.params.keyword || ''), project_code: '', supplier: String(scope.params.supplier || ''), progress: '', organization_ids: (scope.params.organization_ids as number[]) || [], dates: [] as string[], conditions: scope.conditions, column_filters: [] as ColumnFilter[] }
 }
 type Draft = ReturnType<typeof draftSnapshot>
 const applied = ref<Draft | null>(null), pendingPageSize = ref<number | null>(null)
@@ -179,7 +174,7 @@ const resultScopeLabel = computed(() => appliedProjectScope.value ? `${appliedPr
 const buildParams = (draft:Draft, submit:boolean) => ({...draft,...sort,
   ...(projectScope.value ? {project_code:projectScope.value.project_code,organization_ids:[projectScope.value.organization_id]} : {}),
   project_code_is_empty: !!projectScope.value && !projectScope.value.project_code,
-  dates:undefined, conditions:undefined, date_from:draft.dates[0] || undefined,date_to:draft.dates[1] || undefined,filters:serializeReportConditions(draft.conditions),column_filters:serializeColumnFilters(draft.column_filters),page:submit?1:page.value,page_size:submit?(pendingPageSize.value??pageSize.value):pageSize.value})
+  dates:undefined, conditions:undefined, date_from:draft.dates[0] || undefined,date_to:draft.dates[1] || undefined,filters:serializeReportConditions(draft.conditions),column_filters: '[]',page:submit?1:page.value,page_size:submit?(pendingPageSize.value??pageSize.value):pageSize.value})
 const acceptedParams = ref<ReturnType<typeof buildParams> | null>(null)
 type RequestSnapshot = {draft:Draft; params:ReturnType<typeof buildParams>; submit:boolean; scope:PurchaseDetailEntry['scope']}
 let failedRequest: RequestSnapshot | null = null
@@ -193,6 +188,7 @@ function retry() { if (!metadata.value) void initialize(); else if (failedReques
 async function fetchRows(submit = false, replay?:RequestSnapshot, applySort = false) {
   if (!metadata.value || (!submit && !applied.value)) return
   if (!replay && submit && invalid.value) return
+  pageColumns.clear()
   const draft = cloneQuery(replay?.draft || (submit?draftSnapshot():applied.value!))
   const scope = replay ? replay.scope : submit ? projectScope.value : appliedProjectScope.value
   const request = replay?cloneQuery(replay.params):buildParams(draft,submit)
@@ -230,8 +226,8 @@ async function applyEntry() {
   const entry = purchaseDetailEntry(props.entry.draft, filterFields.value, props.entry.scope, props.entry.progress)
   invalidate(); detail.close(); projectScope.value = entry.scope
   const value = entry.draft
-  if (!value) { columnFilters.value = []; projectScope.value = undefined; return }
-  conditions.value = purchaseConditions(value); columnFilters.value = cloneQuery(value.column_filters || [])
+  if (!value) { pageColumns.clear(); projectScope.value = undefined; return }
+  conditions.value = purchaseConditions(value); pageColumns.clear()
   if (projectScope.value) conditions.value = conditions.value.filter(c => c.field !== 'organization_ids')
   if (entry.progress) conditions.value = withReportProgress(conditions.value, entry.progress)
   await fetchRows(true)
@@ -272,7 +268,7 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
     <template #grid>
       <div v-if="error" class="pms-list-load-error" role="alert">{{ error }}<span v-if="applied">，下方保留上次查询结果；上次结果范围：{{ resultScopeLabel }}</span> <el-button size="small" @click="retry">重试</el-button></div>
       <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy"
-        :row-data="rows" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS"
+        :row-data="visibleRows" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS"
         :locale-text="chineseLocaleText" :loading="loading" :pagination="false"
         :overlay-no-rows-template="applied ? '<span>没有符合条件的数据</span>' : '<span>设置条件后，点击查询</span>'"
         :get-row-id="params => String(params.data.id)" :get-row-class="params => String(params.data.id) === detailState.requestId ? 'purchase-selected-row' : ''"

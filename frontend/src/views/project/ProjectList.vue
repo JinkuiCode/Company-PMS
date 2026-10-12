@@ -42,7 +42,7 @@
             ref="agGridRef"
             class="ag-theme-alpine wechat-table pms-ag-grid progress-workbench-grid"
             :class="PMS_AG_GRID_FORM_CLASS"
-            :rowData="filteredRowData"
+            :rowData="pagedRowData"
             :loading="progressListLoading"
             :columnDefs="queryColumnDefs"
             :defaultColDef="defaultColDef"
@@ -50,11 +50,10 @@
             :localeText="localeText"
             :theme="'legacy'"
             :domLayout="'normal'"
-            :pagination="true"
+            :pagination="false"
             :paginationPageSize="pageSize"
             :paginationPageSizeSelector="false"
             :suppressPaginationPanel="true"
-            @pagination-changed="handleProgressPaginationChanged"
             :enableCellTextSelection="true"
             :suppressRowClickSelection="true"
             :singleClickEdit="false"
@@ -62,6 +61,7 @@
             :alwaysShowHorizontalScroll="true"
             :getRowClass="getRowClass"
             @grid-ready="onGridReady"
+            @sort-changed="handleProgressSortChanged"
             @cell-double-clicked="onProjectCellDoubleClicked"
             @row-clicked="onProgressRowClicked"
             @cell-value-changed="onCellValueChanged"
@@ -314,6 +314,7 @@ import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { useSystemQuery } from '@/query-system/system-adapter'
 import { toQueryFields, toQueryRecord } from '@/query-system/list-adapter'
 import { decorateQueryColumns } from '@/query-system/column-grid'
+import { columnSortModel, sortClientRows, type ClientRowSort } from '@/query-system/client-row-sort'
 import type { QueryCondition } from '@/query-system/core'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
@@ -345,7 +346,7 @@ import {
 import type { ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
-import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
   PMS_AG_GRID_FORM_CLASS,
@@ -689,15 +690,16 @@ const projectListFilterFields = computed<ListFilterField<ProjectRow>[]>(() => {
 
 const projectListFilterFieldsForView = computed(() => projectListFilterFields.value as unknown as ListFilterField[])
 
-const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied: queryApplied, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters } = useSystemQuery(() => toQueryFields(projectListFilterFields.value), ['project_code', 'project_name', 'status'], {requireQuery:true,ready:()=>columnPreferencesReady.value && progressListAccepted.value && !progressListLoading.value})
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied: queryApplied, submit: submitQuery, topRows, pageRows, clearColumns, columnContext, columnFilters } = useSystemQuery(() => toQueryFields(projectListFilterFields.value), ['project_code', 'project_name', 'status'], {requireQuery:true,ready:()=>columnPreferencesReady.value && progressListAccepted.value && !progressListLoading.value,pagination:{page,size:pageSize}})
 const queryColumnDefs = computed(() => decorateQueryColumns(columnDefs.value, () => columnContext))
+const progressSort = ref<ClientRowSort[]>([])
 columnContext.sort = (field, direction) => gridApi.value?.applyColumnState({state:[{colId:field,sort:direction}],defaultState:{sort:null}})
 function querySnapshot() { return { pageSize: pageSize.value, selected_sheet_field_keys: selectedSheetFieldKeys.value, columnState: gridApi.value?.getColumnState?.() || [] } }
-function exportSnapshot() { return businessExportSnapshot(queryApplied.value, columnFilters.value, gridApi.value) }
+function exportSnapshot() { return businessExportSnapshot(queryApplied.value, [], gridApi.value) }
 function runQuery(conditions: QueryCondition[], preferences: object) {
   submitQuery(conditions)
   const saved = preferences as Partial<ColumnPreferenceState> & {pageSize?:number}
-  if (saved.pageSize && Number.isSafeInteger(saved.pageSize) && saved.pageSize > 0) pageSize.value = saved.pageSize
+  if (typeof saved.pageSize === 'number' && PAGE_SIZE_OPTIONS.includes(saved.pageSize)) pageSize.value = saved.pageSize
   if (Array.isArray(saved.selected_sheet_field_keys)) selectedSheetFieldKeys.value = saved.selected_sheet_field_keys.filter(key => sheetFieldMetaMap.value.has(key))
   if (Array.isArray(saved.columnState)) gridApi.value?.applyColumnState({state:saved.columnState,applyOrder:true})
 }
@@ -705,7 +707,7 @@ function clearQueryColumns() { clearColumns(); gridApi.value?.setFilterModel(nul
 
 const currentFilterSheetFieldKeys = computed(() => {
   const keys = new Set<string>()
-  for (const filter of [...queryApplied.value, ...columnFilters.value]) {
+  for (const filter of queryApplied.value) {
     if (sheetFieldMetaMap.value.has(filter.field)) {
       keys.add(filter.field)
     }
@@ -721,11 +723,14 @@ const requestedSheetFieldKeys = computed(() => {
 })
 
 const filteredRowData = computed(() => {
-  return filterRows(rowData.value, row => toQueryRecord(row, projectListFilterFields.value))
+  return topRows(rowData.value, row => toQueryRecord(row, projectListFilterFields.value))
 })
+const sortedRowData = computed(() => sortClientRows(filteredRowData.value, progressSort.value, (row, colId) =>
+  colId.startsWith('sheet:') ? sheetFieldValue(row, colId.slice(6)) : row[colId as keyof ProjectRow],
+))
+const pagedRowData = computed(() => pageRows(sortedRowData.value, row => toQueryRecord(row, projectListFilterFields.value)))
 
 function goToProgressPage() {
-  agGridRef.value?.api?.paginationGoToPage(page.value - 1)
   refreshListScrollbar()
 }
 
@@ -740,7 +745,7 @@ const orderedDrawerGroups = computed(() => {
   return buildDrawerGroupsFromRow(selectedProject.value)
 })
 
-watch([queryApplied, columnFilters], () => {
+watch(queryApplied, () => {
   page.value = 1
   if (selectedProject.value && !drawerHasPendingChanges.value && !drawerSaving.value && !filteredRowData.value.some(row => row.id === selectedProject.value?.id)) {
     selectedProject.value = null
@@ -748,6 +753,8 @@ watch([queryApplied, columnFilters], () => {
   nextTick(goToProgressPage)
   nextTick(() => gridApi.value?.refreshCells({force:true}))
 }, { deep: true })
+watch(rowData, clearColumns, {flush:'sync'})
+watch(columnFilters, () => { nextTick(() => gridApi.value?.refreshCells({force:true})) }, {deep:true})
 
 watch(
   () => columnPreferencesReady.value ? requestedSheetFieldKeys.value.join(',') : '__pending__',
@@ -1368,6 +1375,7 @@ function restoreSelectedSheetFieldKeys() {
 function completeColumnPreferenceRestore() {
   if (!columnPreferencesReady.value || !gridApi.value) return
   restoreColumnState()
+  handleProgressSortChanged()
   columnPreferenceWritesEnabled.value = true
 }
 
@@ -1381,6 +1389,14 @@ function handleGridStructureChanged() {
   refreshListScrollbar()
   if (!columnPreferenceWritesEnabled.value || restoringColumnState.value) return
   persistColumnPreferences()
+}
+
+function handleProgressSortChanged() {
+  const next = columnSortModel(gridApi.value?.getColumnState?.() || [])
+  if (JSON.stringify(next) === JSON.stringify(progressSort.value)) return
+  progressSort.value = next
+  clearColumns()
+  handleGridStructureChanged()
 }
 
 function restoreProgressColumnDefaults() {

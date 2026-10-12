@@ -1,6 +1,7 @@
 import type { GridOptions } from 'ag-grid-community'
 
 export const DEFAULT_PAGE_SIZE = 50
+export const PAGE_SIZE_OPTIONS = [15, 20, 50, 100, 200, 300, 500]
 export const PMS_ACTION_COLUMN = {
   width: 112,
   minWidth: 112,

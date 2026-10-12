@@ -8,10 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.models.database_revision import PmsDatabaseRevision
 from app.models.rbac import SysMenu, SysRole, SysRoleMenu
-from app.services.database_revision import CURRENT_DATABASE_REVISION
+from app.services import database_revision
 
 
 OLD = "2026-10-09-archive-02"
+# This contract exercises the historical export-only release, not the latest schema.
+CURRENT_DATABASE_REVISION = "2026-10-11-business-export-01"
 CODES = ("project:archive:export", "project:list:export")
 
 
@@ -39,7 +41,7 @@ class ExportUpgradeContract(unittest.TestCase):
     def upgrade(self):
         module = importlib.import_module("scripts.upgrade_database")
         self.assertIn("business_export_only", module.upgrade_database.__annotations__, "Missing scoped upgrade mode")
-        with patch.object(module, "engine", self.engine), patch.object(module, "validate_runtime_config"), patch.object(module, "init_db", side_effect=AssertionError("Historical init must not run")):
+        with patch.object(module, "CURRENT_DATABASE_REVISION", CURRENT_DATABASE_REVISION), patch.object(database_revision, "CURRENT_DATABASE_REVISION", CURRENT_DATABASE_REVISION), patch.object(module, "engine", self.engine), patch.object(module, "validate_runtime_config"), patch.object(module, "init_db", side_effect=AssertionError("Historical init must not run")):
             module.upgrade_database(business_export_only=True)
 
     def snapshot(self, model):

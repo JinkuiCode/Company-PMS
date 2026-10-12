@@ -16,7 +16,7 @@ def list_field_catalog(
     source_type: str | None = None,
     enum_only: bool = False,
     page: int = Query(1, ge=1),
-    page_size: int = Query(30, ge=1, le=200),
+    page_size: int = Query(30, ge=1, le=500),
     _scope_ctx: dict = Depends(require_permission("system:dict:view")),
 ):
     return query_field_catalog(

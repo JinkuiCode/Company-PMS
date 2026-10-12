@@ -10,7 +10,7 @@
       <p v-if="!querySupported" role="status">同步任务接口尚未声明查询 v2 支持，统一查询暂不可用；未执行当前页过滤。</p>
     </template>
     <template #grid>
-      <el-table v-loading="loading" :data="items" class="pms-dense-table" height="100%" border stripe @selection-change="selected = $event">
+      <el-table v-loading="loading" :data="visibleItems" class="pms-dense-table" height="100%" border stripe @selection-change="selected = $event">
         <el-table-column v-if="canRetry" type="selection" width="42" :selectable="(row: any) => row.status === 'failed'" />
         <el-table-column prop="project_code" label="项目编号" width="145" fixed :class-name="queryColumnClass('project_code')" :label-class-name="queryColumnClass('project_code')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'project_code',displayName:'项目编号'}" /><span v-else>项目编号</span></template></el-table-column>
         <el-table-column prop="project_name" label="项目名称" min-width="180" show-overflow-tooltip :class-name="queryColumnClass('project_name')" :label-class-name="queryColumnClass('project_name')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'project_name',displayName:'项目名称'}" /><span v-else>项目名称</span></template></el-table-column>
@@ -39,6 +39,7 @@
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
 import { useSystemQuery, serverQueryParams, requireServerQueryVersion } from '@/query-system/system-adapter'
+import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import type { QueryCondition } from '@/query-system/core'
 import type { ColumnQueryContext } from '@/query-system/column-filters'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
@@ -47,7 +48,7 @@ import PmsDataList from '@/components/PmsDataList.vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import SyncLogDrawer from '@/components/SyncLogDrawer.vue'
 import { PmsDateControl, PmsSelectControl, PmsTextControl } from '@/form-system'
-import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
 import { syncStatusOptions } from '@/config/syncUi'
 import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'
@@ -65,19 +66,18 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied
   {field:'message',label:'执行结果 / 异常原因',type:'text'},
 ], ['project_code','status','operator_name','created_at'], {requireQuery:true,ready:()=>querySupported.value && !loading.value && !error.value})
 const querySupported = ref(false)
-const columnContext: ColumnQueryContext = {...clientContext, load: async (field, keyword, page) => {
-  if (!clientContext.ready?.()) throw Error('请先完成查询，再使用列筛选')
-  return await request.get('/sync-tasks/column-values', {params:{...serverQueryParams(queryApplied.value,columnFilters.value.filter(f => f.field !== field)),field,keyword,page,page_size:100}}) as any
-}}
 function clearQueryColumns() { clearColumns() }
 function runQuery(conditions: QueryCondition[], preferences: object) {
   if (!querySupported.value) return
   submitQuery(conditions)
   const size = (preferences as {pageSize?:number}).pageSize
-  if (size && Number.isSafeInteger(size) && size > 0) pageSize.value = size
+  if (size && PAGE_SIZE_OPTIONS.includes(size)) pageSize.value = size
   page.value = 1
 }
 const items = ref<any[]>([]), selected = ref<any[]>([]), loading = ref(false), busy = ref(false), error = ref('')
+const pageColumns = usePageColumnFilter(items, () => queryFields.value, columnFilters, () => [page.value,pageSize.value], undefined, () => clientContext.ready?.() !== false)
+const columnContext: ColumnQueryContext = pageColumns.context
+const visibleItems = pageColumns.visibleRows
 const logVisible = ref(false), archiveId = ref<number | null>(null)
 const workerEnabled = ref(true)
 let serial = 0, timer: ReturnType<typeof setTimeout> | undefined, poll: ReturnType<typeof setInterval> | undefined
@@ -89,7 +89,7 @@ async function fetchTasks() {
   loading.value = true
   error.value = ''
   try {
-    const data: any = await request.get('/sync-tasks', { params: { ...serverQueryParams(queryApplied.value,columnFilters.value), page: page.value, page_size: pageSize.value } })
+    const data: any = await request.get('/sync-tasks', { params: { ...serverQueryParams(queryApplied.value,[]), page: page.value, page_size: pageSize.value } })
     if (current !== serial) return
     querySupported.value = requireServerQueryVersion(data, !!queryApplied.value.length || !!columnFilters.value.length)
     items.value = data.items; total.value = data.total; selected.value = []; workerEnabled.value = data.worker_enabled !== false
@@ -117,8 +117,8 @@ async function inspect(row: any) {
   catch { /* The shared request handler displays the server error. */ }
   finally { busy.value = false }
 }
-watch([queryApplied, columnFilters, pageSize], () => { page.value = 1; loading.value = true }, { deep: true, flush: 'sync' })
-watch([queryApplied, columnFilters, page, pageSize], () => { ++serial; clearTimeout(timer); timer = setTimeout(fetchTasks, 200) }, { deep: true })
+watch([queryApplied, pageSize], () => { page.value = 1; pageColumns.clear(); loading.value = true }, { deep: true, flush: 'sync' })
+watch([queryApplied, page, pageSize], () => { ++serial; clearTimeout(timer); timer = setTimeout(fetchTasks, 200) }, { deep: true })
 onMounted(() => { void fetchTasks(); poll = setInterval(() => { if (!busy.value && !loading.value && !selected.value.length && !logVisible.value) void fetchTasks() }, 15000) })
 onUnmounted(() => { ++serial; clearTimeout(timer); clearInterval(poll) })
 </script>

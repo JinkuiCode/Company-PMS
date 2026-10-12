@@ -449,7 +449,7 @@ def query_field_catalog(
         filtered = [item for item in filtered if item["enum_code"]]
 
     page = max(page, 1)
-    page_size = max(1, min(page_size, 200))
+    page_size = max(1, min(page_size, 500))
     total = len(filtered)
     start = (page - 1) * page_size
     module_counts: dict[str, int] = {}

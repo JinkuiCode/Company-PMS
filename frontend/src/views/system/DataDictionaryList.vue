@@ -63,7 +63,7 @@ import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
-import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/config/listUi'
 import { PmsCheckboxControl, PmsSelectControl, PmsTextControl, type PmsOption } from '@/form-system'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import request from '@/utils/request'
@@ -127,7 +127,7 @@ const sourceTypeOptions = [
 
 const sourceLabels = Object.fromEntries(sourceTypeOptions.map(item => [item.value, item.label]))
 const gridApi = ref<any>(null)
-const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters } = useSystemQuery(() => [
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, topRows, pageRows, clearColumns, columnContext, columnFilters } = useSystemQuery(() => [
   { field: 'field_name', label: '字段名称', type: 'text' },
   { field: 'field_code', label: '字段编码', type: 'text' },
   { field: 'module', label: '模块', type: 'enum', options: moduleSelectOptions.value.map(o => ({value:String(o.value),label:o.label})) },
@@ -139,20 +139,21 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit:
   { field: 'enum_code', label: '枚举编码', type: 'text' },
   { field: 'description', label: '说明', type: 'text' },
   { field: 'editable', label: '可编辑', type: 'enum', options:[{value:1,label:'是'},{value:0,label:'否'}] },
-], ['field_name', 'module', 'value_type', 'source_type'], {ready:()=>!loading.value})
-const filteredRows = computed(() => filterRows(rows.value, row => ({...row,editable:Number(row.editable)})))
+], ['field_name', 'module', 'value_type', 'source_type'], {ready:()=>!loading.value,pagination:{page,size:pageSize}})
+const catalogQueryRecord = (row:FieldCatalogRow) => ({...row,editable:Number(row.editable)})
+const filteredRows = computed(() => topRows(rows.value, catalogQueryRecord))
 const total = computed(() => filteredRows.value.length)
-const pagedRows = computed(() => filteredRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+const pagedRows = computed(() => pageRows(rows.value, catalogQueryRecord))
 function runQuery(conditions: QueryCondition[], preferences: object) {
   submitQuery(conditions)
   const size = (preferences as {pageSize?:number}).pageSize
-  if (size && Number.isSafeInteger(size) && size > 0) pageSize.value = size
+  if (size && PAGE_SIZE_OPTIONS.includes(size)) pageSize.value = size
   page.value = 1
   refreshScrollbar()
 }
 function clearQueryColumns() { clearColumns(); gridApi.value?.setFilterModel(null); gridApi.value?.refreshCells({force:true}) }
 columnContext.sort = (field, direction) => gridApi.value?.applyColumnState({state:[{colId:field,sort:direction}],defaultState:{sort:null}})
-watch(columnFilters, () => { page.value = 1 }, {deep:true})
+watch(rows, clearColumns, {flush:'sync'})
 const typeLabels = Object.fromEntries(valueTypeOptions.map(item => [item.value, item.label]))
 const columnDefs: ColDef<FieldCatalogRow>[] = [
   { field: 'module', headerName: '模块', width: 112, valueFormatter: params => params.data?.module_name || params.value },

@@ -49,7 +49,7 @@
       <ag-grid-vue
         ref="agGridRef"
         class="ag-theme-alpine wechat-table pms-ag-grid"
-        :rowData="rowData"
+        :rowData="visibleArchiveRows"
         :loading="archiveListLoading"
         :columnDefs="columnDefs"
         :defaultColDef="defaultColDef"
@@ -314,14 +314,15 @@ import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
-import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { legacyArchiveSchemes } from '@/query-system/archive-schemes'
 import type { QueryDefinition } from '@/query-system/workspace'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
+import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import { adaptConditions, validateConditions, cloneQuery, type QueryCondition } from '@/query-system/core'
-import { toQueryFields } from '@/query-system/list-adapter'
+import { toQueryFields, toQueryRecord } from '@/query-system/list-adapter'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import {
@@ -935,15 +936,13 @@ const archiveWorkspaceReady = ref(false)
 const archiveAppliedFilters = ref<QueryCondition[]>([])
 const archiveHasQueried = ref(false)
 const archiveColumnFilters = ref<ColumnFilter[]>([])
+const archivePageColumns = usePageColumnFilter(rowData, () => archiveQueryFields.value, archiveColumnFilters, () => [page.value, pageSize.value], row => toQueryRecord(row, archiveFilterFields.value), () => archiveHasQueried.value && !archiveListLoading.value)
+const visibleArchiveRows = archivePageColumns.visibleRows
 const archiveColumnContext:ColumnQueryContext = {
+  ...archivePageColumns.context,
   ready:()=>archiveHasQueried.value && !archiveListLoading.value,
   fields:()=>archiveQueryFields.value,
   filters:()=>archiveColumnFilters.value,
-  load:(field,keyword,page)=>request.get('/projects/archives/column-values',{params:{field,keyword,page,filters:JSON.stringify(archiveAppliedFilters.value),column_filters:JSON.stringify(archiveColumnFilters.value.filter(f=>f.field!==field))}}) as unknown as Promise<any>,
-  apply:(field,filter)=>{
-    archiveColumnFilters.value=[...archiveColumnFilters.value.filter(f=>f.field!==field),...(filter?[filter]:[])]
-    gridApi?.refreshHeader();gridApi?.refreshCells({force:true});page.value=1;void fetchList()
-  },
   sort:(field,direction)=>{gridApi?.applyColumnState({state:[{colId:field,sort:direction}],defaultState:{sort:null}});handleArchiveSortChanged()},
 }
 const archiveQueryFields = computed(() => archiveValidationFields(customFilters.value))
@@ -970,7 +969,7 @@ function archivePlanSnapshot() {
 async function submitArchiveQuery(conditions:QueryCondition[], preferences:any) {
   archiveAppliedFilters.value = cloneQuery(conditions)
   archiveColumnFilters.value = []
-  if ([15,20,50,100].includes(preferences.pageSize)) pageSize.value = preferences.pageSize
+  if (PAGE_SIZE_OPTIONS.includes(preferences.pageSize)) pageSize.value = preferences.pageSize
   if (preferences.columns?.selected_column_keys && preferences.columns?.columnState) {
     const key = archiveColumnPreferenceStorageKey()
     if (key) localStorage.setItem(key,JSON.stringify(preferences.columns))
@@ -982,10 +981,14 @@ async function submitArchiveQuery(conditions:QueryCondition[], preferences:any) 
 }
 function clearArchiveColumnFilters() {
   if (!archiveColumnFilters.value.length) return
-  archiveColumnFilters.value = []; page.value = 1; void fetchList()
+  archivePageColumns.clear()
   agGridRef.value?.api?.refreshHeader()
   agGridRef.value?.api?.refreshCells({ force: true })
 }
+watch(archiveColumnFilters, () => nextTick(() => {
+  agGridRef.value?.api?.refreshHeader()
+  agGridRef.value?.api?.refreshCells({ force: true })
+}), { deep: true })
 
 async function fetchDictOptions(code: string) {
   try {
@@ -1251,7 +1254,7 @@ const defaultColDef = {
 const archiveListLoading = ref(false)
 const archiveListError = ref(false)
 const archiveSort = ref<Array<{ colId: string; sort: string }>>([{ colId: 'project_code', sort: 'desc' }])
-function archiveExportSnapshot(){return businessExportSnapshot(archiveAppliedFilters.value,archiveColumnFilters.value,gridApi,{enabled:'all'})}
+function archiveExportSnapshot(){return businessExportSnapshot(archiveAppliedFilters.value,[],gridApi,{enabled:'all'})}
 let archiveListRequestSerial = 0
 let archiveQueryReady = false
 let archiveQueryTimer: ReturnType<typeof setTimeout> | undefined
@@ -1259,6 +1262,7 @@ let archiveQueryTimer: ReturnType<typeof setTimeout> | undefined
 async function fetchList() {
   const errors = validateConditions(archiveAppliedFilters.value,archiveValidationFields(archiveAppliedFilters.value))
   if (Object.keys(errors).length) { ElMessage.warning(Object.values(errors).join('；')); return }
+  archivePageColumns.clear()
   clearTimeout(archiveQueryTimer)
   const requestSerial = ++archiveListRequestSerial
   archiveListLoading.value = true
@@ -1274,7 +1278,7 @@ async function fetchList() {
         filters: JSON.stringify([
           ...archiveAppliedFilters.value,
         ]),
-        column_filters: JSON.stringify(archiveColumnFilters.value),
+        column_filters: '[]',
         sort: JSON.stringify(archiveSort.value),
       },
     })

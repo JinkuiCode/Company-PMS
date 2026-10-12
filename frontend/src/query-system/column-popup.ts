@@ -1,6 +1,11 @@
 export function createColumnPopupGroup() {
   let active: { owner: symbol; close: () => void } | null = null
   return {
+    close() {
+      const previous = active
+      active = null
+      previous?.close()
+    },
     open(owner: symbol, close: () => void) {
       if (active?.owner === owner) return
       const previous = active

@@ -11,30 +11,32 @@ import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import PmsDataList from '@/components/PmsDataList.vue'
 import CustomPagination from '@/components/CustomPagination.vue'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/config/listUi'
 import { PmsFormDrawer, PmsFormField, PmsTextControl, PmsSelectControl, PmsNumberControl, PmsSwitchControl } from '@/form-system'
 import { getProductLines, getOrganizations, type ProductLine, type Organization } from '@/api/productLine'
 
 const auth = useAuthStore()
 const items = ref<ProductLine[]>([])
-const page = ref(1), pageSize = ref(50)
-const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
+const page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE)
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, topRows, pageRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
   { field: 'display_name', label: '产品线名称', type: 'text' },
   { field: 'organization_code', label: '金蝶组织编码', type: 'text' },
   { field: 'organization_name', label: '金蝶组织名称', type: 'text' },
   { field: 'sort', label: '排序', type: 'number' },
   { field: 'is_enabled', label: '状态', type: 'enum', options: [{value:1,label:'启用'},{value:0,label:'禁用'}] },
-], ['display_name', 'is_enabled'], {ready:()=>!loading.value && !failed.value})
-const filteredItems = computed(() => filterRows(items.value, row => ({...row, is_enabled: Number(row.is_enabled)})))
+], ['display_name', 'is_enabled'], {ready:()=>!loading.value && !failed.value,pagination:{page,size:pageSize}})
+const lineQueryRecord = (row:ProductLine) => ({...row,is_enabled:Number(row.is_enabled)})
+const filteredItems = computed(() => topRows(items.value, lineQueryRecord))
 const total = computed(() => filteredItems.value.length)
-const pagedItems = computed(() => filteredItems.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+const pagedItems = computed(() => pageRows(items.value, lineQueryRecord))
 function runQuery(conditions: QueryCondition[], preferences: object) {
   submitQuery(conditions)
   const size = (preferences as {pageSize?:number}).pageSize
-  if (size && Number.isSafeInteger(size) && size > 0) pageSize.value = size
+  if (size && PAGE_SIZE_OPTIONS.includes(size)) pageSize.value = size
   page.value = 1
 }
 function clearQueryColumns() { clearColumns() }
-watch(columnFilters, () => { page.value = 1 }, {deep:true})
+watch(items, clearColumns, {flush:'sync'})
 const loading = ref(false), failed = ref(false), saving = ref(false), opened = ref(false)
 const editing = ref<ProductLine | null>(null)
 const organizations = ref<Organization[]>([]), organizationSearch = ref(''), organizationPage = ref(1), organizationTotal = ref(0)

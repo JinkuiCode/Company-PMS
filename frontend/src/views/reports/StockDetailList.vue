@@ -9,9 +9,10 @@ import PmsDataList from '@/components/PmsDataList.vue'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import '@/report-query/query-surface.css'
 import { cloneQuery, validateConditions, type QueryCondition } from '@/query-system/core'
-import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, reportPreferences, serializeReportConditions, createReportRequest, serializeColumnFilters, reportColumnCandidates, linkReportScope, saveReportPreferences, legacyReportSchemes, createReportColumnSort } from '@/query-system/report-adapter'
+import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, reportPreferences, serializeReportConditions, createReportRequest, linkReportScope, saveReportPreferences, legacyReportSchemes, createReportColumnSort } from '@/query-system/report-adapter'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
+import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import { migrateReportIdentity, reportIdentityVersion } from './report-identity-layout'
@@ -22,7 +23,7 @@ import { DEFAULT_PAGE_SIZE, PMS_GRID_OPTIONS } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { useAuthStore } from '@/stores/auth'
-import { getStockDetailMetadata, getStockDetailRows, getStockDetailReference, getStockDetailColumnCandidates, type StockDetailMetadata } from '@/api/stockDetailReport'
+import { getStockDetailMetadata, getStockDetailRows, getStockDetailReference, type StockDetailMetadata } from '@/api/stockDetailReport'
 import { buildStockDetailQuery, formatStockQuantity, type StockDetailRow, type StockDetailResult } from './stockDetailState'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -38,7 +39,7 @@ const sort = reactive({ sort: 'bill_date', direction: 'asc' as 'asc' | 'desc' })
 function buildQuery(draft: typeof filters, targetPage: number, size: number) {
   const scope = reportScope('stock-detail', draft.conditions)
   return { ...buildStockDetailQuery({ material: String(scope.params.material || ''), organization_ids: scope.params.organization_ids as number[], stock_id: (scope.params.stock_id as number) ?? null, dates: [String(scope.params.start_date || ''), String(scope.params.end_date || '')] }, targetPage, size),
-    filters: serializeReportConditions(scope.conditions), column_filters: serializeColumnFilters(draft.column_filters), ...sort }
+    filters: serializeReportConditions(scope.conditions), column_filters: '[]', ...sort }
 }
 const request = createReportRequest(buildQuery, getStockDetailRows, { items: [], openings: [], total: 0, summary: null } as StockDetailResult, value => { result.value = value })
 const result = shallowRef<Readonly<typeof request.value>>(request.value)
@@ -97,19 +98,15 @@ const exportColumns = () => fields.value.map(field => field.key)
 function text(value: unknown) { return value === null || value === undefined || value === '' ? '' : String(value) }
 function fieldText(key: string, value: unknown) { return numberKeys.has(key) ? formatStockQuantity(value) : text(value) }
 const columnFields = computed(() => reportFields((metadata.value?.column_filter_fields || []).filter(field => field.field !== 'project_name')))
-const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.value, filters: () => columnFilters.value,
+const pageColumns = usePageColumnFilter(computed(() => result.value.items), () => columnFields.value, columnFilters, () => [page.value, pageSize.value], undefined, () => !!result.value.applied && !result.value.loading)
+const visibleRows = pageColumns.visibleRows
+const visibleOpenings = computed(() => pageColumns.filterRows(result.value.openings))
+const columnContext = (): ColumnQueryContext => ({ ...pageColumns.context,
   ready: () => !!result.value.applied && !result.value.loading,
   sort: createReportColumnSort({ accepted: () => result.value.applied, loading: () => result.value.loading, fields: () => Object.fromEntries((metadata.value?.sort_fields || []).map(key => [key, key])), grid: () => grid,
     changed: value => { Object.assign(sort, value); persist() }, unsupported: () => ElMessage.warning('此列不支持排序'),
     load: params => { closeDetail(); return request.submit(params) },
   }),
-  load: (field, keyword, targetPage) => reportColumnCandidates(result.value.applied, field, keyword, targetPage, getStockDetailColumnCandidates),
-  apply: (field, filter) => {
-    columnFilters.value = [...columnFilters.value.filter(f => f.field !== field), ...(filter ? [filter] : [])]
-    if (!result.value.applied || result.value.loading) return
-    closeDetail()
-    void request.submit({ ...cloneQuery(result.value.applied), page: 1, column_filters: serializeColumnFilters(columnFilters.value) })
-  },
 })
 const columns = computed<ColDef<StockDetailRow>[]>(() => decorateQueryColumns<StockDetailRow>(fields.value.map(field => {
   const definition: ColDef<StockDetailRow> = {
@@ -180,6 +177,7 @@ async function initialize() {
 async function query(resetPage = false) {
   if (!metadata.value || result.value.loading) return
   if (queryInvalid.value) { ElMessage.warning(queryInvalid.value); return }
+  pageColumns.clear()
   closeDetail()
   if (await request.query(cloneQuery(filters), resetPage ? 1 : page.value, pendingPageSize.value ?? pageSize.value)) pendingPageSize.value = null
   await nextTick(); listRef.value?.refreshScrollbar()
@@ -199,7 +197,7 @@ async function retry() {
   if (await request.retry() && isSubmit) pendingPageSize.value = null
   await nextTick(); listRef.value?.refreshScrollbar()
 }
-function clearColumnFilters() { columnFilters.value = []; pendingPageSize.value = null; request.invalidate(); closeDetail() }
+function clearColumnFilters() { pageColumns.clear(); pendingPageSize.value = null; request.invalidate(); closeDetail() }
 const planSnapshot = () => ({ reportIdentityVersion: reportIdentityVersion(fields.value), pageSize: pendingPageSize.value ?? pageSize.value, visible: [...visible.value], columns: grid?.getColumnState() || savedColumns.value, sort: { ...sort } })
 async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
   if (queryInvalid.value) { ElMessage.warning(queryInvalid.value); return }
@@ -243,7 +241,7 @@ onUnmounted(() => { disposed = true; request.clear(); detailSwitch.invalidate();
     </template>
     <template #grid>
       <div v-if="initializationError || result.error" role="alert" class="pms-list-load-error">{{ initializationError || result.error }} <el-button size="small" :disabled="result.loading || initializing" @click="initializationError ? initialize() : retry()">重试</el-button></div>
-      <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy" :row-data="result.items" :pinned-top-row-data="result.openings" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS" :locale-text="chineseLocaleText" :loading="result.loading" :pagination="false" :enable-cell-text-selection="true" :get-row-id="p => p.data.row_id" :get-row-class="p => p.data?.row_id === selected?.row_id ? 'pms-detail-row-active' : ''" @grid-ready="onGridReady" @row-clicked="onRowClicked" @column-resized="onColumnResized" @column-moved="persist" @column-pinned="persist" @grid-size-changed="listRef?.refreshScrollbar()" />
+      <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy" :row-data="visibleRows" :pinned-top-row-data="visibleOpenings" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS" :locale-text="chineseLocaleText" :loading="result.loading" :pagination="false" :enable-cell-text-selection="true" :get-row-id="p => p.data.row_id" :get-row-class="p => p.data?.row_id === selected?.row_id ? 'pms-detail-row-active' : ''" @grid-ready="onGridReady" @row-clicked="onRowClicked" @column-resized="onColumnResized" @column-moved="persist" @column-pinned="persist" @grid-size-changed="listRef?.refreshScrollbar()" />
       <div v-else-if="initializing" class="stock-detail-loading" role="status">正在加载报表…</div>
     </template>
     <template #pagination><CustomPagination :key="paginationRevision" :model-value="page" :page-size="pageSize" :total="result.total" @update:model-value="value => paginate(value)" @update:page-size="value => paginate(1, value)" /></template>

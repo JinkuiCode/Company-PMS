@@ -10,9 +10,10 @@ import PmsDataList from '@/components/PmsDataList.vue'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { createReportSession } from '@/report-query/state'
 import { cloneQuery, validateConditions, type QueryCondition, type QueryField } from '@/query-system/core'
-import { activeReportConditions, reportFields, reportDefaults, reportScope, reportPreferences, saveReportPreferences, serializeReportConditions, serializeColumnFilters, reportColumnCandidates, linkReportScope, legacyReportSchemes, createReportColumnSort } from '@/query-system/report-adapter'
+import { activeReportConditions, reportFields, reportDefaults, reportScope, reportPreferences, saveReportPreferences, serializeReportConditions, linkReportScope, legacyReportSchemes, createReportColumnSort } from '@/query-system/report-adapter'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
+import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import { migrateReportIdentity, reportIdentityVersion } from './report-identity-layout'
@@ -20,7 +21,7 @@ import CustomPagination from '@/components/CustomPagination.vue'
 import { DEFAULT_PAGE_SIZE, PMS_GRID_OPTIONS } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
-import { getInventoryMetadata, getInventoryRows, getInventoryColumnCandidates, type InventoryField, type InventoryMetadata, type InventoryRow } from '@/api/inventoryReport'
+import { getInventoryMetadata, getInventoryRows, type InventoryField, type InventoryMetadata, type InventoryRow } from '@/api/inventoryReport'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 const auth = useAuthStore()
@@ -91,20 +92,14 @@ function display(row: InventoryRow | undefined, field: InventoryField) {
   return field.value_type === 'number' ? new Intl.NumberFormat('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(Number(value)) : String(value)
 }
 const columnFields = computed(() => reportFields((metadata.value?.column_filter_fields || []).filter(field => !removedIdentity.includes(field.field))))
-const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.value, filters: () => columnFilters.value,
+const pageColumns = usePageColumnFilter(rows, () => columnFields.value, columnFilters, () => [page.value, pageSize.value], undefined, () => !!acceptedParams.value && !loading.value)
+const visibleRows = pageColumns.visibleRows
+const columnContext = (): ColumnQueryContext => ({ ...pageColumns.context,
   ready: () => !!acceptedParams.value && !loading.value,
   sort: createReportColumnSort({ accepted: () => acceptedParams.value, loading: () => loading.value, fields: () => Object.fromEntries(defaultKeys.value.map(key => [key, key])), grid: () => grid,
     changed: value => { Object.assign(sort, value); savePreferences() }, unsupported: () => ElMessage.warning('此列不支持排序'),
     load: request => fetchRows(false, { draft: cloneQuery(session.applied!), request, submit: false }),
   }),
-  load: (field, keyword, targetPage) => reportColumnCandidates(acceptedParams.value, field, keyword, targetPage, getInventoryColumnCandidates),
-  apply: (field, filter) => {
-    columnFilters.value = [...columnFilters.value.filter(f => f.field !== field), ...(filter ? [filter] : [])]
-    if (!acceptedParams.value || !session.applied || loading.value) return
-    const draft = cloneQuery(session.applied); draft.column_filters = cloneQuery(columnFilters.value)
-    const request = { ...cloneQuery(acceptedParams.value), page: 1, column_filters: serializeColumnFilters(columnFilters.value) }
-    void fetchRows(true, { draft, request, submit: true })
-  },
 })
 const columns = computed<ColDef<InventoryRow>[]>(() => decorateQueryColumns<InventoryRow>(fields.value.map(field => ({
   field: field.key, colId: field.key, headerName: field.label, headerTooltip: field.label,
@@ -132,7 +127,7 @@ function onSortChanged(event: SortChangedEvent) {
 type Draft = ReturnType<typeof emptyDraft>
 const buildParams = (draft: Draft, targetPage = page.value) => {
   const scope = reportScope('inventory', draft.conditions)
-  return { ...scope.params, ...sort, page: targetPage, page_size: pageSize.value, filters: serializeReportConditions(scope.conditions), column_filters: serializeColumnFilters(draft.column_filters) }
+  return { ...scope.params, ...sort, page: targetPage, page_size: pageSize.value, filters: serializeReportConditions(scope.conditions), column_filters: '[]' }
 }
 const acceptedParams = ref<ReturnType<typeof buildParams> | null>(null)
 type FailedRequest = { draft: Draft; request: ReturnType<typeof buildParams>; submit: boolean }
@@ -141,6 +136,7 @@ const params = () => cloneQuery(acceptedParams.value!)
 async function fetchRows(submit = false, replay?: FailedRequest, applySort = false) {
   if (!metadata.value || (!submit && !session.applied)) return
   if (!replay && submit && invalid.value) return
+  pageColumns.clear()
   const ticket = session.begin(replay?.draft || (submit ? filters.value : session.applied!))
   const request = replay ? cloneQuery(replay.request) : buildParams(ticket.value,submit ? 1 : page.value)
   if (!replay && !submit && !applySort && acceptedParams.value) {
@@ -171,7 +167,7 @@ async function initialize() {
   catch { loading.value = false; error.value = '库存报表初始化失败，请重试' }
 }
 function invalidate() { session.invalidate(); controller?.abort(); loading.value = false; failedRequest = null }
-function clearColumnFilters() { columnFilters.value = []; invalidate() }
+function clearColumnFilters() { pageColumns.clear(); invalidate() }
 function planSnapshot() { return { reportIdentityVersion: reportIdentityVersion(fields.value), visible:[...visible.value], columns:grid?.getColumnState() || savedColumns, pageSize:pendingPageSize.value ?? pageSize.value, sort: { ...sort } } }
 async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
   if (invalid.value) { ElMessage.warning(invalid.value); return }
@@ -215,7 +211,7 @@ onUnmounted(() => { invalidate(); grid = null })
     <template #grid>
       <div v-if="error" class="pms-list-load-error" role="alert">{{ error }}<span v-if="session.applied">，下方保留上次查询结果</span> <el-button size="small" @click="retry">重试</el-button></div>
       <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy"
-        :row-data="rows" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS"
+        :row-data="visibleRows" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS"
         :locale-text="chineseLocaleText" :loading="loading" :pagination="false" :suppress-multi-sort="true"
         :overlay-no-rows-template="session.applied ? '<span>没有符合条件的数据</span>' : '<span>设置条件后，点击查询</span>'"
         :enable-cell-text-selection="true" @grid-ready="onGridReady" @column-resized="onColumnResized"

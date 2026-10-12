@@ -67,6 +67,8 @@ class Settings(BaseSettings):
 
     # JWT and local bootstrap credentials.
     SECRET_KEY: str = Field(default="", repr=False)
+    # Optional protected key; otherwise derive a purpose-separated key from SECRET_KEY.
+    PARAMETER_ENCRYPTION_KEY: str = Field(default="", repr=False)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     PMS_BOOTSTRAP_ADMIN_USERNAME: str = ""

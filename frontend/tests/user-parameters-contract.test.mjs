@@ -36,7 +36,7 @@ for (const [name, source] of [['user', drawer], ['parameter', parameters], ['pas
   })
 }
 test('parameter group filter and newly typed secret reveal use shared controls', () => {
-  assert.match(parameters, /aria-label="参数分组"/)
+  assert.match(parameters, /useSystemQuery/)
   assert.match(parameters, /:aria-pressed="revealSecret"/)
   assert.match(parameters, /row.sensitive \? '' : row.value/)
 })

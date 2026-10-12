@@ -153,7 +153,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { OfficeBuilding } from '@element-plus/icons-vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import UserFormDrawer from './UserFormDrawer.vue'
-import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/config/listUi'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -340,7 +340,7 @@ const roleOptions = computed<PmsOption[]>(() => roleList.value.map(role => ({
 const loading = ref(false)
 const page = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
-const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
+const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, topRows, pageRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
   { field: 'username', label: '账号（工号）', type: 'text' },
   { field: 'real_name', label: '员工姓名', type: 'text' },
   { field: 'email', label: '邮箱', type: 'text' },
@@ -348,18 +348,19 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit:
   { field: 'dept_id', label: '部门', type: 'enum', options: Object.entries(deptMap.value).map(([value,label]) => ({value:Number(value),label})) },
   { field: 'role_names', label: '角色', type: 'text' },
   { field: 'status', label: '状态', type: 'enum', options: [{value:1,label:'启用'},{value:0,label:'禁用'}] },
-], ['username', 'real_name', 'status'], {ready:()=>!loading.value})
-const filteredUsers = computed(() => filterRows(userList.value, row => ({...row, role_names: row.role_names?.join('，') || ''})))
+], ['username', 'real_name', 'status'], {ready:()=>!loading.value,pagination:{page,size:pageSize}})
+const userQueryRecord = (row:any) => ({...row,role_names:row.role_names?.join('，') || ''})
+const filteredUsers = computed(() => topRows(userList.value, userQueryRecord))
 const total = computed(() => filteredUsers.value.length)
-const pagedUsers = computed(() => filteredUsers.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+const pagedUsers = computed(() => pageRows(userList.value, userQueryRecord))
 function runQuery(conditions: QueryCondition[], preferences: object) {
   submitQuery(conditions)
   const size = (preferences as {pageSize?:number}).pageSize
-  if (size && Number.isSafeInteger(size) && size > 0) pageSize.value = size
+  if (size && PAGE_SIZE_OPTIONS.includes(size)) pageSize.value = size
   page.value = 1
 }
 function clearQueryColumns() { clearColumns() }
-watch(columnFilters, () => { page.value = 1 }, {deep:true})
+watch(userList, clearColumns, {flush:'sync'})
 
 // 用户弹窗
 const userDialogVisible = ref(false)

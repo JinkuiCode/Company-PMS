@@ -10,15 +10,16 @@ import CustomPagination from '@/components/CustomPagination.vue'
 import ReportExportControl from '@/components/ReportExportControl.vue'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { cloneQuery, validateConditions, type QueryCondition } from '@/query-system/core'
-import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, reportPreferences, saveReportPreferences, serializeReportConditions, serializeColumnFilters, reportColumnCandidates, linkReportScope, legacyReportSchemes, purchaseDetailEntry, createReportColumnSort } from '@/query-system/report-adapter'
+import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, reportPreferences, saveReportPreferences, serializeReportConditions, linkReportScope, legacyReportSchemes, purchaseDetailEntry, createReportColumnSort } from '@/query-system/report-adapter'
 import { migrateOverviewLayout } from './purchase-overview-layout'
 import { migrateReportIdentity, reportIdentityVersion } from './report-identity-layout'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
+import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import { DEFAULT_PAGE_SIZE, PMS_GRID_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
-import { getPurchaseMetadata, getPurchaseOverview, getPurchaseProjectReference, getPurchaseColumnCandidates, type PurchaseMetadata, type PurchaseOverviewRow, type PurchaseQueryDraft, type PurchaseDetailEntry } from '@/api/purchaseReport'
+import { getPurchaseMetadata, getPurchaseOverview, getPurchaseProjectReference, type PurchaseMetadata, type PurchaseOverviewRow, type PurchaseQueryDraft, type PurchaseDetailEntry } from '@/api/purchaseReport'
 
 ModuleRegistry.registerModules([AllCommunityModule])
 const emit = defineEmits<{ detail: [entry: PurchaseDetailEntry] }>()
@@ -67,13 +68,13 @@ function saveLayout() {
 }
 const draft = (): PurchaseQueryDraft => {
   const scope = reportScope('purchase', conditions.value)
-  return { keyword: String(scope.params.keyword || ''), project_code: '', supplier: String(scope.params.supplier || ''), progress: '', organization_ids: (scope.params.organization_ids as number[]) || [], dates: [], conditions: scope.conditions, column_filters: cloneQuery(columnFilters.value) }
+  return { keyword: String(scope.params.keyword || ''), project_code: '', supplier: String(scope.params.supplier || ''), progress: '', organization_ids: (scope.params.organization_ids as number[]) || [], dates: [], conditions: scope.conditions, column_filters: [] as ColumnFilter[] }
 }
 type Selection = { draft: PurchaseQueryDraft; status: string }
 const applied = ref<Selection | null>(null)
 const dirty = computed(() => { if (!applied.value) return false; try { return JSON.stringify({ draft: draft(), status: overviewStatus.value }) !== JSON.stringify(applied.value) || pendingSize.value !== null } catch { return true } })
 function parameters(value: Selection, submit: boolean) {
-  return { ...value.draft, view: 'overview' as const, dates: undefined, conditions: undefined, filters: serializeReportConditions(value.draft.conditions), column_filters: serializeColumnFilters(value.draft.column_filters || []),
+  return { ...value.draft, view: 'overview' as const, dates: undefined, conditions: undefined, filters: serializeReportConditions(value.draft.conditions), column_filters: '[]',
     date_from: value.draft.dates[0] || undefined, date_to: value.draft.dates[1] || undefined,
     overview_status: value.status, ...sort, page: submit ? 1 : page.value, page_size: submit ? pendingSize.value ?? pageSize.value : pageSize.value }
 }
@@ -91,6 +92,7 @@ async function beforeExport() {
 function invalidate() { ++serial; controller?.abort(); loading.value = false; failed = null }
 async function query(submit = false, replay?: Attempt, applySort = false) {
   if (!metadata.value || (!submit && !applied.value) || (submit && invalid.value && !replay)) return
+  pageColumns.clear()
   const selection = cloneQuery(replay?.selection || (submit ? { draft: draft(), status: overviewStatus.value } : applied.value!))
   const params = replay?.params || parameters(selection, submit)
   if (!submit && !replay && !applySort && accepted) {
@@ -123,20 +125,14 @@ const Completion = defineComponent({ props: ['params'], setup(props) { return ()
 } } })
 const Count = defineComponent({ props: ['params'], setup(props) { return () => h('button', { type: 'button', class: ['overview-count', { review: props.params.colDef.field === 'review_lines' }], disabled: loading.value, onClick: () => drill(props.params.data, props.params.colDef.field.replace(/_lines$/, '')) }, String(props.params.value)) } })
 const columnFields = computed(() => reportFields(metadata.value?.overview_column_filter_fields || []).filter(f => f.field !== 'project_name' && f.operators?.join() !== 'reference'))
-const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.value, filters: () => columnFilters.value,
+const pageColumns = usePageColumnFilter(rows, () => columnFields.value, columnFilters, () => [page.value, pageSize.value], undefined, () => !!accepted && !loading.value)
+const visibleRows = pageColumns.visibleRows
+const columnContext = (): ColumnQueryContext => ({ ...pageColumns.context,
   ready: () => !!accepted && !loading.value,
   sort: createReportColumnSort({ accepted: () => accepted?.params || null, loading: () => loading.value, fields: () => sortFields, grid: () => grid,
     changed: value => { Object.assign(sort, value); saveLayout() }, unsupported: () => ElMessage.warning('此列不支持排序'),
     load: params => query(false, { selection: cloneQuery(accepted!.selection), params, submit: false }),
   }),
-  load: (field, keyword, targetPage) => reportColumnCandidates(accepted?.params || null, field, keyword, targetPage, params => getPurchaseColumnCandidates(true, params)),
-  apply: (field, filter) => {
-    columnFilters.value = [...columnFilters.value.filter(f => f.field !== field), ...(filter ? [filter] : [])]
-    if (!accepted || loading.value) return
-    const selection = cloneQuery(accepted.selection); selection.draft.column_filters = cloneQuery(columnFilters.value)
-    const params = { ...cloneQuery(accepted.params), page: 1, column_filters: serializeColumnFilters(columnFilters.value) }
-    void query(true, { selection, params, submit: true })
-  },
 })
 const columns = computed<ColDef<PurchaseOverviewRow>[]>(() => decorateQueryColumns<PurchaseOverviewRow>([
   ...fields.value.map(field => ({ field: field.key, headerName: field.label, colId: field.key, hide: !visible.value.includes(field.key), initialWidth: rateKeys.includes(field.key) ? 170 : field.key === 'project_code' ? 125 : field.value_type === 'number' ? 88 : 110, minWidth: 80, maxWidth: 800,
@@ -163,7 +159,7 @@ function sortChanged(event: { source: string }) {
 }
 function resized(event: { finished: boolean }) { if (event.finished) saveLayout() }
 const planSnapshot = () => ({ reportIdentityVersion: reportIdentityVersion(fields.value), metricLayoutVersion: 1, pageSize: pendingSize.value ?? pageSize.value, visible: [...visible.value], columns: grid?.getColumnState() || savedColumns.value, overviewStatus: overviewStatus.value, sort: { ...sort } })
-function clearColumnFilters() { columnFilters.value = []; overviewStatus.value = ''; invalidate() }
+function clearColumnFilters() { pageColumns.clear(); overviewStatus.value = ''; invalidate() }
 async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
   if (invalid.value) { ElMessage.warning(invalid.value); return }
   const plan = reportPreferences(migrateReportIdentity(migrateOverviewLayout(preferences)), fields.value.map(f => f.key))
@@ -218,7 +214,7 @@ onUnmounted(() => { invalidate(); grid = null })
     </template>
     <template #grid>
       <div v-if="error" class="pms-list-load-error" role="alert">{{ error }}<span v-if="applied">，下方保留上次查询结果</span> <el-button size="small" @click="retry">重试</el-button></div>
-      <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy" :row-data="rows" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS" :locale-text="chineseLocaleText" :loading="loading" :pagination="false" :get-row-id="p => p.data.id" :enable-cell-text-selection="true" :overlay-no-rows-template="applied ? '<span>没有符合条件的项目</span>' : '<span>设置条件后，点击查询</span>'" @grid-ready="ready" @sort-changed="sortChanged" @column-resized="resized" @column-moved="saveLayout" @column-pinned="saveLayout" @first-data-rendered="listRef?.refreshScrollbar()" @grid-size-changed="listRef?.refreshScrollbar()" />
+      <AgGridVue v-if="metadata" class="ag-theme-alpine wechat-table pms-ag-grid" theme="legacy" :row-data="visibleRows" :column-defs="columns" :default-col-def="defaultColDef" :grid-options="PMS_GRID_OPTIONS" :locale-text="chineseLocaleText" :loading="loading" :pagination="false" :get-row-id="p => p.data.id" :enable-cell-text-selection="true" :overlay-no-rows-template="applied ? '<span>没有符合条件的项目</span>' : '<span>设置条件后，点击查询</span>'" @grid-ready="ready" @sort-changed="sortChanged" @column-resized="resized" @column-moved="saveLayout" @column-pinned="saveLayout" @first-data-rendered="listRef?.refreshScrollbar()" @grid-size-changed="listRef?.refreshScrollbar()" />
     </template>
     <template #pagination><CustomPagination v-model="page" v-model:page-size="pageSize" :total="total" /></template>
   </PmsDataList>

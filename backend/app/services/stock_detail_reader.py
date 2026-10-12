@@ -118,7 +118,7 @@ def list_reference_candidates(cursor, kind, keyword, organizations, *, page=1, p
     from app.services.purchase_reader import _like
     if kind not in {'stock', 'material'} or batch_field not in {'code', 'name'}:
         raise HTTPException(422, '引用候选字段无效')
-    if not 1 <= page <= 1000000 or not 1 <= page_size <= 200 or len(keyword) > 100 or len(ids) > 1000 or len(batch_values) > 1000:
+    if not 1 <= page <= 1000000 or not 1 <= page_size <= 500 or len(keyword) > 100 or len(ids) > 1000 or len(batch_values) > 1000:
         raise HTTPException(422, '引用候选查询范围无效')
     if sum(bool(v) for v in (keyword.strip(), ids, batch_values)) > 1:
         raise HTTPException(422, '普通搜索、身份校验及精准批量查询不能混用')

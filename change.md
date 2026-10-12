@@ -1721,3 +1721,13 @@
 - 涉及文件：frontend/src/query-system/PmsQueryColumnHeader.vue、column-popup.ts、PmsQueryConditionRow.vue、PmsQueryReference.vue、reference.ts、reference-summary.ts；frontend/src/page-guide/navigation.ts、router/index.ts；tests/query-popup-fixes.test.mjs、query-popup-fixes-browser.mjs、fixtures/query-popup.*、page-guide-browser.mjs、reference-summary.test.mjs；docs/PMS-UI-STANDARD.md及本日志。
 - 验证：新增访问白名单、名称查询、互斥管理、未解析摘要及外部点击测试先RED后GREEN；最终相关前端22项、四项必需规范检查、TypeScript及生产构建退出0，仅既有包体警告。隔离真实组件验证五漏斗互斥、外部/同列标题/重复点击/Esc关闭、保留已应用条件、丢弃未应用草稿、晚到响应不恢复弹窗、卸载清理、内部下拉/日期/嵌套引用及其两类下拉、名称跨搜索累计勾选与批量查询、OA iframe外部点击。四静态说明匿名及无页面授权时可阅读/刷新且零API调用，业务页未登录及撤权仍拦截；原说明B多尺寸嵌入及新页签状态回归退出0。独立审查发现嵌套引用下拉传送到body导致误关闭，补回归复现并修复后复核无阻塞项。
 - 实页与边界：用户从只读入口启动后，实际5174产品线候选仅名称；档案样本连续五列打开均只有一个面板，外部点击后为零。证据在outputs/query-popup-fixes-20261012/。未部署正式环境，未改数据库/业务授权/配置、触发金蝶写入、提交、合并master或推送GitHub；正式OA实测留待后续发布验收。
+
+### 2026-10-12：当前页漏斗、500条分页与初始密码回显开发机实施
+- 原因：用户确认漏斗只筛选当前页、分页增加至500、弹窗统一配色及参数初始密码可查看。
+- 调整：新增共享page-column-filter模块，档案及三个报表、系统和项目列表复用当前已接受页；候选、按条件和多列交叉过滤均本地执行，表头查询及项目全结果排序仍在分页前。翻页、每页条数、查询、方案及新数据清除列条件和弹窗草稿，旧异步响应不恢复；列过滤不改变总条数、汇总或后台导出范围。收发期初行按同一条件展示，不重算数量。同步任务原定时刷新保留，新数据清除过滤。
+- 分页与样式：共享15/20/50/100/200/300/500，默认50；个人方案只接受目录中的数字值。实际列表及采购项目、收发物料/仓库、OA人员引用接口与读取层支持500，旧后台列候选200上限不变。筛选弹窗24px等高，辅助浅靛蓝、查询靛蓝、应用浅青绿、取消琥珀、关闭无外框叉，复用主题令牌。
+- 初始密码：保留原hash，另存AES-GCM认证密文；参数查看权限可回显，仅该参数开放。接口no-store、审计不含密码/哈希/密文、撤权/卸载清除内存，不写浏览器存储。旧哈希需重新保存；密钥失效或回退期间旧程序改过密码导致hash不一致时不回显错误旧值。未设置/重置任何实际用户密码。
+- 数据库：开发SQLite在线备份.runtime/backups/pms-dev-before-parameter-secret-20261012-133113.db并校验后，经parameter-secret-only限定流程升至2026-10-12-parameter-secret-01，仅加可空密文列；完整性及原账号、授权、参数hash、业务数据保持检查通过。回退限定模式与密钥保护说明已记录，不自动升级正式库。
+- 涉及文件：frontend/src/query-system/page-column-filter.ts、client-row-sort.ts、system-adapter.ts、report-adapter.ts、column-popup.ts、PmsQueryColumnHeader.vue、共享分页和上述业务/系统列表、ParameterList.vue、page-guide/registry.ts；backend参数模型/服务/secret_encryption.py、配置、数据库版本/独立升级脚本及分页API/读取服务；对应测试、AGENTS.md、docs/PMS-UI-STANDARD.md、本批实施计划和docs/releases/2026-10-12-page-column-filter-dev.md。
+- 验证：新增本页边界、全结果排序、分页、密码加密/权限/缓存/回退一致性及方案清理测试先RED后GREEN；前端本批25项、相关共享10项、四项规定契约、字段字典/枚举及build退出0，仅既有包体警告；后端密码/限定升级17项、分页10项、业务导出限定升级9项、用户安全36项及字段目录/枚举退出0。隔离Vue浏览器279/50候选、本地应用无业务/候选请求、总条数/导出范围不变、翻页清除、500及24px配色通过，截图outputs/page-column-filter-20261012/。实际5174档案102条的本页50候选、单项筛选总数不变、翻页恢复已验证；参数当前未设置。独立复核两项发现修复后关闭。
+- 边界：仅开发机；既有同步轮询并未取消，不宣称该页零后台刷新。真实MSSQL2017 DDL/失败回退及正式发布未执行，未改正式数据库/业务/授权，未重启SQL Server/OA/服务器、提交、合并master或推送GitHub，其他资料保持。

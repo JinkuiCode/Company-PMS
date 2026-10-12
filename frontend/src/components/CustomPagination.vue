@@ -13,10 +13,7 @@
     </div>
     <div class="pagination-right">
       <select class="page-size-select" :value="pageSize" @change="$emit('update:pageSize', Number(($event.target as HTMLSelectElement).value))">
-        <option :value="15">15 条/页</option>
-        <option :value="20">20 条/页</option>
-        <option :value="50">50 条/页</option>
-        <option :value="100">100 条/页</option>
+        <option v-for="size in PAGE_SIZE_OPTIONS" :key="size" :value="size">{{ size }} 条/页</option>
       </select>
     </div>
   </div>
@@ -24,6 +21,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { PAGE_SIZE_OPTIONS } from '../config/listUi.ts'
 
 const props = defineProps<{
   total: number

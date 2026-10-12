@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
 import { useSystemQuery } from '@/query-system/system-adapter'
@@ -9,7 +9,7 @@ import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import { PmsTextControl, PmsFormField, PmsSelectControl } from '@/form-system'
 
-interface Parameter { code: string; name: string; group: string; description: string; sensitive: boolean; configured: boolean; version: number; updated_at: string | null; value: string | null; value_type?: string }
+interface Parameter { code: string; name: string; group: string; description: string; sensitive: boolean; configured: boolean; version: number; updated_at: string | null; value: string | null; value_type?: string; reveal_status?: string; reveal_message?: string | null }
 const auth = useAuthStore()
 const items = ref<Parameter[]>([])
 const groups = computed(() => Array.from(new Set(items.value.map(item => item.group))).map(value => ({ label: value, value })))
@@ -29,17 +29,57 @@ const revealSecret = ref(false)
 const saving = ref(false)
 const error = ref('')
 const table = ref()
-const filtered = computed(() => filterRows(items.value, row => ({...row,configured:Number(row.configured)})))
+const filtered = computed(() => filterRows(items.value, row => ({ name: row.name, code: row.code, group: row.group, description: row.description, configured: Number(row.configured) })))
+let active = true
+let securityEpoch = 0
+let loadSequence = 0
+function resetDraft() {
+  editing.value = null; value.value = ''; error.value = ''; revealSecret.value = false
+}
+function clearMemory() {
+  securityEpoch++
+  loadSequence++
+  for (const item of items.value) if (item.sensitive) item.value = null
+  items.value = []
+  resetDraft()
+}
+function currentValue(row: Parameter) {
+  if (!auth.hasPermission('system:parameter:view')) return ''
+  if (!row.configured) return '未设置'
+  if (row.sensitive) {
+    if (row.code !== 'user.initial_password') return '已设置 · 不回显'
+    if (row.reveal_status === 'available' && row.value !== null) return row.value
+    return row.reveal_message || '已设置 · 需重新保存后回显'
+  }
+  return row.value_type === 'boolean' ? (row.value === 'true' ? '开启' : '关闭') : row.value
+}
+watch(() => auth.hasPermission('system:parameter:view'), allowed => {
+  if (!allowed) clearMemory()
+}, { flush: 'sync' })
+watch(() => auth.hasPermission('system:parameter:edit'), allowed => {
+  if (!allowed) resetDraft()
+}, { flush: 'sync' })
 async function focusFirstInvalid() {
   await nextTick()
   if (editing.value && error.value) document.getElementById(`parameter-${editing.value.code}`)?.focus()
 }
 async function load() {
+  if (!active || !auth.hasPermission('system:parameter:view')) { clearMemory(); return }
+  const epoch = securityEpoch
+  const sequence = ++loadSequence
   loading.value = true
   failed.value = false
-  try { const result = await request.get('/parameters') as any; items.value = result.items }
-  catch { failed.value = true }
-  finally { loading.value = false }
+  try {
+    const result = await request.get('/parameters') as any
+    if (active && epoch === securityEpoch && sequence === loadSequence && auth.hasPermission('system:parameter:view')) {
+      for (const item of items.value) if (item.sensitive) item.value = null
+      items.value = result.items.map((item: Parameter) => item.sensitive && item.code !== 'user.initial_password' ? { ...item, value: null } : item)
+    }
+  } catch (e: any) {
+    if (!active || epoch !== securityEpoch || sequence !== loadSequence) return
+    if (e.response?.status === 401 || e.response?.status === 403) clearMemory()
+    failed.value = true
+  } finally { if (sequence === loadSequence || epoch !== securityEpoch) loading.value = false }
 }
 async function discard() {
   if (saving.value) return false
@@ -47,28 +87,35 @@ async function discard() {
     try { await ElMessageBox.confirm('放弃尚未保存的参数修改？', '未保存修改', { confirmButtonText: '放弃修改', cancelButtonText: '继续编辑', type: 'warning' }) }
     catch { return false }
   }
-  editing.value = null; value.value = ''; error.value = ''; revealSecret.value = false
+  resetDraft()
   return true
 }
 async function edit(row: Parameter) {
   if (!auth.hasPermission('system:parameter:edit') || !await discard()) return
+  if (!active || !auth.hasPermission('system:parameter:view') || !auth.hasPermission('system:parameter:edit')) return
   editing.value = row
   value.value = row.sensitive ? '' : row.value || ''
 }
 async function save() {
-  if (!editing.value || saving.value || !auth.hasPermission('system:parameter:edit')) return
+  if (!editing.value || saving.value || !active || !auth.hasPermission('system:parameter:view') || !auth.hasPermission('system:parameter:edit')) return
   if (!value.value) { error.value = '请输入参数值'; await focusFirstInvalid(); return }
   saving.value = true; error.value = ''
+  const epoch = securityEpoch
   try {
     await request.put(`/parameters/${encodeURIComponent(editing.value.code)}`, { value: value.value, version: editing.value.version })
-    value.value = ''; editing.value = null; revealSecret.value = false
+    if (!active || epoch !== securityEpoch || !auth.hasPermission('system:parameter:view')) return
+    resetDraft()
     ElMessage.success('参数已保存')
     await load()
   } catch (e: any) {
+    if (!active || epoch !== securityEpoch) return
+    if (e.response?.status === 401 || e.response?.status === 403) { clearMemory(); return }
+    if (!auth.hasPermission('system:parameter:edit')) return
     error.value = e.response?.status === 409 ? '参数已被其他管理员修改，请取消并刷新后重试' : '保存失败，请检查后重试'
   } finally { saving.value = false; await focusFirstInvalid() }
 }
 onBeforeRouteLeave(() => discard())
+onBeforeUnmount(() => { active = false; clearMemory() })
 onMounted(load)
 </script>
 
@@ -91,7 +138,7 @@ onMounted(load)
       </template></el-table-column>
       <el-table-column label="参数名称" min-width="190" :class-name="queryColumnClass('name')" :label-class-name="queryColumnClass('name')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'name',displayName:'参数名称'}" /></template><template #default="{ row }"><div class="parameter-name">{{ row.name }}</div><div class="parameter-code">{{ row.code }}</div></template></el-table-column>
       <el-table-column prop="group" label="分组" width="120" :class-name="queryColumnClass('group')" :label-class-name="queryColumnClass('group')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'group',displayName:'分组'}" /></template></el-table-column>
-      <el-table-column label="当前值" width="150" :class-name="queryColumnClass('configured')" :label-class-name="queryColumnClass('configured')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'configured',displayName:'当前值'}" /></template><template #default="{ row }"><span :class="['pms-status', row.configured ? 'pms-status-success' : 'pms-status-warning']">{{ row.configured ? (row.sensitive ? '已设置 · 不回显' : row.value_type === 'boolean' ? (row.value === 'true' ? '开启' : '关闭') : row.value) : '未设置' }}</span></template></el-table-column>
+      <el-table-column label="当前值" min-width="210" :class-name="queryColumnClass('configured')" :label-class-name="queryColumnClass('configured')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'configured',displayName:'当前值'}" /></template><template #default="{ row }"><span :class="['pms-status', 'parameter-current-value', row.configured ? 'pms-status-success' : 'pms-status-warning']">{{ currentValue(row) }}</span></template></el-table-column>
       <el-table-column prop="description" label="用途" min-width="280" show-overflow-tooltip :class-name="queryColumnClass('description')" :label-class-name="queryColumnClass('description')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'description',displayName:'用途'}" /></template></el-table-column>
       <el-table-column label="操作" width="88" fixed="right"><template #default="{ row }"><el-button v-if="auth.hasPermission('system:parameter:edit')" link type="primary" :disabled="saving" @click="edit(row)">修改</el-button></template></el-table-column>
     </el-table>
@@ -107,6 +154,7 @@ onMounted(load)
 .parameter-filters > :last-child { width: 260px; max-width: 100%; }
 .parameter-name { font-weight: 500; }
 .parameter-code { font-size: 11px; color: var(--pms-text-muted); }
+.parameter-current-value { max-width: 100%; height: auto; min-height: 24px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .parameter-editor { display: flex; align-items: flex-end; gap: 16px; padding: 16px 24px; background: var(--pms-bg); flex-wrap: wrap; }
 .parameter-editor > :first-child { width: 320px; max-width: 100%; }
 .parameter-editor__actions { display: flex; gap: 8px; padding-bottom: 2px; }

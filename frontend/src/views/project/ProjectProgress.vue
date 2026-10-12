@@ -149,7 +149,7 @@ const filteredRowData = computed(() => filterRows(rowData.value))
 const queryColumnDefs = computed(() => decorateQueryColumns(columnDefs.value, () => columnContext))
 columnContext.sort = (field, direction) => gridApi.value?.applyColumnState({state:[{colId:field,sort:direction}],defaultState:{sort:null}})
 function clearQueryColumns() { clearColumns(); gridApi.value?.setFilterModel(null); gridApi.value?.refreshCells({force:true}) }
-function exportSnapshot() { return businessExportSnapshot(queryApplied.value, columnFilters.value, gridApi.value) }
+function exportSnapshot() { return businessExportSnapshot(queryApplied.value, [], gridApi.value) }
 
 const columnDefs = computed<ColDef[]>(() => ([
   { field: 'sort', headerName: '排序', width: 70, editable: () => hasPermission('project:list:edit'), type: 'numericColumn' },

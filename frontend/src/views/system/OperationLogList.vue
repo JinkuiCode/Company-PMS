@@ -19,7 +19,7 @@
       <el-table
         v-loading="loading"
         class="pms-dense-table operation-log-table"
-        :data="logs"
+        :data="visibleLogs"
         border
         stripe
         height="100%"
@@ -145,10 +145,11 @@ import { useSystemQuery, serverQueryParams, requireServerQueryVersion } from '@/
 import { toQueryFields } from '@/query-system/list-adapter'
 import type { QueryCondition } from '@/query-system/core'
 import type { ColumnQueryContext } from '@/query-system/column-filters'
+import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
-import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/config/listUi'
 import { PmsDateControl, PmsSelectControl, PmsTextControl, type PmsOption } from '@/form-system'
 import {
   type ListFilterField,
@@ -236,16 +237,12 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied
   {field:'request_path',label:'路径',type:'text'},
 ], ['created_at','module','action','operator_name'], {requireQuery:true,ready:()=>querySupported.value && !loading.value && !queryError.value})
 const querySupported = ref(false), queryError = ref('')
-const columnContext: ColumnQueryContext = {...clientContext, load: async (field, keyword, page) => {
-  if (!clientContext.ready?.()) throw Error('请先完成查询，再使用列筛选')
-  return await request.get('/operation-logs/column-values', {params:{...serverQueryParams(queryApplied.value,columnFilters.value.filter(f => f.field !== field)),field,keyword,page,page_size:100}}) as any
-}}
 function clearQueryColumns() { clearColumns() }
 function runQuery(conditions: QueryCondition[], preferences: object) {
   if (!querySupported.value) return
   submitQuery(conditions)
   const size = (preferences as {pageSize?:number}).pageSize
-  if (size && Number.isSafeInteger(size) && size > 0) pageSize.value = size
+  if (size && PAGE_SIZE_OPTIONS.includes(size)) pageSize.value = size
   page.value = 1
 }
 
@@ -254,6 +251,9 @@ const logs = ref<OperationLog[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
+const pageColumns = usePageColumnFilter(logs, () => queryFields.value, columnFilters, () => [page.value,pageSize.value], undefined, () => clientContext.ready?.() !== false)
+const columnContext: ColumnQueryContext = pageColumns.context
+const visibleLogs = pageColumns.visibleRows
 const detailVisible = ref(false)
 const selectedLog = ref<OperationLog | null>(null)
 
@@ -295,7 +295,7 @@ async function fetchLogs() {
     const params: Record<string, string | number | undefined> = {
       page: page.value,
       page_size: pageSize.value,
-      ...serverQueryParams(queryApplied.value, columnFilters.value),
+      ...serverQueryParams(queryApplied.value, []),
     }
     const data = await request.get('/operation-logs', { params }) as unknown as OperationLogListResponse
     if (serial !== logRequestSerial) return
@@ -356,8 +356,8 @@ function formatPrettyJson(value?: string | null) {
   return JSON.stringify(parsed, null, 2)
 }
 
-watch([queryApplied, columnFilters, pageSize], () => { page.value = 1 }, { deep: true, flush: 'sync' })
-watch([page, pageSize, queryApplied, columnFilters], () => {
+watch([queryApplied, pageSize], () => { page.value = 1; pageColumns.clear() }, { deep: true, flush: 'sync' })
+watch([page, pageSize, queryApplied], () => {
   ++logRequestSerial
   loading.value = true
   clearTimeout(logQueryTimer)

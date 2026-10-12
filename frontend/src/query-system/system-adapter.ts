@@ -1,7 +1,8 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { cloneQuery, isEmpty, matchesConditions, validateConditions, type QueryCondition, type QueryField } from './core.ts'
 import type { QueryDefinition } from './workspace.ts'
 import { clientColumnCandidates, matchesColumnFilters, type ColumnFilter, type ColumnQueryContext } from './column-filters.ts'
+import { columnPopupGroup } from './column-popup.ts'
 
 export function serverQueryParams(conditions: QueryCondition[], columns: ColumnFilter[]) {
   return { filters: JSON.stringify(conditions.map(condition => ({...condition,schemaVersion:2}))), column_filters: JSON.stringify(columns) }
@@ -13,7 +14,7 @@ export function requireServerQueryVersion(result: { query_version?: number }, fi
 }
 
 // Pages own data and layout; the workspace alone owns personal schemes.
-export function useSystemQuery(source: () => QueryField[], shown: string[], capability: {ready?: () => boolean; requireQuery?: boolean} = {}) {
+export function useSystemQuery(source: () => QueryField[], shown: string[], capability: {ready?: () => boolean; requireQuery?: boolean; pagination?: {page: Ref<number>; size: Ref<number>}} = {}) {
   const fields = computed(source)
   const defaults = computed<QueryDefinition[]>(() => [...shown.map(key => fields.value.find(field => field.field === key)).filter((field): field is QueryField => !!field), ...fields.value.filter(field => !shown.includes(field.field))].map(field => ({
     field: field.field, shown: shown.includes(field.field),
@@ -28,6 +29,7 @@ export function useSystemQuery(source: () => QueryField[], shown: string[], capa
   function submit(conditions: QueryCondition[]) {
     const errors = validateConditions(conditions, fields.value)
     if (Object.keys(errors).length) throw Error(Object.values(errors).join('；'))
+    clearColumns()
     applied.value = cloneQuery(conditions)
     submitted.value = true
   }
@@ -51,7 +53,14 @@ export function useSystemQuery(source: () => QueryField[], shown: string[], capa
     setResultRows(result.map(row => normalizeRecord(record(row))))
     return result.filter(row => matchesColumnFilters(normalizeRecord(record(row)), columnFilters.value, fields.value))
   }
-  function clearColumns() { if (columnFilters.value.length) columnFilters.value = [] }
+  function pageRows<T>(rows: T[], record: (row: T) => Record<string, unknown> = row => row as Record<string, unknown>): T[] {
+    const all = topRows(rows, record), pagination = capability.pagination
+    const base = pagination ? all.slice((pagination.page.value-1)*pagination.size.value, pagination.page.value*pagination.size.value) : all
+    setResultRows(base.map(row => normalizeRecord(record(row))))
+    return base.filter(row => matchesColumnFilters(normalizeRecord(record(row)), columnFilters.value, fields.value))
+  }
+  function clearColumns() { columnPopupGroup.close(); if (columnFilters.value.length) columnFilters.value = [] }
+  if (capability.pagination) watch([capability.pagination.page, capability.pagination.size], clearColumns, {flush:'sync'})
   function columnClass(field: string) { return columnFilters.value.some(filter => filter.field === field) ? 'pms-query-filtered-column' : '' }
   const columnContext: ColumnQueryContext = {
     ready: () => (!capability.requireQuery || submitted.value) && (capability.ready?.() ?? true),
@@ -63,7 +72,7 @@ export function useSystemQuery(source: () => QueryField[], shown: string[], capa
     },
     apply: (field, filter) => { columnFilters.value = [...columnFilters.value.filter(item => item.field !== field), ...(filter ? [cloneQuery(filter)] : [])] },
   }
-  return { fields, defaults, draft, applied, submitted, submit, topRows, filterRows, columnFilters, clearColumns, columnContext, setResultRows, columnClass }
+  return { fields, defaults, draft, applied, submitted, submit, topRows, filterRows, pageRows, columnFilters, clearColumns, columnContext, setResultRows, columnClass }
 }
 
 export async function loadCompleteDataset<T, R extends { items: T[]; total: number }>(
