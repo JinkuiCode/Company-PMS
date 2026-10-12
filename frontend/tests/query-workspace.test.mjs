@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 const source = new URL('../src/query-system/workspace.ts', import.meta.url)
 assert.ok(existsSync(source), '共享查询工作区状态模块必须存在，不允许页面各自保存方案')
-const { instantiateDefinitions, activeQuery, saveScheme, readSchemes, schemeStorageKey, settingsDefinitions, selectScheme } = await import(source.href)
+const { instantiateDefinitions, activeQuery, saveScheme, readSchemes, schemeStorageKey, settingsDefinitions, selectScheme, prepareDefinitions } = await import(source.href)
 const fields = [{field:'code',label:'编码',type:'text'}, {field:'qty',label:'数量',type:'number'}, {field:'org',label:'组织',type:'enum',required:true,options:[{value:1,label:'Bench'}]}]
 const defs = [{field:'code',shown:true,operator:'contains',value:null,valueEnd:null},{field:'qty',shown:false,operator:'equals',value:0,valueEnd:null},{field:'org',shown:true,operator:'in',value:[],valueEnd:null}]
 const draft = instantiateDefinitions(defs)
@@ -24,4 +24,12 @@ assert.equal(selectScheme(schemes,'jin',defs).conditions[0].value,null,'草稿�
 assert.deepEqual(selected.columnFilters,[])
 assert.throws(()=>saveScheme(local,key,schemes,{name:'second',definitions:defs,isDefault:false},fields,'jin'),/同名/)
 assert.throws(()=>schemeStorageKey(null,'archive'),/登录/)
+const obsolete = [...defs, {field:'project_name',shown:true,operator:'equals',value:'旧项目',valueEnd:null}]
+const original = JSON.stringify(obsolete)
+const prepared = prepareDefinitions(obsolete, fields)
+assert.deepEqual(prepared.definitions, defs)
+assert.deepEqual(prepared.invalidFields, ['project_name'])
+assert.equal(JSON.stringify(obsolete), original, '失效条件仅在内存整理，不改变原方案')
+assert.deepEqual(prepareDefinitions(defs, fields).invalidFields, [])
+assert.deepEqual(settingsDefinitions(prepared.definitions, instantiateDefinitions(prepared.definitions), fields).map(d=>d.field).sort(), fields.map(f=>f.field).sort())
 console.log('query workspace passed: private schemes, single default, draft isolation, required, zero, reselection')

@@ -1,8 +1,16 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { rememberLoginDestination, consumeLoginDestination, chooseLoginDestination } from '@/utils/loginDestination'
+import { guideDestinations } from '@/page-guide/navigation'
 
 const routes: RouteRecordRaw[] = [
+  ...Object.entries(guideDestinations).map(([page, destination]): RouteRecordRaw => ({
+    path: `/page-guide/${page}`,
+    name: `PageGuide-${page}`,
+    component: () => import('@/page-guide/PmsPageGuidePage.vue'),
+    props: { page },
+    meta: { title: '页面说明', permission: destination.permission },
+  })),
   {
     path: '/change-password',
     name: 'ChangePassword',

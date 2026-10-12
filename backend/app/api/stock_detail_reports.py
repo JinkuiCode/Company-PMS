@@ -20,6 +20,20 @@ from app.services.report_filters import filter_fields, query_fields, matches_fil
 router = APIRouter(prefix='/api/reports/stock-detail', tags=['物料收发明细'])
 
 
+def enrich_stock_product_lines(db, connection, dataset):
+    from app.api.purchase_reports import enrich_product_lines
+    keys = dict.fromkeys([*dataset['openings'], *(row['inventory_key'] for row in dataset['rows'])])
+    if not keys:
+        return
+    rows = [{'organization_id': org} for org in sorted({key.organization_id for key in keys})]
+    enrich_product_lines(db, connection, rows)
+    names = {row['organization_id']: row['product_line_name'] for row in rows}
+    for key in keys:
+        dataset['labels'].setdefault(key, {})['product_line_name'] = names[key.organization_id]
+    for row in dataset['rows']:
+        row['product_line_name'] = names[row['inventory_key'].organization_id]
+
+
 @contextmanager
 def stock_detail_connection():
     try:
@@ -55,6 +69,7 @@ def listing(query: Annotated[StockDetailQuery, Query()], db: Session = Depends(g
     if organizations != []:
         with stock_detail_connection() as connection:
             dataset = read_dataset(connection, query, organizations)
+            enrich_stock_product_lines(db, connection, dataset)
             result = assemble_page(query, dataset['rows'], dataset['openings'],
                 opening_date=query.start_date, opening_labels=dataset['labels'])
     else:
@@ -116,4 +131,5 @@ def column_options(field: str = Query(max_length=100), keyword: str = Query('', 
         return dict(items=[], total=0, page=page, page_size=page_size, has_more=False)
     with stock_detail_connection() as connection:
         dataset = read_dataset(connection, query, organizations)
+        enrich_stock_product_lines(db, connection, dataset)
     return stock_candidates(query, dataset, field, keyword, page, page_size)

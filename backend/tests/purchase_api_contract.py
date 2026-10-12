@@ -177,7 +177,7 @@ class ReportApiContract(unittest.TestCase):
             self.assertEqual(read.call_args.args[1].organization_ids,[100,200])
             self.assertEqual([grant.organization_id for grant in read.call_args.args[2]],[100])
             row=response.json()['items'][0]
-            self.assertEqual(row['project_name'],'PMS 项目')
+            self.assertNotIn('project_name',row)
             self.assertEqual(row['product_line_name'],'100')
             self.assertEqual(row['organization_name'],'金蝶组织')
             self.assertEqual(row['completion_rate'],'25.0')

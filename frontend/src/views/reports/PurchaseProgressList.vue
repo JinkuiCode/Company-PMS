@@ -13,6 +13,8 @@ import { activeReportConditions, reportFields, reportDefaults, reportScope, repo
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
+import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
+import { migrateReportIdentity, reportIdentityVersion } from './report-identity-layout'
 import CustomPagination from '@/components/CustomPagination.vue'
 import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN, PMS_GRID_OPTIONS } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
@@ -33,11 +35,10 @@ const referenceScope = (q?: { conditions?: QueryCondition[]; line?: number | nul
   return purchaseReferenceScope(q)
 }
 const projectReference = () => ({ ...reportReference('项目档案', 'id', 'number', getPurchaseProjectReference, referenceScope), lineOptions: () => metadata.value?.organizations || [] })
-const filterFields = computed(() => reportFields(metadata.value?.query_fields || metadata.value?.filter_fields || [], [
+const filterFields = computed(() => reportFields((metadata.value?.query_fields || metadata.value?.filter_fields || []).filter(field => field.field !== 'project_name'), [
   { field: 'keyword', label: '申请单 / 物料 / 规格', type: 'text', operators: ['contains'] },
   { field: 'organization_ids', label: '产品线', type: 'enum', options: metadata.value?.organizations || [], operators: ['equals', 'in', 'reference'] },
   { field: 'project_code', label: '项目编码', type: 'text', reference: projectReference() },
-  { field: 'project_name', label: '项目名称', type: 'text', reference: projectReference() },
   { field: 'supplier_name', label: '供应商', type: 'text' },
 ]))
 const queryDefaults = reportDefaults(['keyword', 'organization_ids', 'project_code', 'application_date', 'supplier_name'])
@@ -62,60 +63,41 @@ const detail = createPurchaseDetailState(getPurchaseDetail, state => { detailSta
 const activeRow = computed(() => rows.value.find(row => String(row.id) === detailState.value.requestId))
 const receipts = computed(() => (detailState.value.data?.receipts || []).filter(row => !detailState.value.orderId || String(row.order_id) === detailState.value.orderId))
 const selectedOrder = computed(() => detailState.value.data?.orders.find(row => String(row.id) === detailState.value.orderId))
-const projectPrefix = ['product_line_name', 'project_code', 'project_name']
+const projectPrefix = ['product_line_name', 'project_code']
+const fields = computed(() => {
+  const available = (metadata.value?.fields || []).filter(field => field.key !== 'project_name')
+  return [...projectPrefix.flatMap(key => available.filter(field => field.key === key)), ...available.filter(field => !projectPrefix.includes(field.key))]
+})
 const defaultKeys = [...projectPrefix, 'material_name', 'unit_name', 'bill_no', 'line_no', 'application_date', 'document_status', 'requested', 'approved', 'last_order_date', 'ordered', 'supplier_name', 'last_stock_date', 'net_received', 'pending_order', 'pending_receipt', 'progress']
-const groups = computed(() => [...new Set((metadata.value?.fields || []).map(field => field.group))].map(group => ({
-  key: group, label: group, fields: metadata.value!.fields.filter(field => field.group === group).map(field => ({ ...field, quick_addable: true })),
+const groups = computed(() => [...new Set(fields.value.map(field => field.group))].map(group => ({
+  key: group, label: group, fields: fields.value.filter(field => field.group === group).map(field => ({ ...field, quick_addable: true })),
 })))
 const storageKey = computed(() => `pms:purchase-report:v1:${auth.user?.id || 'anonymous'}`)
 let savedColumns: ColumnState[] = [], restoring = false
-let productLineColumnMigrated = false
-let projectPrefixMigrated = false
 function readPreferences() {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey.value) || '{}')
-    const keys = new Set(metadata.value?.fields.map(field => field.key))
-    projectPrefixMigrated = saved.projectPrefixMigrated === true
-    const migrateProjectPrefix = !projectPrefixMigrated
-    if (migrateProjectPrefix) {
-      for (const layout of [saved, ...(Array.isArray(saved.plans) ? saved.plans : [])]) {
-        if (Array.isArray(layout.visible)) layout.visible = [...projectPrefix, ...layout.visible.filter((key: string) => !projectPrefix.includes(key))]
-        if (Array.isArray(layout.columns)) layout.columns = [
-          ...projectPrefix.map(colId => ({ ...layout.columns.find((c: ColumnState) => c.colId === colId), colId, hide: false, pinned: 'left' })),
-          ...layout.columns.filter((c: ColumnState) => !projectPrefix.includes(c.colId)).map((c: ColumnState) => ({ ...c, pinned: c.pinned === 'left' ? null : c.pinned })),
-        ]
-      }
-      projectPrefixMigrated = true
-    }
-    productLineColumnMigrated = saved.productLineColumnMigrated === true
-    // Persist this migration once so subsequent user choices remain authoritative.
-    const migrateProductLine = !productLineColumnMigrated && keys.has('product_line_name')
-    if (migrateProductLine) {
-      for (const layout of [saved, ...(Array.isArray(saved.plans) ? saved.plans : [])]) {
-        if (!layout) continue
-        if (Array.isArray(layout.visible) && !layout.visible.includes('product_line_name')) layout.visible.push('product_line_name')
-        if (Array.isArray(layout.columns)) layout.columns = layout.columns.map((column: ColumnState) => column.colId === 'product_line_name' ? { ...column, hide: false } : column)
-      }
-      productLineColumnMigrated = true
-    }
+    const raw = JSON.parse(localStorage.getItem(storageKey.value) || '{}')
+    const saved = migrateReportIdentity(raw)
+    const keys = new Set(fields.value.map(field => field.key))
     visible.value = Array.isArray(saved.visible) ? saved.visible.filter((key: string) => keys.has(key)) : [...defaultKeys]
     savedColumns = Array.isArray(saved.columns) ? saved.columns.filter((column: ColumnState) => keys.has(column.colId) || column.colId === 'purchase_actions') : []
     const sorting = savedColumns.find(column => column.sort && sortFields[column.colId])
-    if (sorting) Object.assign(sort, { sort: sortFields[sorting.colId], direction: sorting.sort })
-    if (migrateProductLine || migrateProjectPrefix) savePreferences()
+    if (saved.sort && Object.values(sortFields).includes(saved.sort.sort)) Object.assign(sort, saved.sort)
+    else if (sorting) Object.assign(sort, { sort: sortFields[sorting.colId], direction: sorting.sort })
+    if (raw.reportIdentityVersion !== 1) savePreferences()
   } catch { visible.value = [...defaultKeys]; savedColumns = [] }
 }
 function savePreferences() {
-  if (restoring) return
-  try { saveReportPreferences(localStorage, storageKey.value, { visible: visible.value, columns: grid?.getColumnState() || savedColumns, productLineColumnMigrated, projectPrefixMigrated }) }
+  if (restoring || !reportIdentityVersion(fields.value)) return
+  try { saveReportPreferences(localStorage, storageKey.value, { visible: visible.value, columns: grid?.getColumnState() || savedColumns, sort: { ...sort }, reportIdentityVersion: 1 }) }
   catch { ElMessage.warning('本机设置保存失败，请检查浏览器存储空间') }
   void nextTick(() => listRef.value?.refreshScrollbar())
 }
-const planSnapshot = () => ({ pageSize: pendingPageSize.value ?? pageSize.value, columns: grid?.getColumnState() || savedColumns, visible: [...visible.value], scope: cloneQuery(projectScope.value || null), sort: { ...sort } })
+const planSnapshot = () => ({ reportIdentityVersion: reportIdentityVersion(fields.value), pageSize: pendingPageSize.value ?? pageSize.value, columns: grid?.getColumnState() || savedColumns, visible: [...visible.value], scope: cloneQuery(projectScope.value || null), sort: { ...sort } })
 function clearColumnFilters() { columnFilters.value = []; invalidate() }
 async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
   if (invalid.value) { ElMessage.warning(invalid.value); return }
-  const plan = reportPreferences(preferences, metadata.value?.fields.map(f => f.key) || [])
+  const plan = reportPreferences(migrateReportIdentity(preferences), fields.value.map(f => f.key))
   if (plan.scope !== undefined) projectScope.value = plan.scope || undefined
   restoring = true
   if (plan.pageSize != null && plan.pageSize !== pageSize.value) pendingPageSize.value = plan.pageSize
@@ -136,7 +118,7 @@ function display(row: PurchaseRow, field: PurchaseField) {
 const tone = (progress: string) => progress === 'complete' ? 'success' : progress === 'review' ? 'danger' : progress === 'ordering' ? 'warning' : 'info'
 const Actions = defineComponent({ props: ['params'], setup(props) { return () => h(ElButton, { size: 'small', link: true, type: 'primary', onClick: () => void detail.open(String(props.params.data.id)) }, () => '明细') } })
 const Progress = defineComponent({ props: ['params'], setup(props) { return () => h('span', { class: ['pms-status', tone(props.params.data.progress)] }, props.params.data.progress_label) } })
-const columnFields = computed(() => reportFields(metadata.value?.column_filter_fields || []).filter(f => f.operators?.join() !== 'reference'))
+const columnFields = computed(() => reportFields(metadata.value?.column_filter_fields || []).filter(f => f.field !== 'project_name' && f.operators?.join() !== 'reference'))
 const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.value, filters: () => columnFilters.value,
   ready: () => !!acceptedParams.value && !loading.value,
   sort: createReportColumnSort({ accepted: () => acceptedParams.value, loading: () => loading.value, fields: () => sortFields, grid: () => grid,
@@ -276,6 +258,7 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
       <span class="pms-report-query-status" :class="{'is-dirty':dirty}">{{loading?'正在查询':dirty?'条件已修改，待查询':applied?'已查询':'尚未查询'}}<template v-if="stamp"> · {{ new Date(stamp).toLocaleTimeString('zh-CN', { hour12: false }) }}</template></span>
       <ReportExportControl v-if="auth.hasPermission('report:purchase:export')" report="purchase" :parameters="params" :columns="exportColumns" :before-export="confirmExport" :disabled="loading || !applied || !total" />
       <PmsListColumnPicker v-if="metadata" v-model="visible" :groups="groups" :default-keys="defaultKeys" :column-definitions="columns" :get-grid-api="() => grid" aria-label="采购进度列设置" @layout-changed="savePreferences" />
+      <PmsPageGuide page="purchase" />
     </template>
     <template #filters>
       <PmsQueryWorkspace v-model="conditions" list-key="report-purchase-progress" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata" :loading="loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters" />

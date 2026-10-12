@@ -38,7 +38,7 @@ class PurchaseQuery(BaseModel):
     progress: Literal['', 'not_ordered', 'ordering', 'receiving', 'complete', 'review'] = ''
     page: int = Field(default=1, ge=1, le=1000000)
     page_size: int = Field(default=50, ge=1, le=500)
-    sort: Literal['date', 'bill_no', 'project_code', 'material_code'] = 'date'
+    sort: Literal['date', 'bill_no', 'project_code', 'material_code', 'product_line_name'] = 'date'
     direction: Literal['asc', 'desc'] = 'desc'
 
     @model_validator(mode='after')
@@ -65,7 +65,7 @@ class PurchaseQuery(BaseModel):
 class PurchaseOverviewQuery(PurchaseQuery):
     view: Literal['overview'] = 'overview'
     overview_status: Literal['', 'unfinished', 'complete', 'review'] = ''
-    sort: Literal['project_code', 'completion_rate', 'conversion_rate', 'total_lines'] = 'project_code'
+    sort: Literal['project_code', 'completion_rate', 'conversion_rate', 'total_lines', 'product_line_name'] = 'project_code'
     direction: Literal['asc', 'desc'] = 'asc'
 
     def conditions(self):
@@ -665,7 +665,8 @@ def progress_for(summary):
 
 def _page_then_summarize(connection, query, base, params):
     total = _rows(connection, 'WITH q AS (' + base + ') SELECT COUNT(*) AS total FROM q', params)[0]['total']
-    sort = {'date': 'application_date', 'bill_no': 'bill_no', 'project_code': 'project_code', 'material_code': 'material_code'}[query.sort]
+    sort = {'date': 'application_date', 'bill_no': 'bill_no', 'project_code': 'project_code',
+            'material_code': 'material_code', 'product_line_name': 'product_line_name'}[query.sort]
     start = (query.page - 1) * query.page_size
     sql = f'WITH q AS ({base}), numbered AS (SELECT *, ROW_NUMBER() OVER (ORDER BY {sort} {query.direction}, id {query.direction}) AS row_number FROM q) SELECT * FROM numbered WHERE row_number>%s AND row_number<=%s ORDER BY row_number'
     items = _with_state(_rows(connection, sql, [*params, start, start + query.page_size])) if total else []

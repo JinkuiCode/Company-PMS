@@ -58,7 +58,7 @@ class ExportContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder, \
              patch('app.api.inventory_reports.authorized_organizations', return_value=[1]), \
              patch('app.services.report_export_data.purchase_connection'), \
-             patch('app.services.stock_detail_fetch.read_dataset', return_value={}), \
+             patch('app.services.stock_detail_fetch.read_dataset', return_value=dict(rows=[], openings={}, labels={})), \
              patch('app.services.stock_detail_engine.export_rows', return_value=[{'bill_seq': 1, 'income_qty': D('6'), 'issue_qty': D('1234567890123456.125')}]) :
             path = Path(folder) / 'stock.xlsx'
             write_report(None, job, {}, path, lambda count: None)
@@ -85,7 +85,7 @@ class ExportContract(unittest.TestCase):
 
     def test_export_fields_exclude_financial_information(self):
         fields = report_export_jobs.fields_for('stock-detail')
-        self.assertEqual(len(fields), 15)
+        self.assertEqual(len(fields), 16)
         self.assertIn('balance_qty', [field['key'] for field in fields])
         self.assertFalse(any('price' in field['key'] or 'amount' in field['key'] for field in fields))
 

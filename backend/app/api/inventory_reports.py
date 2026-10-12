@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.models.product_line import SysProductLine
 from app.services.authorization import require_permission, enforce_permission
 from app.services.inventory_reader import (InventoryQuery, report_fields, list_inventory,
-    list_options, effective_organizations)
+    list_options, effective_organizations, resolve_product_lines)
 from app.services.purchase_connection import purchase_connection
 from app.services.business_data_scope import has_all_business_data, ALL_DATA_SCOPE
 from app.services.report_filters import query_fields
@@ -48,6 +48,7 @@ def query_rows(query,db,ctx):
     organizations=effective_organizations(query,authorized_organizations(db,ctx))
     if organizations == []:
         return {'items':[],'total':0}
+    resolve_product_lines(db, query)
     with inventory_connection() as connection:
         return list_inventory(connection,query,organizations)
 
@@ -92,5 +93,6 @@ def column_options(field: str = Query(max_length=100), keyword: str = Query('', 
     organizations = effective_organizations(query, authorized_organizations(db, ctx))
     if organizations == []:
         return dict(items=[], total=0, page=page, page_size=page_size, has_more=False)
+    resolve_product_lines(db, query)
     with inventory_connection() as connection:
         return inventory_candidates(connection, query, organizations, field, keyword, page, page_size)

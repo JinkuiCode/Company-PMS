@@ -81,10 +81,10 @@ def purchase_candidates(connection, query, grants, field, keyword='', page=1, pa
 
 
 def inventory_candidates(connection, query, organizations, field, keyword='', page=1, page_size=50):
-    from app.services.inventory_reader import where_clause, SOURCE
+    from app.services.inventory_reader import inventory_selection, inventory_projection
     query, spec = candidate_query(query, 'inventory', field, keyword, page, page_size)
-    where, params = where_clause(query, organizations)
-    return sql_candidates(connection, 'SELECT v.*' + SOURCE + where, params, spec, keyword, page, page_size)
+    selection, params = inventory_selection(query, organizations)
+    return sql_candidates(connection, 'SELECT ' + inventory_projection() + selection, params, spec, keyword, page, page_size)
 
 
 def stock_candidates(query, dataset, field, keyword='', page=1, page_size=50):

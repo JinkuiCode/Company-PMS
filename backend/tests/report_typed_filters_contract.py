@@ -199,6 +199,7 @@ class TypedFilters(unittest.TestCase):
              patch('app.api.inventory_reports.authorized_organizations', return_value=[1]), \
              patch('app.services.report_export_data.purchase_connection'), \
              patch('app.services.stock_detail_fetch.read_dataset', return_value=dict(rows=rows, openings={key: D(5)}, labels={})), \
+             patch('app.api.stock_detail_reports.enrich_stock_product_lines'), \
              patch('app.services.report_export_data.ReportWorkbook') as book:
             sheet = book.return_value.__enter__.return_value.sheet.return_value
             write_report(None, job, {}, Path(folder) / 'test.xlsx', lambda count: None)

@@ -2,12 +2,13 @@
 import json
 from decimal import Decimal, InvalidOperation
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 from app.services.inventory_fields import FIELDS, report_fields
 from app.services.business_data_scope import ALL_DATA_SCOPE
 from app.services.report_filters import parse_filters, parse_column_filters, sql_conditions
 
 KEYS = tuple(row[0] for row in FIELDS)
+PUBLIC_KEYS = ('FID', *(field['key'] for field in report_fields()))
 SOURCE = ' FROM dbo.YD_JIN_INVENTORY v '
 
 
@@ -20,7 +21,7 @@ class Condition(BaseModel):
 
     @model_validator(mode='after')
     def validate_condition(self):
-        if self.field not in KEYS or self.field == 'FID':
+        if self.field not in PUBLIC_KEYS or self.field == 'FID':
             raise ValueError('未知筛选字段')
         if self.operator in ('isEmpty','notEmpty'):
             return self
@@ -45,6 +46,7 @@ class Condition(BaseModel):
 
 class InventoryQuery(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    _product_line_names: dict = PrivateAttr(default_factory=dict)
     keyword: str = Field(default='', max_length=100)
     organization_id: int | None = Field(default=None, gt=0)
     stock: str = Field(default='', max_length=256)
@@ -57,7 +59,7 @@ class InventoryQuery(BaseModel):
 
     @model_validator(mode='after')
     def validate_query(self):
-        if self.sort not in KEYS:
+        if self.sort not in PUBLIC_KEYS:
             raise ValueError('未知排序字段')
         self.conditions()
         return self
@@ -81,7 +83,51 @@ class InventoryQuery(BaseModel):
 
 def public_row(row):
     return {key: str(row[key]) if isinstance(row[key], Decimal) else row[key]
-            for key in KEYS if key in row}
+            for key in PUBLIC_KEYS if key in row}
+
+
+def resolve_product_lines(db, query):
+    from app.models.product_line import SysProductLine
+    rows = db.query(SysProductLine.organization_id, SysProductLine.display_name).filter(
+        SysProductLine.source_key == 'kingdee', SysProductLine.organization_id > 0)
+    if query.organization_id:
+        rows = rows.filter(SysProductLine.organization_id == query.organization_id)
+    query._product_line_names = dict(rows.all())
+    return query
+
+
+def inventory_source(query):
+    """Display adapter only: retain stable stock org IDs and original row scope."""
+    parts, params = [], []
+    for org, name in sorted(query._product_line_names.items()):
+        parts.append('WHEN s.FSTOCKORGID=%s THEN %s')
+        params.extend([org, name])
+    fallback = ("CONCAT(COALESCE(NULLIF(raw.[Organization],''),"
+                "CONCAT(N'组织 ',s.FSTOCKORGID)),N'（未配置产品线）')")
+    expression = 'CASE ' + ' '.join(parts) + ' ELSE ' + fallback + ' END' if parts else fallback
+    projection = ','.join(f'raw.[{key}]' for key in KEYS)
+    source = (f' FROM (SELECT {projection},s.FSTOCKORGID AS organization_id,'
+              f'{expression} AS product_line_name FROM dbo.YD_JIN_INVENTORY raw '
+              'LEFT JOIN dbo.T_STK_INVENTORY s ON s.FID=raw.FID) v ')
+    return source, params
+
+
+def inventory_selection(query, organizations):
+    source, source_params = inventory_source(query)
+    where, params = where_clause(query, organizations)
+    params = [*source_params, *params]
+    if len(params) > 2000:
+        raise ValueError('查询参数过多，请缩小范围')
+    return source + where, params
+
+
+def inventory_order(query):
+    return f'v.[{query.sort}] {query.direction.upper()}' + ''.join(
+        f',v.[{key}] ASC' for key in KEYS if key != query.sort)
+
+
+def inventory_projection():
+    return ','.join(f'v.[{key}]' for key in PUBLIC_KEYS)
 
 
 def like(value):
@@ -145,16 +191,14 @@ def list_inventory(connection, query, authorized):
     organizations = effective_organizations(query, authorized)
     if organizations == []:
         return {'items': [], 'total': 0}
-    where, params = where_clause(query, organizations)
+    selection, params = inventory_selection(query, organizations)
     cursor = connection.cursor()
     try:
-        cursor.execute('SELECT COUNT_BIG(*) AS total'+SOURCE+where, tuple(params))
+        cursor.execute('SELECT COUNT_BIG(*) AS total'+selection, tuple(params))
         total = int(cursor.fetchone()['total'])
         # Keep source rows, including duplicates; do not silently sum or deduplicate.
-        ordering = f'v.[{query.sort}] {query.direction.upper()}'
-        ordering += ''.join(f',v.[{key}] ASC' for key in KEYS if key != query.sort)
-        cursor.execute('SELECT '+','.join(f'v.[{key}]' for key in KEYS)+SOURCE+where+
-            ' ORDER BY '+ordering+' OFFSET %s ROWS FETCH NEXT %s ROWS ONLY',
+        cursor.execute('SELECT '+inventory_projection()+selection+
+            ' ORDER BY '+inventory_order(query)+' OFFSET %s ROWS FETCH NEXT %s ROWS ONLY',
             tuple(params+[(query.page-1)*query.page_size,query.page_size]))
         return {'items': [public_row(row) for row in cursor.fetchall()], 'total': total}
     finally:

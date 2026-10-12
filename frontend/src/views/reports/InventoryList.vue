@@ -10,10 +10,12 @@ import PmsDataList from '@/components/PmsDataList.vue'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { createReportSession } from '@/report-query/state'
 import { cloneQuery, validateConditions, type QueryCondition, type QueryField } from '@/query-system/core'
-import { activeReportConditions, reportFields, reportDefaults, reportScope, reportPreferences, serializeReportConditions, serializeColumnFilters, reportColumnCandidates, linkReportScope, legacyReportSchemes, createReportColumnSort } from '@/query-system/report-adapter'
+import { activeReportConditions, reportFields, reportDefaults, reportScope, reportPreferences, saveReportPreferences, serializeReportConditions, serializeColumnFilters, reportColumnCandidates, linkReportScope, legacyReportSchemes, createReportColumnSort } from '@/query-system/report-adapter'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
+import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
+import { migrateReportIdentity, reportIdentityVersion } from './report-identity-layout'
 import CustomPagination from '@/components/CustomPagination.vue'
 import { DEFAULT_PAGE_SIZE, PMS_GRID_OPTIONS } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
@@ -36,15 +38,20 @@ let grid: GridApi<InventoryRow> | null = null
 let savedColumns: ColumnState[] = [], restoring = false
 let controller: AbortController | null = null
 const storageKey = computed(() => `pms:inventory-report:v1:${auth.user?.id || 'anonymous'}`)
-const defaultKeys = computed(() => metadata.value?.fields.map(field => field.key) || [])
-const groups = computed(() => [{ key: 'inventory', label: '即时库存', fields: (metadata.value?.fields || []).map(field => ({...field, quick_addable: true})) }])
+const removedIdentity = ['Organization', 'project_name']
+const fields = computed(() => {
+  const available = (metadata.value?.fields || []).filter(field => !removedIdentity.includes(field.key))
+  return [...available.filter(field => field.key === 'product_line_name'), ...available.filter(field => field.key !== 'product_line_name')]
+})
+const defaultKeys = computed(() => fields.value.map(field => field.key))
+const groups = computed(() => [{ key: 'inventory', label: '即时库存', fields: fields.value.map(field => ({...field, quick_addable: true})) }])
 const conditions = computed({ get: () => filters.value.conditions, set: value => { filters.value.conditions = linkReportScope(value, filters.value.conditions, 'organization_id', ['Stock']) } })
 const columnFilters = computed({ get: () => filters.value.column_filters, set: value => { filters.value.column_filters = value } })
-const filterFields = computed(() => reportFields(metadata.value?.query_fields || (metadata.value?.fields || []).map<QueryField>(field => ({
+const filterFields = computed(() => reportFields((metadata.value?.query_fields || fields.value.map<QueryField>(field => ({
   field: field.key, label: field.label, type: field.value_type === 'number' ? 'number' : 'text',
-})), [
+}))).filter(field => !removedIdentity.includes(field.field)), [
   { field: 'keyword', label: '物料编码 / 名称 / 规格', type: 'text', operators: ['contains'] },
-  { field: 'organization_id', label: '库存组织', type: 'enum', options: metadata.value?.organizations || [], operators: ['equals', 'reference'] },
+  { field: 'organization_id', label: '产品线', type: 'enum', options: metadata.value?.organizations || [], operators: ['equals', 'reference'] },
   { field: 'Stock', label: '仓库', type: 'text' },
 ]))
 const queryDefaults = reportDefaults(['keyword', 'organization_id', 'Stock'])
@@ -54,23 +61,27 @@ const status = computed(() => loading.value ? '正在查询' : error.value ? '�
 function readPreferences() {
   visible.value = [...defaultKeys.value]
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey.value) || '{}')
+    const raw = JSON.parse(localStorage.getItem(storageKey.value) || '{}')
+    const saved = migrateReportIdentity(raw, removedIdentity)
     const keys = new Set(defaultKeys.value)
     if (Array.isArray(saved.visible)) {
       const clean = saved.visible.filter((key: unknown) => typeof key === 'string' && keys.has(key))
-      if (clean.length) visible.value = [...new Set(clean)] as string[]
+      visible.value = [...new Set(clean)] as string[]
     }
     savedColumns = Array.isArray(saved.columns) ? saved.columns.filter((c: ColumnState) => c && keys.has(c.colId)).map((c: ColumnState) => ({
+      ...c,
       colId: c.colId, width: Math.max(80, Math.min(800, Number(c.width) || 140)), pinned: c.pinned === 'left' || c.pinned === 'right' ? c.pinned : null,
       hide: !visible.value.includes(c.colId), sort: c.sort === 'asc' || c.sort === 'desc' ? c.sort : null,
     })) : []
     const sorted = savedColumns.find(c => c.sort)
-    if (sorted) { sort.sort = sorted.colId; sort.direction = sorted.sort! }
+    if (saved.sort && (saved.sort.sort === 'FID' || keys.has(saved.sort.sort))) Object.assign(sort, saved.sort)
+    else if (sorted) { sort.sort = sorted.colId; sort.direction = sorted.sort! }
+    if (raw.reportIdentityVersion !== 1) savePreferences()
   } catch { savedColumns = [] }
 }
 function savePreferences() {
-  if (restoring) return
-  try { localStorage.setItem(storageKey.value, JSON.stringify({ visible: visible.value, columns: grid?.getColumnState() || savedColumns })) }
+  if (restoring || !reportIdentityVersion(fields.value)) return
+  try { saveReportPreferences(localStorage, storageKey.value, { visible: visible.value, columns: grid?.getColumnState() || savedColumns, sort: { ...sort }, reportIdentityVersion: 1 }) }
   catch { ElMessage.warning('列设置保存失败，请检查浏览器存储空间') }
   void nextTick(() => listRef.value?.refreshScrollbar())
 }
@@ -79,7 +90,7 @@ function display(row: InventoryRow | undefined, field: InventoryField) {
   if (value === null || value === undefined || value === '') return '-'
   return field.value_type === 'number' ? new Intl.NumberFormat('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(Number(value)) : String(value)
 }
-const columnFields = computed(() => reportFields(metadata.value?.column_filter_fields || []))
+const columnFields = computed(() => reportFields((metadata.value?.column_filter_fields || []).filter(field => !removedIdentity.includes(field.field))))
 const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.value, filters: () => columnFilters.value,
   ready: () => !!acceptedParams.value && !loading.value,
   sort: createReportColumnSort({ accepted: () => acceptedParams.value, loading: () => loading.value, fields: () => Object.fromEntries(defaultKeys.value.map(key => [key, key])), grid: () => grid,
@@ -95,9 +106,10 @@ const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.va
     void fetchRows(true, { draft, request, submit: true })
   },
 })
-const columns = computed<ColDef<InventoryRow>[]>(() => decorateQueryColumns<InventoryRow>((metadata.value?.fields || []).map(field => ({
+const columns = computed<ColDef<InventoryRow>[]>(() => decorateQueryColumns<InventoryRow>(fields.value.map(field => ({
   field: field.key, colId: field.key, headerName: field.label, headerTooltip: field.label,
   initialWidth: field.width, minWidth: 80, maxWidth: 800, hide: !visible.value.includes(field.key),
+  initialPinned: field.key === 'product_line_name' ? 'left' as const : undefined,
   cellClass: field.value_type === 'number' ? 'inventory-number' : undefined,
   cellClassRules: field.value_type === 'number' ? {'inventory-negative': p => Number(p.value) < 0} : undefined,
   valueFormatter: params => display(params.data, field), tooltipValueGetter: params => display(params.data, field),
@@ -160,10 +172,10 @@ async function initialize() {
 }
 function invalidate() { session.invalidate(); controller?.abort(); loading.value = false; failedRequest = null }
 function clearColumnFilters() { columnFilters.value = []; invalidate() }
-function planSnapshot() { return { visible:[...visible.value], columns:grid?.getColumnState() || savedColumns, pageSize:pendingPageSize.value ?? pageSize.value, sort: { ...sort } } }
+function planSnapshot() { return { reportIdentityVersion: reportIdentityVersion(fields.value), visible:[...visible.value], columns:grid?.getColumnState() || savedColumns, pageSize:pendingPageSize.value ?? pageSize.value, sort: { ...sort } } }
 async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
   if (invalid.value) { ElMessage.warning(invalid.value); return }
-  const plan = reportPreferences(preferences, defaultKeys.value)
+  const plan = reportPreferences(migrateReportIdentity(preferences, removedIdentity), defaultKeys.value)
   restoring = true
   if (plan.visible) visible.value = plan.visible
   if (plan.pageSize != null && plan.pageSize !== pageSize.value) pendingPageSize.value = plan.pageSize
@@ -196,6 +208,7 @@ onUnmounted(() => { invalidate(); grid = null })
       <span class="pms-report-query-status" :class="{'is-dirty':dirty}" role="status">{{ status }}<template v-if="stamp"> · {{ new Date(stamp).toLocaleTimeString('zh-CN', {hour12:false}) }}</template></span>
       <ReportExportControl v-if="auth.hasPermission('report:inventory:export')" report="inventory" :parameters="params" :columns="exportColumns" :before-export="confirmExport" :disabled="loading || !session.applied || !total" />
       <PmsListColumnPicker v-if="metadata" v-model="visible" :groups="groups" :default-keys="defaultKeys" :column-definitions="columns" :get-grid-api="() => grid" aria-label="即时库存列设置" @layout-changed="savePreferences" />
+      <PmsPageGuide page="inventory" />
       </div></template>
       </PmsQueryWorkspace>
     </template>

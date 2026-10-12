@@ -5,12 +5,14 @@ import { AgGridVue } from 'ag-grid-vue3'
 import { AllCommunityModule, ModuleRegistry, type ColDef, type ColumnState, type GridApi, type GridReadyEvent } from 'ag-grid-community'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
+import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import ReportExportControl from '@/components/ReportExportControl.vue'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { cloneQuery, validateConditions, type QueryCondition } from '@/query-system/core'
 import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, reportPreferences, saveReportPreferences, serializeReportConditions, serializeColumnFilters, reportColumnCandidates, linkReportScope, legacyReportSchemes, purchaseDetailEntry, createReportColumnSort } from '@/query-system/report-adapter'
 import { migrateOverviewLayout } from './purchase-overview-layout'
+import { migrateReportIdentity, reportIdentityVersion } from './report-identity-layout'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import { DEFAULT_PAGE_SIZE, PMS_GRID_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
@@ -30,11 +32,10 @@ const referenceScope = (q?: { conditions?: QueryCondition[]; line?: number | nul
   return { organization_ids: q?.line != null ? [q.line] : selected }
 }
 const projectReference = () => ({ ...reportReference('项目档案', 'id', 'number', getPurchaseProjectReference, referenceScope), lineOptions: () => metadata.value?.organizations || [] })
-const filterFields = computed(() => reportFields(metadata.value?.overview_query_fields || metadata.value?.query_fields || metadata.value?.filter_fields || [], [
+const filterFields = computed(() => reportFields((metadata.value?.overview_query_fields || metadata.value?.query_fields || metadata.value?.filter_fields || []).filter(field => field.field !== 'project_name'), [
   { field: 'keyword', label: '申请单 / 物料 / 规格', type: 'text', operators: ['contains'] },
   { field: 'organization_ids', label: '产品线', type: 'enum', options: metadata.value?.organizations || [], operators: ['equals', 'in', 'reference'] },
   { field: 'project_code', label: '项目编码', type: 'text', reference: projectReference() },
-  { field: 'project_name', label: '项目名称', type: 'text', reference: projectReference() },
   { field: 'supplier_name', label: '供应商', type: 'text' },
 ]))
 const queryDefaults = reportDefaults(['keyword', 'organization_ids', 'project_code', 'application_date', 'supplier_name'])
@@ -48,15 +49,19 @@ const sortableKeys = Object.keys(sortFields)
 const rateKeys = ['completion_rate', 'conversion_rate']
 const listRef = ref<InstanceType<typeof PmsDataList>>()
 let grid: GridApi<PurchaseOverviewRow> | null = null, restoring = false, serial = 0, controller: AbortController | null = null
-const fields = computed(() => metadata.value?.overview_fields || [])
-const defaultKeys = ['product_line_name', 'project_code', 'project_name', ...rateKeys, 'total_lines', 'not_ordered_lines', 'ordering_lines', 'receiving_lines', 'complete_lines', 'review_lines']
+const projectPrefix = ['product_line_name', 'project_code']
+const fields = computed(() => {
+  const available = (metadata.value?.overview_fields || []).filter(field => field.key !== 'project_name')
+  return [...projectPrefix.flatMap(key => available.filter(field => field.key === key)), ...available.filter(field => !projectPrefix.includes(field.key))]
+})
+const defaultKeys = [...projectPrefix, ...rateKeys, 'total_lines', 'not_ordered_lines', 'ordering_lines', 'receiving_lines', 'complete_lines', 'review_lines']
 const visible = ref([...defaultKeys]), savedColumns = ref<ColumnState[]>([])
 const groups = computed(() => [...new Set(fields.value.map(f => f.group))].map(group => ({ key: group, label: group, fields: fields.value.filter(f => f.group === group).map(f => ({ ...f, quick_addable: true })) })))
 const key = computed(() => `pms:purchase-overview:v1:${auth.user?.id || 'anonymous'}`)
 function saveLayout() {
-  if (restoring) return
+  if (restoring || !reportIdentityVersion(fields.value)) return
   savedColumns.value = grid?.getColumnState() || savedColumns.value
-  try { saveReportPreferences(localStorage, key.value, { visible: visible.value, columns: savedColumns.value, metricLayoutVersion: 1 }) }
+  try { saveReportPreferences(localStorage, key.value, { visible: visible.value, columns: savedColumns.value, sort: { ...sort }, metricLayoutVersion: 1, reportIdentityVersion: 1 }) }
   catch { ElMessage.warning('列设置保存失败，请检查浏览器存储空间') }
   void nextTick(() => listRef.value?.refreshScrollbar())
 }
@@ -117,7 +122,7 @@ const Completion = defineComponent({ props: ['params'], setup(props) { return ()
   return h('div', { class: 'overview-completion' }, [h('span', { class: 'overview-track' }, [h('span', { class: { done: value === 100 }, style: { width: `${value}%` } })]), h('span', `${value.toFixed(1)}%`)])
 } } })
 const Count = defineComponent({ props: ['params'], setup(props) { return () => h('button', { type: 'button', class: ['overview-count', { review: props.params.colDef.field === 'review_lines' }], disabled: loading.value, onClick: () => drill(props.params.data, props.params.colDef.field.replace(/_lines$/, '')) }, String(props.params.value)) } })
-const columnFields = computed(() => reportFields(metadata.value?.overview_column_filter_fields || []).filter(f => f.operators?.join() !== 'reference'))
+const columnFields = computed(() => reportFields(metadata.value?.overview_column_filter_fields || []).filter(f => f.field !== 'project_name' && f.operators?.join() !== 'reference'))
 const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.value, filters: () => columnFilters.value,
   ready: () => !!accepted && !loading.value,
   sort: createReportColumnSort({ accepted: () => accepted?.params || null, loading: () => loading.value, fields: () => sortFields, grid: () => grid,
@@ -134,13 +139,13 @@ const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.va
   },
 })
 const columns = computed<ColDef<PurchaseOverviewRow>[]>(() => decorateQueryColumns<PurchaseOverviewRow>([
-  ...fields.value.map(field => ({ field: field.key, headerName: field.label, colId: field.key, hide: !visible.value.includes(field.key), initialWidth: field.key === 'project_name' ? 190 : rateKeys.includes(field.key) ? 170 : field.key === 'project_code' ? 125 : field.value_type === 'number' ? 88 : 110, minWidth: 80, maxWidth: 800,
-    initialPinned: defaultKeys.slice(0, 3).includes(field.key) ? 'left' as const : undefined,
-    initialFlex: defaultKeys.slice(0, 3).includes(field.key) ? undefined : 1,
+  ...fields.value.map(field => ({ field: field.key, headerName: field.label, colId: field.key, hide: !visible.value.includes(field.key), initialWidth: rateKeys.includes(field.key) ? 170 : field.key === 'project_code' ? 125 : field.value_type === 'number' ? 88 : 110, minWidth: 80, maxWidth: 800,
+    initialPinned: projectPrefix.includes(field.key) ? 'left' as const : undefined,
+    initialFlex: projectPrefix.includes(field.key) ? undefined : 1,
     sortable: sortableKeys.includes(field.key),
     cellClass: field.value_type === 'number' ? 'overview-number' : undefined,
     valueFormatter: ({value}: {value?: unknown}) => value === null || value === undefined || value === '' ? '' : String(value),
-    tooltipValueGetter: ({value}: {value?: unknown}) => ['project_name', 'organization_name'].includes(field.key) ? String(value || '') : '',
+    tooltipValueGetter: ({value}: {value?: unknown}) => ['product_line_name', 'organization_name'].includes(field.key) ? String(value || '') : '',
     cellRenderer: rateKeys.includes(field.key) ? Completion : field.key.endsWith('_lines') && field.key !== 'total_lines' ? Count : undefined,
   })), { colId: 'purchase_actions', headerName: '操作', pinned: 'right', lockPosition: 'right', ...PMS_ACTION_COLUMN, cellRenderer: Action, cellClass: 'pms-action-cell' },
 ], columnContext) as ColDef<PurchaseOverviewRow>[])
@@ -157,11 +162,11 @@ function sortChanged(event: { source: string }) {
   restoring = true; page.value = 1; restoring = false; saveLayout(); void query(false, undefined, true)
 }
 function resized(event: { finished: boolean }) { if (event.finished) saveLayout() }
-const planSnapshot = () => ({ metricLayoutVersion: 1, pageSize: pendingSize.value ?? pageSize.value, visible: [...visible.value], columns: grid?.getColumnState() || savedColumns.value, overviewStatus: overviewStatus.value, sort: { ...sort } })
+const planSnapshot = () => ({ reportIdentityVersion: reportIdentityVersion(fields.value), metricLayoutVersion: 1, pageSize: pendingSize.value ?? pageSize.value, visible: [...visible.value], columns: grid?.getColumnState() || savedColumns.value, overviewStatus: overviewStatus.value, sort: { ...sort } })
 function clearColumnFilters() { columnFilters.value = []; overviewStatus.value = ''; invalidate() }
 async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
   if (invalid.value) { ElMessage.warning(invalid.value); return }
-  const plan = reportPreferences(migrateOverviewLayout(preferences), fields.value.map(f => f.key))
+  const plan = reportPreferences(migrateReportIdentity(migrateOverviewLayout(preferences)), fields.value.map(f => f.key))
   if (plan.overviewStatus !== undefined) overviewStatus.value = plan.overviewStatus
   restoring = true
   if (plan.pageSize != null && plan.pageSize !== pageSize.value) pendingSize.value = plan.pageSize
@@ -179,13 +184,15 @@ async function initialize() {
     metadata.value = await getPurchaseMetadata()
     try {
       const raw = JSON.parse(localStorage.getItem(key.value) || '{}')
-      const saved = migrateOverviewLayout(raw)
+      const saved = migrateReportIdentity(migrateOverviewLayout(raw))
       if (Array.isArray(saved.visible)) visible.value = saved.visible.filter(k => fields.value.some(f => f.key === k))
       if (Array.isArray(saved.columns)) savedColumns.value = saved.columns
-      if (raw.metricLayoutVersion !== 1) saveLayout()
+      const sorting = savedColumns.value.find(c => c.sort && sortableKeys.includes(c.colId))
+      const savedSort = reportPreferences(saved, fields.value.map(f => f.key)).sort
+      if (savedSort && sortableKeys.includes(savedSort.sort)) Object.assign(sort, savedSort)
+      else if (sorting) Object.assign(sort, { sort: sorting.colId, direction: sorting.sort })
+      if (raw.metricLayoutVersion !== 1 || raw.reportIdentityVersion !== 1) saveLayout()
     } catch { /* Ignore invalid local layout, retaining defaults. */ }
-    const sorting = savedColumns.value.find(c => c.sort && sortableKeys.includes(c.colId))
-    if (sorting) Object.assign(sort, { sort: sorting.colId, direction: sorting.sort })
     await nextTick()
   } catch { error.value = '总进度初始化失败，请重试' } finally { loading.value = false }
 }
@@ -203,6 +210,7 @@ onUnmounted(() => { invalidate(); grid = null })
       <span class="pms-report-query-status" :class="{'is-dirty':dirty}">{{ loading ? '正在查询' : dirty ? '条件已修改，待查询' : applied ? '已查询' : '尚未查询' }}<template v-if="stamp"> · {{ new Date(stamp).toLocaleTimeString('zh-CN',{hour12:false}) }}</template></span>
       <ReportExportControl v-if="auth.hasPermission('report:purchase:export')" report="purchase" :parameters="exportParameters" :columns="exportColumns" :before-export="beforeExport" :disabled="loading || !applied || !total" />
       <PmsListColumnPicker v-if="metadata" v-model="visible" :groups="groups" :default-keys="defaultKeys" :column-definitions="columns" :get-grid-api="() => grid" aria-label="采购总进度列设置" @layout-changed="saveLayout" />
+      <PmsPageGuide page="purchase" />
     </template>
     <template #filters>
       <PmsQueryWorkspace v-model="conditions" list-key="report-purchase-overview" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata" :loading="loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters" />

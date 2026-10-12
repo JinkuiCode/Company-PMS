@@ -115,19 +115,11 @@ class ReportQueryRegressions(unittest.TestCase):
         self.assertEqual(result['total'], 9)
         self.assertFalse(any('SELECT * INTO' in sql for sql in statements))
 
-    def test_null_project_labels_generate_mssql_legal_typed_results(self):
-        for labels in ({('P-1', 100): None}, {}):
-            with self.subTest(labels=labels):
-                query = PurchaseQuery(filters=condition('project_name', 'isEmpty'))
-                query._query_labels = {'project_name': labels}
-                sql, params = request_query(query, fixture.GRANTS)
-                driver_sql = _mssql.substitute_params(sql, tuple(params)).decode('utf-8')
-                self.assertNotRegex(driver_sql, r'CASE(?:\s+WHEN .*? THEN NULL)+\s+ELSE NULL END')
-                self.assertNotIn('label_source.*,NULL AS [project_name]', driver_sql)
-                self.assertEqual(sql.count('%s'), len(params))
-                self.assertEqual(list_requests(self.connection, query, fixture.GRANTS)['total'], 9)
-                candidates = purchase_candidates(self.connection, query, fixture.GRANTS, 'project_name')
-                self.assertEqual([row['value'] for row in candidates['items']], [None])
+    def test_removed_project_labels_are_rejected_before_sql(self):
+        with self.assertRaises(ValueError):
+            PurchaseQuery(filters=condition('project_name', 'isEmpty'))
+        with self.assertRaises(ValueError):
+            purchase_candidates(self.connection, PurchaseQuery(), fixture.GRANTS, 'project_name')
 
 
 if __name__ == '__main__':

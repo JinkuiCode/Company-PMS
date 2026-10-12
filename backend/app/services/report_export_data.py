@@ -6,8 +6,8 @@ from app.services.purchase_connection import purchase_connection
 from app.services.purchase_fields import DOCUMENT_STATUSES, PROGRESS_LABELS
 from app.services.report_export_jobs import fields_for
 
-PARENT_FIELDS = [('request_bill_no', '申请单编号'), ('request_line_no', '申请单行号'),
-    ('product_line_name', '产品线'),
+PARENT_FIELDS = [('product_line_name', '产品线'),
+    ('request_bill_no', '申请单编号'), ('request_line_no', '申请单行号'),
     ('project_code', '项目编号'), ('material_code', '物料编码'), ('material_name', '物料名称')]
 ORDER_FIELDS = [('bill_no', '采购订单编号'), ('line_no', '订单行号'), ('order_date', '订单日期'),
     ('document_status', '数据状态'), ('cancel_status', '作废状态'), ('close_status', '关闭状态'),
@@ -44,16 +44,14 @@ def append_purchase(main, orders, receipts, row, chain):
 
 
 def inventory_batches(connection, query, organizations):
-    from app.services.inventory_reader import effective_organizations, where_clause, KEYS, SOURCE
+    from app.services.inventory_reader import effective_organizations, inventory_selection, inventory_projection, inventory_order
     organizations = effective_organizations(query, organizations)
     if organizations == []:
         return
-    where, params = where_clause(query, organizations)
-    ordering = f'v.[{query.sort}] {query.direction.upper()}'
-    ordering += ''.join(f',v.[{key}] ASC' for key in KEYS if key != query.sort)
+    selection, params = inventory_selection(query, organizations)
     cursor = connection.cursor()
     try:
-        cursor.execute('SELECT '+','.join(f'v.[{key}]' for key in KEYS)+SOURCE+where+' ORDER BY '+ordering, tuple(params))
+        cursor.execute('SELECT '+inventory_projection()+selection+' ORDER BY '+inventory_order(query), tuple(params))
         while rows := cursor.fetchmany(500):
             yield rows
     finally:
@@ -67,7 +65,8 @@ def purchase_batches(connection, query, scope):
         created = []
         try:
             # Snapshot membership after all filters, including full-scope progress.
-            sort = {'date': 'application_date', 'bill_no': 'bill_no', 'project_code': 'project_code', 'material_code': 'material_code'}[query.sort]
+            sort = {'date': 'application_date', 'bill_no': 'bill_no', 'project_code': 'project_code',
+                    'material_code': 'material_code', 'product_line_name': 'product_line_name'}[query.sort]
             cursor.execute(f'WITH q AS ({base}) SELECT *, ROW_NUMBER() OVER (ORDER BY {sort} {query.direction}, id {query.direction}) AS export_row INTO #pms_export_selected FROM q', tuple(params))
             created.append('selected')
             cursor.execute('CREATE UNIQUE CLUSTERED INDEX ix_export_row ON #pms_export_selected(export_row)')
@@ -108,7 +107,8 @@ def write_report(db, job, ctx, path, checkpoint):
     columns = json.loads(job.columns)
     if job.report == 'purchase' and not overview:
         # Always retain human-readable linkage, even if hidden in the screen layout.
-        columns = list(dict.fromkeys(['bill_no', 'line_no', *columns]))
+        prefix = ['product_line_name'] if columns[0] == 'product_line_name' else []
+        columns = list(dict.fromkeys([*prefix, 'bill_no', 'line_no', *columns]))
     stock_organizations = None
     if job.report == 'stock-detail':
         from app.api.inventory_reports import authorized_organizations
@@ -122,9 +122,10 @@ def write_report(db, job, ctx, path, checkpoint):
             quantity_keys={'opening_qty', 'income_qty', 'issue_qty', 'balance_qty'} if job.report == 'stock-detail' else ())
         count = 0
         if job.report == 'inventory':
-            from app.services.inventory_reader import InventoryQuery
+            from app.services.inventory_reader import InventoryQuery, resolve_product_lines
             from app.api.inventory_reports import authorized_organizations
             query = InventoryQuery.model_validate_json(job.parameters)
+            resolve_product_lines(db, query)
             for batch in inventory_batches(connection, query, authorized_organizations(db, ctx)):
                 checkpoint(count)
                 for row in batch:
@@ -135,6 +136,8 @@ def write_report(db, job, ctx, path, checkpoint):
             from app.services.stock_detail_fetch import read_dataset
             from app.services.stock_detail_engine import export_rows
             dataset = read_dataset(connection, stock_query, stock_organizations)
+            from app.api.stock_detail_reports import enrich_stock_product_lines
+            enrich_stock_product_lines(db, connection, dataset)
             checkpoint(count)
             for row in export_rows(dataset, stock_query.start_date, conditions=stock_query.conditions(),
                                    column_conditions=stock_query.column_conditions(),
@@ -146,14 +149,13 @@ def write_report(db, job, ctx, path, checkpoint):
             checkpoint(count)
         elif overview:
             from app.services.purchase_reader import PurchaseOverviewQuery, _rows
-            from app.api.purchase_reports import project_scope, enrich_project_names, enrich_product_lines, resolve_project_references
+            from app.api.purchase_reports import project_scope, enrich_product_lines, resolve_project_references
             query = PurchaseOverviewQuery.model_validate_json(job.parameters)
             resolve_project_references(db, ctx, query)
             from app.services.purchase_query_labels import resolve_query_labels
             resolve_query_labels(db, ctx, query)
             for batch in overview_batches(connection, query, project_scope(db, ctx)):
                 checkpoint(count)
-                enrich_project_names(db, ctx, batch)
                 enrich_product_lines(db, connection, batch)
                 ids = sorted({r['organization_id'] for r in batch})
                 names = {r['id']: r['name'] for r in _rows(connection,
@@ -164,7 +166,7 @@ def write_report(db, job, ctx, path, checkpoint):
                 checkpoint(count)
         else:
             from app.services.purchase_reader import PurchaseQuery, load_chains, _decorate_rows
-            from app.api.purchase_reports import project_scope, enrich_project_names, enrich_product_lines, resolve_project_references
+            from app.api.purchase_reports import project_scope, enrich_product_lines, resolve_project_references
             query = PurchaseQuery.model_validate_json(job.parameters)
             resolve_project_references(db, ctx, query)
             from app.services.purchase_query_labels import resolve_query_labels
@@ -174,7 +176,6 @@ def write_report(db, job, ctx, path, checkpoint):
                 checkpoint(count)
                 chains = load_chains(connection, batch)
                 _decorate_rows(connection, batch, chains=chains)
-                enrich_project_names(db, ctx, batch)
                 enrich_product_lines(db, connection, batch)
                 for row in batch:
                     append_purchase(main, orders, receipts, row, chains[row['id']])

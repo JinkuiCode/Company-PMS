@@ -1,4 +1,6 @@
 """The verified view's complete projection; shared by API, export and catalog."""
+PRODUCT_LINE_FIELD = ('product_line_name', '产品线', 'text', 180, '库存组织 FSTOCKORGID 精确匹配 PMS 产品线显示名称；未配置时保留原组织名称并标注未配置产品线')
+# FIELDS is also consumed by the existing ERP column-grant tooling.
 FIELDS = [
     ('FID', '库存内码', 'text', 150, 'T_STK_INVENTORY.FID；用于精确关联库存组织，不按物料合并'),
     ('Organization', '组织', 'text', 180, '库存组织对应金蝶组织名称；显示源值，权限按FSTOCKORGID校验'),
@@ -17,12 +19,13 @@ FIELDS = [
 def report_fields():
     return [dict(key=key, label=label, value_type=kind, width=width, group='即时库存',
                  description=description, editable=False, list_available=True)
-            for key, label, kind, width, description in FIELDS if key != 'FID']
+            for key, label, kind, width, description in [PRODUCT_LINE_FIELD, *FIELDS] if key not in {'FID', 'Organization'}]
 
 
 def catalog_fields():
     return [dict(module='inventory_report', module_name='即时库存查询', group='即时库存',
         field_name=label, field_code=key, value_type=kind, source_type='system',
-        storage_table='YD_JIN_INVENTORY', storage_column=key, editable=False, computed=False,
+        storage_table='sys_product_line' if key == 'product_line_name' else 'YD_JIN_INVENTORY',
+        storage_column='display_name' if key == 'product_line_name' else key, editable=False, computed=key == 'product_line_name',
         enum_code=None, description=description, catalog_source='INVENTORY_REPORT_FIELDS', sort=110000+i)
-        for i, (key,label,kind,width,description) in enumerate(FIELDS)]
+        for i, (key,label,kind,width,description) in enumerate([PRODUCT_LINE_FIELD, *FIELDS]) if key != 'Organization']

@@ -133,7 +133,6 @@ def overview(query: Annotated[PurchaseOverviewQuery, Query()], db: Session = Dep
             + ','.join(['%s'] * len(ids)) + ')', ids)} if ids else {}
         for row in result['items']:
             row['organization_name'] = names.get(row['organization_id']) or str(row['organization_id'])
-    enrich_project_names(db, ctx, result['items'])
     result['queried_at'] = datetime.now(timezone.utc).isoformat()
     return jsonable_encoder(result, custom_encoder={Decimal: str})
 
@@ -147,7 +146,6 @@ def listing(query: Annotated[PurchaseQuery, Query()], db: Session = Depends(get_
     with report_connection() as connection:
         result = list_requests(connection, query, codes)
         enrich_product_lines(db, connection, result['items'])
-    enrich_project_names(db, ctx, result['items'])
     result['items'] = [public_row(row) for row in result['items']]
     result['queried_at'] = datetime.now(timezone.utc).isoformat()
     return result
@@ -272,7 +270,6 @@ def detail(request_id: int = Path(ge=1), db: Session = Depends(get_db),
             raise HTTPException(404, '申请明细不存在或无权访问')
         chain = load_chains(connection, [row])[row['id']]
         enrich_product_lines(db, connection, [row])
-    enrich_project_names(db, ctx, [row])
     # Do not expose other requisitions' IDs or source allocations used internally.
     return jsonable_encoder(dict(request=public_row(row), **chain, queried_at=datetime.now(timezone.utc).isoformat()),
                             custom_encoder={Decimal: str})

@@ -1,5 +1,6 @@
 """Quantity-only public columns, aligned with the accepted report preview."""
 FIELDS = (
+    ('product_line_name', '产品线', 'text', 180),
     ('material_code', '物料编码', 'text', 140),
     ('material_name', '物料名称', 'text', 100),
     ('bill_date', '日期', 'date', 110),
@@ -26,8 +27,9 @@ def report_fields():
 def catalog_fields():
     return [dict(module='stock_detail_report', module_name='物料收发明细', group='物料收发',
         field_name=label, field_code=key, value_type='number' if kind == 'decimal' else kind,
-        source_type='system', storage_table='STK_StockDetailRpt', storage_column=key,
-        editable=False, computed=key in ('opening_qty', 'balance_qty'), enum_code=None,
-        description='按金蝶库存报表来源只读计算；详见物料收发明细报表说明',
+        source_type='system', storage_table='sys_product_line' if key == 'product_line_name' else 'STK_StockDetailRpt',
+        storage_column='display_name' if key == 'product_line_name' else key,
+        editable=False, computed=key in ('opening_qty', 'balance_qty', 'product_line_name'), enum_code=None,
+        description='库存组织 ID 精确匹配 PMS 产品线显示名称；未配置时保留原组织名称并标注未配置产品线' if key == 'product_line_name' else '按金蝶库存报表来源只读计算；详见物料收发明细报表说明',
         catalog_source='STOCK_DETAIL_REPORT_FIELDS', sort=120000 + index)
         for index, (key, label, kind, width) in enumerate(FIELDS)]

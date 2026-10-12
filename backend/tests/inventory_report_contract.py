@@ -50,7 +50,7 @@ class InventoryContract(unittest.TestCase):
 
     def test_schema_has_all_view_columns_and_decimal_quantity(self):
         r = self.reader()
-        self.assertEqual([f['key'] for f in r.report_fields()], ['Organization','Stock','MaterialCode','MaterialName','FSPECIFICATION','Brand','Material','SupplierNumber','FBaseQty','Unit'])
+        self.assertEqual([f['key'] for f in r.report_fields()], ['product_line_name','Stock','MaterialCode','MaterialName','FSPECIFICATION','Brand','Material','SupplierNumber','FBaseQty','Unit'])
         self.assertEqual(r.public_row({'FID':'x','FBaseQty':Decimal('999999.99'),'secret':'no'})['FBaseQty'], '999999.99')
         self.assertNotIn('secret', r.public_row({'secret':'no'}))
 
@@ -181,7 +181,10 @@ class InventoryApiContract(unittest.TestCase):
         from app.services.field_catalog import build_field_catalog
         fields=[x for x in build_field_catalog() if x['module']=='inventory_report']
         self.assertEqual(len(fields),11)
-        self.assertTrue(all(x['storage_table']=='YD_JIN_INVENTORY' and not x['editable'] for x in fields))
+        self.assertTrue(all(not x['editable'] for x in fields))
+        product_line = next(x for x in fields if x['field_code'] == 'product_line_name')
+        self.assertEqual((product_line['storage_table'], product_line['storage_column']), ('sys_product_line', 'display_name'))
+        self.assertNotIn('Organization', [x['field_code'] for x in fields])
 
 
 if __name__=='__main__':unittest.main()

@@ -2,7 +2,6 @@
 FIELDS = [
     ('product_line_name', '产品线', 'text', '项目信息', 'T_PUR_REQUISITION', 'FAPPLICATIONORGID', '请购组织匹配 PMS 产品线显示名称；未配置时显示金蝶组织名称并标注未配置产品线，不按项目档案产品线替代'),
     ('project_code', '项目编码', 'text', '项目信息', 'T_BAS_ASSISTANTDATAENTRY', 'FNUMBER', '申请明细项目辅助资料 F_TWBJ_ASSISTANT_83G 对应编码'),
-    ('project_name', '项目名称', 'text', '项目信息', 'pms_project_archive', 'project_name', '项目编码精确匹配有权访问的 PMS 档案；无匹配时为空，不回退为金蝶名称'),
     ('material_code', '物料编码', 'text', '物料信息', 'T_BD_MATERIAL', 'FNUMBER', '按申请明细 FMATERIALID 关联'),
     ('material_name', '物料名称', 'text', '物料信息', 'T_BD_MATERIAL_L', 'FNAME', '中文语言 2052'),
     ('specification', '规格型号', 'text', '物料信息', 'T_BD_MATERIAL_L', 'FSPECIFICATION', '中文语言 2052'),
@@ -52,7 +51,7 @@ OVERVIEW_COUNTS = [
 
 
 def overview_fields():
-    return [*report_fields()[:3], dict(key='organization_name', label='请购组织', value_type='text',
+    return [*report_fields()[:2], dict(key='organization_name', label='请购组织', value_type='text',
             group='项目信息', description='当前组合的金蝶请购组织中文名称', editable=False, list_available=True),
             *[dict(key=key, label=label, value_type='number', group='申请行进度',
                    description=description, editable=False, list_available=True)

@@ -36,6 +36,7 @@
           @update:model-value="handleArchiveColumnSelection"
           @restore-defaults="restoreArchiveColumnDefaults"
         />
+        <PmsPageGuide page="archive" />
         <OfflineArchiveTools :selected-rows="selectedRows" @changed="fetchList" />
     </template>
 
@@ -322,6 +323,7 @@ import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-fil
 import { adaptConditions, validateConditions, cloneQuery, type QueryCondition } from '@/query-system/core'
 import { toQueryFields } from '@/query-system/list-adapter'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
+import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import {
   PmsNumberControl,
   PmsDateControl,

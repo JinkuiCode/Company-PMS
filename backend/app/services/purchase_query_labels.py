@@ -10,7 +10,7 @@ CHAIN_LABELS = {'supplier_name', 'order_statuses', 'stock_statuses'}
 
 
 def needed_labels(query, conditions):
-    return {c.field for c in conditions if c.kind != 'project-reference'} | {query._candidate_field}
+    return {c.field for c in conditions if c.kind != 'project-reference'} | {query._candidate_field, query.sort}
 
 
 def resolve_query_labels(db, ctx, query):
@@ -84,6 +84,7 @@ def label_source(base, params, query, conditions, *, final_overview=False):
     from app.services.purchase_reader import PurchaseOverviewQuery
     if not isinstance(query, PurchaseOverviewQuery) or final_overview:
         needed.add(query._candidate_field)
+        needed.add(query.sort)
     fields = needed & (PMS_LABELS | CHAIN_LABELS | {'organization_name'})
     if not fields:
         return base, params

@@ -11,6 +11,13 @@ export function schemeStorageKey(userId:unknown,listKey:string) {
 export function instantiateDefinitions(definitions:QueryDefinition[]):QueryCondition[] {
   return cloneQuery(definitions.filter(d=>d.shown).map((d,i)=>({id:i+1,field:d.field,operator:d.operator,value:d.value,valueEnd:d.valueEnd,schemaVersion:d.schemaVersion??2})))
 }
+export function prepareDefinitions(definitions:QueryDefinition[],fields:QueryField[]) {
+  const available=new Set(fields.map(field=>field.field))
+  return {
+    definitions:cloneQuery(definitions.filter(definition=>available.has(definition.field))),
+    invalidFields:[...new Set(definitions.filter(definition=>!available.has(definition.field)).map(definition=>definition.field))],
+  }
+}
 export function activeQuery(source:QueryCondition[],fields:QueryField[]) {
   const conditions=source.filter(c=>hasConditionValue(c)||!blank(c.value)||!blank(c.valueEnd))
   const errors=validateConditions(conditions,fields)

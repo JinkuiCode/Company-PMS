@@ -135,7 +135,7 @@ class ReportV2(unittest.TestCase):
 
     def test_project_reference_scoped_resolution_rejects_stale_or_foreign(self):
         from app.api import purchase_reports as api
-        query = purchase.PurchaseQuery(filters=condition('project_name', 'reference', [17, 18]))
+        query = purchase.PurchaseQuery(filters=condition('project_code', 'reference', [17, 18]))
         scoped = Mock()
         scoped.join.return_value = scoped
         scoped.with_entities.return_value = scoped
@@ -166,7 +166,7 @@ class ReportV2(unittest.TestCase):
         from app.services.report_filters import query_fields
         fields = {f['field']: f for f in query_fields('purchase')}
         self.assertIn('reference', fields['project_code']['operators'])
-        self.assertIn('contains', fields['project_name']['operators'])
+        self.assertNotIn('project_name', fields)
         self.assertIn('notIn', fields['document_status']['operators'])
         from app.services.purchase_fields import report_fields
         self.assertEqual(set(fields), {f['key'] for f in report_fields()})
@@ -176,18 +176,18 @@ class ReportV2(unittest.TestCase):
         from app.services.report_column_candidates import purchase_candidates
         from app.services.report_export_data import purchase_batches, overview_batches
         for model in (purchase.PurchaseQuery, purchase.PurchaseOverviewQuery):
-            query = model(filters=condition('project_name', 'contains', ' pump '),
+            query = model(filters=condition('product_line_name', 'contains', ' line '),
                           column_filters=column_values('product_line_name', ['Line A']), page_size=1)
             query._query_labels = {'project_name': {('P-1',100):'Pump One', ('P-1',200):'Secret'},
                                    'product_line_name': {100:'Line A',200:'Line B'}}
             read = purchase.list_overview if model is purchase.PurchaseOverviewQuery else purchase.list_requests
             result = read(self.connection, query, fixture.GRANTS)
             self.assertEqual(result['total'], 1 if model is purchase.PurchaseOverviewQuery else 9)
-            candidates = purchase_candidates(self.connection, query, fixture.GRANTS, 'project_name', 'pump', 1, 1)
-            self.assertEqual(candidates['items'], [{'value':'Pump One','label':'Pump One'}])
+            candidates = purchase_candidates(self.connection, query, fixture.GRANTS, 'product_line_name', 'line', 1, 1)
+            self.assertEqual(candidates['items'], [{'value':'Line A','label':'Line A'}])
             export = overview_batches if model is purchase.PurchaseOverviewQuery else purchase_batches
             self.assertEqual(sum(len(b) for b in export(self.connection, query, fixture.GRANTS)), result['total'])
-            negative = query.model_copy(update={'filters':condition('project_name','notContains','pump')})
+            negative = query.model_copy(update={'filters':condition('product_line_name','notContains','line')})
             self.assertEqual(read(self.connection, negative, fixture.GRANTS)['total'], 0)
 
     def test_supplier_and_document_status_column_funnels_use_verified_full_chains(self):
@@ -232,8 +232,8 @@ class ReportV2(unittest.TestCase):
         from app.services.report_column_candidates import purchase_candidates
         self.db.execute('PRAGMA case_sensitive_like=ON')
         query = purchase.PurchaseQuery()
-        query._query_labels = {'project_name':{('P-1',100):'Pump One'}}
-        result = purchase_candidates(self.connection,query,fixture.GRANTS,'project_name','PUMP',1,50)
+        query._query_labels = {'product_line_name':{100:'Pump One'}}
+        result = purchase_candidates(self.connection,query,fixture.GRANTS,'product_line_name','PUMP',1,50)
         self.assertEqual(result['items'],[{'value':'Pump One','label':'Pump One'}])
 
     def test_overview_top_aggregate_fields_filter_after_full_accounting(self):
@@ -254,7 +254,7 @@ class ReportV2(unittest.TestCase):
         self.db.execute("INSERT INTO T_PUR_POORDER(FID,FPURCHASEORGID,FDOCUMENTSTATUS,FCANCELSTATUS,FSUPPLIERID) VALUES(22,100,'B','A',2)")
         self.db.execute('INSERT INTO T_PUR_POORDERENTRY(FENTRYID,FID,FMATERIALID,FBASEUNITID) VALUES(22,22,10,1)')
         self.db.execute("INSERT INTO T_PUR_POORDERENTRY_LK(FENTRYID,FLINKID,FSTABLENAME,FSID,FSBILLID,FBASEUNITQTY) VALUES(22,22,'T_PUR_REQENTRY',2,2,1)")
-        for field, target, expected in [('product_line_name','Line A',9), ('project_name','Pump One',9),
+        for field, target, expected in [('product_line_name','Line A',9),
                                          ('supplier_name','Acme',7), ('order_statuses','已审核',7), ('stock_statuses','已审核',3)]:
             for operator, value, count in [('equals',target,expected), ('contains',target,expected + (field == 'order_statuses')),
                                             ('startsWith',target,expected), ('endsWith',target,expected + (field == 'order_statuses')),
@@ -467,11 +467,11 @@ class ReferenceOptionsV2(unittest.TestCase):
     def test_database_allowlist_labels_and_visible_names_share_pair_identity(self):
         from app.api import purchase_reports as api
         from app.services.purchase_query_labels import resolve_query_labels
-        query = purchase.PurchaseQuery(filters=condition('project_name','equals','Same'),
+        query = purchase.PurchaseQuery(filters=condition('product_line_name','equals','100'),
                                        column_filters=column_values('product_line_name',['100']))
         resolve_query_labels(self.db, self.ctx, query)
         self.assertEqual(query._query_labels['product_line_name'], {100:'100'})
-        self.assertEqual(query._query_labels['project_name'], {('001',100):'Same',('002',100):'Same'})
+        self.assertNotIn('project_name', query._query_labels)
         rows = [{'project_code':'001','organization_id':100}, {'project_code':'001','organization_id':200}]
         api.enrich_project_names(self.db, self.ctx, rows)
         self.assertEqual(rows[0]['project_name'], 'Same')
@@ -495,7 +495,7 @@ class ReferenceOptionsV2(unittest.TestCase):
         erp.create_function('STUFF',4,lambda s,start,length,replacement: s[:start-1]+replacement+s[start-1+length:] if s and start<=len(s) else None)
         self.addCleanup(erp.close)
         with patch.object(api,'purchase_connection',return_value=nullcontext(Connection(erp))):
-            for field,value,count in [('product_line_name','100',9),('project_name','Same',9),
+            for field,value,count in [('product_line_name','100',9),
                                        ('supplier_name','Acme',8),('order_statuses','已审核',8),('stock_statuses','已审核',3)]:
                 with self.subTest(field=field):
                     params = {'filters':condition(field,'equals',value), 'page_size':1}
@@ -509,11 +509,11 @@ class ReferenceOptionsV2(unittest.TestCase):
             from app.services import report_export_jobs as jobs
             from app.services.report_export_data import write_report
             self.ctx['permissions'].append('report:purchase:export')
-            parameters = dict(view='overview',filters=condition('project_name','equals','Same'),
+            parameters = dict(view='overview',filters=condition('product_line_name','equals','100'),
                               column_filters=column_values('complete_lines',[1]))
             with patch.object(jobs,'scope_signature',return_value='fixture'):
                 job = jobs.create_job(self.db,self.ctx,'purchase',parameters,
-                                      ['project_name','product_line_name','total_lines','complete_lines'])
+                                      ['product_line_name','total_lines','complete_lines'])
             self.assertEqual(json.loads(job.parameters)['view'],'overview')
             with tempfile.TemporaryDirectory() as folder, \
                  patch('app.services.report_export_data.purchase_connection',return_value=nullcontext(Connection(erp))):
@@ -524,7 +524,7 @@ class ReferenceOptionsV2(unittest.TestCase):
                     self.assertIn('采购总进度',workbook)
                     self.assertNotIn('订单明细',workbook)
                     xml = archive.read('xl/worksheets/sheet1.xml').decode()
-                    self.assertIn('Same',xml)
+                    self.assertNotIn('项目名称',xml)
                     self.assertIn('100',xml)
                     root = ET.fromstring(xml)
                     self.assertEqual(len(root.findall('.//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row')),2)
@@ -535,10 +535,10 @@ class ReferenceOptionsV2(unittest.TestCase):
             self.db.commit()
             self.ctx['product_line_ids'].append(line.id)
             erp.execute('UPDATE T_PUR_REQUISITION SET FAPPLICATIONORGID=200 WHERE FID=1')
-            listed = self.client.get('/api/reports/purchase',params={'filters':condition('project_name','isEmpty')})
+            listed = self.client.get('/api/reports/purchase',params={'filters':condition('product_line_name','equals','200')})
             self.assertEqual(listed.status_code,200,listed.text)
             self.assertEqual(listed.json()['total'],1)
-            self.assertIsNone(listed.json()['items'][0]['project_name'])
+            self.assertNotIn('project_name',listed.json()['items'][0])
 
     def test_exact_codes_keep_zero_and_cannot_bypass_organization(self):
         path = '/api/reports/purchase/reference-options'
@@ -592,7 +592,7 @@ class ReferenceOptionsV2(unittest.TestCase):
         from app.api import stock_detail_reports as api
         from app.services.stock_detail_balance import InventoryKey
         from contextlib import nullcontext
-        key = InventoryKey(1, 11, 20, 1, '', 0, 10)
+        key = InventoryKey(100, 11, 20, 1, '', 0, 10)
         rows = [dict(row_id='1', inventory_key=key, bill_date=date(2026,6,1), source_order=0,
                      created_at=datetime(2026,6,1), bill_no='B', bill_seq=1, income_qty=Decimal(10), issue_qty=Decimal(0))]
         dataset = dict(rows=rows, openings={key:Decimal(5)}, labels={})
@@ -623,7 +623,7 @@ class ReferenceOptionsV2(unittest.TestCase):
         from app.services.stock_detail_balance import InventoryKey
         from app.services.report_export_data import write_report
         from contextlib import nullcontext
-        key = InventoryKey(1,11,20,1,'',0,10)
+        key = InventoryKey(100,11,20,1,'',0,10)
         rows = [dict(row_id=str(i),inventory_key=key,bill_date=date(2026,6,i),source_order=0,
                      created_at=datetime(2026,6,i),bill_no=bill,bill_seq=i,
                      income_qty=Decimal(income),issue_qty=Decimal(issue))

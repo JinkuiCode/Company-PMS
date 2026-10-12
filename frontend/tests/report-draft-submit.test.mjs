@@ -5,6 +5,8 @@ import ts from 'typescript'
 import { cloneQuery } from '../src/query-system/core.ts'
 import { reportDefaults, reportPreferences, reportScope, serializeReportConditions, serializeColumnFilters } from '../src/query-system/report-adapter.ts'
 import { buildStockDetailQuery } from '../src/views/reports/stockDetailState.ts'
+import { migrateReportIdentity } from '../src/views/reports/report-identity-layout.ts'
+import { migrateOverviewLayout } from '../src/views/reports/purchase-overview-layout.ts'
 
 function pageFunctions(name, names) {
   const source = readFileSync(new URL(`../src/views/reports/${name}.vue`, import.meta.url), 'utf8').split('<script setup lang="ts">')[1].split('</script>')[0]
@@ -28,6 +30,7 @@ for (const name of ['PurchaseOverviewList', 'PurchaseProgressList', 'InventoryLi
     const original = structuredClone(rows), conditions = { value: rows }, filters = stock ? { conditions: rows, column_filters: [] } : { value: { conditions: rows, column_filters: [] } }
     let accepted
     const context = { cloneQuery, reportPreferences, reportScope, serializeReportConditions, serializeColumnFilters, buildStockDetailQuery,
+      migrateReportIdentity, migrateOverviewLayout, removedIdentity: ['project_name', 'Organization'],
       conditions, filters, columnFilters: { value: [] }, invalid: { value: '' }, queryInvalid: { value: '' },
       fields: { value: [] }, defaultKeys: { value: [] }, metadata: { value: { fields: [] } }, projectScope: { value: undefined },
       sort: { sort: 'project_code', direction: 'asc' }, sortFields: {}, page: { value: 1 }, pageSize: { value: 50 },

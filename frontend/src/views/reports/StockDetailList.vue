@@ -13,6 +13,8 @@ import { activeReportConditions, reportFields, reportDefaults, reportScope, repo
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
+import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
+import { migrateReportIdentity, reportIdentityVersion } from './report-identity-layout'
 import CustomPagination from '@/components/CustomPagination.vue'
 import ReportExportControl from '@/components/ReportExportControl.vue'
 import { PmsFormDrawer } from '@/form-system'
@@ -48,17 +50,20 @@ const detailSwitch = createDetailSwitch<StockDetailRow>(() => Promise.resolve(tr
 const visible = ref<string[]>([]), savedColumns = ref<ColumnState[]>([])
 let grid: GridApi<StockDetailRow> | null = null, restoring = false, disposed = false
 const storageKey = computed(() => `pms:stock-detail:v1:${auth.user?.id || 'anonymous'}`)
-const fields = computed(() => metadata.value?.fields || [])
+const fields = computed(() => {
+  const available = (metadata.value?.fields || []).filter(field => field.key !== 'project_name')
+  return [...available.filter(field => field.key === 'product_line_name'), ...available.filter(field => field.key !== 'product_line_name')]
+})
 const conditions = computed({ get: () => filters.conditions, set: value => { filters.conditions = linkReportScope(value, filters.conditions, 'organization_ids', ['stock_id']) } })
 const columnFilters = computed({ get: () => filters.column_filters, set: value => { filters.column_filters = value } })
 const referenceScope = (q?: { conditions?: QueryCondition[] }) => {
   const ids = activeReportConditions(q?.conditions || conditions.value).filter(c => c.field === 'organization_ids').flatMap(c => Array.isArray(c.value) ? c.value : [c.value]).filter(v => typeof v === 'number')
-  if (!ids.length) throw Error('请先选择库存组织，再选择仓库')
+  if (!ids.length) throw Error('请先选择产品线，再选择仓库')
   return { organization_ids: ids }
 }
-const filterFields = computed(() => reportFields((metadata.value?.query_fields || metadata.value?.filter_fields || []).filter(field => field.field !== 'stock_name'), [
+const filterFields = computed(() => reportFields((metadata.value?.query_fields || metadata.value?.filter_fields || []).filter(field => !['stock_name', 'project_name'].includes(field.field)), [
   { field: 'material', label: '物料（必填）', type: 'text', required: true, operators: ['contains'] },
-  { field: 'organization_ids', label: '库存组织（必选）', type: 'enum', required: true, options: metadata.value?.organizations || [], operators: ['equals', 'in', 'reference'] },
+  { field: 'organization_ids', label: '产品线（必选）', type: 'enum', required: true, options: metadata.value?.organizations || [], operators: ['equals', 'in', 'reference'] },
   { field: 'bill_date', label: '收发日期', type: 'date', required: true, operators: ['between'] },
   { field: 'stock_id', label: '仓库', type: 'text', operators: ['reference'], reference: reportReference('仓库', 'stock_id', 'number', params => getStockDetailReference('stock', params), referenceScope) },
 ]))
@@ -91,7 +96,7 @@ const hasAppliedConditions = computed(() => result.value.applied?.filters !== '[
 const exportColumns = () => fields.value.map(field => field.key)
 function text(value: unknown) { return value === null || value === undefined || value === '' ? '' : String(value) }
 function fieldText(key: string, value: unknown) { return numberKeys.has(key) ? formatStockQuantity(value) : text(value) }
-const columnFields = computed(() => reportFields(metadata.value?.column_filter_fields || []))
+const columnFields = computed(() => reportFields((metadata.value?.column_filter_fields || []).filter(field => field.field !== 'project_name')))
 const columnContext = (): ColumnQueryContext => ({ fields: () => columnFields.value, filters: () => columnFilters.value,
   ready: () => !!result.value.applied && !result.value.loading,
   sort: createReportColumnSort({ accepted: () => result.value.applied, loading: () => result.value.loading, fields: () => Object.fromEntries((metadata.value?.sort_fields || []).map(key => [key, key])), grid: () => grid,
@@ -110,7 +115,7 @@ const columns = computed<ColDef<StockDetailRow>[]>(() => decorateQueryColumns<St
   const definition: ColDef<StockDetailRow> = {
     field: field.key, colId: field.key, headerName: field.label,
     headerTooltip: field.label, initialWidth: field.width, minWidth: 65, maxWidth: 800,
-    hide: !visible.value.includes(field.key), initialPinned: numberKeys.has(field.key) ? 'right' : undefined,
+    hide: !visible.value.includes(field.key), initialPinned: field.key === 'product_line_name' ? 'left' : numberKeys.has(field.key) ? 'right' : undefined,
     cellClass: numberKeys.has(field.key) ? 'stock-detail-number' : undefined,
     valueFormatter: p => fieldText(field.key, p.value), tooltipValueGetter: p => fieldText(field.key, p.value),
   }
@@ -134,15 +139,16 @@ function onColumnResized(event: ColumnResizedEvent) { if (event.finished) persis
 function sanitizeColumns(value: unknown): ColumnState[] {
   if (!Array.isArray(value)) return []
   return value.filter(c => c && defaultKeys.value.includes(c.colId)).map(c => ({
+    ...c,
     colId: c.colId, width: Math.max(65, Math.min(800, Number(c.width) || 140)),
     pinned: c.pinned === 'left' || c.pinned === 'right' ? c.pinned : null, hide: !visible.value.includes(c.colId),
     sort: metadata.value?.sort_fields?.includes(c.colId) && (c.sort === 'asc' || c.sort === 'desc') ? c.sort : null,
   }))
 }
 function persist() {
-  if (restoring || !metadata.value) return
+  if (restoring || !reportIdentityVersion(fields.value)) return
   savedColumns.value = grid?.getColumnState() || savedColumns.value
-  try { saveReportPreferences(localStorage, storageKey.value, { visible: visible.value, columns: savedColumns.value }) }
+  try { saveReportPreferences(localStorage, storageKey.value, { visible: visible.value, columns: savedColumns.value, sort: { ...sort }, reportIdentityVersion: 1 }) }
   catch { ElMessage.warning('设置保存失败，请检查浏览器存储空间') }
   void nextTick(() => listRef.value?.refreshScrollbar())
 }
@@ -159,11 +165,14 @@ async function initialize() {
     metadata.value = data; visible.value = [...defaultKeys.value]
     if (data.default_sort && data.sort_fields?.includes(data.default_sort.sort)) Object.assign(sort, data.default_sort)
     try {
-      const saved = JSON.parse(localStorage.getItem(storageKey.value) || '{}')
+      const raw = JSON.parse(localStorage.getItem(storageKey.value) || '{}')
+      const saved = migrateReportIdentity(raw)
       if (Array.isArray(saved.visible)) visible.value = [...new Set(saved.visible.filter((key: unknown) => typeof key === 'string' && defaultKeys.value.includes(key)))] as string[]
       savedColumns.value = sanitizeColumns(saved.columns)
       const sorted = savedColumns.value.find(c => c.sort)
-      if (sorted) Object.assign(sort, { sort: sorted.colId, direction: sorted.sort })
+      if (saved.sort && data.sort_fields?.includes(saved.sort.sort)) Object.assign(sort, saved.sort)
+      else if (sorted) Object.assign(sort, { sort: sorted.colId, direction: sorted.sort })
+      if (raw.reportIdentityVersion !== 1) persist()
     } catch { savedColumns.value = [] }
   } catch { if (!disposed) initializationError.value = '报表初始化失败，请重试' }
   finally { if (!disposed) initializing.value = false }
@@ -191,10 +200,10 @@ async function retry() {
   await nextTick(); listRef.value?.refreshScrollbar()
 }
 function clearColumnFilters() { columnFilters.value = []; pendingPageSize.value = null; request.invalidate(); closeDetail() }
-const planSnapshot = () => ({ pageSize: pendingPageSize.value ?? pageSize.value, visible: [...visible.value], columns: grid?.getColumnState() || savedColumns.value, sort: { ...sort } })
+const planSnapshot = () => ({ reportIdentityVersion: reportIdentityVersion(fields.value), pageSize: pendingPageSize.value ?? pageSize.value, visible: [...visible.value], columns: grid?.getColumnState() || savedColumns.value, sort: { ...sort } })
 async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
   if (queryInvalid.value) { ElMessage.warning(queryInvalid.value); return }
-  const plan = reportPreferences(preferences, defaultKeys.value)
+  const plan = reportPreferences(migrateReportIdentity(preferences), defaultKeys.value)
   if (plan.sort && metadata.value?.sort_fields?.includes(plan.sort.sort)) Object.assign(sort, plan.sort)
   restoring = true
   if (plan.visible) visible.value = plan.visible
@@ -216,6 +225,7 @@ onUnmounted(() => { disposed = true; request.clear(); detailSwitch.invalidate();
       <span class="pms-report-query-status" role="status">{{ queryStatus }}</span>
       <ReportExportControl v-if="auth.hasPermission('report:stock-detail:export')" report="stock-detail" :parameters="exportParameters" :before-export="beforeExport" :columns="exportColumns" :disabled="result.loading || !result.applied || (!result.total && !result.openings.length)" />
       <PmsListColumnPicker v-if="metadata" v-model="visible" :groups="groups" :default-keys="defaultKeys" :column-definitions="columns" :get-grid-api="() => grid" aria-label="物料收发明细列设置" @layout-changed="persist" />
+      <PmsPageGuide page="stock" />
       </div></template>
       </PmsQueryWorkspace>
       <div v-if="hasAppliedConditions" class="stock-detail-scope-note">

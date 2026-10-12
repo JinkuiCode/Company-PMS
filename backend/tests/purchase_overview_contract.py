@@ -61,9 +61,9 @@ class OverviewContract(unittest.TestCase):
         from app.services import purchase_fields
         self.assertTrue(hasattr(purchase_fields, 'overview_fields'), 'Overview metadata is missing')
         from app.services.purchase_fields import report_fields, overview_fields
-        expected = [('product_line_name', '产品线'), ('project_code', '项目编码'), ('project_name', '项目名称')]
-        self.assertEqual([(f['key'], f['label']) for f in report_fields()[:3]], expected)
-        self.assertEqual([(f['key'], f['label']) for f in overview_fields()[:3]], expected)
+        expected = [('product_line_name', '产品线'), ('project_code', '项目编码')]
+        self.assertEqual([(f['key'], f['label']) for f in report_fields()[:2]], expected)
+        self.assertEqual([(f['key'], f['label']) for f in overview_fields()[:2]], expected)
         labels = {f['key']: f['label'] for f in overview_fields()}
         self.assertEqual(labels['completion_rate'], '申请行入库率')
         self.assertEqual(labels['conversion_rate'], '申请行转单率')
