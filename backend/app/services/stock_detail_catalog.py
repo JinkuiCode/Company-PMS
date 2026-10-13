@@ -39,7 +39,7 @@ def load_catalog(cursor, rows):
     material_ids = _ids(rows, 'material_id')
     materials = _read(cursor, """
         SELECT M.FMATERIALID AS id, M.FNUMBER AS code,
-            COALESCE(L.FNAME,M.FNUMBER) AS name,
+            COALESCE(L.FNAME,M.FNUMBER) AS name, L.FSPECIFICATION AS specification,
             S.FSTOREUNITID AS unit_id, S.FSTOREURNUM AS numerator,
             S.FSTOREURNOM AS denominator, U.FPRECISION AS precision,
             COALESCE(UL.FNAME,U.FNUMBER) AS unit_name
@@ -89,7 +89,7 @@ def row_labels(row, catalog):
     owner_type = str(row.get('owner_type') or '').strip()
     owner = catalog['owners'].get((owner_type, row.get('owner_id') or 0), {})
     return {
-        'material_code': material['code'], 'material_name': material['name'],
+        'material_code': material['code'], 'material_name': material['name'], 'specification': material.get('specification'),
         'unit_name': material['unit_name'], 'stock_name': catalog['stocks'][row['stock_id']]['name'],
         'stock_status_name': catalog['statuses'][row['stock_status_id']]['name'],
         'owner_type_name': {'BD_OwnerOrg': '业务组织', 'BD_Customer': '客户', 'BD_Supplier': '供应商'}.get(owner_type, owner_type),

@@ -957,7 +957,6 @@ const archiveQueryDefaults = computed<QueryDefinition[]>(() => {
 function archiveValidationFields(conditions: typeof customFilters.value) {
   const historicalNames = uniqueValueOptions(archiveConditionPersonNames(conditions))
   return [...toQueryFields(archiveFilterFields.value),
-    {field:'keyword',label:'综合搜索',type:'text' as const,operators:['contains' as const]},
     {field:'product_category',label:'产品类别（历史）',type:'enum' as const,options:archiveProductCategoryOptions.value.map(o=>({value:Number(o.value),label:o.label}))},
   ].map(f => archivePersonFilterKeys.has(f.field)
     ? {...f, options:[...(f.options || []),...historicalNames]} : f)

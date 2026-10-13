@@ -9,7 +9,7 @@ import PmsDataList from '@/components/PmsDataList.vue'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import '@/report-query/query-surface.css'
 import { cloneQuery, validateConditions, type QueryCondition } from '@/query-system/core'
-import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, reportPreferences, serializeReportConditions, createReportRequest, linkReportScope, saveReportPreferences, legacyReportSchemes, createReportColumnSort } from '@/query-system/report-adapter'
+import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, reportPreferences, serializeReportConditions, createReportRequest, linkReportScope, saveReportPreferences, legacyReportSchemes, createReportColumnSort, STOCK_MATERIAL_FIELDS } from '@/query-system/report-adapter'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import { usePageColumnFilter } from '@/query-system/page-column-filter'
@@ -38,7 +38,7 @@ const listRef = ref<InstanceType<typeof PmsDataList>>()
 const sort = reactive({ sort: 'bill_date', direction: 'asc' as 'asc' | 'desc' })
 function buildQuery(draft: typeof filters, targetPage: number, size: number) {
   const scope = reportScope('stock-detail', draft.conditions)
-  return { ...buildStockDetailQuery({ material: String(scope.params.material || ''), organization_ids: scope.params.organization_ids as number[], stock_id: (scope.params.stock_id as number) ?? null, dates: [String(scope.params.start_date || ''), String(scope.params.end_date || '')] }, targetPage, size),
+  return { ...buildStockDetailQuery({ material: String(scope.params.material || ''), material_field: scope.params.material_field as 'material_code' | 'material_name' | 'specification', material_operator: scope.params.material_operator as 'contains' | 'equals' | 'startsWith' | 'endsWith', organization_ids: scope.params.organization_ids as number[], stock_id: (scope.params.stock_id as number) ?? null, dates: [String(scope.params.start_date || ''), String(scope.params.end_date || '')] }, targetPage, size),
     filters: serializeReportConditions(scope.conditions), column_filters: '[]', ...sort }
 }
 const request = createReportRequest(buildQuery, getStockDetailRows, { items: [], openings: [], total: 0, summary: null } as StockDetailResult, value => { result.value = value })
@@ -63,12 +63,14 @@ const referenceScope = (q?: { conditions?: QueryCondition[] }) => {
   return { organization_ids: ids }
 }
 const filterFields = computed(() => reportFields((metadata.value?.query_fields || metadata.value?.filter_fields || []).filter(field => !['stock_name', 'project_name'].includes(field.field)), [
-  { field: 'material', label: '物料', type: 'text', required: true, operators: ['contains'] },
+  { field: 'material_code', label: '物料编码', type: 'text' },
+  { field: 'material_name', label: '物料名称', type: 'text' },
+  { field: 'specification', label: '规格型号', type: 'text' },
   { field: 'organization_ids', label: '产品线', type: 'enum', required: true, options: metadata.value?.organizations || [], operators: ['equals', 'in', 'reference'] },
   { field: 'bill_date', label: '收发日期', type: 'date', required: true, operators: ['between'] },
   { field: 'stock_id', label: '仓库', type: 'text', operators: ['reference'], reference: reportReference('仓库', 'stock_id', 'number', params => getStockDetailReference('stock', params), referenceScope) },
-]))
-const queryDefaults = reportDefaults(['material', 'organization_ids', 'bill_date', 'stock_id'], { field: 'bill_date', start: localDate(new Date(today.getFullYear(), today.getMonth(), 1)), end: localDate(today) })
+]).map(field => ({ ...field, requiredGroup: STOCK_MATERIAL_FIELDS.includes(field.field) ? '物料' : undefined })))
+const queryDefaults = reportDefaults(['material_code', 'organization_ids', 'bill_date', 'stock_id'], { field: 'bill_date', start: localDate(new Date(today.getFullYear(), today.getMonth(), 1)), end: localDate(today) })
 const queryInvalid = computed(() => {
   try { buildQuery(filters, 1, pendingPageSize.value ?? pageSize.value) }
   catch (error) { return (error as Error).message }

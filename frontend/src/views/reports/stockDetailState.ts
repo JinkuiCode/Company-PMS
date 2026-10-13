@@ -12,6 +12,8 @@ export function formatStockQuantity(value: unknown): string {
 
 export interface StockDetailFilters {
   material: string
+  material_field?: 'material_code' | 'material_name' | 'specification'
+  material_operator?: 'contains' | 'equals' | 'startsWith' | 'endsWith'
   dates: string[]
   organization_id?: number | null
   organization_ids?: number[]
@@ -20,6 +22,8 @@ export interface StockDetailFilters {
 }
 export interface StockDetailParameters {
   material: string
+  material_field?: 'material_code' | 'material_name' | 'specification'
+  material_operator?: 'contains' | 'equals' | 'startsWith' | 'endsWith'
   start_date: string
   end_date: string
   organization_ids: number[]
@@ -58,7 +62,7 @@ export function buildStockDetailQuery(filters: StockDetailFilters, page: number,
     if (id != null && (!Number.isSafeInteger(id) || id <= 0)) throw new Error('请重新选择组织或仓库')
   }
   if (!Number.isSafeInteger(page) || page < 1 || page > 1000000 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 500) throw new Error('分页参数无效')
-  return { material, start_date: dates[0]!, end_date: dates[1]!,
+  return { material, material_field: filters.material_field, material_operator: filters.material_operator, start_date: dates[0]!, end_date: dates[1]!,
     organization_ids: organizations, stock_id: filters.stock_id ?? undefined,
     page, page_size: pageSize,
     filters: filters.conditions?.length ? JSON.stringify(filters.conditions.map(({ field, operator, value, valueEnd }) => ({ field, operator, value, valueEnd }))) : undefined }

@@ -10,7 +10,7 @@ from sqlalchemy.dialects import mssql
 from app.services.query_conditions import build_query_clause, scalar
 
 from app.services.purchase_fields import report_fields as purchase_fields, DOCUMENT_STATUSES, PROGRESS_LABELS
-from app.services.stock_detail_fields import report_fields as stock_fields
+from app.services.stock_detail_fields import report_fields as stock_fields, QUERY_ONLY_FIELDS
 
 EMPTY = ('isEmpty', 'notEmpty')
 COMPARISONS = {'equals': '=', 'notEquals': '<>', 'greaterThan': '>',
@@ -37,7 +37,7 @@ def filter_fields(report):
         enums = {'document_status': DOCUMENT_STATUSES, 'close_status': {'A': '未关闭', 'B': '已关闭'},
                  'progress': PROGRESS_LABELS}
     elif report == 'stock-detail':
-        fields = stock_fields()
+        fields = [*stock_fields(), *[dict(key=k, label=l, type=t) for k,l,t,_ in QUERY_ONLY_FIELDS]]
         enums = {}
     else:
         raise ValueError('Unknown report')
@@ -145,7 +145,7 @@ def query_fields(report):
     elif report == 'inventory':
         fields = inventory_fields()
     elif report == 'stock-detail':
-        fields = stock_fields()
+        fields = [*stock_fields(), *[dict(key=k, label=l, type=t) for k,l,t,_ in QUERY_ONLY_FIELDS]]
     else:
         raise ValueError('Unknown report')
     enums = {'document_status': DOCUMENT_STATUSES, 'close_status': {'A': '未关闭', 'B': '已关闭'},

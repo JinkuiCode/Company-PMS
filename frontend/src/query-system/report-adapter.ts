@@ -71,6 +71,12 @@ export function reportDefaults(fields: string[], date?: { field: string; start: 
     value: field === date?.field ? date.start : /organization/.test(field) || ['project_code', 'stock_id'].includes(field) ? [] : null,
     valueEnd: field === date?.field ? date.end : null, schemaVersion: 2 }))
 }
+export const STOCK_MATERIAL_FIELDS = ['material_code', 'material_name', 'specification']
+export function stockMaterialCondition(source: QueryCondition[]) {
+  return activeReportConditions(source).find(c => STOCK_MATERIAL_FIELDS.includes(c.field)
+    && ['contains', 'equals', 'startsWith', 'endsWith'].includes(c.operator)
+    && typeof c.value === 'string' && !!c.value.trim())
+}
 function selectedKeys(condition: QueryCondition, label: string): (string | number)[] {
   if (!['equals', 'in', 'reference'].includes(condition.operator)) throw Error(`${label}只能选择，不支持文字匹配或排除`)
   const keys = Array.isArray(condition.value) ? condition.value : [condition.value]
@@ -108,6 +114,11 @@ export function reportScope(kind: ReportKind, source: QueryCondition[]) {
     } else conditions.push(cloneQuery(condition))
   }
   if (kind === 'stock-detail') {
+    const material = stockMaterialCondition(source)
+    if (material) {
+      if ((material.value as string).length > 100) throw Error('物料条件最多100个字符')
+      params.material = (material.value as string).trim(); params.material_field = material.field; params.material_operator = material.operator
+    }
     if (!params.material) throw Error('请填写物料后再查询')
     if (!(params.organization_ids as number[] | undefined)?.length) throw Error('请选择至少一个库存组织后再查询')
     if (!params.start_date || !params.end_date) throw Error('请选择完整、有效的起止日期')

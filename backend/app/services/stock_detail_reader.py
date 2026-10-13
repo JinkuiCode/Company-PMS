@@ -16,6 +16,8 @@ class StockDetailQuery(BaseModel):
     column_filters: str = Field(default='[]', max_length=12000)
 
     material: str = Field(min_length=1, max_length=100)
+    material_field: Literal['material_code', 'material_name', 'specification'] = 'material_code'
+    material_operator: Literal['contains', 'equals', 'startsWith', 'endsWith'] = 'contains'
     start_date: date
     end_date: date
     organization_id: int | None = Field(default=None, gt=0)

@@ -18,6 +18,8 @@ FIELDS = (
     ('balance_qty', '结存', 'decimal', 95),
 )
 
+QUERY_ONLY_FIELDS = (('specification', '规格型号', 'text', 140),)
+
 
 def report_fields():
     return [{'key': key, 'label': label, 'type': kind, 'width': width}
@@ -32,4 +34,4 @@ def catalog_fields():
         editable=False, computed=key in ('opening_qty', 'balance_qty', 'product_line_name'), enum_code=None,
         description='库存组织 ID 精确匹配 PMS 产品线显示名称；未配置时保留原组织名称并标注未配置产品线' if key == 'product_line_name' else '按金蝶库存报表来源只读计算；详见物料收发明细报表说明',
         catalog_source='STOCK_DETAIL_REPORT_FIELDS', sort=120000 + index)
-        for index, (key, label, kind, width) in enumerate(FIELDS)]
+        for index, (key, label, kind, width) in enumerate((*FIELDS, *QUERY_ONLY_FIELDS))]

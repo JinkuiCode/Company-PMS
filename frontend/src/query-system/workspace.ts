@@ -1,4 +1,4 @@
-import { cloneQuery, hasConditionValue, operatorsForField, validateConditions, type QueryCondition, type QueryField, type QueryOperator, type QueryValue, type QueryScalar } from './core.ts'
+import { cloneQuery, hasConditionValue, isPositiveQueryCondition, operatorsForField, validateConditions, type QueryCondition, type QueryField, type QueryOperator, type QueryValue, type QueryScalar } from './core.ts'
 
 export type QueryDefinition = { field:string; shown:boolean; operator:QueryOperator; value:QueryValue; valueEnd:QueryScalar; schemaVersion?:1|2 }
 export type QueryScheme = { version:2; name:string; definitions:QueryDefinition[]; isDefault:boolean; preferences:object }
@@ -25,6 +25,11 @@ export function activeQuery(source:QueryCondition[],fields:QueryField[]) {
     const c=source.find(c=>c.field===field.field)
     if(!c||blank(c.value)||['isEmpty','notEmpty','notEquals','notIn','notContains'].includes(c.operator))errors[c?.id||0]=`${field.label}为必输条件`
   }
+  for (const group of new Set(fields.map(f=>f.requiredGroup).filter(Boolean))) {
+    const members = fields.filter(f=>f.requiredGroup===group).map(f=>f.field)
+    if (!source.some(c=>members.includes(c.field)&&isPositiveQueryCondition(c)&&hasConditionValue(c)))
+      errors[source.find(c=>members.includes(c.field))?.id||0]=`${group}条件至少填写一项正向匹配`
+  }
   return {conditions:cloneQuery(conditions),errors}
 }
 export function settingsDefinitions(definitions:QueryDefinition[],draft:QueryCondition[],fields:QueryField[]):QueryDefinition[] {
@@ -40,11 +45,16 @@ export function validateDefinitions(definitions:QueryDefinition[],fields:QueryFi
     if(used.has(d.field))errors[d.field]='默认条件字段不能重复'
     used.add(d.field)
     if(f.required&&!d.shown)errors[d.field]='必输条件不能隐藏'
-    const validation=activeQuery([{...d,id:1,schemaVersion:d.schemaVersion??2}], [{...f,required:false}])
+    const validation=activeQuery([{...d,id:1,schemaVersion:d.schemaVersion??2}], [{...f,required:false,requiredGroup:undefined}])
     if(Object.keys(validation.errors).length)errors[d.field]=Object.values(validation.errors)[0]!
     if(!operatorsForField(f).includes(d.operator))errors[d.field]='匹配方式已失效'
   }
   for(const f of fields.filter(f=>f.required))if(!definitions.some(d=>d.field===f.field&&d.shown))errors[f.field]='必输条件不能隐藏'
+  for (const group of new Set(fields.map(f=>f.requiredGroup).filter(Boolean))) {
+    const members = fields.filter(f=>f.requiredGroup===group).map(f=>f.field)
+    if (!definitions.some(d=>d.shown&&members.includes(d.field)&&isPositiveQueryCondition({...d,id:1})))
+      errors[members[0]||String(group)]=`${group}至少展示一项正向匹配条件`
+  }
   if(definitions.filter(d=>d.shown).length>20)errors[0]='最多展示20个条件'
   return errors
 }

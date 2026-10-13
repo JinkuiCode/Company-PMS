@@ -21,12 +21,10 @@ def snapshot_sql(query, organization_id, balance_date, balance_type):
         raise ValueError('组织范围无效')
     if effective_date(balance_date, balance_type) > query.start_date:
         raise ValueError('库存结存基点晚于查询开始日期')
-    keyword = query.material.replace('[', '[[]').replace('%', '[%]').replace('_', '[_]')
-    predicates = ['S.FSTOCKORGID=%s', 'S.FBALTYPE=%s', 'S.FBALDATE=%s',
-        '''(M.FNUMBER LIKE %s OR EXISTS (SELECT 1 FROM dbo.T_BD_MATERIAL_L ML
-            WHERE ML.FMATERIALID=M.FMATERIALID AND ML.FLOCALEID=2052
-            AND (ML.FNAME LIKE %s OR ML.FSPECIFICATION LIKE %s)))''']
-    params = [organization_id, balance_type, balance_date, *(['%' + keyword + '%'] * 3)]
+    from app.services.stock_detail_material_query import material_predicate
+    material_sql, material_params = material_predicate(query)
+    predicates = ['S.FSTOCKORGID=%s', 'S.FBALTYPE=%s', 'S.FBALDATE=%s', material_sql]
+    params = [organization_id, balance_type, balance_date, *material_params]
     if query.stock_id is not None:
         predicates.append('S.FSTOCKID=%s'); params.append(query.stock_id)
     # The plugin checks shared strategy separately for material/BOM and each

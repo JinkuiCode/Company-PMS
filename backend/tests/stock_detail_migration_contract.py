@@ -33,10 +33,11 @@ class MigrationContract(unittest.TestCase):
 
     def test_revision_and_field_catalog_include_report(self):
         from app.services.database_revision import CURRENT_DATABASE_REVISION
-        self.assertEqual(CURRENT_DATABASE_REVISION, '2026-10-09-archive-02')
+        self.assertEqual(CURRENT_DATABASE_REVISION, '2026-10-12-feedback-02')
         from app.services.field_catalog import build_field_catalog
         fields = [row for row in build_field_catalog() if row['module'] == 'stock_detail_report']
-        self.assertEqual(len(fields), 15)
+        self.assertEqual(len(fields), 17)
+        self.assertIn('specification', {row['field_code'] for row in fields})
         self.assertTrue(all(not row['editable'] for row in fields))
 
 

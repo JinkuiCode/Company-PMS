@@ -34,12 +34,11 @@ const referenceScope = (q?: { conditions?: QueryCondition[]; line?: number | nul
 }
 const projectReference = () => ({ ...reportReference('项目档案', 'id', 'number', getPurchaseProjectReference, referenceScope), lineOptions: () => metadata.value?.organizations || [] })
 const filterFields = computed(() => reportFields((metadata.value?.overview_query_fields || metadata.value?.query_fields || metadata.value?.filter_fields || []).filter(field => field.field !== 'project_name'), [
-  { field: 'keyword', label: '申请单 / 物料 / 规格', type: 'text', operators: ['contains'] },
   { field: 'organization_ids', label: '产品线', type: 'enum', options: metadata.value?.organizations || [], operators: ['equals', 'in', 'reference'] },
   { field: 'project_code', label: '项目编码', type: 'text', reference: projectReference() },
   { field: 'supplier_name', label: '供应商', type: 'text' },
 ]))
-const queryDefaults = reportDefaults(['keyword', 'organization_ids', 'project_code', 'application_date', 'supplier_name'])
+const queryDefaults = reportDefaults(['bill_no', 'organization_ids', 'project_code', 'application_date', 'supplier_name'])
 const invalid = computed(() => { try { reportScope('purchase', conditions.value); return Object.values(validateConditions(activeReportConditions(conditions.value), filterFields.value))[0] || '' } catch (error) { return (error as Error).message } })
 const rows = ref<PurchaseOverviewRow[]>([]), total = ref(0), totals = reactive({ all: 0, complete: 0, review: 0 })
 const page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE), pendingSize = ref<number | null>(null)

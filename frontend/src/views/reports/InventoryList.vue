@@ -51,11 +51,10 @@ const columnFilters = computed({ get: () => filters.value.column_filters, set: v
 const filterFields = computed(() => reportFields((metadata.value?.query_fields || fields.value.map<QueryField>(field => ({
   field: field.key, label: field.label, type: field.value_type === 'number' ? 'number' : 'text',
 }))).filter(field => !removedIdentity.includes(field.field)), [
-  { field: 'keyword', label: '物料编码 / 名称 / 规格', type: 'text', operators: ['contains'] },
   { field: 'organization_id', label: '产品线', type: 'enum', options: metadata.value?.organizations || [], operators: ['equals', 'reference'] },
   { field: 'Stock', label: '仓库', type: 'text' },
 ]))
-const queryDefaults = reportDefaults(['keyword', 'organization_id', 'Stock'])
+const queryDefaults = reportDefaults(['MaterialCode', 'organization_id', 'Stock'])
 const invalid = computed(() => { try { reportScope('inventory', conditions.value); return Object.values(validateConditions(activeReportConditions(conditions.value), filterFields.value))[0] || '' } catch (error) { return (error as Error).message } })
 const dirty = computed(() => session.dirty || pendingPageSize.value !== null)
 const status = computed(() => loading.value ? '正在查询' : error.value ? '查询失败' : dirty.value ? '条件已修改，待查询' : session.applied ? '已查询' : '尚未查询')

@@ -2,7 +2,7 @@
 from datetime import date, datetime
 from decimal import Decimal, localcontext
 from app.services.stock_detail_balance import InventoryKey, quantity, stock_quantity
-from app.services.stock_detail_fields import report_fields
+from app.services.stock_detail_fields import report_fields, QUERY_ONLY_FIELDS
 
 
 def _identity(value, *, required=False):
@@ -48,6 +48,7 @@ def normalize_movement(row, form_id, side, unit, labels, bill_name):
         raise ValueError('库存流水时间或单号无效')
     descriptive = {field['key'] for field in report_fields()} - {
         'opening_qty', 'income_qty', 'issue_qty', 'balance_qty', 'bill_date', 'bill_name', 'bill_no', 'bill_seq'}
+    descriptive.update(key for key, _, _, _ in QUERY_ONLY_FIELDS)
     return {**{key: labels.get(key) for key in descriptive},
         'row_id': identity, 'inventory_key': inventory_key(row, unit['unit_id']),
         'source_order': 0, 'created_at': created, 'bill_date': day,

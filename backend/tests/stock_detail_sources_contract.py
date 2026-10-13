@@ -196,7 +196,8 @@ class SourceContract(unittest.TestCase):
                 values = []
                 for side, sql, params in module.movement_queries('STK_TransferDirect', query, scope):
                     args = [value.isoformat() if hasattr(value, 'isoformat') else value for value in params]
-                    values.extend((side, dict(row)) for row in connection.execute(sql.replace('%s', '?'), args))
+                    translated=sql.replace('%s', '?').replace('%%', '%').replace(' + ', ' || ')
+                    values.extend((side, dict(row)) for row in connection.execute(translated, args))
                 return values
             incoming, outgoing = result([10]), result([20])
             self.assertEqual([(side, row['base_income_qty'], row['base_issue_qty']) for side, row in incoming], [('in', 6, 0)])

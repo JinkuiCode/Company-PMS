@@ -2,13 +2,14 @@
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { Close, Collection } from '@element-plus/icons-vue'
 import { PmsSelectControl, PmsTextControl, PmsNumberControl, PmsDateControl } from '@/form-system'
-import { operatorsForField, operatorLabel, type QueryCondition, type QueryField, type QueryValue, type QueryOperator } from './core'
+import { operatorsForField, operatorLabel, isRequiredQueryField, type QueryCondition, type QueryField, type QueryValue, type QueryOperator } from './core'
 import { optionReference, type ReferenceRequest, type ReferenceRecord } from './reference'
 import { referenceSummary } from './reference-summary'
 import PmsQueryReference from './PmsQueryReference.vue'
 const props=defineProps<{condition:QueryCondition;fields:QueryField[];conditions?:QueryCondition[];fixedField?:boolean;regular?:boolean;removable?:boolean;error?:string;prefix:string;appendTo?:HTMLElement|null}>()
 const emit=defineEmits<{update:[value:QueryCondition];remove:[]}>()
 const field=computed(()=>props.fields.find(f=>f.field===props.condition.field))
+const required=computed(()=>isRequiredQueryField(field.value,props.fields,props.conditions||[props.condition]))
 const referenceOpen=ref(false)
 const resolved=ref<ReferenceRecord[]>([])
 let resolution=0
@@ -46,9 +47,9 @@ onBeforeUnmount(()=>resolution++)
 <template>
   <div class="pms-condition-row" :class="{'is-range':condition.operator==='between','has-error':error,'is-regular':regular}" :data-field="condition.field">
     <div class="pms-condition-field">
-      <span v-if="field?.required" class="pms-condition-required" aria-hidden="true">*</span>
+      <span v-if="required" class="pms-condition-required" :title="field?.requiredGroup?`${field.requiredGroup}条件至少填写一项`:undefined" aria-hidden="true">*</span>
       <span v-if="fixedField" class="pms-condition-label" :title="field?.label">{{field?.label || condition.field}}</span>
-      <PmsSelectControl v-else :model-value="condition.field" :options="fields.map(f=>({value:f.field,label:f.label}))" v-bind="controls" :append-to="appendTo" :aria-required="field?.required||undefined" :aria-label="prefix+'字段名'" @update:model-value="changeField" />
+      <PmsSelectControl v-else :model-value="condition.field" :options="fields.map(f=>({value:f.field,label:f.label}))" v-bind="controls" :append-to="appendTo" :aria-required="required||undefined" :aria-label="prefix+'字段名'" @update:model-value="changeField" />
     </div>
     <PmsSelectControl :model-value="referenceOpen?'reference':condition.operator" :options="options" v-bind="controls" :append-to="appendTo" :aria-label="prefix+'条件'" @update:model-value="changeOperator" />
     <div class="pms-condition-value">

@@ -218,11 +218,9 @@ def _source_sql(source, query, organizations):
     predicates.extend([source.cancel_predicate, "H.FDOCUMENTSTATUS='C'", source.additional,
                        f"{columns['bill_date']}>=%s AND {columns['bill_date']}<%s"])
     params.extend([query.start_date, query.end_date + timedelta(days=1)])
-    keyword = query.material.replace('[', '[[]').replace('%', '[%]').replace('_', '[_]')
-    predicates.append('''(M.FNUMBER LIKE %s OR EXISTS (SELECT 1 FROM dbo.T_BD_MATERIAL_L ML
-        WHERE ML.FMATERIALID=M.FMATERIALID AND ML.FLOCALEID=2052
-          AND (ML.FNAME LIKE %s OR ML.FSPECIFICATION LIKE %s)))''')
-    params.extend(['%' + keyword + '%'] * 3)
+    from app.services.stock_detail_material_query import material_predicate
+    material_sql, material_params = material_predicate(query)
+    predicates.append(material_sql); params.extend(material_params)
     if query.stock_id is not None:
         predicates.append(columns['stock_id'] + '=%s'); params.append(query.stock_id)
     join = (f'INNER JOIN dbo.{source.quantity_table} Q ON Q.FENTRYID=E.FENTRYID'

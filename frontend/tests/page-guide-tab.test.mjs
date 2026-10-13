@@ -26,6 +26,6 @@ test('invalid states use safe defaults without crashing', () => {
 })
 test('standalone surfaces reuse existing page permission codes', () => {
   assert.deepEqual(Object.fromEntries(Object.entries(guideDestinations).map(([key, value]) => [key, value.permission])), {
-    archive: 'project:archive:view', purchase: 'report:purchase:view', inventory: 'report:inventory:view', stock: 'report:stock-detail:list',
+    archive: 'project:archive:view', purchase: 'report:purchase:view', inventory: 'report:inventory:view', stock: 'report:stock-detail:list', feedback: 'feedback:view',
   })
 })

@@ -145,7 +145,7 @@ for (const name of pages) {
     const { page, warnings } = pageHarness(name)
     await page.initialize()
     if (name === 'StockDetailList') page.conditions.value = [
-      { id: 1, field: 'material', operator: 'contains', value: '物料 A', valueEnd: null, schemaVersion: 2 },
+      { id: 1, field: 'material_name', operator: 'contains', value: '物料 A', valueEnd: null, schemaVersion: 2 },
       { id: 2, field: 'organization_ids', operator: 'reference', value: [7], valueEnd: null, schemaVersion: 2 },
       { id: 3, field: 'bill_date', operator: 'between', value: '2026-10-01', valueEnd: '2026-10-12', schemaVersion: 2 },
     ]

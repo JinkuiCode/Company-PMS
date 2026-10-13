@@ -63,7 +63,7 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied
   {field:'created_at',label:'任务时间',type:'date'},
   {field:'attempts',label:'尝试次数',type:'number'},
   {field:'started_at',label:'最后执行时间',type:'date'},
-  {field:'message',label:'执行结果 / 异常原因',type:'text'},
+  {field:'message',label:'执行信息',type:'text'},
 ], ['project_code','status','operator_name','created_at'], {requireQuery:true,ready:()=>querySupported.value && !loading.value && !error.value})
 const querySupported = ref(false)
 function clearQueryColumns() { clearColumns() }

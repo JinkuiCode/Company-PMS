@@ -7,8 +7,8 @@ assert.ok(existsSync(registryFile), '需要独立的正式页面说明目录，�
 const { pageGuides, findGuideEntries } = await import(registryFile.href)
 const { migrateReportIdentity } = await import('../src/views/reports/report-identity-layout.ts')
 
-test('four approved business surfaces share searchable operation and field instructions', () => {
-  assert.deepEqual(Object.keys(pageGuides).sort(), ['archive', 'inventory', 'purchase', 'stock'])
+test('approved business surfaces share searchable operation and field instructions', () => {
+  assert.deepEqual(Object.keys(pageGuides).sort(), ['archive', 'feedback', 'inventory', 'purchase', 'stock'])
   for (const guide of Object.values(pageGuides)) {
     assert.ok(guide.title && guide.operations.length && guide.fields.length)
     assert.equal(new Set(guide.fields.map(item => item.label)).size, guide.fields.length)

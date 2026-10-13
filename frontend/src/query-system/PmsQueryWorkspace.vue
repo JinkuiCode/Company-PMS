@@ -54,6 +54,7 @@ watch(()=>props.fields,()=>{run++;busy.value=false},{deep:true})
 onBeforeUnmount(()=>{run++;pendingEntry.value='';initializedKey=''})
 function reset(){load()}
 function update(c:QueryCondition,value:QueryCondition){change(conditions.value.map(row=>row.id===c.id?value:row))}
+function removable(c:QueryCondition){const f=props.fields.find(f=>f.field===c.field);return !f?.required&&(!f?.requiredGroup||conditions.value.filter(row=>props.fields.find(field=>field.field===row.field)?.requiredGroup===f.requiredGroup).length>1)}
 function add(){const f=available.value[0];if(!f||conditions.value.length>=20)return;change([...conditions.value,{id:Math.max(0,...conditions.value.map(c=>c.id))+1,field:f.field,operator:f.type==='enum'?'in':operatorsForField(f).find(op=>op!=='reference')!,value:null,valueEnd:null,schemaVersion:2}]);nextTick(()=>host.value?.querySelector<HTMLInputElement>(`[data-field="${f.field}"] input`)?.focus())}
 async function query(){
   if(!props.ready||busy.value||props.loading||schemeWarning.value)return
@@ -86,7 +87,7 @@ defineExpose({getConditions:()=>cloneQuery(conditions.value),reset,query})
       <span v-if="dirty" class="pms-query-dirty">条件已修改</span><slot name="after" />
     </div>
     <form class="pms-query-workspace-fields" aria-label="统一查询条件" @submit.prevent="query">
-      <PmsQueryConditionRow v-for="(c,i) in conditions" :key="c.id" :condition="c" :fields="fields" :conditions="conditions" :removable="!fields.find(f=>f.field===c.field)?.required" :error="errors[c.id]" :prefix="`查询${i+1}`" @update="update(c,$event)" @remove="change(conditions.filter(row=>row.id!==c.id))" />
+      <PmsQueryConditionRow v-for="(c,i) in conditions" :key="c.id" :condition="c" :fields="fields" :conditions="conditions" :removable="removable(c)" :error="errors[c.id]" :prefix="`查询${i+1}`" @update="update(c,$event)" @remove="change(conditions.filter(row=>row.id!==c.id))" />
       <p v-if="errors[0]" class="pms-query-error" role="alert">{{errors[0]}}</p>
       <p v-if="schemeWarning" class="pms-query-warning" role="alert">{{schemeWarning}}</p>
     </form>
@@ -95,7 +96,7 @@ defineExpose({getConditions:()=>cloneQuery(conditions.value),reset,query})
       <div class="pms-query-settings-labels"><span>默认展示</span><span>字段名 / 条件 / 默认值</span><span>顺序</span></div>
       <div v-for="(d,i) in editDefinitions" :key="d.field" class="pms-query-settings-row">
         <PmsCheckboxControl v-model="d.shown" :disabled="fields.find(f=>f.field===d.field)?.required" :aria-label="`${fields.find(f=>f.field===d.field)?.label}默认展示`" />
-        <PmsQueryConditionRow :condition="{...d,id:i+1}" :fields="fields" :conditions="editDefinitions.map((v,i)=>({...v,id:i+1}))" regular fixed-field :error="configErrors[d.field]" :prefix="`默认${fields.find(f=>f.field===d.field)?.label}`" @update="value=>Object.assign(d,value)" />
+        <PmsQueryConditionRow :condition="{...d,id:i+1}" :fields="fields" :conditions="editDefinitions.filter(v=>v.shown).map((v,i)=>({...v,id:i+1}))" regular fixed-field :error="configErrors[d.field]" :prefix="`默认${fields.find(f=>f.field===d.field)?.label}`" @update="value=>Object.assign(d,value)" />
         <div class="pms-query-order"><el-button type="primary" text :icon="ArrowUp" :disabled="i===0" title="上移" :aria-label="`上移${d.field}`" @click="move(i,-1)" /><el-button type="primary" text :icon="ArrowDown" :disabled="i===editDefinitions.length-1" title="下移" :aria-label="`下移${d.field}`" @click="move(i,1)" /></div>
       </div>
       <template #secondary><span class="pms-query-personal">仅当前用户 · {{editDefinitions.filter(d=>d.shown).length}} 个默认条件</span></template>

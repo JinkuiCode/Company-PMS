@@ -76,7 +76,9 @@ class TypedFilters(unittest.TestCase):
         for meta in (purchase, stock):
             self.assertIn('filter_fields', meta)
             fields = {f['field']: f for f in meta['filter_fields']}
-            self.assertTrue(set(fields) <= {f['key'] for f in meta['fields']})
+            from app.services.stock_detail_fields import QUERY_ONLY_FIELDS
+            query_only = {key for key,_,_,_ in QUERY_ONLY_FIELDS} if meta is stock else set()
+            self.assertTrue(set(fields) <= {f['key'] for f in meta['fields']} | query_only)
             self.assertEqual(fields['bill_no']['type'], 'text')
             self.assertIn('contains', fields['bill_no']['operators'])
         fields = {f['field']: f for f in purchase['filter_fields']}

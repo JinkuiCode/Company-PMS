@@ -4,7 +4,7 @@ export type QueryOperator = 'reference' | 'contains' | 'notContains' | 'equals' 
 export type QueryScalar = string | number | null
 export type QueryValue = QueryScalar | (string | number)[]
 export type QueryOption = { value: string | number; label: string }
-export type QueryField = { field: string; label: string; type: QueryType; options?: QueryOption[]; reference?:QueryReference; required?:boolean; operators?:QueryOperator[] }
+export type QueryField = { field: string; label: string; type: QueryType; options?: QueryOption[]; reference?:QueryReference; required?:boolean; requiredGroup?:string; operators?:QueryOperator[] }
 export type QueryCondition = { id: number; field: string; operator: QueryOperator; value: QueryValue; valueEnd: QueryScalar; schemaVersion?: 1 | 2 }
 export const cloneQuery = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 const emptyOperators: QueryOperator[] = ['isEmpty', 'notEmpty']
@@ -23,6 +23,17 @@ export function hasConditionValue(condition: QueryCondition) {
   if (emptyOperators.includes(condition.operator)) return true
   if (['in','notIn','reference'].includes(condition.operator)) return Array.isArray(condition.value) && condition.value.length > 0
   return !isEmpty(condition.value) && (condition.operator !== 'between' || !isEmpty(condition.valueEnd))
+}
+export const isPositiveQueryCondition = (condition: QueryCondition) =>
+  ['contains','equals','startsWith','endsWith','in','reference','between','greaterThan','greaterOrEqual','lessThan','lessOrEqual'].includes(condition.operator)
+export function isRequiredQueryField(field: QueryField | undefined, fields: QueryField[], conditions: QueryCondition[]): boolean {
+  if (!field) return false
+  if (field.required) return true
+  if (!field.requiredGroup) return false
+  const members = fields.filter(f => f.requiredGroup === field.requiredGroup)
+  const candidates = conditions.filter(c => members.some(f => f.field === c.field))
+  const representative = candidates.find(c => isPositiveQueryCondition(c) && hasConditionValue(c)) ?? candidates[0]
+  return field.field === (representative?.field ?? members[0]?.field)
 }
 export function operatorsForField(field:QueryField):QueryOperator[] {
   if(field.operators) return [...field.operators]
