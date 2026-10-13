@@ -199,7 +199,7 @@ onUnmounted(() => { invalidate(); grid = null })
 <template>
   <PmsDataList ref="listRef" class="inventory-page pms-report-query-surface" scrollbar-label="即时库存横向滚动条">
     <template #filters>
-      <PmsQueryWorkspace v-model="conditions" list-key="report-inventory" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata" :loading="loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters">
+      <PmsQueryWorkspace entry-mode="report" v-model="conditions" list-key="report-inventory" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata" :loading="loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters">
       <template #after><div class="pms-query-utilities">
       <span class="pms-report-query-status" :class="{'is-dirty':dirty}" role="status">{{ status }}<template v-if="stamp"> · {{ new Date(stamp).toLocaleTimeString('zh-CN', {hour12:false}) }}</template></span>
       <ReportExportControl v-if="auth.hasPermission('report:inventory:export')" report="inventory" :parameters="params" :columns="exportColumns" :before-export="confirmExport" :disabled="loading || !session.applied || !total" />

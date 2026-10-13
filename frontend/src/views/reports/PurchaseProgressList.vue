@@ -17,7 +17,7 @@ import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import { migrateReportIdentity, reportIdentityVersion } from './report-identity-layout'
 import CustomPagination from '@/components/CustomPagination.vue'
-import { DEFAULT_PAGE_SIZE, PMS_ACTION_COLUMN, PMS_GRID_OPTIONS } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PMS_SINGLE_ACTION_COLUMN as PMS_ACTION_COLUMN, PMS_GRID_OPTIONS } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
 import { getPurchaseMetadata, getPurchaseRows, getPurchaseDetail, getPurchaseProjectReference, type PurchaseField, type PurchaseRow, type PurchaseDocument, type PurchaseMetadata, type PurchaseDetail, type PurchaseDetailEntry } from '@/api/purchaseReport'
@@ -257,7 +257,7 @@ onUnmounted(() => { invalidate(); detail.close(); grid = null })
       <PmsPageGuide page="purchase" />
     </template>
     <template #filters>
-      <PmsQueryWorkspace v-model="conditions" list-key="report-purchase-progress" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata" :loading="loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters" />
+      <PmsQueryWorkspace entry-mode="report" v-model="conditions" list-key="report-purchase-progress" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata" :loading="loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters" />
       <div class="purchase-shortcuts" role="group" aria-label="采购进度快捷筛选">
         <button type="button" :aria-pressed="selectedProgress === ''" :disabled="loading || !metadata" @click="chooseProgress('')">全部</button>
         <button v-for="option in progressOptions" :key="option.value" type="button" :aria-pressed="selectedProgress === option.value" :disabled="loading || !metadata" @click="chooseProgress(option.value)">{{ option.label }}</button>

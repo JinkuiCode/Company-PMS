@@ -7,16 +7,17 @@ import { PmsSelectControl, PmsTextControl, PmsCheckboxControl, PmsFormDrawer, Pm
 import { cloneQuery, operatorsForField, type QueryCondition, type QueryField } from './core'
 import { instantiateDefinitions, activeQuery, readSchemes, saveScheme, selectScheme, schemeStorageKey, settingsDefinitions, validateDefinitions, validateReferences, prepareDefinitions, type QueryDefinition, type QueryScheme } from './workspace'
 import PmsQueryConditionRow from './PmsQueryConditionRow.vue'
-const props=withDefaults(defineProps<{listKey:string;fields:QueryField[];defaults:QueryDefinition[];ready?:boolean;loading?:boolean;modelValue?:QueryCondition[];snapshot?:()=>object;legacySchemes?:(storage:Pick<Storage,'getItem'>,userId:number|string,listKey:string)=>{schemes:QueryScheme[];warnings:string[]}}>(),{ready:true,loading:false})
+const props=withDefaults(defineProps<{listKey:string;fields:QueryField[];defaults:QueryDefinition[];entryMode?:'document'|'report';ready?:boolean;loading?:boolean;modelValue?:QueryCondition[];snapshot?:()=>object;legacySchemes?:(storage:Pick<Storage,'getItem'>,userId:number|string,listKey:string)=>{schemes:QueryScheme[];warnings:string[]}}>(),{entryMode:'report',ready:true,loading:false})
 const emit=defineEmits<{'update:modelValue':[value:QueryCondition[]];query:[conditions:QueryCondition[],preferences:object];clearColumns:[]}>()
 const auth=useAuthStore(),schemes=ref<QueryScheme[]>([]),selected=ref(''),definitions=ref<QueryDefinition[]>([]),conditions=ref<QueryCondition[]>([])
 const opened=ref(false),name=ref(''),originalName=ref(''),isDefault=ref(false),editDefinitions=ref<QueryDefinition[]>([]),errors=ref<Record<number,string>>({}),configErrors=ref<Record<string,string>>({}),busy=ref(false),host=ref<HTMLElement|null>(null)
 const schemeWarning=ref('')
+const pendingEntry=ref('')
 let run=0,initializedKey='',settingsOwner='',preferences:object={}
 const key=computed(()=>auth.user?.id?schemeStorageKey(auth.user.id,props.listKey):'')
 const available=computed(()=>props.fields.filter(f=>!conditions.value.some(c=>c.field===f.field)))
 const dirty=computed(()=>JSON.stringify(conditions.value)!==JSON.stringify(instantiateDefinitions(definitions.value)))
-function change(value:QueryCondition[]){run++;busy.value=false;conditions.value=cloneQuery(value);errors.value={};emit('update:modelValue',cloneQuery(value))}
+function change(value:QueryCondition[]){run++;busy.value=false;pendingEntry.value='';conditions.value=cloneQuery(value);errors.value={};emit('update:modelValue',cloneQuery(value))}
 function load(){
   const restored=selectScheme(schemes.value,selected.value,props.defaults)
   const prepared=prepareDefinitions(restored.definitions,props.fields)
@@ -25,9 +26,9 @@ function load(){
   change(instantiateDefinitions(definitions.value));emit('clearColumns')
 }
 function closeSettings(){settingsOwner='';name.value='';originalName.value='';isDefault.value=false;editDefinitions.value=[];configErrors.value={};opened.value=false}
-watch(key,()=>{run++;busy.value=false;schemeWarning.value='';closeSettings();initializedKey=''},{flush:'sync'})
+watch(key,()=>{run++;busy.value=false;pendingEntry.value='';schemeWarning.value='';closeSettings();initializedKey=''},{flush:'sync'})
 watch(opened,value=>{if(!value)closeSettings()},{flush:'sync'})
-watch([key,()=>props.ready],()=>{
+watch([key,()=>props.ready,()=>props.fields.length],()=>{
   if(!key.value||!props.ready||!props.fields.length||initializedKey===key.value)return
   initializedKey=key.value
   try{schemes.value=readSchemes(localStorage,key.value)}catch(error){schemes.value=[];ElMessage.warning(String(error))}
@@ -39,10 +40,18 @@ watch([key,()=>props.ready],()=>{
     }catch{ElMessage.warning('旧个人方案未读取，原记录保留，请重新配置')}
   }
   selected.value=schemes.value.find(p=>p.isDefault)?.name||'';load()
+  if(props.entryMode==='document')pendingEntry.value=key.value
 },{immediate:true})
+watch([pendingEntry,()=>props.ready,()=>props.loading,()=>props.fields],async()=>{
+  const owner=pendingEntry.value
+  if(!owner||!props.ready||props.loading)return
+  await nextTick()
+  if(owner!==pendingEntry.value||owner!==key.value||initializedKey!==owner||!props.ready||props.loading)return
+  await query()
+},{flush:'post',immediate:true,deep:true})
 watch(()=>props.modelValue,value=>{if(value&&JSON.stringify(value)!==JSON.stringify(conditions.value))change(value)},{deep:true})
 watch(()=>props.fields,()=>{run++;busy.value=false},{deep:true})
-onBeforeUnmount(()=>{run++})
+onBeforeUnmount(()=>{run++;pendingEntry.value='';initializedKey=''})
 function reset(){load()}
 function update(c:QueryCondition,value:QueryCondition){change(conditions.value.map(row=>row.id===c.id?value:row))}
 function add(){const f=available.value[0];if(!f||conditions.value.length>=20)return;change([...conditions.value,{id:Math.max(0,...conditions.value.map(c=>c.id))+1,field:f.field,operator:f.type==='enum'?'in':operatorsForField(f).find(op=>op!=='reference')!,value:null,valueEnd:null,schemaVersion:2}]);nextTick(()=>host.value?.querySelector<HTMLInputElement>(`[data-field="${f.field}"] input`)?.focus())}
@@ -51,7 +60,7 @@ async function query(){
   const snapshot=cloneQuery(conditions.value),validation=activeQuery(snapshot,props.fields)
   errors.value=validation.errors;if(Object.keys(errors.value).length)return
   const currentRun=++run;busy.value=true
-  try{const failures=await validateReferences(validation.conditions,props.fields,()=>currentRun===run);if(currentRun!==run||!failures)return;errors.value=failures;if(!Object.keys(failures).length)emit('query',validation.conditions,cloneQuery(preferences))}
+  try{const failures=await validateReferences(validation.conditions,props.fields,()=>currentRun===run);if(currentRun!==run||!failures)return;errors.value=failures;if(!Object.keys(failures).length){pendingEntry.value='';emit('query',validation.conditions,cloneQuery(preferences))}}
   catch{if(currentRun===run)errors.value[0]='引用校验失败，请重试；原查询结果保持不变'}finally{if(currentRun===run)busy.value=false}
 }
 function openSettings(){if(!key.value||!props.ready||initializedKey!==key.value)return;settingsOwner=key.value;name.value=selected.value;originalName.value=selected.value;isDefault.value=!!schemes.value.find(p=>p.name===selected.value)?.isDefault;editDefinitions.value=settingsDefinitions(definitions.value,conditions.value,props.fields);configErrors.value={};opened.value=true}

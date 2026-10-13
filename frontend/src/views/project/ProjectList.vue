@@ -34,7 +34,7 @@
         </template>
 
         <template #filters>
-          <PmsQueryWorkspace v-model="queryDraft" list-key="project-progress-list" :fields="queryFields" :defaults="queryDefaults" :ready="columnPreferencesReady" :loading="progressListLoading" :snapshot="querySnapshot" @query="runQuery" @clear-columns="clearQueryColumns" />
+          <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="project-progress-list" :fields="queryFields" :defaults="queryDefaults" :ready="columnPreferencesReady" :loading="progressListLoading" :snapshot="querySnapshot" @query="runQuery" @clear-columns="clearQueryColumns" />
         </template>
 
         <template #grid>
@@ -346,7 +346,7 @@ import {
 import type { ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
-import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, pmsActionColumn, normalizeActionColumnState } from '@/config/listUi'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import {
   PMS_AG_GRID_FORM_CLASS,
@@ -701,7 +701,7 @@ function runQuery(conditions: QueryCondition[], preferences: object) {
   const saved = preferences as Partial<ColumnPreferenceState> & {pageSize?:number}
   if (typeof saved.pageSize === 'number' && PAGE_SIZE_OPTIONS.includes(saved.pageSize)) pageSize.value = saved.pageSize
   if (Array.isArray(saved.selected_sheet_field_keys)) selectedSheetFieldKeys.value = saved.selected_sheet_field_keys.filter(key => sheetFieldMetaMap.value.has(key))
-  if (Array.isArray(saved.columnState)) gridApi.value?.applyColumnState({state:saved.columnState,applyOrder:true})
+  if (Array.isArray(saved.columnState)) gridApi.value?.applyColumnState({state:normalizeActionColumnState(saved.columnState,'progress_actions',hasPermission('project:list:delete') ? 2 : 1),applyOrder:true})
 }
 function clearQueryColumns() { clearColumns(); gridApi.value?.setFilterModel(null); nextTick(() => gridApi.value?.refreshCells({force:true})) }
 
@@ -1250,7 +1250,7 @@ const columnDefs = computed<Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>>
   {
     headerName: '操作',
     colId: 'progress_actions',
-    ...PMS_ACTION_COLUMN,
+    ...pmsActionColumn(hasPermission('project:list:delete') ? 2 : 1),
     pinned: 'right',
     lockPosition: 'right',
     lockPinned: true,
@@ -1354,7 +1354,7 @@ function restoreColumnState() {
       if (!state.colId.startsWith('sheet:')) return true
       return availableSheetIds.has(state.colId)
     }).map(state => state.colId === 'progress_actions'
-      ? { ...state, width: PMS_ACTION_COLUMN.width, flex: null, hide: false, pinned: 'right' as const }
+      ? { ...state, width: pmsActionColumn(hasPermission('project:list:delete') ? 2 : 1).width, flex: null, hide: false, pinned: 'right' as const }
       : state)
     gridApi.value.applyColumnState({ state: sanitizedState, applyOrder: true })
   } finally {

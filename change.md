@@ -1,5 +1,14 @@
 # PMS 变更记录
 
+## 2026-10-13 单据进入规则、查询红星及操作列收窄（开发机）
+
+- 原因：用户批准单据进入自动刷新、报表默认待查询，必输条件统一红星并取消名称文字标记，操作列按内容收窄；另批准修复正式截图揭示的角色保存兼容问题，仅开发机实施。
+- 调整：共享PmsQueryWorkspace新增document/report模式，个人默认方案和依赖就绪后单据自动查询一次；PmsQueryConditionRow按required显示红星；listUi统一64/96/136px操作列与旧偏好归一，各业务和管理列表接入。档案业务列改用initialWidth，恢复方案时暂停旧状态回写，保留业务列宽；初始化等待人员选项。后端兼容菜单自身view，前端独立查看映射既有权限ID，修复仅查看勾选恢复，不额外授予处理/重试。
+- 涉及：frontend/src/query-system/{PmsQueryWorkspace,PmsQueryConditionRow}.vue、config/listUi.ts、styles/pms-theme.css、views/project/{ProjectArchive,ProjectList,ProjectProgress}.vue、views/reports/{InventoryList,StockDetailList,PurchaseOverviewList,PurchaseProgressList}.vue及report-identity-layout.ts、views/feedback/FeedbackList.vue、系统列表与role-permission-tree.ts；backend/app/services/rbac.py、对应新行为测试、AGENTS.md、docs/PMS-UI-STANDARD.md、实施计划及开发机验收记录。
+- 验证：共享控件/旧列偏好/角色依赖先RED后GREEN；隔离真实页面涵盖单据默认首查与重新进入、三个报表无业务首查、采购下钻、红星禁查、64/96px及角色提交ID，均通过。后端角色7项、RBAC/首页/反馈升级及前端四项必需契约、方案所有权15项等通过，构建退出0，仅既有大分块提示。真实Edge档案自动显示21条、操作列64px，采购待查询、收发红星与禁用查询、角色独立查看已核对；截图outputs/list-entry-20261013/，详细证据docs/releases/2026-10-13-list-entry-dev.md。
+- 复核修复：晚到枚举或引用校验期间元数据刷新导致漏首查、项目进度旧默认方案覆盖操作列均由实际隔离浏览器先RED后GREEN；首查票据保留至真正提交、数据源改变重新校验，用户修改/重选/卸载取消。项目进度方案入口也仅规范化操作列，其他列偏好保留。
+- 边界：本机服务已独立保持在线并更新启动器运行记录，仍金蝶只读、后台同步关闭；未部署服务器、未升级数据库、未保存真实角色修改，未提交、合并或推送。正式环境报错仍需后续批准发布才会消除。
+
 ## 2026-10-12 页面说明与查询宽度三种交互样稿
 
 - 原因：用户要求报表取消项目名称、首列产品线；首期为项目档案及三张报表设计可复用说明入口，并比较三种样稿和查询条件宽度。

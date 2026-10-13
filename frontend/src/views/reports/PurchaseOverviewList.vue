@@ -16,7 +16,7 @@ import { migrateReportIdentity, reportIdentityVersion } from './report-identity-
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import { usePageColumnFilter } from '@/query-system/page-column-filter'
-import { DEFAULT_PAGE_SIZE, PMS_GRID_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PMS_GRID_OPTIONS, PMS_SINGLE_ACTION_COLUMN as PMS_ACTION_COLUMN } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
 import { getPurchaseMetadata, getPurchaseOverview, getPurchaseProjectReference, type PurchaseMetadata, type PurchaseOverviewRow, type PurchaseQueryDraft, type PurchaseDetailEntry } from '@/api/purchaseReport'
@@ -209,7 +209,7 @@ onUnmounted(() => { invalidate(); grid = null })
       <PmsPageGuide page="purchase" />
     </template>
     <template #filters>
-      <PmsQueryWorkspace v-model="conditions" list-key="report-purchase-overview" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata" :loading="loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters" />
+      <PmsQueryWorkspace entry-mode="report" v-model="conditions" list-key="report-purchase-overview" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata" :loading="loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters" />
       <div class="overview-shortcuts" role="group" aria-label="项目进度快捷筛选"><button v-for="option in quickOptions" :key="option.value" type="button" :aria-pressed="overviewStatus === option.value" :disabled="loading || !metadata" @click="overviewStatus = option.value; query(true)">{{ option.label }}</button><span v-if="applied">{{ total }} 个项目组织组合 · {{ totals.all }} 申请行 · 已完成 {{ totals.complete }} 行 · 待核对 {{ totals.review }} 行</span></div>
     </template>
     <template #grid>

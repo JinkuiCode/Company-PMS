@@ -41,7 +41,7 @@
     </template>
 
     <template #filters>
-      <PmsQueryWorkspace v-model="customFilters" list-key="project-archive" :fields="archiveQueryFields" :defaults="archiveQueryDefaults" :ready="archiveWorkspaceReady" :loading="archiveListLoading" :snapshot="archivePlanSnapshot" :legacy-schemes="legacyArchiveSchemes" @query="submitArchiveQuery" @clear-columns="clearArchiveColumnFilters" />
+      <PmsQueryWorkspace entry-mode="document" v-model="customFilters" list-key="project-archive" :fields="archiveQueryFields" :defaults="archiveQueryDefaults" :ready="archiveWorkspaceReady" :loading="archiveListLoading" :snapshot="archivePlanSnapshot" :legacy-schemes="legacyArchiveSchemes" @query="submitArchiveQuery" @clear-columns="clearArchiveColumnFilters" />
     </template>
 
     <template #grid>
@@ -314,7 +314,7 @@ import 'ag-grid-community/styles/ag-theme-alpine.css'
 import { ModuleRegistry, AllCommunityModule, type ColDef, type ColumnState } from 'ag-grid-community'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
-import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, PMS_SINGLE_ACTION_COLUMN as PMS_ACTION_COLUMN } from '@/config/listUi'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { legacyArchiveSchemes } from '@/query-system/archive-schemes'
 import type { QueryDefinition } from '@/query-system/workspace'
@@ -971,10 +971,14 @@ async function submitArchiveQuery(conditions:QueryCondition[], preferences:any) 
   archiveColumnFilters.value = []
   if (PAGE_SIZE_OPTIONS.includes(preferences.pageSize)) pageSize.value = preferences.pageSize
   if (preferences.columns?.selected_column_keys && preferences.columns?.columnState) {
-    const key = archiveColumnPreferenceStorageKey()
-    if (key) localStorage.setItem(key,JSON.stringify(preferences.columns))
-    restoreSelectedArchiveColumnKeys(); archiveColumnStateRestored.value = false
-    await nextTick(); restoreArchiveColumnState()
+    const writable = archiveColumnPreferenceWritesEnabled.value
+    archiveColumnPreferenceWritesEnabled.value = false
+    try {
+      const key = archiveColumnPreferenceStorageKey()
+      if (key) localStorage.setItem(key,JSON.stringify(preferences.columns))
+      restoreSelectedArchiveColumnKeys(); archiveColumnStateRestored.value = false
+      await nextTick(); restoreArchiveColumnState()
+    } finally { archiveColumnPreferenceWritesEnabled.value = writable }
   }
   page.value = 1
   await fetchList()
@@ -1237,7 +1241,9 @@ const archiveBusinessColumnDefs = computed<ColDef[]>(() => [
   },
 ])
 
-const columnDefs = computed(() => decorateQueryColumns(archiveBusinessColumnDefs.value,()=>archiveColumnContext) as ColDef[])
+const columnDefs = computed(() => decorateQueryColumns(archiveBusinessColumnDefs.value.map(column =>
+  fixedArchiveColumnKeys.has(column.colId || '') ? column : { ...column, initialWidth: column.width, width: undefined },
+),()=>archiveColumnContext) as ColDef[])
 
 const defaultColDef = {
   sortable: true,
@@ -1919,10 +1925,11 @@ async function handleBatchDelete() {
 }
 
 onMounted(async () => {
-  fetchUsers().catch(() => {
+  const usersReady = fetchUsers().catch(() => {
     userList.value = []
   })
   await Promise.allSettled([
+    usersReady,
     fetchEffectiveArchiveFields(), productLines.load(),
     fetchDictOptions('equipment_series'),
     ...Object.values(offlineEnumCodes).map(code => fetchDictOptions(code)),

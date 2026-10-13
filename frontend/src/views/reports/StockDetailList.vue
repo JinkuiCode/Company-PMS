@@ -63,8 +63,8 @@ const referenceScope = (q?: { conditions?: QueryCondition[] }) => {
   return { organization_ids: ids }
 }
 const filterFields = computed(() => reportFields((metadata.value?.query_fields || metadata.value?.filter_fields || []).filter(field => !['stock_name', 'project_name'].includes(field.field)), [
-  { field: 'material', label: '物料（必填）', type: 'text', required: true, operators: ['contains'] },
-  { field: 'organization_ids', label: '产品线（必选）', type: 'enum', required: true, options: metadata.value?.organizations || [], operators: ['equals', 'in', 'reference'] },
+  { field: 'material', label: '物料', type: 'text', required: true, operators: ['contains'] },
+  { field: 'organization_ids', label: '产品线', type: 'enum', required: true, options: metadata.value?.organizations || [], operators: ['equals', 'in', 'reference'] },
   { field: 'bill_date', label: '收发日期', type: 'date', required: true, operators: ['between'] },
   { field: 'stock_id', label: '仓库', type: 'text', operators: ['reference'], reference: reportReference('仓库', 'stock_id', 'number', params => getStockDetailReference('stock', params), referenceScope) },
 ]))
@@ -218,7 +218,7 @@ onUnmounted(() => { disposed = true; request.clear(); detailSwitch.invalidate();
 <template>
   <PmsDataList ref="listRef" class="pms-report-query-surface" scrollbar-label="物料收发明细横向滚动条">
     <template #filters>
-      <PmsQueryWorkspace v-model="conditions" list-key="report-stock-detail" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata && !initializing" :loading="result.loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters">
+      <PmsQueryWorkspace entry-mode="report" v-model="conditions" list-key="report-stock-detail" :legacy-schemes="legacyReportSchemes" :fields="filterFields" :defaults="queryDefaults" :ready="!!metadata && !initializing" :loading="result.loading" :snapshot="planSnapshot" @query="submitWorkspace" @clear-columns="clearColumnFilters">
       <template #after><div class="pms-query-utilities">
       <span class="pms-report-query-status" role="status">{{ queryStatus }}</span>
       <ReportExportControl v-if="auth.hasPermission('report:stock-detail:export')" report="stock-detail" :parameters="exportParameters" :before-export="beforeExport" :columns="exportColumns" :disabled="result.loading || !result.applied || (!result.total && !result.openings.length)" />

@@ -29,7 +29,7 @@
     </template>
 
     <template #filters>
-      <PmsQueryWorkspace v-model="queryDraft" :list-key="`project-tasks-${projectId}`" :fields="queryFields" :defaults="queryDefaults" :loading="tasksLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
+      <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" :list-key="`project-tasks-${projectId}`" :fields="queryFields" :defaults="queryDefaults" :loading="tasksLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
     </template>
 
     <template #grid>
@@ -66,6 +66,7 @@ import { useSystemQuery } from '@/query-system/system-adapter'
 import { toQueryFields } from '@/query-system/list-adapter'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import { ref, computed, onMounted } from 'vue'
+import { PMS_SINGLE_ACTION_COLUMN } from '@/config/listUi'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back, Search } from '@element-plus/icons-vue'
@@ -193,7 +194,7 @@ const columnDefs = computed<ColDef[]>(() => ([
     cellEditor: 'agTextCellEditor',
   },
   {
-    headerName: '操作', width: 80, pinned: 'right',
+    headerName: '操作', ...PMS_SINGLE_ACTION_COLUMN, pinned: 'right', hide: !hasPermission('project:list:delete'),
     cellRenderer: (params: any) => hasPermission('project:list:delete')
       ? `<button class="pms-table-action pms-link-danger del-btn" data-id="${params.data.id}">删除</button>`
       : '',

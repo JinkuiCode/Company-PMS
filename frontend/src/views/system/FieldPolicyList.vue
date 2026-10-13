@@ -26,7 +26,7 @@
     </template>
 
     <template #filters>
-      <PmsQueryWorkspace v-model="queryDraft" :list-key="`system-field-policy-${moduleCode}`" :fields="queryFields" :defaults="queryDefaults" :loading="loading" @query="submitQuery" @clear-columns="clearQueryColumns" />
+      <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" :list-key="`system-field-policy-${moduleCode}`" :fields="queryFields" :defaults="queryDefaults" :loading="loading" @query="submitQuery" @clear-columns="clearQueryColumns" />
     </template>
 
     <template #grid>

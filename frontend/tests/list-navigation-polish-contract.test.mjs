@@ -90,12 +90,12 @@ assert.match(
 
 assert.match(
   progress,
-  /\.\.\.PMS_ACTION_COLUMN/,
-  'Project progress operation width uses the shared standard regardless of permissions',
+  /\.\.\.pmsActionColumn\(hasPermission\('project:list:delete'\) \? 2 : 1\)/,
+  'Project progress operation width uses the shared content-sized standard',
 )
 assert.match(
   progress,
-  /headerName:\s*'操作',[\s\S]*?colId:\s*'progress_actions',[\s\S]*?\.\.\.PMS_ACTION_COLUMN/,
+  /headerName:\s*'操作',[\s\S]*?colId:\s*'progress_actions',[\s\S]*?\.\.\.pmsActionColumn/,
   'Project progress operation column has a stable ID and shared fixed width',
 )
 assert.match(

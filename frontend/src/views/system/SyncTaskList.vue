@@ -6,7 +6,7 @@
     </template>
     <template #toolbar-right><span v-if="!workerEnabled" class="pms-status warning">后台执行器未启用</span></template>
     <template #filters>
-      <PmsQueryWorkspace v-model="queryDraft" list-key="system-sync-task" :fields="queryFields" :defaults="queryDefaults" :ready="querySupported" :loading="loading" :snapshot="() => ({pageSize})" @query="runQuery" @clear-columns="clearQueryColumns" />
+      <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="system-sync-task" :fields="queryFields" :defaults="queryDefaults" :ready="querySupported" :loading="loading" :snapshot="() => ({pageSize})" @query="runQuery" @clear-columns="clearQueryColumns" />
       <p v-if="!querySupported" role="status">同步任务接口尚未声明查询 v2 支持，统一查询暂不可用；未执行当前页过滤。</p>
     </template>
     <template #grid>
@@ -20,7 +20,7 @@
         <el-table-column prop="attempts" label="尝试次数" width="90" :class-name="queryColumnClass('attempts')" :label-class-name="queryColumnClass('attempts')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'attempts',displayName:'尝试次数'}" /><span v-else>尝试次数</span></template></el-table-column>
         <el-table-column prop="started_at" label="最后执行时间" width="170" :class-name="queryColumnClass('started_at')" :label-class-name="queryColumnClass('started_at')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'started_at',displayName:'最后执行时间'}" /><span v-else>最后执行时间</span></template><template #default="{ row }">{{ formatTime(row.started_at) }}</template></el-table-column>
         <el-table-column prop="message" label="执行结果 / 异常原因" min-width="260" show-overflow-tooltip :class-name="queryColumnClass('message')" :label-class-name="queryColumnClass('message')"><template #header><PmsQueryColumnHeader v-if="querySupported" :params="{contextQuery:() => columnContext,field:'message',displayName:'执行结果 / 异常原因'}" /><span v-else>执行结果 / 异常原因</span></template></el-table-column>
-        <el-table-column label="操作" :width="PMS_ACTION_COLUMN.width" fixed="right">
+        <el-table-column label="操作" :width="pmsActionColumn(canRetry ? 2 : 1).width" fixed="right">
           <template #default="{ row }">
             <el-button size="small" link type="primary" @click="openLogs(row)">日志</el-button>
             <el-button v-if="canRetry && row.status === 'failed'" size="small" link type="primary" :disabled="busy" @click="retry([row])">重试</el-button>
@@ -48,7 +48,7 @@ import PmsDataList from '@/components/PmsDataList.vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import SyncLogDrawer from '@/components/SyncLogDrawer.vue'
 import { PmsDateControl, PmsSelectControl, PmsTextControl } from '@/form-system'
-import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, PMS_ACTION_COLUMN } from '@/config/listUi'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, pmsActionColumn } from '@/config/listUi'
 import { syncStatusOptions } from '@/config/syncUi'
 import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'

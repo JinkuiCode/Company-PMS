@@ -6,7 +6,7 @@
         <el-button v-if="hasPermission('system:role:add')" type="primary" size="small" :disabled="opening" @click="openDialog()">新增角色</el-button>
       </div>
 
-      <PmsQueryWorkspace v-model="queryDraft" list-key="system-role" :fields="queryFields" :defaults="queryDefaults" :loading="queryLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
+      <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="system-role" :fields="queryFields" :defaults="queryDefaults" :loading="queryLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
       <el-table class="pms-dense-table" height="100%" :data="filteredRoles" border stripe size="small">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="role_name" label="角色名称" width="150" :class-name="queryColumnClass('role_name')" :label-class-name="queryColumnClass('role_name')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'role_name',displayName:'角色名称'}" /></template></el-table-column>
@@ -33,7 +33,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" :class-name="queryColumnClass('remark')" :label-class-name="queryColumnClass('remark')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'remark',displayName:'备注'}" /></template></el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column v-if="(Number(hasPermission('system:role:edit'))+Number(hasPermission('system:role:delete')))>0" label="操作" :width="pmsActionColumn(Number(hasPermission('system:role:edit'))+Number(hasPermission('system:role:delete'))).width" fixed="right">
           <template #default="{ row }">
             <el-button v-if="hasPermission('system:role:edit')" link type="primary" size="small" :disabled="opening" @click="openDialog(row)">编辑</el-button>
             <el-button v-if="hasPermission('system:role:delete')" link type="danger" size="small" @click="handleDelete(row.id)">删除</el-button>
@@ -157,9 +157,11 @@
 
 <script setup lang="ts">
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
+import { rolePermissionTree, canonicalPermissionIds, selectedPermissionLeaves } from './role-permission-tree'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
 import { useSystemQuery } from '@/query-system/system-adapter'
 import { ref, reactive, onMounted, computed } from 'vue'
+import { pmsActionColumn } from '@/config/listUi'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
@@ -289,7 +291,7 @@ const isIndeterminate = ref(false)
 function updateCheckAllState() {
   if (!permTreeRef.value) return
   const checkedKeys = permTreeRef.value.getCheckedKeys() as number[]
-  checkedMenuIds.value = [...checkedKeys, ...permTreeRef.value.getHalfCheckedKeys()]
+  checkedMenuIds.value = canonicalPermissionIds([...checkedKeys, ...permTreeRef.value.getHalfCheckedKeys()])
   if (!homeOptions.value.some(option => option.value === form.home_menu_id)) form.home_menu_id = 0
   const checkedLeafCount = checkedKeys.filter((k: number) => allLeafIds.value.includes(k)).length
   const totalLeaf = allLeafIds.value.length
@@ -356,7 +358,7 @@ async function loadRoleDialog(row?: any) {
   formRef.value?.resetFields()
 
   // 加载权限树
-  permTree.value = (await request.get('/menus/tree')) as any
+  permTree.value = rolePermissionTree((await request.get('/menus/tree')) as any)
 
   if (row) {
     Object.assign(form, {
@@ -380,7 +382,7 @@ async function loadRoleDialog(row?: any) {
   setTimeout(() => {
     if (permTreeRef.value) {
       // 只勾选叶子节点，避免父子联动时重复设置
-      const leafChecked = checkedMenuIds.value.filter(id => allLeafIds.value.includes(id))
+      const leafChecked = selectedPermissionLeaves(checkedMenuIds.value, allLeafIds.value)
       permTreeRef.value.setCheckedKeys(leafChecked)
       updateCheckAllState()
     }
@@ -398,7 +400,7 @@ async function handleSubmit() {
   // 获取所有勾选的节点（含半选的父节点）
   const checkedKeys = permTreeRef.value?.getCheckedKeys() || []
   const halfCheckedKeys = permTreeRef.value?.getHalfCheckedKeys() || []
-  const menuIds = [...checkedKeys, ...halfCheckedKeys]
+  const menuIds = canonicalPermissionIds([...checkedKeys, ...halfCheckedKeys])
 
   const payload = {
     role_name: form.role_name,

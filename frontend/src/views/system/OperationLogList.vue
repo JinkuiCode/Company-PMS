@@ -10,7 +10,7 @@
     </template>
 
     <template #filters>
-      <PmsQueryWorkspace v-model="queryDraft" list-key="system-operation-log" :fields="queryFields" :defaults="queryDefaults" :ready="querySupported" :loading="loading" :snapshot="() => ({pageSize})" @query="runQuery" @clear-columns="clearQueryColumns" />
+      <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="system-operation-log" :fields="queryFields" :defaults="queryDefaults" :ready="querySupported" :loading="loading" :snapshot="() => ({pageSize})" @query="runQuery" @clear-columns="clearQueryColumns" />
       <p v-if="!querySupported" class="operation-log-hint" role="status">操作日志接口尚未声明查询 v2 支持，统一查询暂不可用；未执行当前页过滤。</p>
       <p v-if="queryError" role="alert">{{queryError}}</p>
     </template>
@@ -48,7 +48,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="82" fixed="right">
+        <el-table-column label="操作" :width="pmsActionColumn(1).width" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="openDetail(row)">详情</el-button>
           </template>
@@ -147,6 +147,7 @@ import type { QueryCondition } from '@/query-system/core'
 import type { ColumnQueryContext } from '@/query-system/column-filters'
 import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { pmsActionColumn } from '@/config/listUi'
 import CustomPagination from '@/components/CustomPagination.vue'
 import PmsDataList from '@/components/PmsDataList.vue'
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/config/listUi'

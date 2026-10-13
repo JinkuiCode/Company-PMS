@@ -11,10 +11,10 @@
   --pms-grid-header-height: 30px;
   --pms-grid-group-height: 26px;
   --pms-drawer-width: 460px;
-  --pms-action-cell-padding: 8px;
+  --pms-action-cell-padding: 6px;
   --pms-action-button-width: 40px;
   --pms-action-button-height: 24px;
-  --pms-action-gap: 8px;
+  --pms-action-gap: 4px;
   --pms-frozen-divider: #d9dfe8;
   --pms-bg: #f6f8fb;
   --pms-bg-soft: #f8fafc;

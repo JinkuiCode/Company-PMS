@@ -1,12 +1,18 @@
-import type { GridOptions } from 'ag-grid-community'
+import type { ColumnState, GridOptions } from 'ag-grid-community'
 
 export const DEFAULT_PAGE_SIZE = 50
 export const PAGE_SIZE_OPTIONS = [15, 20, 50, 100, 200, 300, 500]
-export const PMS_ACTION_COLUMN = {
-  width: 112,
-  minWidth: 112,
-  maxWidth: 112,
-  resizable: false,
+export function pmsActionColumn(count = 1) {
+  const width = count <= 1 ? 64 : count === 2 ? 96 : 16 + count * 40
+  return { width, minWidth: width, maxWidth: width, resizable: false, flex: 0 }
+}
+export const PMS_ACTION_COLUMN = pmsActionColumn(2)
+export const PMS_SINGLE_ACTION_COLUMN = pmsActionColumn(1)
+
+export function normalizeActionColumnState<T extends Partial<ColumnState> & { colId: string }>(state: T[], key: string, count = 1): T[] {
+  return state.map(column => column.colId === key
+    ? { ...column, width: pmsActionColumn(count).width, flex: null, hide: false, pinned: 'right' as const }
+    : { ...column })
 }
 export const PMS_GRID_OPTIONS: GridOptions = {
   rowHeight: 32,

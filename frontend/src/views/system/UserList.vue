@@ -53,7 +53,7 @@
         <el-button v-if="hasPermission('system:user:add')" type="primary" size="small" @click="openUserDialog()">新增用户</el-button>
       </div>
 
-        <PmsQueryWorkspace v-model="queryDraft" list-key="system-user" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" />
+        <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="system-user" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" />
         <el-table class="pms-dense-table" height="100%" :data="pagedUsers" v-loading="loading" border stripe size="small">
           <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="username" label="账号（工号）" width="120" :class-name="queryColumnClass('username')" :label-class-name="queryColumnClass('username')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'username',displayName:'账号（工号）'}" /></template></el-table-column>
@@ -73,7 +73,7 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="130" fixed="right">
+          <el-table-column v-if="(Number(hasPermission('system:user:edit')||hasPermission('system:user:reset-password'))+Number(hasPermission('system:user:delete')))>0" label="操作" :width="pmsActionColumn(Number(hasPermission('system:user:edit')||hasPermission('system:user:reset-password'))+Number(hasPermission('system:user:delete'))).width" fixed="right">
             <template #default="{ row }">
               <el-button v-if="hasPermission('system:user:edit') || hasPermission('system:user:reset-password')" link type="primary" size="small" @click="openUserDialog(row)">{{ hasPermission('system:user:edit') ? '编辑' : '查看' }}</el-button>
               <el-button v-if="hasPermission('system:user:delete')" link type="danger" size="small" @click="handleDeleteUser(row.id)">删除</el-button>
@@ -149,6 +149,7 @@ import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
 import { useSystemQuery, loadCompleteDataset } from '@/query-system/system-adapter'
 import type { QueryCondition } from '@/query-system/core'
 import { computed, ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
+import { pmsActionColumn } from '@/config/listUi'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { OfficeBuilding } from '@element-plus/icons-vue'
 import CustomPagination from '@/components/CustomPagination.vue'

@@ -40,7 +40,7 @@
           </div>
         </template>
 
-        <PmsQueryWorkspace v-model="queryDraft" :list-key="`system-field-values-${selectedDict.dict_code}`" :fields="queryFields" :defaults="queryDefaults" :loading="itemsLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
+        <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" :list-key="`system-field-values-${selectedDict.dict_code}`" :fields="queryFields" :defaults="queryDefaults" :loading="itemsLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
         <el-table :data="filteredItems" border stripe>
           <el-table-column prop="item_value" label="存储值" width="140" :class-name="queryColumnClass('item_value')" :label-class-name="queryColumnClass('item_value')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'item_value',displayName:'存储值'}" /></template></el-table-column>
           <el-table-column prop="item_label" label="显示文本" width="160" :class-name="queryColumnClass('item_label')" :label-class-name="queryColumnClass('item_label')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'item_label',displayName:'显示文本'}" /></template></el-table-column>
@@ -52,7 +52,7 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="180" fixed="right">
+          <el-table-column v-if="(2*Number(hasPermission('system:field:edit'))+Number(hasPermission('system:field:delete')))>0" label="操作" :width="pmsActionColumn(2*Number(hasPermission('system:field:edit'))+Number(hasPermission('system:field:delete'))).width" fixed="right">
             <template #default="{ row }">
               <el-button v-if="hasPermission('system:field:edit')" link type="primary" size="small" @click="openItemDialog(row)">编辑</el-button>
               <el-tooltip :content="row.status === 1 ? '禁用' : '启用'" placement="top">
@@ -157,6 +157,7 @@ import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
 import { useSystemQuery } from '@/query-system/system-adapter'
 import { ref, reactive, computed, onMounted } from 'vue'
+import { pmsActionColumn } from '@/config/listUi'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'

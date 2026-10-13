@@ -48,7 +48,7 @@
           </el-button>
         </header>
 
-        <PmsQueryWorkspace :key="activeEnumIdentity" v-model="queryDraft" :list-key="`system-enum-values-${selectedDict.dict_code}`" :fields="queryFields" :defaults="queryDefaults" :loading="itemsLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
+        <PmsQueryWorkspace entry-mode="document" :key="activeEnumIdentity" v-model="queryDraft" :list-key="`system-enum-values-${selectedDict.dict_code}`" :fields="queryFields" :defaults="queryDefaults" :loading="itemsLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
         <el-table
           :key="activeEnumIdentity"
           v-loading="itemsLoading"
@@ -77,7 +77,7 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="194" align="center" fixed="right">
+          <el-table-column v-if="(2*Number(hasPermission('system:enum:edit'))+Number(hasPermission('system:enum:delete')))>0" label="操作" :width="pmsActionColumn(2*Number(hasPermission('system:enum:edit'))+Number(hasPermission('system:enum:delete'))).width" align="center" fixed="right">
             <template #default="{ row }">
               <el-button v-if="hasPermission('system:enum:edit')" link type="primary" size="small" @click="openItemDialog(row)">编辑</el-button>
               <el-button
@@ -154,6 +154,7 @@ import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
 import { useSystemQuery } from '@/query-system/system-adapter'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { pmsActionColumn } from '@/config/listUi'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { useAuthStore } from '@/stores/auth'

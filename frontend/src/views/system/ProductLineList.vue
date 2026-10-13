@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { pmsActionColumn } from '@/config/listUi'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
 import { useSystemQuery, loadCompleteDataset } from '@/query-system/system-adapter'
@@ -117,7 +118,7 @@ onMounted(load)
   <PmsDataList :show-scrollbar="false" class="pms-system-page">
     <template #toolbar-left><el-button v-if="auth.hasPermission('system:product-line:add')" type="primary" size="small" :icon="Plus" @click="open()">新增产品线</el-button></template>
     <template #toolbar-right><el-tooltip content="刷新"><el-button :icon="Refresh" size="small" aria-label="刷新产品线" @click="load" /></el-tooltip></template>
-    <template #filters><PmsQueryWorkspace v-model="queryDraft" list-key="system-product-line" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" /><div v-if="failed" role="alert">产品线未完整读取 <el-button link @click="load">重试</el-button></div></template>
+    <template #filters><PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="system-product-line" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" /><div v-if="failed" role="alert">产品线未完整读取 <el-button link @click="load">重试</el-button></div></template>
     <template #grid>
       <el-table v-loading="loading" :data="pagedItems" height="100%" row-key="id" border stripe class="pms-dense-table">
         <el-table-column prop="display_name" label="产品线名称" min-width="180" show-overflow-tooltip :class-name="queryColumnClass('display_name')" :label-class-name="queryColumnClass('display_name')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'display_name',displayName:'产品线名称'}" /></template></el-table-column>
@@ -125,7 +126,7 @@ onMounted(load)
         <el-table-column prop="organization_name" label="金蝶组织名称" min-width="220" show-overflow-tooltip :class-name="queryColumnClass('organization_name')" :label-class-name="queryColumnClass('organization_name')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'organization_name',displayName:'金蝶组织名称'}" /></template></el-table-column>
         <el-table-column prop="sort" label="排序" width="80" align="center" :class-name="queryColumnClass('sort')" :label-class-name="queryColumnClass('sort')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'sort',displayName:'排序'}" /></template></el-table-column>
         <el-table-column label="状态" width="100" :class-name="queryColumnClass('is_enabled')" :label-class-name="queryColumnClass('is_enabled')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'is_enabled',displayName:'状态'}" /></template><template #default="{ row }"><span class="pms-status" :class="row.is_enabled ? 'pms-status-success' : 'pms-status-neutral'">{{ row.is_enabled ? '启用' : '禁用' }}</span></template></el-table-column>
-        <el-table-column label="操作" width="120" fixed="right"><template #default="{ row }"><el-button v-if="auth.hasPermission('system:product-line:edit')" link type="primary" :disabled="saving" @click="open(row)">编辑</el-button><el-button v-if="auth.hasPermission('system:product-line:delete')" link type="danger" :disabled="saving" @click="remove(row)">删除</el-button></template></el-table-column>
+        <el-table-column v-if="(Number(auth.hasPermission('system:product-line:edit'))+Number(auth.hasPermission('system:product-line:delete')))>0" label="操作" :width="pmsActionColumn(Number(auth.hasPermission('system:product-line:edit'))+Number(auth.hasPermission('system:product-line:delete'))).width" fixed="right"><template #default="{ row }"><el-button v-if="auth.hasPermission('system:product-line:edit')" link type="primary" :disabled="saving" @click="open(row)">编辑</el-button><el-button v-if="auth.hasPermission('system:product-line:delete')" link type="danger" :disabled="saving" @click="remove(row)">删除</el-button></template></el-table-column>
       </el-table>
     </template>
     <template #pagination><CustomPagination v-model="page" v-model:page-size="pageSize" :total="total" /></template>

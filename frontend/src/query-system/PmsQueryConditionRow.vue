@@ -45,8 +45,11 @@ onBeforeUnmount(()=>resolution++)
 </script>
 <template>
   <div class="pms-condition-row" :class="{'is-range':condition.operator==='between','has-error':error,'is-regular':regular}" :data-field="condition.field">
-    <span v-if="fixedField" class="pms-condition-label" :title="field?.label">{{field?.label || condition.field}}</span>
-    <PmsSelectControl v-else :model-value="condition.field" :options="fields.map(f=>({value:f.field,label:f.label}))" v-bind="controls" :append-to="appendTo" :aria-label="prefix+'字段名'" @update:model-value="changeField" />
+    <div class="pms-condition-field">
+      <span v-if="field?.required" class="pms-condition-required" aria-hidden="true">*</span>
+      <span v-if="fixedField" class="pms-condition-label" :title="field?.label">{{field?.label || condition.field}}</span>
+      <PmsSelectControl v-else :model-value="condition.field" :options="fields.map(f=>({value:f.field,label:f.label}))" v-bind="controls" :append-to="appendTo" :aria-required="field?.required||undefined" :aria-label="prefix+'字段名'" @update:model-value="changeField" />
+    </div>
     <PmsSelectControl :model-value="referenceOpen?'reference':condition.operator" :options="options" v-bind="controls" :append-to="appendTo" :aria-label="prefix+'条件'" @update:model-value="changeOperator" />
     <div class="pms-condition-value">
       <span v-if="['isEmpty','notEmpty'].includes(condition.operator)" class="pms-condition-no-value">无需填写值</span>
@@ -64,6 +67,9 @@ onBeforeUnmount(()=>resolution++)
 <style scoped>
 .pms-condition-row{display:grid;grid-template-columns:96px 68px minmax(0,1fr) 18px;gap:4px;min-width:0;align-items:center;}
 .pms-condition-row>.pms-form-control{width:100%;min-width:0;}
+.pms-condition-field{display:flex;align-items:center;gap:3px;min-width:0;}
+.pms-condition-field>.pms-form-control,.pms-condition-field>.pms-condition-label{flex:1;min-width:0;width:0;}
+.pms-condition-required{flex-shrink:0;color:var(--pms-danger);font:500 12px/1 var(--pms-font);}
 .pms-condition-value{display:flex;align-items:center;gap:4px;min-width:0;}
 .pms-condition-value>.pms-form-control{flex:1;min-width:0;width:0;}
 .pms-condition-value>span{flex-shrink:0;color:var(--pms-text-muted);line-height:24px;font-size:12px;}

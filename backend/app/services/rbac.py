@@ -71,6 +71,12 @@ def normalize_role_menu_ids(db: Session, menu_ids: list[int]) -> list[int]:
             SysMenu.status == 1,
         ).first()
         if not view_menu:
+            parent = db.get(SysMenu, menu.parent_id)
+            if (parent and parent.menu_type == 'C' and parent.status == 1
+                    and parent.permission_code and parent.permission_code.endswith(':view')
+                    and menu.permission_code.startswith(parent.permission_code[:-4])):
+                view_menu = parent
+        if not view_menu:
             raise HTTPException(status_code=400, detail=f"动作权限缺少查看权限：{menu.permission_code}")
         selected.add(view_menu.id)
 

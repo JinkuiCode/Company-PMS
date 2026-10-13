@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { pmsActionColumn } from '@/config/listUi'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
 import { useSystemQuery } from '@/query-system/system-adapter'
@@ -123,7 +124,7 @@ onMounted(load)
 <template>
   <div class="parameter-page pms-system-page pms-surface-section">
     <div class="pms-section-header"><span class="pms-section-title">参数设置</span></div>
-    <PmsQueryWorkspace v-model="queryDraft" list-key="system-parameter" :fields="queryFields" :defaults="queryDefaults" :loading="loading" @query="submitQuery" @clear-columns="clearQueryColumns" />
+    <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="system-parameter" :fields="queryFields" :defaults="queryDefaults" :loading="loading" @query="submitQuery" @clear-columns="clearQueryColumns" />
     <div v-if="failed" class="parameter-error" role="alert">参数读取失败 <el-button link type="primary" @click="load">重试</el-button></div>
     <el-table ref="table" :data="filtered" row-key="code" class="pms-dense-table" border height="100%" v-loading="loading" :expand-row-keys="editing ? [editing.code] : []">
       <el-table-column type="expand" width="1"><template #default="{ row }">
@@ -142,7 +143,7 @@ onMounted(load)
       <el-table-column prop="group" label="分组" width="120" :class-name="queryColumnClass('group')" :label-class-name="queryColumnClass('group')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'group',displayName:'分组'}" /></template></el-table-column>
       <el-table-column label="当前值" min-width="210" :class-name="queryColumnClass('configured')" :label-class-name="queryColumnClass('configured')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'configured',displayName:'当前值'}" /></template><template #default="{ row }"><span :class="['pms-status', 'parameter-current-value', row.configured ? 'pms-status-success' : 'pms-status-warning']">{{ currentValue(row) }}</span></template></el-table-column>
       <el-table-column prop="description" label="用途" min-width="280" show-overflow-tooltip :class-name="queryColumnClass('description')" :label-class-name="queryColumnClass('description')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'description',displayName:'用途'}" /></template></el-table-column>
-      <el-table-column label="操作" width="88" fixed="right"><template #default="{ row }"><el-button v-if="auth.hasPermission('system:parameter:edit')" link type="primary" :disabled="saving" @click="edit(row)">修改</el-button></template></el-table-column>
+      <el-table-column v-if="auth.hasPermission('system:parameter:edit')" label="操作" :width="pmsActionColumn(1).width" fixed="right"><template #default="{ row }"><el-button link type="primary" :disabled="saving" @click="edit(row)">修改</el-button></template></el-table-column>
     </el-table>
   </div>
 </template>

@@ -15,7 +15,7 @@
     </template>
 
     <template #filters>
-      <PmsQueryWorkspace v-model="queryDraft" list-key="system-data-dictionary" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" />
+      <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="system-data-dictionary" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" />
       <p v-if="queryError" role="alert">{{ queryError }}</p>
     </template>
 
