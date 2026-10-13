@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     # Explicitly enabled at deployment; development never writes ERP in the background by default.
     ERP_SYNC_WORKER_ENABLED: bool = False
+    FEEDBACK_ATTACHMENT_DIR: str = str(Path(__file__).resolve().parents[2] / 'data' / 'feedback-attachments')
 
     # Safe local defaults never target company infrastructure.
     DB_HOST: str = ""

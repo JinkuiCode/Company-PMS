@@ -57,7 +57,7 @@ class BusinessExportUpgradeContract(unittest.TestCase):
         self.assertEqual(self.db.query(SysMenu).filter(SysMenu.permission_code.in_(codes)).count(), 2)
 
     def test_revision_has_explicit_business_export_upgrade(self):
-        self.assertEqual(CURRENT_DATABASE_REVISION, '2026-10-12-parameter-secret-01')
+        self.assertEqual(CURRENT_DATABASE_REVISION, '2026-10-12-feedback-02')
 
 
 if __name__ == '__main__':

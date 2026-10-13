@@ -3,8 +3,9 @@ withDefaults(defineProps<{
   modelValue: boolean
   title: string
   busy?: boolean
+  penetrable?: boolean
   beforeClose?: (done: () => void) => void
-}>(), { busy: false })
+}>(), { busy: false, penetrable: false })
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 </script>
 
@@ -15,6 +16,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
     size="var(--pms-drawer-width)"
     class="pms-form-drawer"
     :modal="false"
+    :modal-penetrable="penetrable"
     :before-close="beforeClose"
     :close-on-click-modal="false"
     :close-on-press-escape="!busy"

@@ -52,6 +52,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/layout/AppLayout.vue'),
     children: [
       {
+        path: 'feedback', name: 'FeedbackList',
+        component: () => import('@/views/feedback/FeedbackList.vue'),
+        meta: { title: '问题提报', permission: 'feedback:view' },
+      },
+      {
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/Dashboard.vue'),

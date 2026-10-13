@@ -15,6 +15,8 @@ from app.models.project import PmsProject, PmsProjectArchive, PmsTask
 from app.models.rbac import SysDept, SysRole
 from app.models.user import SysUser
 from app.models.parameter import SysParameter
+from app.models.feedback import FeedbackReport
+from app.schemas.feedback import FeedbackCreate, FeedbackHandle
 from app.models.erp_task import ErpSyncTask
 from app.models.product_line import SysProductLine, SysRoleProductLine
 from app.schemas.product_line import ProductLineCreate, ProductLineUpdate
@@ -46,6 +48,8 @@ from app.services.project_sheet_fields import (
 
 
 MODULE_CONFIGS = (
+    {"key": "feedback", "label": "问题提报", "group": "提报字段", "model": FeedbackReport,
+     "schemas": (FeedbackCreate, FeedbackHandle), "editable_schemas": (FeedbackCreate, FeedbackHandle)},
     {
         "key": "product_line", "label": "产品线管理", "group": "组织产品线",
         "model": SysProductLine, "schemas": (ProductLineCreate, ProductLineUpdate),
@@ -124,6 +128,9 @@ MODULE_CONFIGS = (
 
 
 AUTO_MODEL_MODULES: dict[str, tuple[str, str, str]] = {
+    "pms_feedback_followup": ("feedback_followup", "提报跟进", "跟进记录"),
+    "pms_feedback_attachment": ("feedback_attachment", "提报附件", "附件记录"),
+    "pms_feedback_notification": ("feedback_notification", "提报通知", "通知记录"),
     "sys_remember_token": ("authentication", "登录认证", "会话令牌字段"),
     "sys_menu": ("permission_menu", "菜单权限", "菜单与权限字段"),
     "sys_user_role": ("user_role_relation", "用户角色关系", "关联字段"),
@@ -189,6 +196,15 @@ FIELD_LABELS = {
 
 
 ENUM_BINDINGS: dict[tuple[str, str], tuple[str | None, str]] = {
+    ("feedback", "type_id"): ("feedback_type", "enum"),
+    ("feedback", "module_id"): ("feedback_module", "enum"),
+    ("feedback", "impact_id"): ("feedback_impact", "enum"),
+    ("feedback", "status_id"): ("feedback_status", "enum"),
+    ("feedback", "outcome_id"): ("feedback_outcome", "enum"),
+    ("feedback", "cause_id"): ("feedback_cause", "enum"),
+    ("feedback_followup", "status_id"): ("feedback_status", "enum"),
+    ("feedback_followup", "outcome_id"): ("feedback_outcome", "enum"),
+    ("feedback_followup", "cause_id"): ("feedback_cause", "enum"),
     ("user", "status"): (None, "system_fixed"),
     ("department", "status"): (None, "system_fixed"),
     ("role", "status"): (None, "system_fixed"),
@@ -208,6 +224,8 @@ ENUM_BINDINGS: dict[tuple[str, str], tuple[str | None, str]] = {
 
 
 FIELD_METADATA_OVERRIDES: dict[tuple[str, str], dict[str, Any]] = {
+    ("feedback", "category_id"): {"source_type": "enum", "description": "问题类型引用feedback_issue_category，需求类型引用feedback_request_category"},
+    **{("feedback", field): {"editable": False, "source_type": "system_fixed"} for field in ("report_no", "submission_id", "author_id", "handler_id", "version", "created_at", "updated_at")},
     **{(module, field): {"editable": False, "description": "历史停用字段，仅保留旧值，不参与权限或业务维护"}
        for module, field in (("project_archive","product_category"),("project_progress","product_category"),("role","product_category_ids"))},
     ("project_archive", "status"): {

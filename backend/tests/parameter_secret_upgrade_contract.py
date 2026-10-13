@@ -30,7 +30,8 @@ class ParameterSecretUpgradeContract(unittest.TestCase):
 
     def run_upgrade(self, rollback=False):
         self.assertTrue(hasattr(upgrade, "upgrade_parameter_secret_only"), "Missing independent parameter-secret migration")
-        with patch.object(upgrade, "engine", self.engine), patch.object(upgrade, "validate_runtime_config"), patch.object(upgrade, "init_db", side_effect=AssertionError("No historical init")):
+        # Exercise the old release's bounded entry; the current binary rejects this mode.
+        with patch.object(upgrade, "CURRENT_DATABASE_REVISION", NEW), patch('app.services.database_revision.CURRENT_DATABASE_REVISION', NEW), patch.object(upgrade, "engine", self.engine), patch.object(upgrade, "validate_runtime_config"), patch.object(upgrade, "init_db", side_effect=AssertionError("No historical init")):
             upgrade.upgrade_database(parameter_secret_only=not rollback, parameter_secret_rollback=rollback)
 
     def revision(self):
@@ -38,7 +39,7 @@ class ParameterSecretUpgradeContract(unittest.TestCase):
             return connection.exec_driver_sql("SELECT revision FROM pms_database_revision").scalar_one()
 
     def test_revision_is_independently_bumped(self):
-        self.assertEqual(CURRENT_DATABASE_REVISION, NEW)
+        self.assertEqual(CURRENT_DATABASE_REVISION, '2026-10-12-feedback-02')
 
     def test_latest_release_rejects_historical_export_mode_without_changes(self):
         with patch.object(upgrade, "engine", self.engine), patch.object(upgrade, "validate_runtime_config"):
@@ -50,7 +51,7 @@ class ParameterSecretUpgradeContract(unittest.TestCase):
     def test_idempotent_upgrade_preserves_hash_versions_values_and_unrelated_data(self):
         for _ in range(2):
             self.run_upgrade()
-            check_database_ready(self.engine)
+            self.assertEqual(self.revision(), NEW)
         with self.engine.connect() as connection:
             self.assertEqual(tuple(connection.exec_driver_sql("SELECT secret_hash, value_text, version, secret_ciphertext FROM sys_parameter").one()), ("synthetic-legacy-hash", None, 4, None))
             self.assertEqual(connection.exec_driver_sql("SELECT value FROM unrelated").scalar_one(), "preserved")
@@ -80,7 +81,7 @@ class ParameterSecretUpgradeContract(unittest.TestCase):
         with self.engine.connect() as connection:
             self.assertEqual(tuple(connection.exec_driver_sql("SELECT secret_hash, secret_ciphertext FROM sys_parameter").one()), ("synthetic-legacy-hash", "synthetic-encrypted-envelope"))
         self.run_upgrade()
-        check_database_ready(self.engine)
+        self.assertEqual(self.revision(), NEW)
 
     def test_current_marker_cannot_bypass_missing_column_and_incompatible_column_rejected(self):
         with self.engine.begin() as connection:

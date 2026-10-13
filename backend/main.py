@@ -18,6 +18,7 @@ from app.api import purchase_reports
 from app.api import inventory_reports
 from app.api import stock_detail_reports
 from app.api import report_exports
+from app.api import feedback
 from app.services.authorization import get_current_user_context, require_permission
 from app.models.init_db import init_db
 from app.services.database_revision import check_database_ready
@@ -44,11 +45,15 @@ async def lifespan(app: FastAPI):
         runner.start()
     export_runner = threading.Thread(target=export_worker, args=(stop, SessionLocal), daemon=True, name='pms-report-export-worker')
     export_runner.start()
+    from app.services.feedback_mail import worker as feedback_worker
+    feedback_runner = threading.Thread(target=feedback_worker, args=(stop, SessionLocal), daemon=True, name='pms-feedback-mail-worker')
+    feedback_runner.start()
     try:
         yield
     finally:
         stop.set()
         await asyncio.to_thread(export_runner.join, 60)
+        await asyncio.to_thread(feedback_runner.join, 60)
         if runner:
             await asyncio.to_thread(runner.join, 300)
 
@@ -85,6 +90,7 @@ app.include_router(purchase_reports.router)
 app.include_router(inventory_reports.router)
 app.include_router(stock_detail_reports.router)
 app.include_router(report_exports.router)
+app.include_router(feedback.router)
 app.include_router(users.router)
 app.include_router(roles.router)
 app.include_router(menus.router)

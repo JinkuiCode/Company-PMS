@@ -122,6 +122,9 @@ for _key,_meta in OFFLINE_FIELDS.items():
 ENUM_REGISTRY["archive_category"]["items"]=[(str(i),v) for i,v in enumerate(["主机","辅机","C类","D类","AS类","BS类","免费","待分类"],1)]
 ENUM_REGISTRY["product_category"]["visible"]=False
 
+from app.services.feedback_enums import FEEDBACK_ENUMS, count_feedback_references
+ENUM_REGISTRY.update(FEEDBACK_ENUMS)
+
 MANAGED_ENUM_CODES = {
     code for code, definition in ENUM_REGISTRY.items() if definition["visible"]
 }
@@ -142,6 +145,8 @@ def initialize_enum_definitions(db: Session) -> list[str]:
     for code, config in ENUM_REGISTRY.items():
         definition = db.query(SysDict).filter(SysDict.dict_code == code).first()
         created = definition is None
+        if code in FEEDBACK_ENUMS and not created:
+            continue
         if created:
             definition = SysDict(dict_code=code, dict_name=config["name"])
             db.add(definition)
@@ -209,6 +214,8 @@ def get_enum_definition(code: str, *, managed_only: bool = False) -> dict[str, A
 
 def count_enum_references(db: Session, code: str, value: str) -> int:
     """按注册绑定统计精确引用数量。"""
+    if code in FEEDBACK_ENUMS:
+        return count_feedback_references(db, code, value)
     from app.services.offline_archive_fields import OFFLINE_FIELDS
     for key, meta in OFFLINE_FIELDS.items():
         if meta["enum_code"] == code:

@@ -31,7 +31,7 @@ function harness(request = { get: async () => ({ items: [row()] }), put: async (
     ElMessage: { success() {} }, ElMessageBox: { confirm: async () => {} },
     document: { getElementById: () => null },
   })
-  vm.runInContext(script + '\nglobalThis.subject = { items, value, editing, load, edit, save, revealSecret };', context)
+  vm.runInContext(script + '\nglobalThis.subject = { items, value, editing, load, edit, save, revealSecret, currentValue };', context)
   return { ...context.subject, permissions, hooks }
 }
 
@@ -39,6 +39,15 @@ test('parameter current value is plaintext only for the initial-password allowli
   assert.match(descriptor.template.content, /currentValue\(row\)/)
   assert.doesNotMatch(descriptor.scriptSetup.content, /localStorage|sessionStorage|indexedDB/)
   assert.match(descriptor.scriptSetup.content, /user\.initial_password/)
+})
+
+test('mail connection settings show their option label while SMTP password remains hidden', () => {
+  const subject = harness()
+  const connection = {code:'mail.security', configured:true, sensitive:false, value:'internal',
+    options:[{value:'internal', label:'内网专用（不加密）'}]}
+  assert.equal(subject.currentValue(connection), '内网专用（不加密）')
+  assert.equal(subject.currentValue({...connection, value:'unknown'}), 'unknown')
+  assert.equal(subject.currentValue({code:'mail.password', configured:true, sensitive:true, value:'synthetic-secret'}), '已设置 · 不回显')
 })
 
 test('permission loss clears memory and discards a late successful fetch', async () => {

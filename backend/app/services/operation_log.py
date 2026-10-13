@@ -28,6 +28,10 @@ SENSITIVE_KEYWORDS = (
 MASK_VALUE = "***"
 
 ENTITY_CATALOG_MODULES = {
+    "pms_feedback_report": "feedback",
+    "pms_feedback_followup": "feedback_followup",
+    "pms_feedback_attachment": "feedback_attachment",
+    "pms_feedback_notification": "feedback_notification",
     "sys_product_line": "product_line",
     "sys_role_product_line": "role_product_line",
     "sys_parameter": "parameter",

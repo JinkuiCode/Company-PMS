@@ -9,7 +9,7 @@ import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import { PmsTextControl, PmsFormField, PmsSelectControl } from '@/form-system'
 
-interface Parameter { code: string; name: string; group: string; description: string; sensitive: boolean; configured: boolean; version: number; updated_at: string | null; value: string | null; value_type?: string; reveal_status?: string; reveal_message?: string | null }
+interface Parameter { code: string; name: string; group: string; description: string; sensitive: boolean; configured: boolean; version: number; updated_at: string | null; value: string | null; value_type?: string; max_length?: number; options?: {value:string;label:string}[]; reveal_status?: string; reveal_message?: string | null }
 const auth = useAuthStore()
 const items = ref<Parameter[]>([])
 const groups = computed(() => Array.from(new Set(items.value.map(item => item.group))).map(value => ({ label: value, value })))
@@ -51,7 +51,8 @@ function currentValue(row: Parameter) {
     if (row.reveal_status === 'available' && row.value !== null) return row.value
     return row.reveal_message || '已设置 · 需重新保存后回显'
   }
-  return row.value_type === 'boolean' ? (row.value === 'true' ? '开启' : '关闭') : row.value
+  if (row.value_type === 'boolean') return row.value === 'true' ? '开启' : '关闭'
+  return row.options?.find(option => option.value === row.value)?.label || row.value
 }
 watch(() => auth.hasPermission('system:parameter:view'), allowed => {
   if (!allowed) clearMemory()
@@ -129,7 +130,8 @@ onMounted(load)
         <form v-if="editing?.code === row.code" class="parameter-editor" @submit.prevent="save">
           <PmsFormField v-slot="{ describedBy, invalid }" :field-id="`parameter-${row.code}`" label="新参数值" required :error="error">
             <PmsSelectControl v-if="row.value_type === 'boolean'" :id="`parameter-${row.code}`" v-model="value" :options="[{value:'true',label:'开启'},{value:'false',label:'关闭'}]" :aria-describedby="describedBy" :aria-invalid="invalid" aria-required="true" :error="error" :disabled="saving" aria-label="新参数值" />
-            <PmsTextControl v-else :id="`parameter-${row.code}`" v-model="value" :aria-describedby="describedBy" :aria-invalid="invalid" aria-required="true" :type="row.sensitive && !revealSecret ? 'password' : 'text'" :error="error" :disabled="saving" maxlength="64" autocomplete="new-password" aria-label="新参数值">
+            <PmsSelectControl v-else-if="row.options?.length" :id="`parameter-${row.code}`" v-model="value" :options="row.options" :aria-describedby="describedBy" :aria-invalid="invalid" aria-required="true" :error="error" :disabled="saving" aria-label="新参数值" />
+            <PmsTextControl v-else :id="`parameter-${row.code}`" v-model="value" :aria-describedby="describedBy" :aria-invalid="invalid" aria-required="true" :type="row.sensitive && !revealSecret ? 'password' : 'text'" :error="error" :disabled="saving" :maxlength="row.max_length||64" autocomplete="new-password" aria-label="新参数值">
               <template v-if="row.sensitive" #suffix><el-button text :disabled="saving || !value" :aria-controls="`parameter-${row.code}`" :aria-pressed="revealSecret" :aria-label="revealSecret ? '隐藏新密码' : '显示新密码'" @click="revealSecret = !revealSecret">{{ revealSecret ? '隐藏' : '显示' }}</el-button></template>
             </PmsTextControl>
           </PmsFormField>

@@ -49,6 +49,8 @@ def test_registry_separates_managed_system_and_legacy_definitions():
         "archive_sales_company", "archive_legacy_archive_status",
         "equipment_series",
         "task_status",
+        "feedback_type", "feedback_module", "feedback_issue_category", "feedback_request_category",
+        "feedback_impact", "feedback_status", "feedback_outcome", "feedback_cause",
     }
     assert SYSTEM_ENUM_CODES == {"erp_sync_status", "data_scope"}
     assert LEGACY_DICT_CODES == {
