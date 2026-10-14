@@ -61,7 +61,7 @@ class BusinessExportContract(unittest.TestCase):
         for i in range(1, 22):
             self.db.add(PmsProjectArchive(id=i, project_code=f'A{i:02}', project_name='=1+1' if i == 1 else f'项目{i}',
                         manager_id=1 if i <= 20 else 2, business_product_line_id=1 if i <= 20 else 2,
-                        status=1, is_enabled=1, customer='客户', plan_start_date=datetime(2026, 10, 11, 23, 59)))
+                        status=1, is_enabled=1, customer='客户', contract_signed_date=datetime(2026, 10, 11, 23, 59)))
             self.db.add(PmsProject(id=i, archive_id=i, project_code=f'P{i:02}', project_name=f'项目{i}',
                         dept_id=1 if i <= 20 else 2, pm_id=1 if i <= 20 else 2, status=1,
                         budget=i, start_date=date(2026, 10, 11)))
@@ -140,7 +140,7 @@ class BusinessExportContract(unittest.TestCase):
     def test_archive_reuses_scope_date_query_and_excel_literal(self):
         response = self.export('/api/projects/archives/export', columns=['project_name', 'manager_name', 'status', 'product_line_id'],
                                filters=[condition('project_code', 'reference', [1, 21])],
-                               column_filters=[{'field': 'plan_start_date', 'mode': 'values', 'values': ['2026-10-11']}])
+                               column_filters=[{'field': 'contract_signed_date', 'mode': 'values', 'values': ['2026-10-11']}])
         self.assertEqual(response.status_code, 200, response.text)
         rows = workbook_rows(response.content)
         self.assertEqual(len(rows), 2)

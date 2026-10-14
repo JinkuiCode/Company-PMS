@@ -5,6 +5,7 @@ import datetime
 from typing import Any
 
 from fastapi import HTTPException, Request
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.field_policy import SysBusinessFieldPolicy
@@ -16,6 +17,9 @@ from app.services.project_sheet_fields import PROJECT_SHEET_FIELDS, PROJECT_SHEE
 MODULE_PROJECT_ARCHIVE = "project_archive"
 MODULE_PROJECT_PROGRESS = "project_progress"
 SUPPORTED_MODULES = {MODULE_PROJECT_ARCHIVE, MODULE_PROJECT_PROGRESS}
+ARCHIVE_GOVERNANCE_REQUIRED_FIELDS = ('archive_category', 'machine_model', 'quantity', 'quantity_unit', 'manager_id')
+ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS = ('equipment_series', 'serial_no')
+ARCHIVE_MAIN_CATEGORY_VALUE = 1
 
 
 def _registry_field(
@@ -34,6 +38,7 @@ def _registry_field(
     required_locked: bool = False,
     list_available_locked: bool = False,
     enum_code: str | None = None,
+    required_when: dict | None = None,
 ) -> dict[str, Any]:
     return {
         "key": key,
@@ -43,6 +48,7 @@ def _registry_field(
         "value_type": value_type,
         "source_type": source_type,
         "enum_code": enum_code,
+        "required_when": required_when,
         "default_visible": visible,
         "default_editable": editable,
         "default_required": required,
@@ -61,8 +67,7 @@ def _registry_field(
 ARCHIVE_GROUPS = [
     {"key": "basic", "label": "基础信息"},
     {"key": "contract", "label": "合同与交付"},
-    {"key": "contact", "label": "项目联系信息"},
-    {"key": "plan", "label": "计划信息"},
+    {"key": "contact", "label": "收货信息"},
     {"key": "erp", "label": "ERP 同步"},
     {"key": "system", "label": "系统信息"},
 ]
@@ -70,16 +75,22 @@ ARCHIVE_GROUPS = [
 from app.services.offline_archive_fields import OFFLINE_FIELDS
 
 ARCHIVE_FIELDS = [
-    *[_registry_field(k, v['label'], 'basic', value_type=('select' if v['enum_code'] else 'date' if v['sql_type']=='DATE' else 'number' if k=='quantity' else 'long_text' if k in {'remarks','delivery_note'} else 'text'), enum_code=v['enum_code']) for k,v in OFFLINE_FIELDS.items()],
+    *[_registry_field(k, v['label'], 'basic', value_type=('select' if v['enum_code'] else 'date' if v['sql_type']=='DATE' else 'number' if k=='quantity' else 'long_text' if k in {'remarks','delivery_note'} else 'text'), enum_code=v['enum_code'],
+        editable=k!='customer_full_name', required=k in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS,
+        required_locked=k in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS,
+        visible_locked=k in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS,
+        editable_locked=k in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS) for k,v in OFFLINE_FIELDS.items()],
     _registry_field("project_code", "项目编号", "basic", required=True, visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("project_name", "项目名称", "basic", required=True, visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("customer", "客户", "basic"),
     _registry_field("product_category", "产品类别（已停用）", "basic", visible=False, editable=False, list_available=False, visible_locked=True, required_locked=True),
     _registry_field("product_line_id", "产品线", "basic", value_type="select", required=True,
                     visible_locked=True, editable_locked=True, required_locked=True),
-    _registry_field("manager_id", "负责人", "basic", value_type="user"),
-    _registry_field("equipment_series", "设备系列", "basic", value_type="select", enum_code="equipment_series"),
-    _registry_field("serial_no", "序列号", "basic"),
+    _registry_field("manager_id", "负责人", "basic", value_type="user", required=True, required_locked=True, visible_locked=True, editable_locked=True),
+    _registry_field("equipment_series", "设备系列", "basic", value_type="select", enum_code="equipment_series", visible_locked=True, editable_locked=True,
+                    required_when={'field':'archive_category','values':[ARCHIVE_MAIN_CATEGORY_VALUE]}),
+    _registry_field("serial_no", "序列号", "basic", visible_locked=True, editable_locked=True,
+                    required_when={'field':'archive_category','values':[ARCHIVE_MAIN_CATEGORY_VALUE]}),
     _registry_field("contract_signed_date", "合同签订日期", "contract", value_type="date", required=True, visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("contract_ship_date", "合同出货日期", "contract", value_type="date", required=True, visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("actual_ship_date", "实际出货日期", "contract", value_type="date"),
@@ -87,10 +98,8 @@ ARCHIVE_FIELDS = [
     _registry_field("address_province", "项目地址省份", "contact"),
     _registry_field("address_city", "项目地址城市", "contact"),
     _registry_field("address_detail", "项目详细地址", "contact", value_type="long_text"),
-    _registry_field("project_contact", "项目联系人", "contact"),
+    _registry_field("project_contact", "收货联系人", "contact"),
     _registry_field("contact_phone", "联系人手机", "contact"),
-    _registry_field("plan_start_date", "计划开始", "plan", value_type="date"),
-    _registry_field("plan_end_date", "计划结束", "plan", value_type="date"),
     _registry_field("erp_sync_policy", "同步方式", "erp", source_type="system", editable=False),
     _registry_field("data_origin", "档案来源", "system", source_type="system", editable=False),
     _registry_field("erp_sync_status", "同步状态", "erp", source_type="system", editable=False),
@@ -177,6 +186,7 @@ def get_effective_field_policies(db: Session, module_code: str) -> dict[str, Any
             else bool(row.list_available)
         )
         editable = bool(editable and base["editable_cap"])
+        required = bool(required and base["required_cap"])
         list_available = bool(list_available and base["list_available_cap"] and visible)
         item = {
             **base,
@@ -186,6 +196,8 @@ def get_effective_field_policies(db: Session, module_code: str) -> dict[str, Any
             "required": bool(required),
             "list_available": list_available,
             "required_effective_at": row.required_effective_at if row else None,
+            "governance_required": module_code == MODULE_PROJECT_ARCHIVE and base['key'] in (
+                *ARCHIVE_GOVERNANCE_REQUIRED_FIELDS, *ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS),
             "updated_at": row.updated_at if row else None,
         }
         items.append(item)
@@ -223,7 +235,7 @@ def update_field_policies(
     }
     before: dict[str, Any] = {}
     after: dict[str, Any] = {}
-    now = datetime.datetime.now()
+    now = db.scalar(select(func.now()))
 
     for item in data.items:
         base = registry.get(item.field_key)
@@ -264,7 +276,7 @@ def update_field_policies(
         row.list_available = desired["list_available"]
         if desired["required"] and not previous_required:
             row.required_effective_at = now
-        elif not desired["required"]:
+        elif not desired["required"] and not base.get('required_when'):
             row.required_effective_at = None
         row.updated_by = operator_id
         db.flush()
@@ -303,8 +315,9 @@ def reset_field_policies(
     after = {}
     for row in rows:
         # Keep the original introduction cutoff for immutable contract requirements.
-        if module_code == MODULE_PROJECT_ARCHIVE and row.field_key in {"contract_signed_date", "contract_ship_date"}:
-            row.visible = row.editable = row.required = row.list_available = True
+        if module_code == MODULE_PROJECT_ARCHIVE and row.field_key in {"contract_signed_date", "contract_ship_date", *ARCHIVE_GOVERNANCE_REQUIRED_FIELDS, *ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS}:
+            row.visible = row.editable = row.list_available = True
+            row.required = row.field_key not in ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS
             after[row.field_key] = serialize_model(row)
         else:
             db.delete(row)
@@ -339,6 +352,8 @@ def validate_business_field_write(
     is_create: bool,
     historical_import: bool = False,
     effective_policies: dict[str, Any] | None = None,
+    entity_governance_legacy: bool = False,
+    allow_initial_name_fill: bool = False,
 ) -> dict[str, Any]:
     """校验写入；内部批次可传入本次校验读取的规则，普通写入仍实时读取。"""
     effective = effective_policies if effective_policies is not None else get_effective_field_policies(db, module_code)
@@ -348,16 +363,37 @@ def validate_business_field_write(
     errors: list[dict[str, str]] = []
     merged = {**current_values, **updates}
 
+    if module_code == MODULE_PROJECT_ARCHIVE:
+        for key in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS:
+            applies = is_create or not entity_governance_legacy
+            if applies and _is_empty(merged.get(key)):
+                errors.append({'field_key':key,'message':'此字段为必填项'})
+        if merged.get('archive_category') == ARCHIVE_MAIN_CATEGORY_VALUE:
+            for key in ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS:
+                applies = is_create or not entity_governance_legacy or (
+                    bool(current_values) and 'archive_category' in updates and updates['archive_category'] != current_values.get('archive_category'))
+                if applies and _is_empty(merged.get(key)):
+                    errors.append({'field_key':key,'message':'主机档案此字段必输'})
+        if 'manager_id' in updates and updates['manager_id'] != current_values.get('manager_id') and updates['manager_id'] is not None:
+            from app.models.user import SysUser
+            person = db.get(SysUser, updates['manager_id'])
+            if not person or person.status != 1:
+                errors.append({'field_key':'manager_id','message':'负责人必须选择启用的PMS用户'})
+
     for key, value in updates.items():
         policy = policies.get(key)
         if not policy:
             errors.append({"field_key": key, "message": "未知字段"})
             continue
-        if not policy["editable"] and current_values.get(key) != value:
+        historical_name_fill = (module_code == MODULE_PROJECT_ARCHIVE and historical_import and allow_initial_name_fill
+            and key == 'customer_full_name' and _is_empty(current_values.get(key)))
+        if not policy["editable"] and current_values.get(key) != value and not historical_name_fill:
             errors.append({"field_key": key, "message": "字段已设为只读"})
 
     for policy in effective["items"]:
         if not policy["required"]:
+            continue
+        if module_code == MODULE_PROJECT_ARCHIVE and policy['field_key'] in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS:
             continue
         effective_at = policy.get("required_effective_at")
         # 代码级结构必填继续由 Pydantic/数据库负责；这里仅执行后来启用的业务必填。

@@ -191,8 +191,13 @@ def get_archive_delete_guards(db: Session, archive_ids: list[int]) -> dict[int, 
     }
 
     guards: dict[int, dict[str, Any]] = {}
+    from app.models.archive_change import ArchiveChange
+    change_counts = dict(db.query(ArchiveChange.archive_id,func.count(ArchiveChange.id)).filter(
+        ArchiveChange.archive_id.in_(unique_ids)).group_by(ArchiveChange.archive_id).all())
     for archive_id in unique_ids:
         blockers: list[dict[str, Any]] = []
+        if change_count := change_counts.get(archive_id, 0):
+            blockers.append({'type':'business_reference','source':'archive_change','label':'档案变更申请','count':change_count})
         erp_synced, erp_sync_status, data_origin = archive_sync_states.get(archive_id, (0, None, None))
         if project_count := project_counts.get(archive_id, 0):
             blockers.append({

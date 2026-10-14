@@ -1,7 +1,5 @@
 """Add archive business fields without rewriting historic rows or requirements."""
-from datetime import datetime
-
-from sqlalchemy import inspect, select, insert, text
+from sqlalchemy import func, inspect, select, insert, text
 
 from app.models.field_policy import SysBusinessFieldPolicy
 
@@ -31,7 +29,7 @@ def upgrade_archive_business_fields(engine) -> None:
             if name not in columns:
                 connection.execute(text(f'ALTER TABLE pms_project_archive ADD {name} {sql_type} NULL'))
         policy = SysBusinessFieldPolicy.__table__
-        cutoff = datetime.now()
+        cutoff = connection.scalar(select(func.now()))
         for key in CONTRACT_REQUIRED_FIELDS:
             exists = connection.execute(select(policy.c.id).where(
                 policy.c.module_code == 'project_archive', policy.c.field_key == key,

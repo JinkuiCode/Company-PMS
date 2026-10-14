@@ -153,7 +153,7 @@ def get_user_options(db: Session) -> list[dict]:
     """为业务表单提供最小化的有效用户选项。"""
     users = db.query(SysUser).filter(SysUser.status == 1).order_by(SysUser.real_name, SysUser.id).all()
     return [
-        {"id": user.id, "real_name": user.real_name, "dept_id": user.dept_id}
+        {"id": user.id, "username": user.username, "real_name": user.real_name, "dept_id": user.dept_id}
         for user in users
     ]
 
@@ -579,6 +579,12 @@ def get_dept_tree(db: Session) -> list[DeptResponse]:
     """获取部门树"""
     depts = db.query(SysDept).order_by(SysDept.parent_id, SysDept.sort).all()
     dept_dict = {d.id: DeptResponse.model_validate(d) for d in depts}
+    leader_ids = {d.leader_id for d in depts if d.leader_id is not None}
+    leaders = {u.id: u for u in db.query(SysUser).filter(SysUser.id.in_(leader_ids)).all()} if leader_ids else {}
+    for dept in depts:
+        leader = leaders.get(dept.leader_id)
+        if leader:
+            dept_dict[dept.id].leader_label = f"{leader.real_name or leader.username}（{leader.username}）"
     tree = []
     for d in depts:
         if d.parent_id == 0:
@@ -596,7 +602,20 @@ def get_dept_options(db: Session) -> list[dict]:
     ]
 
 
+def _validate_department_leader(db: Session, leader_id: int | None):
+    if leader_id is None:
+        raise HTTPException(status_code=422, detail={
+            "code": "DEPT_LEADER_REQUIRED", "field_key": "leader_id", "message": "请选择部门负责人",
+        })
+    leader = db.get(SysUser, leader_id)
+    if not leader or leader.status != 1:
+        raise HTTPException(status_code=422, detail={
+            "code": "DEPT_LEADER_INVALID", "field_key": "leader_id", "message": "部门负责人必须是启用的PMS用户",
+        })
+
+
 def create_dept(db: Session, data: DeptCreate, operator_id: int | None = None, request: Request | None = None):
+    _validate_department_leader(db, data.leader_id)
     dept = SysDept(**data.model_dump())
     db.add(dept)
     db.flush()
@@ -622,6 +641,7 @@ def update_dept(db: Session, dept_id: int, data: DeptUpdate, operator_id: int | 
         raise HTTPException(status_code=404, detail="部门不存在")
     before = serialize_model(dept)
     update_data = data.model_dump(exclude_unset=True)
+    _validate_department_leader(db, update_data.get("leader_id", dept.leader_id))
     for key, val in update_data.items():
         setattr(dept, key, val)
     record_operation_log(

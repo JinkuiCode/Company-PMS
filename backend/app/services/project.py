@@ -1122,6 +1122,8 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
     rows = (query.limit(page_size) if export_scan else
             query.offset((page - 1) * page_size).limit(page_size)).all()
     guards = get_archive_delete_guards(db, [archive.id for archive in rows])
+    from app.services.archive_change import archive_edit_contexts
+    edit_contexts = archive_edit_contexts(db, rows, scope_context)
     user_ids = {value for row in rows for value in (
         row.manager_id, row.created_by, row.updated_by, row.erp_sync_by,
     ) if value is not None}
@@ -1137,12 +1139,12 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
         items.append(ArchiveResponse(
             id=a.id, project_code=a.project_code, project_name=a.project_name,
             data_origin=a.data_origin, erp_sync_policy=a.erp_sync_policy,
+            governance_legacy=a.governance_legacy,
             status=a.status, manager_id=a.manager_id, customer=a.customer,
             equipment_series=a.equipment_series, serial_no=a.serial_no,
             product_category=a.product_category,
             **{key: (a.business_product_line_id if key == 'product_line_id' else getattr(a, key))
                for key in ArchiveBusinessFields.model_fields},
-            plan_start_date=a.plan_start_date, plan_end_date=a.plan_end_date,
             manager_name=manager.real_name if manager else "",
             created_by_name=creator.real_name if creator else "",
             updated_by_name=editor.real_name if editor else "",
@@ -1152,6 +1154,7 @@ def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
             is_enabled=a.is_enabled,
             can_delete=guard["can_delete"],
             delete_blockers=guard["blockers"],
+            **edit_contexts[a.id],
             created_at=a.created_at, updated_at=a.updated_at,
         ))
     return {"total": total, "items": items}
@@ -1210,7 +1213,7 @@ def create_archive(
     try:
         storage_values = dict(values)
         storage_values['business_product_line_id'] = storage_values.pop('product_line_id')
-        archive = PmsProjectArchive(**storage_values, created_by=user_id, updated_by=user_id, created_at=datetime.now())
+        archive = PmsProjectArchive(**storage_values, created_by=user_id, updated_by=user_id)
         db.add(archive)
         db.flush()
         from app.services.erp_queue import enqueue
@@ -1243,16 +1246,17 @@ def create_archive(
     return {"msg": "创建成功", "id": archive.id}
 
 
-def update_archive(
+def apply_archive_updates(
     db: Session,
     archive_id: int,
     data: ArchiveUpdate,
     user_id: int,
     request: Request | None = None,
     scope_context: dict | None = None,
+    *, archive: PmsProjectArchive | None = None, dry_run: bool = False, commit: bool = True,
 ):
-    """更新项目档案"""
-    archive = _claim_enabled_archive_for_write(
+    """Shared validation and application; the governance caller owns its transaction."""
+    archive = archive or _claim_enabled_archive_for_write(
         db,
         archive_id,
         scope_context,
@@ -1261,7 +1265,7 @@ def update_archive(
     )
     before = serialize_model(archive)
 
-    update_data = _normalize_archive_values(data.model_dump(exclude_unset=True))
+    update_data = _normalize_archive_values(data.model_dump(exclude_unset=True, exclude={'expected_version'}))
     from app.services.offline_archive_fields import OFFLINE_FIELDS
     if "product_category" in update_data:
         db.rollback()
@@ -1325,12 +1329,15 @@ def update_archive(
             }},
             updates=update_data,
             entity_created_at=archive.created_at,
+            entity_governance_legacy=archive.governance_legacy,
             is_create=False,
             historical_import=archive.data_origin == "offline_initial",
         )
     except Exception:
         db.rollback()
         raise
+    if dry_run:
+        return update_data
     try:
         for key, val in update_data.items():
             setattr(archive, 'business_product_line_id' if key == 'product_line_id' else key, val)
@@ -1362,7 +1369,8 @@ def update_archive(
             before_data=before,
             after_data=serialize_model(archive),
         )
-        db.commit()
+        if commit:
+            db.commit()
     except IntegrityError as exc:
         db.rollback()
         _ensure_archive_unique_values(db, update_data, exclude_archive_id=archive_id)
@@ -1375,6 +1383,12 @@ def update_archive(
         db.rollback()
         raise
     return {"msg": "更新成功", "sync_queued": sync_queued}
+
+
+def update_archive(db: Session, archive_id: int, data: ArchiveUpdate, user_id: int,
+                   request: Request | None = None, scope_context: dict | None = None):
+    from app.services.archive_change import direct_archive_update
+    return direct_archive_update(db, archive_id, data, user_id, request=request, scope_context=scope_context)
 
 
 def validate_archive_for_business_operation(db: Session, archive: PmsProjectArchive) -> None:
@@ -1399,6 +1413,7 @@ def validate_archive_for_business_operation(db: Session, archive: PmsProjectArch
         current_values=current_values,
         updates={},
         entity_created_at=archive.created_at,
+        entity_governance_legacy=archive.governance_legacy,
         is_create=False,
     )
 

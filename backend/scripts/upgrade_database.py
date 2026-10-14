@@ -105,10 +105,15 @@ def upgrade_parameter_secret_only(*, rollback=False) -> None:
 
 
 def upgrade_database(*, business_export_only: bool = False, parameter_secret_only: bool = False,
-                     parameter_secret_rollback: bool = False, feedback_only: bool = False) -> None:
-    if sum((business_export_only, parameter_secret_only, parameter_secret_rollback, feedback_only)) > 1:
+                     parameter_secret_rollback: bool = False, feedback_only: bool = False, archive_governance_only: bool = False) -> None:
+    if sum((business_export_only, parameter_secret_only, parameter_secret_rollback, feedback_only, archive_governance_only)) > 1:
         raise RuntimeError("限定升级与回滚模式不能同时使用")
     validate_runtime_config(settings)
+    if archive_governance_only:
+        from app.services.archive_governance_migration import upgrade_archive_governance
+        upgrade_archive_governance(engine)
+        check_database_ready(engine)
+        return
     if feedback_only:
         from app.services.feedback_migration import upgrade_feedback
         upgrade_feedback(engine)
@@ -129,6 +134,8 @@ def upgrade_database(*, business_export_only: bool = False, parameter_secret_onl
         if inspect(connection).has_table("sys_parameter"):
             upgrade_parameter_secret_storage(connection)
     init_db()
+    from app.services.archive_governance_migration import finalize_archive_governance_setup
+    finalize_archive_governance_setup(engine)
     with engine.begin() as connection:
         upgrade_parameter_secret_storage(connection, allow_add=False)
     mark_database_ready(engine)
@@ -138,11 +145,12 @@ def upgrade_database(*, business_export_only: bool = False, parameter_secret_onl
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--archive-governance-only',action='store_true',help='仅升级档案变更申请、必输规则及移除档案计划字段')
     modes.add_argument("--feedback-only", action="store_true", help="仅新增问题提报表、菜单与一次性模板权限")
     modes.add_argument("--business-export-only", action="store_true", help="仅从archive-02升级两个业务导出权限，禁止历史初始化")
     modes.add_argument("--parameter-secret-only", action="store_true", help="仅从business-export-01新增参数认证密文列，不修改权限或历史数据")
     modes.add_argument("--parameter-secret-rollback", action="store_true", help="恢复business-export-01版本，保留新增列及原哈希，配合旧程序回滚")
     args = parser.parse_args()
     upgrade_database(business_export_only=args.business_export_only, parameter_secret_only=args.parameter_secret_only,
-                     parameter_secret_rollback=args.parameter_secret_rollback, feedback_only=args.feedback_only)
+                     parameter_secret_rollback=args.parameter_secret_rollback, feedback_only=args.feedback_only, archive_governance_only=args.archive_governance_only)
     print("数据库升级完成")

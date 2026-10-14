@@ -96,6 +96,8 @@ app.include_router(roles.router)
 app.include_router(menus.router)
 app.include_router(depts.router)
 app.include_router(projects.router)
+from app.api import archive_changes
+app.include_router(archive_changes.router)
 app.include_router(sso.router)
 app.include_router(erp.router)
 app.include_router(dicts.router)

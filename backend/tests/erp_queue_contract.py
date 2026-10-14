@@ -17,7 +17,8 @@ from app.models.project import PmsProjectArchive
 from app.models.erp_task import ErpSyncTask
 from app.models.product_line import SysProductLine, SysRoleProductLine
 from app.models.user import SysUser
-from app.models.rbac import SysRole, SysMenu, SysRoleMenu, SysUserRole
+from app.models.rbac import SysDept, SysRole, SysMenu, SysRoleMenu, SysUserRole
+from app.services.archive_change import archive_business_version
 from app.services import erp_queue
 from fastapi import HTTPException
 
@@ -34,11 +35,13 @@ class QueueContract(unittest.TestCase):
         menu = SysMenu(menu_name='重试', menu_type='B', permission_code='system:sync:retry', status=1)
         self.db.add_all([self.line, self.user, role, menu])
         self.db.flush()
+        dept=SysDept(dept_name='测试部门',leader_id=self.user.id,status=1)
+        self.db.add(dept);self.db.flush();self.user.dept_id=dept.id
         self.db.add_all([SysUserRole(user_id=self.user.id, role_id=role.id),
             SysRoleMenu(role_id=role.id, menu_id=menu.id),
             SysRoleProductLine(role_id=role.id, product_line_id=self.line.id)])
         self.archive = PmsProjectArchive(project_code='TEST', project_name='名称', is_enabled=1,
-            business_product_line_id=self.line.id)
+            business_product_line_id=self.line.id,manager_id=self.user.id,governance_legacy=True)
         self.db.add(self.archive)
         self.db.commit()
 
@@ -316,7 +319,8 @@ class QueueContract(unittest.TestCase):
                 setattr(self.archive, key, value)
             self.db.commit()
             with self.assertRaises(HTTPException) as ctx:
-                update_archive(self.db, self.archive.id, ArchiveUpdate(project_code='CHANGED'), 1)
+                update_archive(self.db, self.archive.id, ArchiveUpdate(project_code='CHANGED',expected_version=archive_business_version(self.archive)), self.user.id,
+                    scope_context={'user_id':self.user.id,'data_scope':4,'permissions':['business:data:all','project:archive:edit']})
             self.assertEqual(ctx.exception.detail['code'], 'ARCHIVE_CODE_LOCKED')
 
     def test_mssql_table_compiles_and_menu_revocation_survives(self):
@@ -339,19 +343,25 @@ class QueueContract(unittest.TestCase):
         from app.schemas.project import ArchiveCreate, ArchiveUpdate
         from app.services.enum_registry import initialize_enum_definitions
         initialize_enum_definitions(self.db)
+        from app.models.dict import SysDict,SysDictItem
+        for code,value,label in [('archive_machine_model','1','机型'),('archive_quantity_unit','7','台')]:
+            definition=self.db.query(SysDict).filter_by(dict_code=code).one()
+            self.db.add(SysDictItem(dict_id=definition.id,item_value=value,item_label=label,status=1))
         self.db.commit()
         from app.services.authorization import build_authorization_context
         with patch('app.services.product_line_source.get_organization'):
             result = create_archive(self.db, ArchiveCreate(project_code='NEW', project_name='新项目',
-                product_line_id=self.line.id), self.user.id,
+                product_line_id=self.line.id,manager_id=self.user.id,archive_category=2,machine_model=1,quantity=1,quantity_unit=7), self.user.id,
                 scope_context=build_authorization_context(self.db, self.user.id))
         self.assertEqual(self.db.query(ErpSyncTask).filter_by(archive_id=result['id']).count(), 1)
-        update_archive(self.db, result['id'], ArchiveUpdate(project_name='新名称'), 1)
+        scope={'user_id':self.user.id,'data_scope':4,'permissions':['business:data:all','project:archive:edit']}
+        row=self.db.get(PmsProjectArchive,result['id'])
+        update_archive(self.db, result['id'], ArchiveUpdate(project_name='新名称',expected_version=archive_business_version(row)), self.user.id,scope_context=scope)
         tasks = self.db.query(ErpSyncTask).filter_by(archive_id=result['id']).order_by(ErpSyncTask.id).all()
         self.assertEqual([task.status for task in tasks], ['superseded', 'queued'])
         with patch('app.services.erp_queue.enqueue', side_effect=RuntimeError('queue failed')):
             with self.assertRaises(RuntimeError):
-                update_archive(self.db, result['id'], ArchiveUpdate(project_name='不能提交'), 1)
+                update_archive(self.db, result['id'], ArchiveUpdate(project_name='不能提交',expected_version=archive_business_version(row)), self.user.id,scope_context=scope)
         self.assertEqual(self.db.get(PmsProjectArchive, result['id']).project_name, '新名称')
 
     def test_old_completion_cannot_overwrite_new_queue_status(self):
@@ -387,8 +397,9 @@ class QueueContract(unittest.TestCase):
         self.assertEqual(client.get(f'/api/sync-tasks/archive/{self.archive.id}').status_code, 200)
         self.assertEqual(client.post('/api/sync-tasks/retry', json={'task_ids': [task.id]}).status_code, 403)
         ctx['data_scope'] = 1
+        ctx['user_id'] = 999
         self.assertEqual(client.get(f'/api/sync-tasks/archive/{self.archive.id}').status_code, 404)
-        ctx.update(data_scope=4, permissions=['system:sync:view'])
+        ctx.update(user_id=self.user.id,data_scope=4, permissions=['system:sync:view'])
         self.assertEqual(client.get('/api/sync-tasks').status_code, 200)
         self.assertEqual(client.post(f'/api/sync-tasks/{task.id}/inspect').status_code, 403)
         ctx['permissions'].append('system:sync:retry')

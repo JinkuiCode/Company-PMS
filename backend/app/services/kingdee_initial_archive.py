@@ -82,6 +82,14 @@ def insert_initial_archives(db: Any, ready: Iterable[Mapping[str, Any]], *, oper
     """Stage validated rows in the caller's transaction; never call Kingdee."""
     from app.models.project import PmsProjectArchive
     from app.services.operation_log import record_operation_log, serialize_model
+    from app.services.authorization import build_authorization_context, enforce_permission
+    from app.services.parameter import require_archive_initialization
+    from app.services.offline_archive_import import require_import_scope
+
+    require_archive_initialization(db)
+    scope = build_authorization_context(db, operator_id)
+    enforce_permission(scope, 'project:archive:import')
+    require_import_scope(scope)
 
     count = 0
     for row in ready:
@@ -89,6 +97,7 @@ def insert_initial_archives(db: Any, ready: Iterable[Mapping[str, Any]], *, oper
             project_code=row["project_code"],
             project_name=row["project_name"],
             data_origin=DATA_ORIGIN_KINGDEE_INITIAL,
+            governance_legacy=True,
             is_enabled=1,
             erp_synced=0,
             erp_sync_status="historical",

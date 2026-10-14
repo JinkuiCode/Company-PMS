@@ -333,7 +333,7 @@ def test_archive_delete_guards_and_enabled_lifecycle():
             synced_without_log.id,
             pending.id,
         }
-        assert len(select_statements) == 3
+        assert len(select_statements) == 4  # Added one batch query for change-history references.
 
         try:
             ensure_archive_enabled(disabled, "编辑")

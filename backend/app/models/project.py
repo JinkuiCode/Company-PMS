@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Integer, Date, DateTime, ForeignKey, func, DECIMAL, Index, event, text
+from sqlalchemy import Boolean, Integer, Date, DateTime, ForeignKey, func, DECIMAL, Index, event, text
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +20,8 @@ class PmsProjectArchive(Base):
         NVARCHAR(32), nullable=False, default="pms", server_default=text("'pms'"),
         comment="档案来源: pms/kingdee_initial/offline_initial",
     )
+    governance_legacy: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+        server_default=text('0'), comment='治理存量标记（系统只读）')
     customer: Mapped[str | None] = mapped_column(NVARCHAR(128), default=None, comment="客户")
     status: Mapped[int] = mapped_column(Integer, default=1, comment="状态: 1未启动 2进行中 3已完结 4暂停")
     is_enabled: Mapped[int] = mapped_column(
@@ -40,13 +42,11 @@ class PmsProjectArchive(Base):
     address_province: Mapped[str | None] = mapped_column(NVARCHAR(6), default=None, comment="项目地址省份编码")
     address_city: Mapped[str | None] = mapped_column(NVARCHAR(6), default=None, comment="项目地址城市编码")
     address_detail: Mapped[str | None] = mapped_column(NVARCHAR(512), default=None, comment="项目详细地址")
-    project_contact: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="项目联系人")
+    project_contact: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="收货联系人")
     contact_phone: Mapped[str | None] = mapped_column(NVARCHAR(32), default=None, comment="联系人手机")
     equipment_series: Mapped[int | None] = mapped_column(Integer, default=None, comment="设备系列枚举值")
     serial_no: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="序列号")
     serial_no_key: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="序列号唯一键")
-    plan_start_date: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="计划开始日期")
-    plan_end_date: Mapped[datetime.datetime | None] = mapped_column(DateTime, default=None, comment="计划结束日期")
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="创建人ID")
     updated_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), default=None, comment="最后编辑人ID")
     archive_category: Mapped[object | None] = mapped_column(Integer, nullable=True, comment="档案类别")

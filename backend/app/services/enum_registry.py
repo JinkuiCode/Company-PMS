@@ -21,6 +21,11 @@ LEGACY_DICT_CODES = {
 
 
 ENUM_REGISTRY: dict[str, dict[str, Any]] = {
+    'archive_change_status': {
+        'name':'档案变更审批状态','description':'固定审批流程，不允许改写状态协议','mode':'workflow','visible':True,
+        'sort':18,'table_name':'pms_archive_change','field_name':'status','bindings':['项目档案变更.status'],
+        'items':[('1','草稿'),('2','待审批'),('3','已通过'),('4','已退回'),('5','已撤回')],
+    },
     "archive_status": {
         "name": "档案状态",
         "description": "项目档案保留状态，暂未启用",

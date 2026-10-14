@@ -1,5 +1,13 @@
 # PMS 变更记录
 
+## 2026-10-13 单据进入规则与角色兼容修复正式发布
+
+- 原因：开发机本批完成后用户明确要求更新到正式环境。
+- 发布：10.10.1.228从d49a143固定更新至2616ae79863a050b1633ceb7695e62c6b353fc03；旧源码/Git历史/前端/配置备份已校验，恢复目录C:\PMS\.runtime\release-history\list-entry-20261013-120735-2616ae79。仅停启PMS，数据库仍2026-10-12-feedback-02，无升级、业务写入或实际角色授权变更，保留正式邮件配置与开关。
+- 涉及：本批共享查询控件、操作列与各单据/报表/管理列表、角色查看依赖及树映射；私有.runtime/list-entry-release-20261013固定发布工具和回执；docs/releases/2026-10-13-list-entry-server-release.md及发布计划、本日志。
+- 验证：固定提交构建退出0、898项清单/bundle/ZIP校验及发布工具3项契约通过；服务器最终published-verified/EXIT_0，源码/资源/服务入口一致、健康ok，业务/授权/基础资料/参数及受保护配置哈希一致。实际SQL只读验证feedback:add/supplement查看依赖，不增加处理或重试权限。正式Edge档案自动305条、档案/采购操作列64px，三报表待查询、收发3红星及空必输禁查、角色独立查看已核对；取消角色草稿，未正式保存角色。截图outputs/list-entry-20261013/*-formal.png。
+- 边界：未重启SQL Server/OA/服务器，临时18956传输已关闭；功能提交留在codex/pms-unified-query，未合并master、未推送GitHub，其他未提交资料保留。
+
 ## 2026-10-13 单据进入规则、查询红星及操作列收窄（开发机）
 
 - 原因：用户批准单据进入自动刷新、报表默认待查询，必输条件统一红星并取消名称文字标记，操作列按内容收窄；另批准修复正式截图揭示的角色保存兼容问题，仅开发机实施。
@@ -8,6 +16,28 @@
 - 验证：共享控件/旧列偏好/角色依赖先RED后GREEN；隔离真实页面涵盖单据默认首查与重新进入、三个报表无业务首查、采购下钻、红星禁查、64/96px及角色提交ID，均通过。后端角色7项、RBAC/首页/反馈升级及前端四项必需契约、方案所有权15项等通过，构建退出0，仅既有大分块提示。真实Edge档案自动显示21条、操作列64px，采购待查询、收发红星与禁用查询、角色独立查看已核对；截图outputs/list-entry-20261013/，详细证据docs/releases/2026-10-13-list-entry-dev.md。
 - 复核修复：晚到枚举或引用校验期间元数据刷新导致漏首查、项目进度旧默认方案覆盖操作列均由实际隔离浏览器先RED后GREEN；首查票据保留至真正提交、数据源改变重新校验，用户修改/重选/卸载取消。项目进度方案入口也仅规范化操作列，其他列偏好保留。
 - 边界：本机服务已独立保持在线并更新启动器运行记录，仍金蝶只读、后台同步关闭；未部署服务器、未升级数据库、未保存真实角色修改，未提交、合并或推送。正式环境报错仍需后续批准发布才会消除。
+
+## 2026-10-13 正式问题提报邮件通知开启
+
+- 原因：正式两类测试邮件收件验收通过后，用户明确批准开启正常邮件通知。
+- 调整：在正式参数设置保存mail.enabled=true；未调整发件账号、密码、角色权限或业务数据，沿用既有参数操作日志。
+- 涉及：正式sys_parameter/mail.enabled；docs/releases/2026-10-13-feedback-server-release.md、本日志。无程序或数据库结构变更。
+- 验证：正式Edge界面显示参数已保存，刷新页面重新查询仍显示开启；截图outputs/feedback/formal-mail-enabled-20261013.jpg。此前正式SMTP及两类实收证据继续适用；未新增正式测试提报，不宣称正式业务全流程验收已执行。未合并主分支、未推送GitHub。
+
+## 2026-10-13 正式邮件服务限定收件人验收
+
+- 原因：用户已在正式参数页面配置发件账号，指定验收仅发送给A000645，并询问后续收件人维护位置。
+- 执行：复用正式发件服务，向该启用账号的当前档案邮箱发送两封明确标注测试的邮件，不创建正式提报记录、不改通知队列、角色权限或正常通知开关；不读取回显或复制发件密码。正常通知保持关闭。
+- 涉及：私有.runtime/feedback-release-20261013/mail_acceptance.py及限定临时传输入口、服务器验收回执；docs/releases/2026-10-13-feedback-server-release.md、本日志。无应用代码、数据库结构修改。
+- 验证：正式SMTP接受两类测试邮件，接收地址均为code.jin@aelsystem.com，待发队列0，服务器退出码0；2026-10-13用户确认两类邮件均已实际收到，正式发件服务收件验收完成。正常通知仍关闭，未执行正式业务提报/跟进全流程验收。临时传输作业执行后已关闭，未合并主分支或推送GitHub。
+
+## 2026-10-13 开发机邮件通知真实启用与闭环验收
+
+- 原因：用户已自行配置PMS专用邮箱账号密码并维护验收收件邮箱，继续已批准的通知闭环验证。
+- 调整：通过实际参数设置开启开发机邮件通知；仅ael的code.jin@aelsystem.com为有效管理员及提报人收件地址。密码仅核对已配置状态，不读取、不回显、不记录；不复制到正式环境。
+- 涉及：开发机sys_parameter/mail.enabled及pms_feedback_notification正常队列处理；docs/releases/2026-10-12-feedback-dev.md、docs/superpowers/plans/2026-10-12-feedback.md、本日志。没有应用代码或数据库结构修改。
+- 验证：6条测试事件于09:20:42至09:21:08发送，5条管理员通知、1条处理结果通知；每条发送尝试1次、收件人数1、状态sent且无错误。Edge详情显示两类已发送，截图outputs/feedback/mail-sent-dev-20261013.jpg；用户确认两类均实际收到。复用代码未变化的上一轮91项反馈/21项参数及前端必需检查证据。
+- 边界：仅开发机通知开启，未升级或部署正式库、未提交合并或推送；正式发布仍须独立升级批准和备份校验。
 
 ## 2026-10-12 页面说明与查询宽度三种交互样稿
 
@@ -1731,6 +1761,13 @@
 - 验证：新增访问白名单、名称查询、互斥管理、未解析摘要及外部点击测试先RED后GREEN；最终相关前端22项、四项必需规范检查、TypeScript及生产构建退出0，仅既有包体警告。隔离真实组件验证五漏斗互斥、外部/同列标题/重复点击/Esc关闭、保留已应用条件、丢弃未应用草稿、晚到响应不恢复弹窗、卸载清理、内部下拉/日期/嵌套引用及其两类下拉、名称跨搜索累计勾选与批量查询、OA iframe外部点击。四静态说明匿名及无页面授权时可阅读/刷新且零API调用，业务页未登录及撤权仍拦截；原说明B多尺寸嵌入及新页签状态回归退出0。独立审查发现嵌套引用下拉传送到body导致误关闭，补回归复现并修复后复核无阻塞项。
 - 实页与边界：用户从只读入口启动后，实际5174产品线候选仅名称；档案样本连续五列打开均只有一个面板，外部点击后为零。证据在outputs/query-popup-fixes-20261012/。未部署正式环境，未改数据库/业务授权/配置、触发金蝶写入、提交、合并master或推送GitHub；正式OA实测留待后续发布验收。
 
+### 2026-10-12：查询交互修复正式部署
+- 原因：用户要求将已验收三项修复更新服务器。
+- 调整：固定功能分支提交218fd61，独立构建844项清单并发布10.10.1.228；复用发布助手保留旧程序、历史、前端和受保护配置用于回退。仅停启PMS，不改数据库、权限或OA回调。
+- 涉及文件：本批frontend/src/query-system、page-guide/navigation.ts和router/index.ts；.runtime/query-popup-release-20261012/发布工具；docs/superpowers/plans/2026-10-12-query-popup-server-release.md、docs/releases/PMS查询交互修复发布记录-20261012.md及本日志。
+- 验证：固定提交构建、ZIP和bundle通过；服务器控制台已到published-verified后回传URLError，总退出非零，未虚报脚本exit0。独立HTTP入口确认新index-CferMCag.js，健康ok；正式Edge产品线仅名称、五漏斗互斥及外部点击关闭通过，独立说明页可阅读。匿名/业务路由边界复用同版本开发机隔离证据；正式IAB已有会话，不作为匿名证明。代理直接只读核对服务器本地记录，目标218fd61，文件/服务前端/健康、采购总表/Excel及三报表只读校验均true，PMS运行中；精确回退目录C:\PMS\.runtime\release-history\query-popup-20261012-115353-218fd61d，截图留存。真实OA新页签由用户复测。
+- 边界：回传异常不重复部署或回滚；临时传输关闭，截图在outputs/query-popup-server-20261012/。未升级数据库、改业务数据/配置/授权、重启SQL Server/OA/服务器、合并master或推送GitHub；其他未提交资料保留。
+
 ### 2026-10-12：当前页漏斗、500条分页与初始密码回显开发机实施
 - 原因：用户确认漏斗只筛选当前页、分页增加至500、弹窗统一配色及参数初始密码可查看。
 - 调整：新增共享page-column-filter模块，档案及三个报表、系统和项目列表复用当前已接受页；候选、按条件和多列交叉过滤均本地执行，表头查询及项目全结果排序仍在分页前。翻页、每页条数、查询、方案及新数据清除列条件和弹窗草稿，旧异步响应不恢复；列过滤不改变总条数、汇总或后台导出范围。收发期初行按同一条件展示，不重算数量。同步任务原定时刷新保留，新数据清除过滤。
@@ -1740,3 +1777,149 @@
 - 涉及文件：frontend/src/query-system/page-column-filter.ts、client-row-sort.ts、system-adapter.ts、report-adapter.ts、column-popup.ts、PmsQueryColumnHeader.vue、共享分页和上述业务/系统列表、ParameterList.vue、page-guide/registry.ts；backend参数模型/服务/secret_encryption.py、配置、数据库版本/独立升级脚本及分页API/读取服务；对应测试、AGENTS.md、docs/PMS-UI-STANDARD.md、本批实施计划和docs/releases/2026-10-12-page-column-filter-dev.md。
 - 验证：新增本页边界、全结果排序、分页、密码加密/权限/缓存/回退一致性及方案清理测试先RED后GREEN；前端本批25项、相关共享10项、四项规定契约、字段字典/枚举及build退出0，仅既有包体警告；后端密码/限定升级17项、分页10项、业务导出限定升级9项、用户安全36项及字段目录/枚举退出0。隔离Vue浏览器279/50候选、本地应用无业务/候选请求、总条数/导出范围不变、翻页清除、500及24px配色通过，截图outputs/page-column-filter-20261012/。实际5174档案102条的本页50候选、单项筛选总数不变、翻页恢复已验证；参数当前未设置。独立复核两项发现修复后关闭。
 - 边界：仅开发机；既有同步轮询并未取消，不宣称该页零后台刷新。真实MSSQL2017 DDL/失败回退及正式发布未执行，未改正式数据库/业务/授权，未重启SQL Server/OA/服务器、提交、合并master或推送GitHub，其他资料保持。
+
+### 2026-10-12：当前页筛选发布包固定及限定升级准备
+- 原因：用户批准更新服务器，初始密码认证密文列须通过独立升级发布。
+- 调整：将本批开发验收内容固定为功能分支提交f632ec3，排除其他未提交文件并独立构建；新增受保护发布助手，复用已校验的备份和程序发布流程，限定parameter-secret-only，不重放初始化；仅准备bootstrap不执行升级或停启服务。
+- 涉及文件：.runtime/page-column-release-20261012/{server_release.py,package.py,transfer.py,bootstrap.ps1,test_release.py,test_transfer.py}、本批正式发布计划及准备记录、本日志。
+- 验证：固定提交构建、861项包清单和bundle通过；助手8项及传输3项先RED后GREEN；本轮参数/限定升级17项、分页浏览器5项及四项前端必需规范检查退出0。独立复核的唯一目标锁定及升级后列存在检查已补反例并关闭。另一档案维护核验完成后执行本批prepare，回执通过，程序/前端/Git历史索引/配置已校验备份，恢复目录C:\PMS\.runtime\release-history\archive-20261012-140929-6bbcf316，业务摘要保持、PMS未停止。
+- 边界：正式库独立升级批准未收到，本批仅上传候选及准备，未执行数据库备份/DDL、PMS停启或程序发布，不报告正式部署完成；未合并master或推送GitHub。
+
+
+### 2026-10-12：正式环境项目档案产品线补齐与AS编码规范
+- 原因：用户按业务数据及前缀规则确认产品线归属；确认排除冲突中的江苏亚电、电镀/HOTSPM冲突归电镀、未匹配归8吋Bench。金蝶关联AS由用户先在金蝶改码，其他PMS档案直接整理；领创改为禁用并保留历史。
+- 调整：10.10.1.228 / PMS一次事务补齐929条组织产品线（8吋Bench412、光伏432、12吋Bench46、Single17、亚电股份9、电镀12、HSPM1）；2113条未关联金蝶且手动同步的线下AS档案，将首个AS-改为AS_，保留其余字符及重号后缀；7条领创档案禁用，保留原编号及金蝶关联。107条金蝶关联AS保留原编码，输出原编码/目标编码清单，待用户完成金蝶变更后再核对PMS改码。
+- 实施边界：沿用服务器当前RBAC、明确全部业务范围、档案编辑/启停及产品线迁移权限，按本次有效字段规则校验，仅对原空产品线赋值。未改菜单或角色授权、数据库结构、产品线配置、ERP关联/同步任务及金蝶数据；未修改或部署应用代码、重启PMS/SQL Server/OA、提交或推送GitHub；其他对话的程序变更保留。
+- 备份与恢复：服务器C:\PMS\.runtime\archive-repair-20261012\private\before.json保留3646条档案完整精确快照；ACL仅Administrators/SYSTEM。SHA256 e4fe7c24694f52289cb34c86c39fffcac110f5e3eafb9a81d6b6e3a0145cd2c1。隔离SQLite演练3049条修改后恢复原值通过；维护脚本rollback入口保留，恢复前逐条校验没有后续修改，恢复时追加操作日志，不删除历史日志。这是业务数据快照，未执行新全库备份或生产恢复。
+- 涉及文件：.runtime/archive-line-match-20261012/repair-plan.json、maintenance.py、repair-prepared.json、repair-verified.json、diagnose.py、build-gold-list.mjs；服务器独立维护目录及回滚快照；outputs/01a08a08-10f1-7050-aa3c-3c7123df6b08/金蝶AS项目改码清单与领创禁用记录_20261012.xlsx；本日志。原始项目档案.xlsx及前次匹配工作簿未修改。
+- 验证：快照哈希/回读、隔离恢复演练、源指纹和前置重号/ERP队列保护通过；提交前后全字段比较、非目标597条原值、其他业务/ERP/导入来源/角色授权表哈希、源程序哈希及3049条逐档案操作日志核对通过。首次提交后验收因SQL Server DATETIME对更新时间舍入误判；只读诊断确认所有3049条唯一差异字段为updated_at，未重复写业务。按SQL Server CAST(datetime2(6) AS datetime)精确复算后严格比较通过，保留原期望快照和持久化精度快照；最终verify退出0。启用档案未归属0条，剩余7条空产品线均已禁用。真实Edge列表AS_查询2113条、LC-查询7条全部“已禁用”且仅显示“查看”；产品线范围模拟查询及空产品线授权拒绝通过，实际用户仍同时受人员/部门和按钮权限约束。工作簿107条AS及7条领创逐行、公式、下拉选项和两页渲染核对通过；临时传输关闭。
+
+### 2026-10-12：当前页筛选、500条分页与初始密码回显正式部署
+- 原因：用户验收后批准服务器更新及parameter-secret-01限定独立升级。
+- 调整：正式PMS备份创建并校验后，仅新增可空初始密码认证密文列，发布固定功能分支f632ec3至10.10.1.228；共享漏斗只过滤本页快照，分页统一最大500，弹窗使用紧凑语义配色。原参数哈希、账号、授权、业务和受保护配置保持，旧初始密码需管理员重新保存后才可回显，未重置任何用户密码。
+- 涉及文件：本批已固定的共享query-system、分页、业务/系统列表、参数服务及限定升级；.runtime/page-column-release-20261012/server_release.py与test_release.py；docs/superpowers/plans/2026-10-12-page-column-server-release.md、docs/releases/2026-10-12-page-column-server-release-prepared.md及本日志。
+- 发布修复：SQL Server新增列继承Chinese_PRC_CI_AS，助手比较类型字符串误判；DDL实际已完成。改为校验类型族/长度、可空和默认值，其他列及全部原数据保持校验不放宽；两项回归先RED后GREEN、助手10项退出0。只读恢复核验VERIFY_EXIT_0后发布原包，未重复升级、伪造版本或重新输入凭据。
+- 验证：正式回执文件/前端入口/健康、PMS备份及全表原数据/配置保持均true，实际版本2026-10-12-parameter-secret-01，PMS运行中。Edge实际档案305条、50条分页候选50；应用单项总条数仍305，翻页清除。500分页本页候选完整305，恢复50后仍50；外部点击关闭、紧凑配色和旧初始密码重新保存提示核对通过。截图outputs/page-column-server-20261012/current-page-filter.png；相关同固定版本前后端及构建证据复用。
+- 边界：临时18954入口已无监听；只停启PMS，不重启SQL Server/OA/服务器；未合并master、推送GitHub或创建PR。保留另一对话已完成的档案维护与未提交资料；真实OA最终验收及管理员重新保存初始密码后的实值回显待用户操作，未声称已完成这两项。
+
+### 2026-10-12：问题提报独立模块三版交互样稿
+- 原因：用户要求设计独立问题/需求提报功能，管理员跟进状态和结论，提交及结果更新通过邮件通知；先提供三版样稿选型。
+- 调整：新增A标准列表与详情抽屉、B左列表右详情联动工作台、C状态看板与分类统计，保持既有主题、字体和紧凑尺寸，复用统一表单抽屉及字段控件。问题/需求按模块、类别、影响程度结构化分类；问题必填复现步骤；完成/关闭必填结论及归因。可模拟新增、补充、处理、通知记录/失败重试、个人/管理员视角、查询方案与当前页漏斗。
+- 涉及文件：frontend/prototypes/feedback.html、feedback/{main.js,App.vue,Detail.vue,model.mjs,preview.css}；frontend/tests/feedback-preview.test.mjs；docs/superpowers/specs/2026-10-12-feedback-prototypes.md及本日志；预览图outputs/feedback-prototypes-20261012/。
+- 验证：模型分类、必填、结论通知、个人范围及统计测试先RED后GREEN；实际5174页面验证空内容拦截、有效提报新增、管理员完成并生成提交人通知、问题/需求分类联动、提报人5条本人示例、双栏行切换、看板统计与漏斗外部点击关闭。表头居中，较小窗口看板列独立滚动不占分页；浏览器实际CSS视口1177×662、882×517及窄窗口520×671检查。三项规定前端契约与正式应用构建退出0，保留既有包体警告；样稿由Vite开发服务编译并在浏览器验证。
+- 边界：仅样稿内存模拟，刷新恢复示例；不发送真实邮件、不上传附件、不改正式菜单/接口/权限/数据库/配置、不部署、提交、合并主分支或推送GitHub。正式实施等待用户选型及范围确认；真实OA环境尚未验收。其他任务未提交内容保留。
+- 复核修复：限制完成/关闭与结论矛盾组合，新增反例先RED后GREEN；A/B补齐具体类别统计，B切换个人范围或查询结果后自动切换可见详情。实际浏览器复现他人详情残留并验证修复后为零、本人详情可见，类别统计已展示。
+
+### 2026-10-12：问题提报方案A选定与必填空值修订
+- 原因：用户选择A，要求必输项无默认值、由提报人主动选择，具体类别暂定并在后续枚举管理中维护。
+- 调整：新增提报类型、涉及模块、具体类别、影响程度及必填文本初始为空；类型未选时类别禁用，选型后仍不自动选首项，切换类型清空类别。提报人/邮箱保持系统带出。记录问题6项、需求5项暂定类别及后续枚举维护要求；方案A为后续开发基线。
+- 涉及文件：frontend/prototypes/feedback/{model.mjs,App.vue}、frontend/tests/feedback-preview.test.mjs、docs/superpowers/specs/2026-10-12-feedback-prototypes.md、本日志。
+- 验证：新增全部必填初始空值及未填写拦截测试先RED后GREEN；实际5174确认四类选择未预填、类别先禁用、类型选取不带首个类别、切换问题到需求清空已选类别、缺项阻止提交。三项规定前端契约及应用构建退出0，保留既有包体警告。
+- 边界：仅修改已获选样稿与规格，未新建正式枚举、功能菜单、数据库或邮件服务，未部署、提交、合并或推送；其他任务改动保留。
+
+### 2026-10-12：问题提报方案A开发机阶段交付
+- 原因：用户确认方案A及必填空值、可维护分类、独立权限、附件和后台通知范围，批准开发机备份后独立升级。
+- 调整：独立问题提报菜单、提报/跟进/附件/通知四表；普通用户仅本人，有有效查看及处理权限者处理全部；数字枚举8组、运行时权限校验、统一日志、版本冲突及提交UUID幂等。实现新增问题/需求、管理员结论及完成状态、补充历史、分类统计、个人查询方案、本页漏斗、500分页及提报/跟进双sheet导出。必输内容不预填，问题必须有复现步骤，终态必须有兼容结论、归因及意见。
+- 邮件与附件：参数设置集成SSL/STARTTLS及加密密码；业务保存与通知入队同事务，后台独立发送，未配置明确待配置，失败有限重试/结果未知人工核查，SMTP接受后退出错误不重复投递。附件5个/单、10MB/个、隔离私有保存和权限下载，基本类型/内容/路径/版本校验；未增加病毒扫描。
+- 验收修复：空展示条件不发送为后台谓词；未完成快捷状态0接口支持；页面/日期筛选/导出统一中国时间而UTC存储及通知时钟不变。实际主从验收发现透明抽屉外层截获列表点击，统一PmsFormDrawer增加默认关闭的可选公开穿透属性，仅本模块启用，编辑草稿仍有保存/放弃/取消保护；重复已关闭表单回调不得覆盖当前详情。
+- 数据库：开发机在线备份.runtime/backups/pms-dev-before-feedback-20261012-184550.db并校验，限定升级至2026-10-12-feedback-02，原102条档案保留；新权限仅首次模板迁移，不在启动回补。恢复工具只支持本机已验证完整旧SQLite备份，保留恢复前安全副本，不伪造版本；隔离演练通过，实际库未恢复。
+- 涉及文件：backend/app/{api,models,schemas}/feedback.py、services/feedback*.py、enum_registry.py、field_catalog.py、operation_log.py、parameter.py、database_revision.py、core/config.py、models/init_db.py、main.py、scripts/{upgrade_database,restore_feedback_dev}.py及相关契约；frontend/src/api/feedback.ts、feedback/model.ts、views/feedback/*、form-system/components/PmsFormDrawer.vue、router/index.ts、layout/AppLayout.vue、views/system/ParameterList.vue及feedback-contract；本批计划、docs/releases/2026-10-12-feedback-dev.md、本日志。
+- 验证：反馈后端85项、字段目录/枚举、相关参数与业务导出限定升级契约退出0；输入、提交幂等、SMTP退出、权限范围、版本竞争、恢复、UTC跨日及表单重复回调均有RED/GREEN证据。前端feedback、样式/列表/系统一致性/字段目录/枚举契约及构建退出0，仅既有包体警告。只读独立复核发现项逐一修复。用户登录Edge实际新增问题与需求、终态必填拒绝、管理员完成、补充及跟进、分类统计、未完成快捷筛选、主从切换及草稿保护、本页漏斗和1150×700窄窗口通过；下载工作簿实际2条主表/4条跟进，漏斗只显示1条仍导出完整后台查询范围。截图outputs/feedback/。
+- 边界：仅开发机，保留两条标注验收测试的提报。真实附件页面上传因Edge扩展未允许文件URL访问而未完成，隔离接口与文件权限测试通过；未有公司SMTP服务配置，未验证真实邮件，ael开发档案邮箱目前为空。正式MSSQL升级和真实OA验收未执行；未部署正式环境、提交、合并master、推送GitHub或改其他任务资料，金蝶写入和后台同步继续关闭。
+- 最终复核：保存后切换时，表单首次关闭回调仍会重新选择旧记录；增加切换确认期间的回调保护，反例先RED后GREEN，Edge实际保存补充并进入另一条需求详情通过，最新构建退出0；测试记录目前共5条跟进，4条是前次导出时点数量。
+
+### 2026-10-13：问题提报附件开发机续验收
+- 原因：继续昨日未完成的真实页面附件验证。
+- 调整：修正验收截图的误PNG后缀，生成与JPEG内容一致的notification-dev.jpg；通过Edge系统文件选择器向开发机验收记录补充说明并上传附件。保留类型不符被拒绝后的业务保存及仅附件重试证据，不修改上传校验或放宽浏览器扩展权限。
+- 涉及文件：outputs/feedback/notification-dev.jpg、attachment-dev-20261013.jpg、docs/releases/2026-10-12-feedback-dev.md、docs/superpowers/plans/2026-10-12-feedback.md及本日志；仅开发机验收数据。
+- 验证：实际上传79728字节JPEG成功、详情显示1/5附件、下载与源文件SHA256完全一致；未重复提交补充记录，当前2条提报/6条跟进/1个附件。后端85项及前端反馈契约退出0。
+- 边界：应用代码、正式数据与SRM配置未修改；公司SMTP真实发信仍未验证，非加密模式未获批准亦未实施。未部署、提交、合并或推送。
+
+### 2026-10-13：PMS内网邮件路径与账号密码参数配置
+- 原因：用户明确批准内网通知沿用SRM路径，并要求在参数设置输入新的PMS邮箱账号密码。
+- 调整：新增仅限10.10.1.150:25的internal连接例外，参数保存、加载和发信前共享端点校验；其他地址仍要求SSL/STARTTLS并验证证书，TLS失败不降级。参数页显示中文连接名称及明文风险，邮箱密码仍隐藏输入、加密保存、不回显、不写日志。沿用现有参数编辑及权限控件，不改OA或ERP认证。
+- 实际配置：开发机参数页面保存服务地址、25端口和内网模式；邮件发送关闭，发件邮箱/登录账号/密码留给用户本机输入。未读取或复用SRM旧凭据，未发送真实邮件。开发机用户验收邮箱待用户确认。
+- 涉及文件：backend/app/services/{mail_transport_policy,feedback_mail,parameter}.py、backend/tests/feedback_mail_contract.py、frontend/src/views/system/ParameterList.vue、frontend/tests/parameter-secret-ui.test.mjs、docs/releases/2026-10-12-feedback-dev.md及本批计划；截图outputs/feedback/mail-settings-20261013.jpg与本日志。
+- 验证：端点允许/拒绝、运行时拒绝、内网SMTP调用及STARTTLS失败不降级测试；连接方式中文展示反例先RED后GREEN。后端反馈91项、参数及独立升级21项、字段目录及枚举契约退出0；前端密码界面6项、用户参数5项、反馈、样式/列表/系统一致性及构建退出0，仅既有包体/时间API弃用警告。实际Edge参数修改成功、连接方式中文显示、发送开关关闭。
+- 边界：仅开发机应用与上述配置，不改数据库结构、版本或初始化逻辑；SRM/正式PMS未修改。等待账号配置及真实邮件验收后统一发布，正式数据库升级仍按独立批准和备份校验执行；未提交、合并或推送。
+
+### 2026-10-13：问题提报真实邮件验收与正式发布准备
+- 原因：用户完成开发机专用邮箱及验收邮箱配置，并确认两类通知实际收到；随后批准feedback-02限定独立升级与正式发布。
+- 调整：开发机邮件发送开关开启，6条既有测试通知实际发送；将42项已验收功能文件固定为d49a143发布提交，保留当前功能分支及其他未提交资料。正式服务器上传并校验候选，备份旧程序、前端、Git历史和受保护配置，准备限定升级；正式邮件密码不从开发机复制。
+- 涉及文件：本批feedback及参数/邮件代码、对应测试和开发交付文档；.runtime/feedback-release-20261013/{package.py,server_release.py,test_release.py,transfer.py,bootstrap.ps1,transfer.plist}；docs/releases/2026-10-13-feedback-server-release.md、本日志；截图outputs/feedback/mail-sent-dev-20261013.jpg和server-upgrade-ready-20261013.jpg。
+- 验证：开发机5条管理员通知和1条提交人结果通知均status=sent、attempts=1，用户确认两类均收到。固定提交隔离前端构建、bundle及888项文件清单退出0；发布工具三项测试退出0。正式基线f632ec3一致，prepared回执business_unchanged=true、backend_stopped=false，旧程序及配置备份目录C:\PMS\.runtime\release-history\archive-20261013-093825-f74ff694。
+- 边界：当前仅发布准备，服务器等待用户本地输入升级凭据；数据库备份/DDL、PMS停启和程序发布尚未执行。未合并master或推送GitHub，未读取、显示或记录发件及升级密码；其他任务变更完整保留。
+
+### 2026-10-13：问题提报与邮件通知正式程序发布
+- 原因：用户批准feedback-02独立升级与统一发布，并在远程窗口自行输入升级凭据。
+- 调整：创建并校验正式PMS数据库备份，执行feedback-only限定升级，新增提报/跟进/附件/通知四表、八组枚举、独立菜单及六项权限，只首次授予启用模板角色；发布固定d49a143程序，只停启PMS。正式邮件保持关闭，不复制开发机发件密文；原业务、账号、原权限、其他枚举和受保护配置保持。
+- 涉及文件：本批已提交feedback功能及限定升级代码；.runtime/feedback-release-20261013/release-result.json；docs/releases/2026-10-13-feedback-server-release.md、本日志。配套旧程序/配置备份C:\PMS\.runtime\release-history\archive-20261013-093825-f74ff694，数据库备份由SQL服务执行并校验。
+- 验证：正式回执published-awaiting-browser-acceptance，数据库版本2026-10-12-feedback-02，数据库备份verified=true；business_unchanged、protected_configs_unchanged、live_files、served_frontend及health均true，backend_stopped=false；外部健康接口返回status=ok。新表完整结构和日常运行身份访问检查、邮件关闭检查通过。应用测试和固定提交构建证据复用，未再次执行DDL。
+- 边界：未重启SQL Server/OA/服务器，未合并master或推送GitHub。Edge正式页面已打开登录页，登录后验收等待用户；正式SMTP凭据未配置、邮件闭环未验证，不将开发机收件结果等同正式收件。保留其他对话未提交内容。
+- 登录后续验收：用户已自行登录Edge；独立菜单、管理员列表、统计/导出/个人查询方案和500分页可见，正式枚举问题六类/需求五类，新增必填未预填，类型切换清类别及问题复现步骤联动通过。缺项提交前端拦截，放弃草稿后仍0条，未创建正式测试单。截图outputs/feedback/formal-list-20261013.jpg、formal-required-fields-20261013.jpg。
+- 正式邮件准备：在真实参数页面保存并回读已批准内网服务地址10.10.1.150、端口25和发送关闭状态，使用原有参数日志服务；连接方式及发件邮箱/账号/密码未保存，交由用户输入。当前正式管理员邮箱为空已提示维护；正式邮件实发待配置和收件范围核对。截图outputs/feedback/formal-mail-settings-20261013.jpg。临时传输作业已停止，18955无监听；发布记录已补齐。
+
+### 2026-10-13：单字段查询与问题提报标准说明开发机实施
+- 原因：用户要求查询方案取消一个条件匹配多个字段，并批准问题提报说明及后续新增页面统一引用标准说明模块。
+- 调整：档案、采购总/明细、即时库存与收发取消综合字段，编码/名称/规格/单号独立组合；旧综合方案保留存储、提示重配并阻止查询。收发期初和发生额使用统一参数化物料字段与实际匹配操作，等于不放宽为包含；共享requiredGroup支持至少一项正向物料条件、动态红星、只按名称/规格配置方案及字段行错误。规格仅为查询元数据，不新增公开列或数据库列。问题提报引用既有PmsPageGuide，新增操作/字段说明、搜索及新页签，开发标准规定新增功能页面直接接入。
+- 涉及文件：frontend/src/query-system/{core,workspace,report-adapter,PmsQueryConditionRow,PmsQueryWorkspace}、views/project/ProjectArchive.vue、views/reports/{PurchaseOverviewList,PurchaseProgressList,InventoryList,StockDetailList,stockDetailState}、views/system/SyncTaskList.vue、views/feedback/FeedbackList.vue、page-guide/{types,navigation,registry}；backend/app/services/stock_detail_*及report_filters.py；对应单字段/类型过滤/收发/说明/页面行为测试；AGENTS.md、docs/PMS-UI-STANDARD.md、本批规格/计划、docs/releases/2026-10-13-single-field-query-dev.md、本日志。
+- 验证：新增前端6项/后端6项RED-GREEN；收发88项、新增及导出17项、报表相关76项、独立档案查询/字段目录/枚举契约通过；必需四项前端规范检查、共享查询/说明及数据字典/枚举测试通过，最新构建退出0，仅既有包体提示。独立复核发现等于误放宽和名称设置被锁定后已修复，并补齐必输组错误可见性测试。隔离页面浏览器测试通过旧方案禁查、单据首查/重入、报表待查、只名称方案保存/错误、反馈说明新页签及角色依赖。
+- 实际页面：已登录Edge开发机5174核对采购独立字段、反馈说明搜索处理状态及新页签免重复登录；金蝶只读查询编码等于180102020045、12吋Bench、2026-09-01至09-23返回1条采购入库，收入/期末50.00，期初行保留。截图outputs/single-field-query-20261013/。启动器运行记录与实际源码进程对齐。
+- 边界：仅开发机，数据库版本不变，金蝶写入及后台同步关闭；未部署正式、未改账号/角色/权限或正式业务数据、未提交、合并master或推送GitHub。正式OA本批验收待后续发布；其他任务未提交内容保留。
+
+### 2026-10-13：单字段查询正式发布包固定与部署准备
+- 原因：用户要求将本批单字段查询及问题提报说明部署服务器。
+- 调整：38项已验收源码/测试/标准文档固定为功能分支bd6f864，其他任务文件与未提交日志不混入包；隔离构建并生成904项清单、ZIP及Git bundle。复用受保护程序发布助手，仅更新基线、独立路径、校验本批单字段/精确操作；成功发布的回执传输异常不改记发布失败。准备限定正式主机来源的临时18957传输。
+- 涉及文件：.runtime/single-field-release-20261013/{package.py,server_release.py,transfer.py,bootstrap.ps1,transfer.plist,test_release.py,package.json}、docs/superpowers/plans/2026-10-13-single-field-server-release.md、docs/releases/2026-10-13-single-field-server-release.md及本日志。
+- 验证：固定提交构建退出0，ZIP/904项SHA256与bundle校验通过；部署助手4项测试退出0，验证无DDL/角色写入、文件/回执白名单及单字段源/期初实际纯逻辑。发布检查参数期望最初漏掉空字符串及小写归一化，已RED/GREEN修正；未改变业务查询逻辑。Window App连接信息确认正式目标10.10.1.228，外部健康ok。
+- 边界：远程窗口未接收工具输入，已请求用户执行已准备bootstrap；正式源码前置校验、备份和发布尚未执行，未停启正式PMS，不报告上线成功。传输已获工具许可注册于当前GUI会话，原工具进程退出；完成后卸载。数据库版本/配置/权限未改，不合并master或推送GitHub。
+
+### 2026-10-14：单字段查询与问题提报说明正式部署
+- 原因：用户要求代理本人在服务器执行昨日已批准部署，沿用固定bd6f864程序，不扩大范围。
+- 调整：新开独立服务器发布终端保留其他任务窗口，核对正式2616ae7及干净工作区；以等价编码命令避免远程键盘漏符号，执行既有bootstrap。校验旧源码/前端/Git历史/私有配置备份后，仅停启PMS，正式程序更新至bd6f864；数据库版本仍2026-10-12-feedback-02。
+- 涉及文件：本批已提交单字段查询、requiredGroup及page-guide/反馈说明代码；.runtime/single-field-release-20261013/release-result.json、docs/releases/2026-10-13-single-field-server-release.md及本批发布计划、本日志；截图outputs/single-field-server-20261014/。
+- 备份：C:\PMS\.runtime\release-history\single-field-20261014-083446-bd6f864e，配套旧程序/前端/Git历史及受保护配置已校验；无DDL，不执行数据库恢复。
+- 验证：部署助手4项测试退出0；正式终端SINGLE_FIELD_PUBLICATION_VERIFIED EXIT_0、回执published-verified。目标源码/前端资源/服务入口/健康、单字段谓词/精确操作/源与期初一致校验通过；业务、授权及受保护配置保持。外部健康ok；Edge正式问题提报独立说明免登录，操作说明和字段搜索处理状态正常。固定提交的应用测试与隔离构建证据复用。
+- 边界：当前正式业务页会话过期，登录后的独立条件及说明弹窗点击核对等待用户自行登录，不声称完整业务页面验收已通过。临时传输作业已卸载、18957无监听；未重启SQL Server/OA/服务器、改账号/角色/参数或邮件开关，未合并master、推送GitHub或创建PR；其他任务未提交文件完整保留。
+- 登录后续核验：用户随后自行登录，正式问题提报说明弹窗、字段逻辑搜索处理状态、新页签保留fields/搜索词且无重复登录通过，原数据页不变。采购总/明细单独申请单编号及物料编码/名称/规格、库存独立物料字段、收发名称红星及空物料/产品线禁查均通过，三个报表待查询；档案自动加载305条且字段下拉无综合搜索。只临时改显示条件、不保存方案或业务数据；旧综合方案禁查复用固定源码隔离行为测试，未在正式造旧方案。本批约定只读页面核验已完成，实际OA iframe最终视觉验收未执行。截图outputs/single-field-server-20261014/{feedback-modal,purchase,inventory,stock,archive}.png。
+
+### 2026-10-14：部门负责人维护开发机实施与档案审批样稿
+- 原因：用户批准档案字段调整和按原项目负责人部门审批，要求部门负责人可选择所有用户、跨部门兼任；补充明确新增仍需角色中的project:archive:add，不开放所有登录用户。
+- 已实施：在用户管理部门抽屉增加必输负责人，独立加载全部启用用户，姓名/账号区分同名；支持兼任，不改变人员部门或角色。后端创建与更新校验有效负责人，历史空值/禁用人员保持可读，已禁用历史负责人显示但不可新选；加载错误可重试、关闭重开取消旧请求、保存失败留草稿。继续复用现有部门操作日志、统一表单及PmsPageGuide；新增用户/部门说明支持搜索和新页签。
+- 样稿：独立archive-governance入口展示字段顺序、主机系列/序列号红星、历史客户全名只读、收货联系人、底部来源和计划信息移除；演示原部门审批人、中文差异、原因、通过/退回/撤回及部门负责人直接保存。样稿仅内存数据，无业务API请求，不作为正式权限或审批存储实现。
+- 涉及文件：backend/app/{schemas/rbac.py,services/rbac.py,services/field_catalog.py}、backend/tests/department_leader_contract.py；frontend/src/views/system/UserList.vue、page-guide/{types,navigation,registry}.ts；frontend/tests/{department-leader-browser.mjs,system-form-drawer-browser.mjs,page-guide.test.mjs,archive-governance-preview.test.mjs,archive-governance-preview-browser.mjs}；frontend/prototypes/archive-governance.html及同名目录；本批规格、两份实施计划及本日志。
+- 验证：后端6项负责人契约退出0（含已有角色关系保持、跨部门及兼任、必输/失效校验、读取兼容、权限不变），前端说明4项、样稿模型4项通过；负责人浏览器含加载失败重试、关闭重开和说明新页签，以及原部门/枚举抽屉、档案样稿交互均通过。必需style/list/system-ui/build、前端数据字典/枚举与后端字段目录/枚举契约退出0；构建仅既有包体警告，git diff --check通过。独立只读复核无阻断项，已补齐其测试缺口。
+- 开发机：仅重启本机PMS后端，/api/health返回ok；Edge已登录用户管理实际下拉核对3个有效用户（包含无部门用户），未代用户保存。样稿实际Edge打开、字段和32px控件核对，截图outputs/archive-governance-20261014/{department-leader,archive-drawer}.png。读取开发库102条中5条已有负责人、97条仍空，3个部门负责人仍空，记录仅用于缺资料提醒，未自动补值。
+- 边界：新增档案现有授权及实际编辑逻辑未改变，真实档案字段/审批尚未接入，等待样稿确认；未清理计划值、升级数据库、改角色/用户部门、部署正式、合并master或推送GitHub。用户维护的档案负责人保留，无关未提交文件保留。
+
+### 2026-10-14：档案治理真实服务与开发机限定升级（阶段实施）
+- 原因：用户确认档案治理样稿，批准仅开发机备份、恢复演练及archive-governance-01限定升级，并追加批准三个部门负责人设为A000645。
+- 调整：新建/编辑接入共享业务表单、重排字段、客户全名只读/空值隐藏、收货联系人、来源底部；移除档案计划。新增申请/审批服务、原部门路由、部门负责人直改、单pending、UUID和业务版本校验、事务写入及日志，pending不改正式和队列；审批列表接入标准查询/漏斗/列设置/导出/说明，沿用原授权，不自动回补。
+- 涉及文件：backend/app/{models/archive_change.py,models/project.py,schemas/archive_change.py,schemas/project.py,api/archive_changes.py,services/archive_change.py,services/archive_change_export.py,services/archive_governance_migration.py,services/project.py,services/field_policy.py,services/field_catalog.py,services/enum_registry.py,services/project_archive_lifecycle.py,services/operation_log.py}、main.py、独立升级及开发机备份/校正/部门维护脚本；frontend/src/views/project/{ArchiveRecordForm.vue,ArchiveChangeList.vue,archiveGovernance.ts,ProjectArchive.vue}、api/businessExport.ts、page-guide、submissionId及反馈复用；对应契约/浏览器测试和docs/releases/2026-10-14-archive-governance-dev.md。
+- 开发机：数据库-01已升级，102条及范围外原记录比对保持，项目/任务日期未动；备份archive-governance-before-20261014-120342.db（SHA256 ee99407bb531cd20b5a753f5da3a4520e248f1e4171fbfd766767b70d1bb166b）升级/恢复演练通过。校正本次7项规则时钟前另行备份并写日志，不改业务日期；三个部门负责人为A000645，用户dept_id和角色授权保持。
+- 验证：申请API16项、升级5项通过，较早组合119项通过；前端必需规范/构建、字段目录/枚举、说明及导出通过；隔离页面提交、失败保留、审批生效、意见展示和主从切换通过，实际Edge核对字段及只读/列表。最新字段组7项中6项通过、1项RED，不能称最终验收通过。
+- 未完成：复核发现历史混合创建时钟及普通必填开关仍可能破坏主机条件边界，已提出-02内部存量标记补充升级，待新范围批准，尚未改模型或执行-02。A000645开发机角色未授权、ael部门及97条负责人空值未代选，真实配置后的审批验收未完成。未部署正式、合并master、提交或推送GitHub；无关文件保留。
+
+### 2026-10-14：治理存量保护与开发机-02补充升级
+- 原因：用户批准开发机内部存量标记，防止历史混合时钟及普通必填开关误判存量/绕过主机必输。
+- 调整：档案新增系统只读governance_legacy，普通新增默认否，Create/Update禁止客户端传入；统一字段规则、编辑/同步/批量归属及前端红星读取真实标记，新主机条件不随必填开关推迟。限定升级支持feedback-02/-01到-02，重跑仅校验不重标；原合同字段安装及新档案均使用数据库时钟，更新页面说明。
+- 涉及文件：backend/app/{models/project.py,schemas/project.py,services/archive_governance_migration.py,services/database_revision.py,services/field_policy.py,services/field_catalog.py,services/project.py,services/archive_business_migration.py,services/offline_archive_import.py}；backend/scripts/dev_archive_governance_upgrade.py；对应升级/字段及历史测试夹具；frontend/src/views/project/{archiveGovernance.ts,ProjectArchive.vue}、page-guide/registry.ts及相关测试；本批规格/计划/开发记录。
+- 开发机：备份archive-governance-before-20261014-132027.db（SHA256 21a56c646492d96ed8d3c5554c4c9e1610880dfb70afab6a46a3c15e0ec96eed），升级/恢复演练通过；102条原值/日期/负责人及账号角色逐表保留，102条标记存量、0真实申请。PMS后端重载后健康ok，未操作正式环境。
+- 验证：相关组合97项、业务导出29项及独立字段目录/枚举/规则/权限/语义/生命周期通过；前端必需规范/筛选/字典/枚举/build与档案隔离浏览器通过。实际Edge新建字段顺序及红星核对，关闭未保存表单，无业务写入；截图actual-create-02.png。
+- 边界：测试账号最小授权范围已列出待批准，未改角色或ael部门。历史期初导入缺项例外待确认，离线导入8项错误及金蝶导入后治理维护缺口仍存在，不称整批最终完工；不合并、提交、推送或部署正式。
+- 最终补充核验：新增“标记更新后失败”恢复测试，相关组合98项退出0；主从浏览器通过，说明更新后构建退出0。只读复核确认迁移幂等/回滚和普通接口写保护无新增缺陷，历史导入后治理缺口保留为待确认项。
+
+### 2026-10-14：历史导入兼容与最小测试授权完成
+- 原因：用户批准保留历史期初导入缺项例外，以及开发机A000645最小角色、ael信息化归属和新测试档案审批验证。
+- 调整：受控离线/金蝶期初导入服务端标记存量；金蝶导入检查初始化模式、有效操作人、独立导入权限及全部业务数据范围。仅历史导入可补入空客户完整名称，不覆盖已有值；普通离线档案编辑仍只读，内部开关不进入Schema。更新档案说明及字段目录描述。
+- 开发机配置：新增dev_archive_approval_acceptance角色（本部门范围、12吋Bench、档案查看/编辑及必要菜单），仅追加给A000645；ael部门补为信息化。调用现有服务记录3条配置日志，旧角色/授权、密码、邮箱、credential_version和102条档案原值保留；备份archive-test-access-before-20261014-133742.db。
+- 涉及文件：backend/app/services/{offline_archive_import.py,kingdee_initial_archive.py,field_policy.py,field_catalog.py}；backend/tests/{offline_archive_import_contract.py,offline_archive_contract.py,kingdee_initial_archive_contract.py,archive_initial_governance_contract.py,dev_archive_test_access_contract.py}；backend/scripts/{dev_archive_test_access.py,dev_archive_governance_acceptance.py}；frontend/src/page-guide/registry.ts；本批规格、实施计划和开发验证记录。
+- 验证：客户完整名称导入、普通离线编辑拒绝均RED→GREEN；相关组合148项退出0，金蝶期初/字段规则/目录/枚举独立契约通过。真实开发资料私有副本API验证ael新增/提交、必输拦截、待批正式值不变、A000645最小权限及新增403、审批通过和重复幂等；不启动工作线程、不写外部ERP、日常库0测试申请。前端必需style/list/system-ui、archive-filter、字典/枚举、说明及build退出0，构建仅原包体警告。最终独立只读复核56项通过，无范围内残留问题。
+- 页面与边界：实际Edge已登录ael，说明初始化分组及历史只读规则核对，截图actual-guide-final.png。批准的开发机实施和技术验证完成，待用户验收；未以A000645密码登录，未部署或升级正式、提交、合并master、推送GitHub；不自动填97条缺负责人档案，不改无关文件。
+
+### 2026-10-14：档案治理正式发布准备
+- 原因：用户要求更新正式环境，并明确批准feedback-02至archive-governance-02限定升级及编辑规则生效；人员资料后续自行维护。
+- 调整：创建独立正式发布计划和受保护发布助手，复用固定旧助手备份/凭据输入/只停启PMS/配套回退。新校验仅允许申请表、状态枚举、7项规则、档案存量标记及档案计划2列移除，权限/人员/其他业务原值保留；备份或差异不一致即停止，不自动恢复数据库。
+- 涉及文件：docs/superpowers/plans/2026-10-14-archive-governance-server-release.md；.runtime/archive-governance-release-20261014/{server_release.py,test_release.py}及本日志。
+- 验证：发布助手RED→GREEN，3项契约通过，覆盖精确结构/业务/授权差异限制、枚举/原规则保留、独立批准/备份/停启顺序和无凭据参数。仅只读核对正式bd6f864、干净工作区、版本feedback-02及档案3646/缺负责人3643/缺部门负责人6/有计划值3；ERP和导出活动0。
+- 边界：本条仅记准备，尚未正式备份、升级、停启或发布；不复制开发机测试授权/人员/数据，不合并master或推送GitHub。

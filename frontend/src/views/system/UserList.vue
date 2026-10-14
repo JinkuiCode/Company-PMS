@@ -50,7 +50,10 @@
           <span class="pms-section-title">用户管理</span>
           <span v-if="selectedDeptName" class="pms-chip">{{ selectedDeptName }}</span>
         </div>
-        <el-button v-if="hasPermission('system:user:add')" type="primary" size="small" @click="openUserDialog()">新增用户</el-button>
+        <div class="pms-system-toolbar-actions">
+          <el-button v-if="hasPermission('system:user:add')" type="primary" size="small" @click="openUserDialog()">新增用户</el-button>
+          <PmsPageGuide page="users" />
+        </div>
       </div>
 
         <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="system-user" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" />
@@ -116,6 +119,23 @@
             <PmsTextControl id="dept-name" v-model="deptForm.dept_name" :disabled="deptSaving" aria-label="部门名称" />
           </PmsFormField>
         </el-form-item>
+        <el-form-item prop="leader_id">
+          <PmsFormField field-id="dept-leader" label="部门负责人" required :error="deptLeaderError">
+            <PmsSelectControl
+              id="dept-leader"
+              v-model="deptForm.leader_id"
+              :options="deptLeaderOptions"
+              :loading="deptLeadersLoading"
+              :disabled="deptSaving || deptLeadersLoading || Boolean(deptLeaderError)"
+              aria-label="部门负责人"
+              aria-required="true"
+              placeholder="请选择部门负责人"
+              filterable
+              clearable
+            />
+            <el-button v-if="deptLeaderError" class="pms-button-auxiliary" @click="loadDeptLeaders">重试</el-button>
+          </PmsFormField>
+        </el-form-item>
         <el-form-item>
           <PmsFormField field-id="dept-sort" label="排序">
             <PmsNumberControl id="dept-sort" v-model="deptForm.sort" :min="0" :disabled="deptSaving" aria-label="部门排序" />
@@ -135,7 +155,7 @@
       </el-form>
       <template #footer>
         <el-button :disabled="deptSaving" @click="deptDialogVisible = false">取消</el-button>
-        <el-button v-if="isDeptEdit ? hasPermission('system:user:edit') : hasPermission('system:user:add')" type="primary" :loading="deptSaving" native-type="submit" form="pms-dept-form">保存</el-button>
+        <el-button v-if="isDeptEdit ? hasPermission('system:user:edit') : hasPermission('system:user:add')" type="primary" :loading="deptSaving" :disabled="deptLeadersLoading || Boolean(deptLeaderError)" native-type="submit" form="pms-dept-form">保存</el-button>
       </template>
     </PmsFormDrawer>
 
@@ -146,6 +166,7 @@
 <script setup lang="ts">
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import { useSystemQuery, loadCompleteDataset } from '@/query-system/system-adapter'
 import type { QueryCondition } from '@/query-system/core'
 import { computed, ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
@@ -161,6 +182,7 @@ import {
   PmsFormDrawer,
   PmsFormField,
   PmsNumberControl,
+  PmsSelectControl,
   PmsSwitchControl,
   PmsTextControl,
   PmsTreeSelectControl,
@@ -195,8 +217,53 @@ const deptDialogVisible = ref(false)
 const isDeptEdit = ref(false)
 const deptFormRef = ref<FormInstance>()
 const deptSaving = ref(false)
-const deptForm = reactive({ id: 0, parent_id: 0, dept_name: '', sort: 0, status: 1 })
-const deptRules: FormRules = { dept_name: [{ required: true, message: '请输入部门名称' }] }
+const deptForm = reactive({ id: 0, parent_id: 0, dept_name: '', leader_id: null as number | null, sort: 0, status: 1 })
+const deptLeaderUsers = ref<Array<{ id: number; real_name: string; username: string }>>([])
+const deptLegacyLeaderLabel = ref('')
+const deptLeadersLoading = ref(false)
+const deptLeaderError = ref('')
+let deptLeaderRequest: AbortController | undefined
+const deptLeaderOptions = computed<PmsOption[]>(() => {
+  const options: PmsOption[] = deptLeaderUsers.value.map(user => ({
+    value: user.id, label: `${user.real_name || user.username}（${user.username}）`,
+  }))
+  if (deptForm.leader_id != null && !options.some(option => option.value === deptForm.leader_id)) {
+    options.push({ value: deptForm.leader_id, label: `${deptLegacyLeaderLabel.value || `用户${deptForm.leader_id}`}（不可选）`, disabled: true })
+  }
+  return options
+})
+const deptRules: FormRules = {
+  dept_name: [{ required: true, message: '请输入部门名称' }],
+  leader_id: [{ required: true, message: '请选择部门负责人', trigger: 'change' }, {
+    validator: (_rule, value, callback) => callback(
+      value != null && !deptLeaderUsers.value.some(user => user.id === value)
+        ? new Error('请选择启用的PMS用户') : undefined,
+    ), trigger: 'change',
+  }],
+}
+
+async function loadDeptLeaders() {
+  deptLeaderRequest?.abort()
+  const controller = new AbortController()
+  deptLeaderRequest = controller
+  deptLeadersLoading.value = true
+  deptLeaderError.value = ''
+  deptLeaderUsers.value = []
+  try {
+    const users = await request.get('/users/options', { signal: controller.signal })
+    if (deptLeaderRequest === controller && deptDialogVisible.value) deptLeaderUsers.value = users as any
+  } catch {
+    if (!controller.signal.aborted && deptLeaderRequest === controller && deptDialogVisible.value) {
+      deptLeaderError.value = '无法加载负责人选项，请重试'
+    }
+  } finally {
+    if (deptLeaderRequest === controller) deptLeadersLoading.value = false
+  }
+}
+watch(deptDialogVisible, visible => {
+  if (!visible) deptLeaderRequest?.abort()
+})
+onBeforeUnmount(() => deptLeaderRequest?.abort())
 
 async function fetchDeptTree() {
   const tree = (await request.get('/depts/tree')) as any
@@ -250,9 +317,12 @@ async function handleDeptDrop(draggingNode: any, dropNode: any, dropType: string
     const parentId = parentNode?.data?.id
     newParentId = (parentId === undefined || parentId === 0) ? 0 : parentId
   }
-  await request.put(`/depts/${dragId}`, { parent_id: newParentId })
-  ElMessage.success('部门层级已更新')
-  await fetchDeptTree()
+  try {
+    await request.put(`/depts/${dragId}`, { parent_id: newParentId })
+    ElMessage.success('部门层级已更新')
+  } finally {
+    await fetchDeptTree()
+  }
 }
 
 // 右键菜单
@@ -284,15 +354,18 @@ function openDeptDialog(row?: any, parentId?: number) {
   isDeptEdit.value = !!(row && row.id)
   deptFormRef.value?.resetFields()
   if (row && row.id) {
-    Object.assign(deptForm, { id: row.id, parent_id: row.parent_id ?? 0, dept_name: row.dept_name, sort: row.sort ?? 0, status: row.status ?? 1 })
+    Object.assign(deptForm, { id: row.id, parent_id: row.parent_id ?? 0, dept_name: row.dept_name, leader_id: row.leader_id ?? null, sort: row.sort ?? 0, status: row.status ?? 1 })
+    deptLegacyLeaderLabel.value = row.leader_label || ''
   } else {
-    Object.assign(deptForm, { id: 0, parent_id: parentId ?? 0, dept_name: '', sort: 0, status: 1 })
+    Object.assign(deptForm, { id: 0, parent_id: parentId ?? 0, dept_name: '', leader_id: null, sort: 0, status: 1 })
+    deptLegacyLeaderLabel.value = ''
   }
   deptDialogVisible.value = true
+  void loadDeptLeaders()
 }
 
 async function handleDeptSubmit() {
-  if (deptSaving.value) return
+  if (deptSaving.value || deptLeadersLoading.value || deptLeaderError.value) return
   if (isDeptEdit.value ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
   const valid = await deptFormRef.value?.validate().catch(() => false)
   if (!valid || deptSaving.value) return

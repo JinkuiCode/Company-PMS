@@ -35,7 +35,7 @@ def archive_columns():
     )})
     fields['product_line_id'] = (Archive.business_product_line_id, 'number')
     fields.update({name: (getattr(Archive, name), 'date') for name in (
-        'plan_start_date', 'plan_end_date', 'created_at', 'updated_at', 'erp_sync_time',
+        'created_at', 'updated_at', 'erp_sync_time',
         'contract_signed_date', 'contract_ship_date', 'actual_ship_date', 'warranty_end_date',
     )})
     from app.services.offline_archive_fields import OFFLINE_FIELDS

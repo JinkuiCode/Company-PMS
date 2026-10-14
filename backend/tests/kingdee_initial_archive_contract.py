@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.environ["DB_DIALECT"] = "sqlite"
 os.environ["SQLITE_DB_PATH"] = str(ROOT / "data" / "pms-test-kingdee-initial.db")
+import app.models.init_db  # Register all related archive and lifecycle tables.
 
 
 def test_preflight_maps_only_remark_to_pms_name():
@@ -147,17 +148,27 @@ def test_nameless_archive_requires_name_before_edit_sync_or_progress():
         update_archive,
         validate_archive_for_business_operation,
     )
+    from app.models.user import SysUser
+    from app.models.rbac import SysDept
+    from app.services.archive_change import archive_business_version
+    from app.models.product_line import SysProductLine
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
+        user=SysUser(id=1,username='fixture',real_name='测试',password_hash='fixture',status=1)
+        department=SysDept(id=1,dept_name='测试部门',leader_id=1,status=1)
+        db.add_all([user,department]);db.flush();user.dept_id=department.id
+        line=SysProductLine(source_key='kingdee',organization_id=100,organization_code='100',organization_name='测试',display_name='测试',name_key='test')
+        db.add(line);db.flush()
         archive = PmsProjectArchive(
-            project_code="K-UNNAMED", project_name=None, data_origin="kingdee_initial"
+            project_code="K-UNNAMED", project_name=None, data_origin="kingdee_initial",manager_id=1,business_product_line_id=line.id
         )
         db.add(archive)
         db.commit()
         for action in (
-            lambda: update_archive(db, archive.id, ArchiveUpdate(customer="新客户"), user_id=1),
+            lambda: update_archive(db, archive.id, ArchiveUpdate(customer="新客户",expected_version=archive_business_version(archive)), user_id=1,
+                scope_context={'user_id':1,'data_scope':4,'permissions':['business:data:all','project:archive:edit']}),
             lambda: validate_archive_for_business_operation(db, archive),
             lambda: create_project(
                 db,
@@ -188,6 +199,7 @@ def test_sqlite_upgrade_preserves_archive_and_allows_multiple_empty_names():
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE sys_user (id INTEGER PRIMARY KEY)"))
+        connection.execute(text("CREATE TABLE sys_product_line (id INTEGER PRIMARY KEY)"))
         connection.execute(text("""
             CREATE TABLE pms_project_archive (
                 id INTEGER PRIMARY KEY, project_code NVARCHAR(32) NOT NULL,
@@ -323,19 +335,34 @@ def test_imported_archive_has_provenance_and_audit_without_fake_sync_time():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
+        from app.models.user import SysUser
+        from app.models.rbac import SysRole,SysMenu,SysRoleMenu,SysUserRole
+        user=SysUser(username='initial-importer',real_name='期初操作人',password_hash='fixture',status=1)
+        role=SysRole(role_code='initial-importer',role_name='期初角色',status=1,data_scope=4)
+        db.add_all([user,role]);db.flush();db.add(SysUserRole(user_id=user.id,role_id=role.id))
+        for code in ('project:archive:import','business:data:all'):
+            menu=SysMenu(menu_name=code,menu_type='B',permission_code=code,status=1)
+            db.add(menu);db.flush();db.add(SysRoleMenu(role_id=role.id,menu_id=menu.id))
+        db.commit()
         inserted = insert_initial_archives(db, [{
             "project_code": "K-1", "project_name": None,
             "source_id": "source-1", "data_origin": "kingdee_initial",
-        }], operator_id=None)
+        }], operator_id=user.id)
         db.commit()
         archive = db.query(PmsProjectArchive).one()
         assert inserted == 1
         assert archive.project_name is None
         assert archive.data_origin == "kingdee_initial"
+        assert archive.governance_legacy is True
         assert archive.erp_synced == 0
         assert archive.erp_sync_status == "historical"
         assert archive.erp_sync_time is None
         assert db.query(SysOperationLog).count() == 1
+        from app.services.field_policy import validate_business_field_write
+        from app.services.operation_log import serialize_model
+        validate_business_field_write(db,'project_archive',current_values=serialize_model(archive),
+            updates={'customer':'补充客户'},entity_created_at=archive.created_at,is_create=False,
+            entity_governance_legacy=archive.governance_legacy)
 
         from app.services.project_archive_lifecycle import get_archive_delete_guard
 

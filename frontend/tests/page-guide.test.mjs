@@ -8,7 +8,7 @@ const { pageGuides, findGuideEntries } = await import(registryFile.href)
 const { migrateReportIdentity } = await import('../src/views/reports/report-identity-layout.ts')
 
 test('approved business surfaces share searchable operation and field instructions', () => {
-  assert.deepEqual(Object.keys(pageGuides).sort(), ['archive', 'feedback', 'inventory', 'purchase', 'stock'])
+  assert.deepEqual(Object.keys(pageGuides).sort(), ['archive', 'archiveChanges', 'feedback', 'inventory', 'purchase', 'stock', 'users'])
   for (const guide of Object.values(pageGuides)) {
     assert.ok(guide.title && guide.operations.length && guide.fields.length)
     assert.equal(new Set(guide.fields.map(item => item.label)).size, guide.fields.length)
@@ -18,9 +18,16 @@ test('approved business surfaces share searchable operation and field instructio
   assert.ok(findGuideEntries(pageGuides.stock, 'fields', 'NULL').some(entry => /0/.test(entry.logic)))
   assert.ok(!pageGuides.inventory.fields.some(entry => entry.label === '组织'))
   assert.ok(pageGuides.archive.fields.some(entry => entry.label === '项目名称'))
+  assert.ok(!pageGuides.archive.fields.some(entry=>entry.label.includes('计划开始')))
+  assert.ok(findGuideEntries(pageGuides.archive,'operations','审批').some(entry=>entry.logic.includes('审批前正式档案保持不变')))
   for (const label of ['请购组织','关闭状态','订单数据状态','入库数据状态','待下单数量','待入库数量','申请单行号','累计退料数量','累计净入库数量']) {
     assert.ok(pageGuides.purchase.fields.some(entry=>entry.label.includes(label)), `采购字段说明应覆盖${label}`)
   }
+})
+
+test('department instructions cover cross-department leaders without granting user access', () => {
+  assert.ok(findGuideEntries(pageGuides.users, 'operations', '跨部门兼任').some(item => /多个部门/.test(item.logic)))
+  assert.ok(findGuideEntries(pageGuides.users, 'fields', '部门负责人').some(item => /启用.*用户/.test(item.logic)))
 })
 
 test('identity migration puts product line first, drops obsolete report columns and preserves widths', () => {

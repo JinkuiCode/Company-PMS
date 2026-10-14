@@ -39,6 +39,7 @@ ENTITY_CATALOG_MODULES = {
     "sys_role": "role",
     "sys_menu": "permission_menu",
     "sys_dept": "department",
+    'pms_archive_change': 'archive_change',
     "sys_enum_item": "enum_item",
     "pms_project": "project_progress",
     "pms_project_archive": "project_archive",
@@ -282,6 +283,20 @@ def build_operation_log_diff_items(
     """把原始差异转换为面向业务人员的中文字段变更项。"""
     catalog = catalog or _catalog_index()
     enum_maps = enum_maps or _enum_label_maps(db)
+    reference_maps = {}
+    if db is not None and entity_type == 'pms_project_archive':
+        from app.models.user import SysUser
+        from app.models.product_line import SysProductLine
+        for field in ('manager_id','product_line_id','business_product_line_id'):
+            values = (diff or {}).get(field, {})
+            ids = {int(value) for value in (values.get('before'), values.get('after')) if value is not None and str(value).isdigit()}
+            if not ids:
+                continue
+            if field == 'manager_id':
+                reference_maps[field] = {str(user.id): f'{user.real_name or user.username}（{user.username}）'
+                                         for user in db.query(SysUser).filter(SysUser.id.in_(ids)).all()}
+            else:
+                reference_maps[field] = {str(line.id): line.display_name for line in db.query(SysProductLine).filter(SysProductLine.id.in_(ids)).all()}
     items: list[dict[str, Any]] = []
     for field_key, before, after in _flatten_diff_entries(diff):
         field_label, field_group, enum_code, field_code = _field_metadata(
@@ -311,6 +326,10 @@ def build_operation_log_diff_items(
                 enum_maps=enum_maps,
             ),
         })
+        for side, value in (('before', before), ('after', after)):
+            label = reference_maps.get(field_code, {}).get(str(value))
+            if label is not None:
+                items[-1][f'{side}_display'] = label
     return items
 
 

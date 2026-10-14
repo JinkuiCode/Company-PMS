@@ -25,7 +25,7 @@ with SessionLocal() as db:
         project_code=f'PAGE-{i:04}', project_name='long name ' * 10,
         customer='target' if i % 2 == 0 else 'other',
         product_category=1, is_enabled=1, created_by=user.id, manager_id=user.id,
-        plan_start_date=datetime.datetime(2026, 9, 18, 12),
+        contract_signed_date=datetime.date(2026, 9, 18),
     ) for i in range(1040)])
     db.commit()
     statements = []
@@ -36,7 +36,7 @@ with SessionLocal() as db:
     first = get_archive_list(db, page_size=15)
     print(f'1040 archives, page 15: {len(statements)} SQL statements, {(perf_counter() - started) * 1000:.1f} ms (local SQLite)')
     assert len(first['items']) == 15 and first['total'] == 1040
-    assert len(statements) <= 10, f'Query count grows per row: {len(statements)}'
+    assert len(statements) <= 13, f'Query count grows per row: {len(statements)}'
     result = get_archive_list(db, page=2, page_size=15,
         filters='[{"field":"customer","operator":"equals","value":"target"}]',
         sort='[{"colId":"project_code","sort":"asc"}]')
@@ -46,8 +46,8 @@ with SessionLocal() as db:
     assert get_archive_list(db, keyword='PAGE_%')['total'] == 0
     assert get_archive_list(db, filters='[{"field":"erp_sync_status","operator":"equals","value":"pending"}]')['total'] == 0
     assert get_archive_list(db, filters='[{"field":"created_by_name","operator":"equals","value":"查询测试人"}]')['total'] == 1040
-    assert get_archive_list(db, filters='[{"field":"plan_start_date","operator":"equals","value":"2026-09-18"}]')['total'] == 1040
-    assert get_archive_list(db, filters='[{"field":"plan_start_date","operator":"after","value":"2026-09-18"}]')['total'] == 0
+    assert get_archive_list(db, filters='[{"field":"contract_signed_date","operator":"equals","value":"2026-09-18"}]')['total'] == 1040
+    assert get_archive_list(db, filters='[{"field":"contract_signed_date","operator":"after","value":"2026-09-18"}]')['total'] == 0
     assert get_archive_list(db, scope_context={'data_scope': 1, 'user_id': user.id + 1, 'product_category_ids': None})['total'] == 0
     assert get_archive_list(db, scope_context={'permissions':['business:data:all'], 'product_category_ids':[2]})['total'] == 1040
     assert get_archive_list(db, archive_id=first['items'][0].id)['total'] == 1

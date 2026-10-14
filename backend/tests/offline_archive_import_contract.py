@@ -29,6 +29,7 @@ class ImportContract(unittest.TestCase):
         self.assertEqual(apply_import(self.db,self.payload,self.uid,self.scope)["created"],0)
         self.assertEqual(self.db.query(ErpSyncTask).count(),0)
         for a in self.db.query(PmsProjectArchive):
+            self.assertTrue(a.governance_legacy)
             self.assertEqual(a.erp_sync_policy,"manual")
             self.assertIsNone(a.business_product_line_id)
     def test_collision_blocks_entire_batch(self):
@@ -47,6 +48,31 @@ class ImportContract(unittest.TestCase):
         from app.services.offline_archive_import import preview_import
         self.payload["rows"][0]["values"]["erp_sync_policy"]="auto"
         self.assertTrue(preview_import(self.db,self.payload,self.scope)["errors"])
+    def test_governance_marker_cannot_be_supplied_by_import_payload(self):
+        from app.services.offline_archive_import import preview_import
+        self.payload['rows'][0]['values']['governance_legacy']=True
+        self.assertTrue(preview_import(self.db,self.payload,self.scope)['errors'])
+    def test_imported_gaps_remain_compatible_with_governance_validation(self):
+        from app.services.offline_archive_import import apply_import
+        from app.services.field_policy import validate_business_field_write
+        from app.services.operation_log import serialize_model
+        apply_import(self.db,self.payload,self.uid,self.scope)
+        archive=self.db.query(PmsProjectArchive).first()
+        validate_business_field_write(self.db,'project_archive',current_values=serialize_model(archive),
+            updates={'customer':'补历史资料'},entity_created_at=archive.created_at,is_create=False,
+            entity_governance_legacy=archive.governance_legacy)
+    def test_historical_import_keeps_nonempty_customer_full_name(self):
+        from app.services.offline_archive_import import preview_import,apply_import
+        self.payload['rows'][0]['values']['customer_full_name']='历史完整客户名称'
+        self.assertEqual(preview_import(self.db,self.payload,self.scope)['errors'],[])
+        apply_import(self.db,self.payload,self.uid,self.scope)
+        self.assertEqual(self.db.query(PmsProjectArchive).filter_by(project_code='A-1').one().customer_full_name,'历史完整客户名称')
+    def test_historical_import_cannot_overwrite_an_existing_full_name(self):
+        from app.services.field_policy import validate_business_field_write
+        with self.assertRaises(HTTPException):
+            validate_business_field_write(self.db,'project_archive',current_values={'customer_full_name':'已有名称'},
+                updates={'customer_full_name':'覆盖名称'},entity_created_at=None,is_create=False,
+                historical_import=True,entity_governance_legacy=True,allow_initial_name_fill=True)
     def test_safe_rollback_and_modified_block(self):
         from app.services.offline_archive_import import apply_import,rollback_import
         result=apply_import(self.db,self.payload,self.uid,self.scope)

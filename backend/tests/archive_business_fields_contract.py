@@ -17,6 +17,7 @@ from app.models.product_line import SysProductLine
 from app.models.dict import SysDict, SysDictItem
 from app.models.erp_task import ErpSyncTask
 from app.models.field_policy import SysBusinessFieldPolicy
+from app.models.rbac import SysDept
 from app.schemas.project import ArchiveCreate, ArchiveUpdate, ArchiveResponse
 from app.services import project
 from app.services.enum_registry import initialize_enum_definitions, count_enum_references
@@ -33,13 +34,19 @@ class ArchiveBusinessFields(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         self.db = Session(self.engine)
         initialize_enum_definitions(self.db)
+        for code,value,label in [('archive_machine_model','1','测试机型'),('archive_quantity_unit','7','台')]:
+            definition=self.db.query(SysDict).filter_by(dict_code=code).one()
+            self.db.add(SysDictItem(dict_id=definition.id,item_value=value,item_label=label,status=1,sort=1))
         self.user = SysUser(username='fields-test', real_name='测试人', password_hash='x', status=1)
         self.db.add(self.user)
+        self.db.flush()
+        department = SysDept(dept_name='测试部门',leader_id=self.user.id,status=1)
+        self.db.add(department);self.db.flush();self.user.dept_id=department.id
         self.db.add_all([SysProductLine(id=i, source_key='kingdee', organization_id=i * 100,
             organization_code=str(i), organization_name=f'组织{i}', display_name=f'产品线{i}',
             name_key=f'line-{i}') for i in (1, 2)])
         self.db.commit()
-        self.scope = {'user_id': self.user.id, 'data_scope': 4, 'product_line_ids': [1, 2]}
+        self.scope = {'user_id': self.user.id, 'data_scope': 4, 'product_line_ids': [1, 2], 'permissions':['project:archive:view','project:archive:edit','project:archive:add']}
 
     def tearDown(self):
         self.db.close()
@@ -48,9 +55,17 @@ class ArchiveBusinessFields(unittest.TestCase):
     def upgrade(self):
         from app.services.archive_business_migration import upgrade_archive_business_fields
         upgrade_archive_business_fields(self.engine)
+        from app.services.archive_governance_migration import install_archive_governance
+        install_archive_governance(self.db);self.db.commit()
+
+    def update(self, db, archive_id, data, user_id):
+        from app.services.archive_change import archive_business_version
+        version=archive_business_version(db.get(PmsProjectArchive,archive_id))
+        return project.update_archive(db,archive_id,data.model_copy(update={'expected_version':version}),user_id,scope_context=self.scope)
 
     def create(self, **kwargs):
         kwargs.setdefault('product_line_id', 1)
+        for key,value in {'archive_category':2,'machine_model':1,'quantity':1,'quantity_unit':7}.items():kwargs.setdefault(key,value)
         legacy_category=kwargs.pop('product_category',None)
         with patch('app.services.product_line_source.get_organization'):
             result = project.create_archive(self.db, ArchiveCreate(
@@ -75,7 +90,7 @@ class ArchiveBusinessFields(unittest.TestCase):
             archive.erp_sync_status = status
             archive.erp_error_msg = '保留原失败原因' if status == 'failed' else None
             self.db.commit()
-            result = project.update_archive(self.db, archive_id, ArchiveUpdate(
+            result = self.update(self.db, archive_id, ArchiveUpdate(
                 customer=status, project_code=' NEW ', project_name=' 测试 '), self.user.id)
             self.assertEqual(self.db.query(ErpSyncTask).count(), 1)
             self.assertFalse(result.get('sync_queued', True))
@@ -90,12 +105,12 @@ class ArchiveBusinessFields(unittest.TestCase):
         self.assertEqual(self.db.query(ErpSyncTask).count(), 1)
         for fields in ({'project_name': '修改名称'}, {'project_code': 'NEW-2'}):
             count = self.db.query(ErpSyncTask).count()
-            result = project.update_archive(self.db, archive_id, ArchiveUpdate(**fields), self.user.id)
+            result = self.update(self.db, archive_id, ArchiveUpdate(**fields), self.user.id)
             self.assertTrue(result.get('sync_queued', False))
             self.assertEqual(self.db.query(ErpSyncTask).count(), count + 1)
 
     def test_required_dates_new_records_only_and_reset_preserves_cutoff(self):
-        old = PmsProjectArchive(project_code='OLD', project_name='历史', created_at=datetime.now()-timedelta(days=1))
+        old = PmsProjectArchive(project_code='OLD', project_name='历史', manager_id=self.user.id, business_product_line_id=1, governance_legacy=True, created_at=datetime.now()-timedelta(days=1))
         self.db.add(old)
         self.db.commit()
         self.upgrade()
@@ -104,17 +119,17 @@ class ArchiveBusinessFields(unittest.TestCase):
         self.assertEqual(caught.exception.status_code, 422)
         self.assertEqual({x['field_key'] for x in caught.exception.detail['fields']}, set(DATES))
         self.assertEqual(self.db.query(ErpSyncTask).count(), 0)
-        project.update_archive(self.db, old.id, ArchiveUpdate(customer='历史允许维护'), self.user.id)
+        self.update(self.db, old.id, ArchiveUpdate(customer='历史允许维护'), self.user.id)
         created = self.create(**DATES)
         with self.assertRaises(HTTPException):
-            project.update_archive(self.db, created, ArchiveUpdate(contract_ship_date=None), self.user.id)
+            self.update(self.db, created, ArchiveUpdate(contract_ship_date=None), self.user.id)
         self.db.expire_all()
         self.assertIsNotNone(self.db.get(PmsProjectArchive, created).contract_ship_date)
         from app.services.field_policy import reset_field_policies
         cutoff = self.db.query(SysBusinessFieldPolicy).filter_by(field_key='contract_ship_date').one().required_effective_at
         reset_field_policies(self.db, 'project_archive', operator_id=self.user.id)
         self.assertEqual(self.db.query(SysBusinessFieldPolicy).filter_by(field_key='contract_ship_date').one().required_effective_at, cutoff)
-        project.update_archive(self.db, old.id, ArchiveUpdate(customer='再次维护'), self.user.id)
+        self.update(self.db, old.id, ArchiveUpdate(customer='再次维护'), self.user.id)
 
     def test_roundtrip_default_manager_line_and_audit(self):
         self.upgrade()
@@ -130,10 +145,10 @@ class ArchiveBusinessFields(unittest.TestCase):
         item = project.get_archive_list(self.db)['items'][0]
         self.assertEqual(item.contact_phone, '+86 013800000000')
         self.assertEqual(item.warranty_end_date.isoformat(), '2028-12-01')
-        project.update_archive(self.db, archive_id, ArchiveUpdate(manager_id=None), self.user.id)
-        project.update_archive(self.db, archive_id, ArchiveUpdate(project_contact='李四'), self.user.id)
+        with self.assertRaises(HTTPException):self.update(self.db, archive_id, ArchiveUpdate(manager_id=None), self.user.id)
+        self.update(self.db, archive_id, ArchiveUpdate(project_contact='李四'), self.user.id)
         self.db.refresh(archive)
-        self.assertIsNone(archive.manager_id)
+        self.assertEqual(archive.manager_id,self.user.id)
         from app.models.operation_log import SysOperationLog
         logs = self.db.query(SysOperationLog).filter_by(entity_id=str(archive_id)).all()
         self.assertTrue(any('project_contact' in str(log.diff_data) for log in logs))
@@ -146,7 +161,7 @@ class ArchiveBusinessFields(unittest.TestCase):
         self.assertEqual(self.db.query(PmsProjectArchive).count(), 0)
         archive_id = self.create(**DATES)
         with self.assertRaises(HTTPException):
-            project.update_archive(self.db, archive_id, ArchiveUpdate(customer='不可部分保存', address_detail='不完整'), self.user.id)
+            self.update(self.db, archive_id, ArchiveUpdate(customer='不可部分保存', address_detail='不完整'), self.user.id)
         self.db.expire_all()
         self.assertIsNone(self.db.get(PmsProjectArchive, archive_id).customer)
 
@@ -205,7 +220,7 @@ class ArchiveBusinessFields(unittest.TestCase):
             is_enabled=False, expected_updated_at=item.updated_at), operator_id=self.user.id)
         with self.assertRaises(HTTPException):
             self.create(project_code='DISABLED', **DATES, product_line_id=2)
-        project.update_archive(self.db, archive_id, ArchiveUpdate(product_line_id=2, customer='历史继续维护'), self.user.id)
+        self.update(self.db, archive_id, ArchiveUpdate(product_line_id=2, customer='历史继续维护'), self.user.id)
         self.assertEqual(self.db.get(PmsProjectArchive, archive_id).business_product_line_id, 2)
 
     def test_new_field_filters_and_pagination(self):
@@ -226,11 +241,11 @@ class ArchiveBusinessFields(unittest.TestCase):
             self.db.add(SysBusinessFieldPolicy(module_code='project_archive', field_key=key,
                 visible=True, editable=False, required=False, list_available=True))
         self.db.commit()
-        project.update_archive(self.db, archive_id, ArchiveUpdate(customer='只修改客户',
+        self.update(self.db, archive_id, ArchiveUpdate(customer='只修改客户',
             actual_ship_date='2026-12-02', warranty_end_date='2027-12-02'), self.user.id)
         self.assertEqual(self.db.get(PmsProjectArchive, archive_id).customer, '只修改客户')
         with self.assertRaises(HTTPException):
-            project.update_archive(self.db, archive_id, ArchiveUpdate(actual_ship_date='2026-12-03'), self.user.id)
+            self.update(self.db, archive_id, ArchiveUpdate(actual_ship_date='2026-12-03'), self.user.id)
 
 
 if __name__ == '__main__':

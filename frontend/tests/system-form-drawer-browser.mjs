@@ -17,6 +17,7 @@ try {
     let body = []
     if (path === '/api/auth/me') body = { id: 1, username: 'mock', permissions: ['system:user:view', 'system:user:add', 'system:user:edit', 'system:enum:view', 'system:enum:add', 'system:enum:edit'] }
     else if (path === '/api/users') body = { items: [], total: 0 }
+    else if (path === '/api/users/options') body = [{ id: 2, username: 'A002', real_name: '测试负责人', dept_id: 2 }]
     else if (path === '/api/depts/tree') body = [{ id: 1, dept_name: '测试部门', parent_id: 0, sort: 0, status: 1, children: [] }]
     else if (path === '/api/dicts') body = [
       { id: 1, dict_code: 'product_category', dict_name: '产品类别', mode: 'configurable', allow_add: true, bindings: [], item_count: 1 },
@@ -48,6 +49,8 @@ try {
   await expect(drawer.getByText('请输入部门名称', { exact: true })).toBeVisible()
   assert.equal(writes.length, 0)
   await drawer.getByRole('textbox', { name: '部门名称', exact: true }).fill('子部门')
+  await drawer.locator('[aria-label="部门负责人"] .el-select__wrapper').click()
+  await page.getByRole('option', { name: '测试负责人（A002）', exact: true }).click()
   await drawer.getByRole('button', { name: '保存', exact: true }).click()
   await expect(drawer).toHaveCount(0)
   assert.equal(writes[0].data.parent_id, 1)

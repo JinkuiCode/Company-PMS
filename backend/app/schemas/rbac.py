@@ -92,7 +92,7 @@ class DeptBase(BaseModel):
 
 
 class DeptCreate(DeptBase):
-    pass
+    leader_id: int = Field(..., gt=0)
 
 
 class DeptUpdate(BaseModel):
@@ -105,6 +105,7 @@ class DeptUpdate(BaseModel):
 
 class DeptResponse(DeptBase):
     id: int
+    leader_label: str | None = None
     children: list["DeptResponse"] = []
     created_at: datetime
     updated_at: datetime

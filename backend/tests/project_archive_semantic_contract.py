@@ -116,7 +116,9 @@ def test_archive_uniqueness_and_linked_project_synchronization():
     from app.models.user import SysUser
     from app.schemas.project import ArchiveCreate, ArchiveUpdate, ProjectUpdate
     from app.services.enum_registry import initialize_enum_definitions
-    from app.services.project import create_archive as create_archive_service, update_archive, update_project
+    from app.services.project import create_archive as create_archive_service, update_archive as update_archive_service, update_project
+    from app.services.archive_change import archive_business_version
+    from app.models.dict import SysDict,SysDictItem
     from app.models.product_line import SysProductLine
     from unittest.mock import patch
 
@@ -131,11 +133,20 @@ def test_archive_uniqueness_and_linked_project_synchronization():
             organization_code='100', organization_name='测试组织', display_name='测试产品线', name_key='test')
         db.add(line)
         db.commit()
+        user.dept_id=dept.id;dept.leader_id=user.id
+        for code,value,label in [('archive_machine_model','1','机型'),('archive_quantity_unit','7','台')]:
+            definition=db.query(SysDict).filter_by(dict_code=code).one()
+            db.add(SysDictItem(dict_id=definition.id,item_value=value,item_label=label,status=1))
+        db.commit()
+        scope={'data_scope':4,'user_id':user.id,'product_line_ids':[line.id],'permissions':['project:archive:edit']}
 
         def create_archive(db, data, user_id):
             with patch('app.services.product_line_source.get_organization'):
-                return create_archive_service(db, data.model_copy(update={'product_line_id': line.id}),
-                    user_id=user_id, scope_context={'data_scope': 4, 'product_line_ids': [line.id]})
+                return create_archive_service(db, data.model_copy(update={'product_line_id':line.id,'manager_id':user.id,'archive_category':2,'machine_model':1,'quantity':1,'quantity_unit':7}),
+                    user_id=user_id, scope_context=scope)
+
+        def update_archive(db,archive_id,data,user_id):
+            return update_archive_service(db,archive_id,data.model_copy(update={'expected_version':archive_business_version(db.get(PmsProjectArchive,archive_id))}),user_id,scope_context=scope)
 
         first_id = create_archive(
             db,

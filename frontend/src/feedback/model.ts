@@ -16,9 +16,4 @@ export function validateFeedback(draft: Record<string, any>, mode: FeedbackMode)
 export const mailLabels: Record<string,string> = {pending:'待发送',waiting:'待配置',processing:'发送中',sent:'已发送',failed:'发送失败',unknown:'结果待核查'}
 export function feedbackTone(status: number | string) { return status === 5 || status === 'sent' ? 'success' : status === 6 ? 'neutral' : status === 'failed' || status === 'unknown' ? 'danger' : status === 3 || status === 'waiting' ? 'warning' : 'info' }
 
-export function newSubmissionId() {
-  const bytes=crypto.getRandomValues(new Uint8Array(16))
-  bytes[6]=(bytes[6]!&15)|64;bytes[8]=(bytes[8]!&63)|128
-  const hex=Array.from(bytes,byte=>byte.toString(16).padStart(2,'0')).join('')
-  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`
-}
+export { newSubmissionId } from '../utils/submissionId.ts'

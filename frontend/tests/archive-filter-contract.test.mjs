@@ -20,12 +20,13 @@ for (const field of [
   'product_category',
   'manager_name',
   'equipment_series',
-  'plan_start_date',
-  'plan_end_date',
+  'contract_signed_date',
+  'contract_ship_date',
   'erp_sync_status',
 ]) {
   assert.match(archive, new RegExp(field), `Project archive custom filters should include ${field}`)
 }
+assert.doesNotMatch(archive,/plan_start_date|plan_end_date/,'Removed archive plan fields must not remain queryable')
 
 assert.match(archive, /field:'is_enabled',shown:true,operator:'equals',value:1/, 'Enabled-state default belongs to shared three-part conditions')
 assert.match(archive, /value:1,label:'启用'/, 'Enabled-state filter should include enabled records')

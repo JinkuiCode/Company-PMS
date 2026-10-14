@@ -14,6 +14,9 @@ import app.models.init_db
 from app.models.project import PmsProjectArchive, PmsProject, PmsTask
 from app.models.product_line import SysProductLine
 from app.models.user import SysUser
+from app.models.rbac import SysDept
+from app.services.archive_change import archive_business_version
+from app.services.archive_governance_migration import install_archive_governance
 from app.services import project
 from app.schemas.project import ArchiveCreate, ArchiveUpdate
 from app.schemas.product_line import OrganizationOption
@@ -29,8 +32,10 @@ class ProjectScope(unittest.TestCase):
                       organization_name=str(n), display_name=str(n), name_key=str(n)) for n in (100, 200)]
         self.db.add_all([*self.users, *self.lines])
         self.db.flush()
+        self.db.add_all([SysDept(id=n,dept_name=f'部门{n}',leader_id=self.users[n-1].id,status=1) for n in (1,2)])
+        install_archive_governance(self.db)
         self.archives = [PmsProjectArchive(project_code=f'A{n}', project_name=f'A{n}', manager_id=self.users[n % 2].id,
-                        product_line_id=self.lines[0].id, business_product_line_id=line_id, created_at=datetime(2020, 1, 1))
+                        product_line_id=self.lines[0].id, business_product_line_id=line_id, governance_legacy=True, created_at=datetime(2020, 1, 1))
                          for n, line_id in enumerate((self.lines[0].id, self.lines[1].id, None))]
         self.db.add_all(self.archives)
         self.db.flush()
@@ -43,7 +48,9 @@ class ProjectScope(unittest.TestCase):
         self.db.add_all(self.tasks)
         self.db.commit()
         self.ctx = dict(user_id=self.users[0].id, dept_id=1, data_scope=4, product_category_ids=None,
-                        product_line_ids=[self.lines[0].id])
+                        product_line_ids=[self.lines[0].id],permissions=['project:archive:edit'])
+    def update(self,archive,updates,scope=None):
+        return project.update_archive(self.db,archive.id,ArchiveUpdate(**updates,expected_version=archive_business_version(archive)),self.users[0].id,scope_context=scope or self.ctx)
 
     def tearDown(self):
         self.db.close()
@@ -97,10 +104,17 @@ class ProjectScope(unittest.TestCase):
         self.assertEqual(result['items'][0].product_line_id, self.lines[1].id)
 
     def test_create_requires_authorized_line_and_stores_no_legacy_enum_value(self):
+        from app.models.dict import SysDict,SysDictItem
+        from app.services.enum_registry import initialize_enum_definitions
+        initialize_enum_definitions(self.db)
+        for code,value,label in [('archive_machine_model','1','机型'),('archive_quantity_unit','7','台')]:
+            definition=self.db.query(SysDict).filter_by(dict_code=code).one()
+            self.db.add(SysDictItem(dict_id=definition.id,item_value=value,item_label=label,status=1))
+        self.db.commit()
         option = OrganizationOption(source_key='kingdee', organization_id=100, code='100', name='100', active=True)
         with patch('app.services.product_line_source.get_organization', return_value=option):
             created = project.create_archive(self.db, ArchiveCreate(project_code='NEW', project_name='新档案',
-                        product_line_id=self.lines[0].id), self.users[0].id, scope_context=self.ctx)
+                        product_line_id=self.lines[0].id,manager_id=self.users[0].id,archive_category=2,machine_model=1,quantity=1,quantity_unit=7), self.users[0].id, scope_context=self.ctx)
         row = self.db.get(PmsProjectArchive, created['id'])
         self.assertEqual(row.business_product_line_id, self.lines[0].id)
         self.assertIsNone(row.product_line_id)
@@ -125,15 +139,13 @@ class ProjectScope(unittest.TestCase):
 
     def test_change_checks_both_lines_and_does_not_overwrite_legacy_value(self):
         with self.assertRaises(HTTPException) as caught:
-            project.update_archive(self.db, self.archives[0].id, ArchiveUpdate(product_line_id=self.lines[1].id),
-                                   self.users[0].id, scope_context=self.ctx)
+            self.update(self.archives[0],{'product_line_id':self.lines[1].id})
         self.assertEqual(caught.exception.status_code, 404)
         self.db.refresh(self.archives[0])
         self.assertEqual(self.archives[0].business_product_line_id, self.lines[0].id)
         option = OrganizationOption(source_key='kingdee', organization_id=200, code='200', name='200', active=True)
         with patch('app.services.product_line_source.get_organization', return_value=option):
-            project.update_archive(self.db, self.archives[0].id, ArchiveUpdate(product_line_id=self.lines[1].id),
-                self.users[0].id, scope_context={**self.ctx, 'product_line_ids': [r.id for r in self.lines]})
+            self.update(self.archives[0],{'product_line_id':self.lines[1].id},{**self.ctx, 'product_line_ids': [r.id for r in self.lines]})
         self.assertEqual(self.archives[0].business_product_line_id, self.lines[1].id)
         self.assertEqual(self.archives[0].product_line_id, self.lines[0].id)
 
@@ -141,29 +153,27 @@ class ProjectScope(unittest.TestCase):
         self.archives[0].erp_synced = 1
         self.db.commit()
         with self.assertRaises(HTTPException) as caught:
-            project.update_archive(self.db, self.archives[0].id, ArchiveUpdate(product_line_id=self.lines[1].id),
-                self.users[0].id, scope_context={**self.ctx, 'product_line_ids': [r.id for r in self.lines]})
+            self.update(self.archives[0],{'product_line_id':self.lines[1].id},{**self.ctx, 'product_line_ids': [r.id for r in self.lines]})
         self.assertEqual(caught.exception.status_code, 409)
 
     def test_disabled_line_allows_other_edits_but_not_selecting_a_new_line(self):
         self.lines[0].is_enabled = 0
         self.db.commit()
-        project.update_archive(self.db, self.archives[0].id, ArchiveUpdate(customer='新客户'),
-                               self.users[0].id, scope_context=self.ctx)
+        self.update(self.archives[0],{'customer':'新客户'})
         self.assertEqual(self.archives[0].customer, '新客户')
         with self.assertRaises(HTTPException):
             project.create_archive(self.db, ArchiveCreate(project_code='DISABLED', project_name='拒绝',
                         product_line_id=self.lines[0].id), self.users[0].id, scope_context=self.ctx)
 
     def test_no_legacy_category_authorization_remains_for_other_field_edits(self):
-        project.update_archive(self.db, self.archives[0].id, ArchiveUpdate(customer='可修改'),
-            self.users[0].id, scope_context={**self.ctx, 'product_category_ids': []})
+        self.update(self.archives[0],{'customer':'可修改'},{**self.ctx, 'product_category_ids': []})
         self.assertEqual(self.archives[0].customer, '可修改')
 
     def test_business_validation_uses_organization_binding_not_legacy_enum(self):
         row = self.archives[0]
         row.product_line_id = None
         row.created_at = datetime.now()
+        row.archive_category=2;row.machine_model=1;row.quantity=1;row.quantity_unit=7
         self.db.commit()
         project.validate_archive_for_business_operation(self.db, row)
         row.business_product_line_id = None

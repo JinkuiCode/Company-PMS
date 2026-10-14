@@ -16,6 +16,7 @@ from app.models.rbac import SysDept, SysRole
 from app.models.user import SysUser
 from app.models.parameter import SysParameter
 from app.models.feedback import FeedbackReport
+from app.models.archive_change import ArchiveChange
 from app.schemas.feedback import FeedbackCreate, FeedbackHandle
 from app.models.erp_task import ErpSyncTask
 from app.models.product_line import SysProductLine, SysRoleProductLine
@@ -48,6 +49,7 @@ from app.services.project_sheet_fields import (
 
 
 MODULE_CONFIGS = (
+    {'key':'archive_change','label':'项目档案变更','group':'审批字段','model':ArchiveChange,'schemas':(),'editable_schemas':()},
     {"key": "feedback", "label": "问题提报", "group": "提报字段", "model": FeedbackReport,
      "schemas": (FeedbackCreate, FeedbackHandle), "editable_schemas": (FeedbackCreate, FeedbackHandle)},
     {
@@ -186,6 +188,15 @@ FIELD_LABELS = {
     "updated_by_name": "最后编辑人",
     "erp_sync_by_name": "最后同步人",
     "dept_name": "部门名称",
+    "leader_label": "部门负责人显示名称",
+    "expected_version": "预期业务版本",
+    "can_edit": "可编辑状态",
+    "change_mode": "变更方式",
+    "change_version": "档案业务版本",
+    "approver_id": "审批人",
+    "approver_name": "审批人姓名",
+    "pending_change_id": "待处理变更申请",
+    "edit_reason": "不可编辑原因",
     "pm_name": "项目经理",
     "assignee_name": "负责人",
     "task_count": "任务数",
@@ -196,6 +207,7 @@ FIELD_LABELS = {
 
 
 ENUM_BINDINGS: dict[tuple[str, str], tuple[str | None, str]] = {
+    ('archive_change','status'):('archive_change_status','system_fixed'),
     ("feedback", "type_id"): ("feedback_type", "enum"),
     ("feedback", "module_id"): ("feedback_module", "enum"),
     ("feedback", "impact_id"): ("feedback_impact", "enum"),
@@ -224,6 +236,8 @@ ENUM_BINDINGS: dict[tuple[str, str], tuple[str | None, str]] = {
 
 
 FIELD_METADATA_OVERRIDES: dict[tuple[str, str], dict[str, Any]] = {
+    ('project_archive','governance_legacy'): {'editable':False,'source_type':'system_fixed',
+        'description':'仅独立升级及受控历史期初导入标记存量，保留历史必输兼容；普通新增和修改不可设置'},
     ("feedback", "category_id"): {"source_type": "enum", "description": "问题类型引用feedback_issue_category，需求类型引用feedback_request_category"},
     **{("feedback", field): {"editable": False, "source_type": "system_fixed"} for field in ("report_no", "submission_id", "author_id", "handler_id", "version", "created_at", "updated_at")},
     **{(module, field): {"editable": False, "description": "历史停用字段，仅保留旧值，不参与权限或业务维护"}

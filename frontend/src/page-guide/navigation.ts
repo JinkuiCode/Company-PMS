@@ -9,10 +9,12 @@ export interface GuideViewState {
 
 export const guideDestinations = {
   archive: { permission: 'project:archive:view' },
+  archiveChanges: { permission: 'project:archive:view' },
   purchase: { permission: 'report:purchase:view' },
   inventory: { permission: 'report:inventory:view' },
   stock: { permission: 'report:stock-detail:list' },
   feedback: { permission: 'feedback:view' },
+  users: { permission: 'system:user:view' },
 } satisfies Record<PageGuideKey, { permission: string }>
 
 export function isPublicGuidePath(path: string): boolean {

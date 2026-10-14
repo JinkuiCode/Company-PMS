@@ -10,7 +10,7 @@ try {
   const rows = [1, 2, 3].map(id => ({ id, project_code: `TEST-${id}`, project_name: `项目${id}`,
     customer: `客户${id}`, is_enabled: 1, created_at: '2020-01-01', status: 1,
     product_category: 1, product_line_id: 1, contract_signed_date: '2026-01-01', contract_ship_date: '2026-12-01',
-    plan_start_date: '2026-01-01', plan_end_date: '2026-12-01',
+    can_edit:true,change_mode:'direct',change_version:'a'.repeat(64),
     data_origin: 'pms', sheet_fields: {}, manager_name: '测试用户' }))
   const fields = [{ key: 'note', label: '备注', value_type: 'text', source_type: 'detail', editable: true }]
   let failSave = false, slowDetail = false, slowSave = false, writes = []
@@ -45,43 +45,40 @@ try {
   const cell = id => page.locator(`.ag-cell[col-id="project_code"]`).filter({ hasText: `TEST-${id}` }).first()
   await page.goto('http://127.0.0.1:5174/project/archive')
   await page.locator('.archive-row-actions button').first().click()
-  await expect(page.locator('.archive-drawer-title')).toHaveText('项目1')
+  await expect(page.locator('#archive-drawer-project_name')).toHaveValue('项目1')
   await cell(2).click()
-  await expect(page.locator('.archive-drawer-title')).toHaveText('项目2')
-  await page.getByRole('button', { name: '编辑客户', exact: true }).click()
+  await expect(page.locator('#archive-drawer-project_name')).toHaveValue('项目2')
   await page.locator('#archive-drawer-customer').fill('草稿')
   await cell(3).click()
-  await page.getByRole('button', { name: '取消', exact: true }).click()
-  await expect(page.locator('.archive-drawer-title')).toHaveText('项目2')
+  await page.locator('.el-message-box').getByRole('button', { name: '取消', exact: true }).click()
+  await expect(page.locator('#archive-drawer-project_name')).toHaveValue('项目2')
   failSave = true
   await cell(3).click()
   await page.getByRole('button', { name: '保存后切换', exact: true }).click()
   await expect.poll(() => writes.length).toBe(1)
-  await expect(page.locator('.archive-drawer-title')).toHaveText('项目2')
-  await expect(page.getByRole('button', { name: '编辑客户', exact: true })).toHaveText('草稿')
+  await expect(page.locator('#archive-drawer-project_name')).toHaveValue('项目2')
+  await expect(page.locator('#archive-drawer-customer')).toHaveValue('草稿')
   failSave = false
   await cell(3).click()
   await page.getByRole('button', { name: '保存后切换', exact: true }).click()
-  await expect(page.locator('.archive-drawer-title')).toHaveText('项目3')
+  await expect(page.locator('#archive-drawer-project_name')).toHaveValue('项目3')
   assert.equal(rows[1].customer, '草稿')
-  await page.getByRole('button', { name: '编辑客户', exact: true }).click()
   await page.locator('#archive-drawer-customer').fill('不保存')
   await cell(1).click()
   await page.getByRole('button', { name: '放弃修改并切换', exact: true }).click()
-  await expect(page.locator('.archive-drawer-title')).toHaveText('项目1')
+  await expect(page.locator('#archive-drawer-project_name')).toHaveValue('项目1')
   assert.equal(rows[2].customer, '客户3')
   slowSave = true
-  await page.getByRole('button', { name: '编辑客户', exact: true }).click()
   await page.locator('#archive-drawer-customer').fill('保存后仍选当前行')
   await cell(2).click()
   await page.getByRole('button', { name: '保存后切换', exact: true }).click()
   await expect(page.locator('.el-message-box')).toBeHidden()
-  await expect(page.locator('.archive-drawer-title')).toHaveText('项目1')
+  await expect(page.locator('#archive-drawer-project_name')).toHaveValue('项目1')
   await expect.poll(() => typeof releaseSave).toBe('function')
   await cell(1).click()
   releaseSave()
-  await expect(page.locator('.archive-drawer-savebar .is-loading')).toHaveCount(0)
-  await expect(page.locator('.archive-drawer-title')).toHaveText('项目1')
+  await expect(page.locator('.pms-form-drawer .is-loading')).toHaveCount(0)
+  await expect(page.locator('#archive-drawer-project_name')).toHaveValue('项目1')
   slowSave = false
   await page.goto('http://127.0.0.1:5174/project/list')
   await page.getByRole('button', { name: '编辑项目', exact: true }).first().click()
@@ -95,7 +92,7 @@ try {
   await page.getByRole('button', { name: '编辑备注', exact: true }).click()
   await page.locator('.drawer-field-editor input').fill('进度草稿')
   await cell(1).click()
-  await page.getByRole('button', { name: '取消', exact: true }).click()
+  await page.locator('.el-message-box').getByRole('button', { name: '取消', exact: true }).click()
   await expect(page.locator('.drawer-title')).toHaveText('项目3')
   await cell(1).click()
   await page.getByRole('button', { name: '放弃修改并切换', exact: true }).click()

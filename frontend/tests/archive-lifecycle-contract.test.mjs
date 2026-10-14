@@ -11,22 +11,21 @@ function functionSource(name) {
 
 assert.match(
   archive,
-  /const archiveQuery = reactive\(\{[\s\S]*?enabled:\s*'true'/,
+  /field:'is_enabled',shown:true,operator:'equals',value:1/,
   'Project archive list should default to enabled records',
 )
-assert.match(archive, /label:\s*'启用',\s*value:\s*'true'/, 'Enabled filter should expose the true protocol value')
-assert.match(archive, /label:\s*'已禁用',\s*value:\s*'false'/, 'Disabled filter should expose the false protocol value')
-assert.match(archive, /label:\s*'全部',\s*value:\s*'all'/, 'Enabled filter should expose an explicit all protocol value')
+assert.match(archive, /value:1,label:'启用'/, 'Enabled filter should expose the numeric enabled value')
+assert.match(archive, /value:0,label:'已禁用'/, 'Disabled filter should expose the numeric disabled value')
 assert.match(
   archive,
-  /\/projects\/archives\/list[\s\S]*?enabled:\s*archiveQuery\.enabled/,
+  /\/projects\/archives\/list[\s\S]*?enabled:\s*'all'/,
   'Project archive list requests should send the explicit enabled filter',
 )
 
 assert.match(archive, /project:archive:toggle/, 'Archive lifecycle controls should use the toggle permission')
 assert.match(
   archive,
-  /const editable = archiveIsEnabled\(row\) && hasPermission\('project:archive:edit'\)[\s\S]*?editable \? '编辑' : '查看'/,
+  /const editable = archiveIsEnabled\(row\) && row.can_edit === true && hasPermission\('project:archive:edit'\)[\s\S]*?editable \? '编辑' : '查看'/,
   'Rows expose edit or view; saves arrange background synchronization',
 )
 assert.match(
@@ -61,15 +60,11 @@ assert.match(
   /const archiveDrawerReadOnly = computed\(\(\) => \([\s\S]*?selectedArchive\.value\?\.is_enabled !== 1[\s\S]*?archiveDrawerLifecycleConflict\.value/,
   'Archive drawer read-only state should follow is_enabled and lifecycle conflict state',
 )
+assert.match(archive,/selectedArchive\.edit_reason/,'Read-only drawer displays the backend reason')
 assert.match(
   archive,
-  /archiveDrawerReadOnly[\s\S]*?已禁用/,
-  'Read-only archive drawers should show a disabled badge',
-)
-assert.match(
-  archive,
-  /v-if="!archiveDrawerReadOnly"[\s\S]*?class="archive-drawer-savebar"/,
-  'Read-only archive drawers should not render save or sync actions',
+  /v-if="selectedArchive.can_edit && !archiveDrawerReadOnly"/,
+  'Read-only archive drawers should not render a save action',
 )
 assert.match(
   functionSource('startArchiveFieldEdit'),

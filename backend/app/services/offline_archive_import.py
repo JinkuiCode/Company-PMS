@@ -72,7 +72,8 @@ def preview_import(db,payload,scope):
         try:
             validate_business_field_write(db,MODULE_PROJECT_ARCHIVE,current_values=serialize_model(obj) if obj else {},
                 updates={k:v for k,v in updates.items() if v is not None},entity_created_at=obj.created_at if obj else None,
-                is_create=False,historical_import=True,effective_policies=effective_policies)
+                is_create=False,historical_import=True,effective_policies=effective_policies,
+                entity_governance_legacy=obj.governance_legacy if obj else True,allow_initial_name_fill=True)
         except HTTPException as exc:error(str(exc.detail))
     return {"total":len(data["rows"]),"errors":errors,"content_hash":fingerprint,"already_imported":False,
             "created":sum(a is None for _,a,_ in plan),"updated":sum(a is not None and bool(p) for _,a,p in plan),
@@ -110,7 +111,7 @@ def apply_import(db,payload,user_id,scope,request=None,*,source_file_hash=None):
                 values=ImportPayload.model_validate({"rows":[row]}).rows[0].values.model_dump(exclude={"product_line_id"})
                 values["project_code"]=values["project_code"].strip()
                 values["project_name"]=(values["project_name"] or "").strip() or None
-                obj=PmsProjectArchive(**values,data_origin="offline_initial",erp_sync_policy="manual",erp_sync_status=None,
+                obj=PmsProjectArchive(**values,data_origin="offline_initial",governance_legacy=True,erp_sync_policy="manual",erp_sync_status=None,
                     created_by=user_id,updated_by=user_id,business_product_line_id=None)
                 db.add(obj);operation="created";created+=1
             elif updates:
@@ -193,7 +194,7 @@ def assign_product_line(db,payload,user_id,scope,request=None):
             before=serialize_model(a)
             validate_business_field_write(db,MODULE_PROJECT_ARCHIVE,current_values={**serialize_model(a), "product_line_id":a.business_product_line_id},
                 updates={"product_line_id":data.product_line_id},entity_created_at=a.created_at,is_create=False,
-                historical_import=a.data_origin=="offline_initial")
+                historical_import=a.data_origin=="offline_initial",entity_governance_legacy=a.governance_legacy)
             a.business_product_line_id=data.product_line_id;a.updated_by=user_id;a.updated_at=datetime.now()
             _log(db,"update",a,user_id,request,before=before)
         db.commit();return {"updated":len(objects),"msg":"产品线已分配，未触发金蝶同步"}

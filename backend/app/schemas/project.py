@@ -30,6 +30,7 @@ class ArchiveBusinessFields(BaseModel):
 
 
 class ArchiveCreate(ArchiveBusinessFields):
+    model_config = {'extra': 'forbid'}
     project_code: str = Field(..., max_length=32)
     project_name: str = Field(..., max_length=128)
     manager_id: int | None = None
@@ -37,11 +38,11 @@ class ArchiveCreate(ArchiveBusinessFields):
     product_category: int | None = None
     equipment_series: int | None = None
     serial_no: str | None = Field(None, max_length=64)
-    plan_start_date: datetime | None = None
-    plan_end_date: datetime | None = None
 
 
 class ArchiveUpdate(ArchiveBusinessFields):
+    model_config = {'extra': 'forbid'}
+    expected_version: str | None = Field(None, min_length=64, max_length=64)
     project_code: str | None = Field(None, max_length=32)
     project_name: str | None = Field(None, max_length=128)
     manager_id: int | None = None
@@ -49,8 +50,6 @@ class ArchiveUpdate(ArchiveBusinessFields):
     product_category: int | None = None
     equipment_series: int | None = None
     serial_no: str | None = Field(None, max_length=64)
-    plan_start_date: datetime | None = None
-    plan_end_date: datetime | None = None
 
 
 class ArchiveDeleteBlocker(BaseModel):
@@ -77,6 +76,7 @@ class ArchiveResponse(ArchiveBusinessFields):
     project_code: str
     project_name: str | None
     data_origin: str = "pms"
+    governance_legacy: bool = False
     erp_sync_policy: str = "auto"
     status: int
     manager_id: int | None = None
@@ -84,8 +84,6 @@ class ArchiveResponse(ArchiveBusinessFields):
     product_category: int | None = None
     equipment_series: int | None = None
     serial_no: str | None = None
-    plan_start_date: datetime | None = None
-    plan_end_date: datetime | None = None
     manager_name: str = ""    # 关联查询
     created_by_name: str = ""   # 创建人
     updated_by_name: str = ""   # 最后编辑人
@@ -97,6 +95,13 @@ class ArchiveResponse(ArchiveBusinessFields):
     erp_error_msg: str | None = None
     is_enabled: int = 1
     can_delete: bool = True
+    can_edit: bool = False
+    change_mode: str = 'readonly'
+    change_version: str = ''
+    approver_id: int | None = None
+    approver_name: str = ''
+    pending_change_id: int | None = None
+    edit_reason: str = ''
     delete_blockers: list[ArchiveDeleteBlocker] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None

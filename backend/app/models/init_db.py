@@ -19,6 +19,7 @@ from app.models.erp_task import ErpSyncTask  # noqa: F401
 from app.models.report_export import ReportExportJob  # noqa: F401
 from app.models.product_line import SysProductLine, SysRoleProductLine  # noqa: F401
 from app.models.feedback import FeedbackReport, FeedbackFollowup, FeedbackAttachment, FeedbackNotification  # noqa: F401
+from app.models.archive_change import ArchiveChange  # noqa: F401
 from app.services.user_security_migration import upgrade_user_security, initialize_user_security
 
 
@@ -453,6 +454,9 @@ def init_db():
 
         from app.services.feedback_migration import install_feedback
         install_feedback(db)
+        if is_fresh_database:
+            from app.services.archive_governance_migration import install_archive_governance
+            install_archive_governance(db)
         db.commit()
 
     finally:

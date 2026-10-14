@@ -3,8 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import ts from 'typescript'
 const path = new URL('../src/feedback/model.ts', import.meta.url)
 assert.ok(existsSync(path), 'formal feedback model has not been implemented')
-const source = ts.transpileModule(readFileSync(path, 'utf8'), {compilerOptions:{module:ts.ModuleKind.ES2022}}).outputText
-const { freshFeedback, categoryCode, validateFeedback, allowedOutcomes, newSubmissionId } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+const { freshFeedback, categoryCode, validateFeedback, allowedOutcomes, newSubmissionId } = await import(path.href)
 assert.match(newSubmissionId(), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
 const draft = freshFeedback()
 for (const key of ['type_id','module_id','category_id','impact_id']) assert.equal(draft[key], null)

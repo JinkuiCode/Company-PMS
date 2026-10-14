@@ -11,6 +11,9 @@ import app.models.init_db
 from app.models.project import PmsProjectArchive
 from app.models.erp_task import ErpSyncTask
 from app.models.user import SysUser
+from app.models.rbac import SysDept
+from app.services.archive_change import archive_business_version
+from app.services.archive_governance_migration import install_archive_governance
 from app.models.product_line import SysProductLine
 from app.schemas.project import ArchiveUpdate, ArchiveCreate
 from app.services import project
@@ -24,33 +27,41 @@ class OfflineArchiveContract(unittest.TestCase):
         initialize_enum_definitions(self.db)
         self.user=SysUser(username="offline-test", real_name="测试",password_hash="x",status=1)
         self.db.add(self.user);self.db.commit()
-        self.scope={"user_id":self.user.id,"data_scope":4,"permissions":["business:data:all"]}
+        dept=SysDept(dept_name='测试部门',leader_id=self.user.id,status=1)
+        self.db.add(dept);self.db.flush();self.user.dept_id=dept.id
+        install_archive_governance(self.db);self.db.commit()
+        self.scope={"user_id":self.user.id,"data_scope":4,"permissions":["business:data:all","project:archive:edit"]}
     def tearDown(self):
         self.db.close();self.engine.dispose()
     def archive(self, **kw):
         obj=PmsProjectArchive(project_code="AS-TEST-1",project_name="原名称",
-            data_origin="offline_initial",**kw)
+            data_origin="offline_initial",manager_id=self.user.id,governance_legacy=True,created_at=datetime(2020,1,1),**kw)
         self.db.add(obj);self.db.commit();return obj
+    def update(self,archive,**updates):
+        return project.update_archive(self.db,archive.id,ArchiveUpdate(**updates,expected_version=archive_business_version(archive)),self.user.id,scope_context=self.scope)
     def test_business_fields_and_policy(self):
         self.assertIn("erp_sync_policy",PmsProjectArchive.__table__.columns)
         for k in ("archive_category","customer_full_name","machine_model","quantity","quantity_unit",
                   "sales_company","legacy_archive_status","legacy_code_date","legacy_updated_date","delivery_note","remarks"):
             self.assertIn(k,PmsProjectArchive.__table__.columns)
             self.assertIn(k,ArchiveUpdate.model_fields)
+    def test_ordinary_edit_of_offline_archive_cannot_fill_readonly_full_name(self):
+        archive=self.archive()
+        with self.assertRaises(HTTPException):self.update(archive,customer_full_name='普通编辑不可补入')
     def test_manual_rename_does_not_queue(self):
         a=self.archive();a.erp_sync_policy="manual"
-        result=project.update_archive(self.db,a.id,ArchiveUpdate(project_name="新名称"),self.user.id,scope_context=self.scope)
+        result=self.update(a,project_name="新名称")
         self.assertFalse(result["sync_queued"])
         self.assertEqual(self.db.query(ErpSyncTask).count(),0)
     def test_empty_legacy_name_can_edit_customer(self):
         a=self.archive();a.project_name=None;a.erp_sync_policy="manual";self.db.commit()
-        project.update_archive(self.db,a.id,ArchiveUpdate(customer="客户"),self.user.id,scope_context=self.scope)
+        self.update(a,customer="客户")
         self.assertIsNone(a.project_name)
         self.assertEqual(a.customer,"客户")
     def test_category_write_rejected(self):
         a=self.archive()
         with self.assertRaises(HTTPException) as caught:
-            project.update_archive(self.db,a.id,ArchiveUpdate(product_category=1),self.user.id,scope_context=self.scope)
+            self.update(a,product_category=1)
         self.assertEqual(caught.exception.status_code,422)
     def test_implicit_manual_enqueue_rejected(self):
         from app.services.erp_queue import enqueue
@@ -86,7 +97,7 @@ class OfflineArchiveContract(unittest.TestCase):
         self.assertNotIn("product_category",MANAGED_ENUM_CODES)
     def test_legacy_raw_address_does_not_block_customer_edit(self):
         a=self.archive();a.erp_sync_policy="manual";a.address_detail="原台账交付地点";self.db.commit()
-        project.update_archive(self.db,a.id,ArchiveUpdate(customer="新客户"),self.user.id,scope_context=self.scope)
+        self.update(a,customer="新客户")
         self.assertEqual(a.address_detail,"原台账交付地点")
     def test_new_quantity_filter_before_pagination(self):
         from app.services.project import get_archive_list
