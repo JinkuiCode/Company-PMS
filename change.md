@@ -2043,3 +2043,5 @@
 - 涉及：backend/app/services/governance_migration.py、backend/tests/governance_upgrade_contract.py；本批兼容修复计划、验收记录和本日志。
 - 验证：原方法正例RED失败1项后GREEN16项；同批数据库升级、运行版本4项、构建6项均退出0，git diff --check为0。独立窄复核无阻断，隔离16项复跑通过；关系型sys夹具是真实SELECT，未连接MSSQL。
 - 边界：应用源代码及测试调整完成，新固定包生成结果随后记录；未连接正式、修改实际数据库或授权、启停服务、部署、合并master、推送GitHub或真实通知。不将本机测试称为MSSQL现场验收。
+
+- 本批打包闭环：修复提交`98ac38c77f4b0bf40764f38257084b7fde5b4c81`，新包release/governance-mssql-20261015/pms-server-98ac38c7-20261015.zip，SHA256 `09b906b83c392c41788d5c55f6f452197a43549c7d4e74cf7b596c84c9aa14f4`。固定提交前端重建退出0；405文件/404摘要/207源码一致，独立产物复核通过，旧包保留且哈希保持。新旧解压内容仅治理修复和3项版本摘要元数据不同，前端字节一致。Mac35表/配置及362份范围外文件原值保持，实际发布/邮件0；治理跟踪与升级回退材料改指新候选，未将本地验证称为真实MSSQL验收。

@@ -59,10 +59,10 @@ PYTHONPATH=.:.venv-deps312 PYTHONDONTWRITEBYTECODE=1 /Users/jin/.cache/codex-run
 
 **Files:** 本批后端修复/测试/记录；build-server-release.command保持原逻辑。
 
-- [ ] 仅暂存本批精确路径，本地提交；原样稿、Excel、outputs和私有目录继续排除。
-- [ ] 从修复提交的干净本地副本重新打包，使用既有依赖并显式禁用字节码；包名绑定新的提交SHA，保留原ZIP不覆盖。
-- [ ] 再核对包内所有SHA256、源码字节、v1.0.0/7项升级说明/数据库版本、入口资源及敏感排除项，记录新的代码SHA和ZIP哈希。因没有改前端源码，可以复用原契约证据；打包仍必须重新构建前端。
-- [ ] 核对实际Mac库35表/结构、受保护配置及范围外资料未变；不重启当前服务。
+- [x] 仅暂存本批精确路径，本地提交；原样稿、Excel、outputs和私有目录继续排除。
+- [x] 从修复提交的干净本地副本重新打包，使用既有依赖并显式禁用字节码；包名绑定新的提交SHA，保留原ZIP不覆盖。
+- [x] 再核对包内所有SHA256、源码字节、v1.0.0/7项升级说明/数据库版本、入口资源及敏感排除项，记录新的代码SHA和ZIP哈希。因没有改前端源码，可以复用原契约证据；打包仍必须重新构建前端。
+- [x] 核对实际Mac库35表/结构、受保护配置及范围外资料未变；不重启当前服务。
 
 ### Task 4：下一阶段正式预检范围（本计划不授权执行）
 
@@ -74,3 +74,5 @@ PYTHONPATH=.:.venv-deps312 PYTHONDONTWRITEBYTECODE=1 /Users/jin/.cache/codex-run
 ## 验收边界
 
 本计划批准后完成的是本地兼容修复与重新锁定，不代表正式部署、真实MSSQL演练或企业邮箱已验收。正式现场流程必须依照已有governance-upgrade-runbook和新的现场证据执行。
+
+本地结果：修复提交`98ac38c77f4b0bf40764f38257084b7fde5b4c81`，固定包及验证见[兼容修复记录](../../releases/2026-10-15-governance-mssql-compatibility.md)。Task 1—3已完成，Task 4尚未批准或执行。
