@@ -134,3 +134,15 @@
 - `frontend/tests/release-live-e2e.mjs`
 - `frontend/tests/task-document-history-browser.mjs`
 - `release-notes.json`
+
+## 本地锁定结果
+
+- 候选代码提交：`c2d1ce299bccdd6a4d3caa7fed885b8b0b653a20`；本地分支`codex/pms-unified-query`。116项选择性提交，上轮98项应用/测试摘要一致；未将其他任务资料纳入。
+- 固定包：`release/governance-20261015/pms-server-c2d1ce29-20261015.zip`，6229041字节；SHA256：`b3be06d68d31b1eeab1eb46c20b3317377f55ed008f90c671397739fa9e3c39b`。
+- 从`.runtime/governance-candidate-20261015/source`本地干净副本checkout精确提交构建，未复制当前dist；使用既有依赖并显式`PYTHONDONTWRITEBYTECODE=1`，防止manifest校验导入模块时把缓存带进包。构建退出0，仅已有500kB包体警告。
+- 发布构建契约6项通过；ZIP内405个文件，404项SHA256SUMS全部吻合，207项后端/运维源码逐字节匹配提交。release.json为v1.0.0、7项更新、数据库版本2026-10-15-governance-01，提交和build_id与包相同。所有入口引用的assets均存在。
+- 包内排除真实env、数据库、运行目录、原始Excel、旧样稿、截图、测试夹具、pyc及__pycache__。backend/app/data/regions下6项是Git内静态地区资料，与提交逐字节一致，属于应用资源。
+- 当前Mac35张表原值/结构、受保护配置保持；346份范围外文件摘要保持。实际发布和版本邮件记录均0；8000/api/health及5174返回200。没有启停当前服务，没有连接正式环境。
+- 核验材料在`outputs/governance-candidate-20261015/`：build.log、build-result.json、verify-package.py、package-verification.json、local-state-before.json、local-state-after.json、staged-source-sha256.json及明确范围；这些本机结果不进入Git和服务器包。
+
+代码与包已经固定；后续记录提交只更新文档和change.md，不改变候选应用。服务器尚未安装本候选包，正式MSSQL升级/恢复演练、企业邮箱和真实受众通知仍未执行。未合并master、推送GitHub或创建PR。

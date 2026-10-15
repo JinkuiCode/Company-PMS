@@ -4,7 +4,7 @@
 
 ## 候选范围
 
-- 来源分支`codex/pms-unified-query`；尚未提交、合并或推送。最终构建必须使用审查通过并提交后的固定提交，不能把当前工作区当成发布包。
+- 来源分支`codex/pms-unified-query`；候选代码已本地提交为`c2d1ce299bccdd6a4d3caa7fed885b8b0b653a20`，固定包及SHA256见[候选锁定结果](2026-10-15-governance-local-candidate.md)。尚未合并、推送或正式部署；不能把当前混合工作区当成发布包。
 - 目标数据库版本`2026-10-15-governance-01`，限定来源`2026-10-14-archive-governance-02`。
 - 增加日志主单关联、中文差异快照、3张版本通知表及问题提报运行版本字段。历史原值保留，不虚构历史名称，不删除日志。
 - 增加`project:archive:maintain`、`system:release:publish`、`system:release:manage`、`system:release:retry`权限节点；不自动授予任何角色。首次角色模板和重建模板均排除这些权限。
