@@ -1,4 +1,4 @@
-"""Accepted queue work is pinned to its organization; interactive retries are scoped."""
+"""Queue work is pinned to its organization and rechecks live execution grants."""
 import json
 import unittest
 from unittest.mock import patch
@@ -104,12 +104,13 @@ class SyncScope(unittest.TestCase):
         self.assertIn(caught.exception.status_code, (403, 404))
         client.assert_not_called()
 
-    def test_accepted_background_work_does_not_require_old_operator_grants(self):
+    def test_accepted_background_work_stops_without_current_operator_grants(self):
         task = self.queued()
         with patch('app.services.kingdee.sync_project_archive_to_erp', return_value={'success': True}) as send:
             erp_queue.run_once(self.db)
-        self.assertEqual(send.call_count, 1)
-        self.assertEqual(task.status, 'success')
+        send.assert_not_called()
+        self.assertEqual(task.status, 'failed')
+        self.assertIn('未发送金蝶请求', task.message)
 
 
 if __name__ == '__main__':

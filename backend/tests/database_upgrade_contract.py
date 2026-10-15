@@ -107,6 +107,7 @@ def test_production_lifespan_checks_revision_without_running_upgrade() -> None:
         patch.object(main, "validate_runtime_config"),
         patch.object(main, "init_db") as initialize,
         patch.object(main, "check_database_ready") as check,
+        patch('app.services.runtime_release.load_runtime_manifest'),
         patch('app.services.report_export_jobs.worker'),
     ):
         asyncio.run(exercise())
@@ -129,6 +130,8 @@ def test_failed_upgrade_cannot_leave_ready_marker() -> None:
 
         PmsDatabaseRevision.__table__.create(engine)
         mark_database_ready(engine)
+        with engine.begin() as connection:
+            connection.execute(PmsDatabaseRevision.__table__.update().values(revision='previous-fixture'))
         with (
             patch.object(upgrade_script, "engine", engine),
             patch.object(upgrade_script, "validate_runtime_config"),

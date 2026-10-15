@@ -132,6 +132,14 @@ def ensure_archive_access(
     return archive
 
 
+def get_scoped_project_query(db: Session, scope_context: dict | None):
+    """项目公共查询入口；缺少授权上下文时默认拒绝。"""
+    query = db.query(PmsProject)
+    if not scope_context:
+        return query.filter(PmsProject.id == -1)
+    return _apply_project_scope(query, db, scope_context)
+
+
 def get_scoped_archive_query(db: Session, scope_context: dict | None = None):
     """返回同时应用人员/部门与明确产品线范围的档案查询。"""
     return _apply_archive_scope(db.query(PmsProjectArchive), db, scope_context)
@@ -851,7 +859,13 @@ def delete_project(
     scope_context: dict | None = None,
 ):
     proj = ensure_project_access(db, project_id, scope_context)
-    before = serialize_model(proj, extra={"task_count": db.query(PmsTask).filter(PmsTask.project_id == project_id).count()})
+    tasks = db.query(PmsTask).filter(PmsTask.project_id == project_id).all()
+    task_ids = [task.id for task in tasks]
+    before = serialize_model(proj, extra={"task_count": len(tasks),
+        'tasks': [serialize_model(task) for task in tasks],
+        'progress_logs': [serialize_model(row) for row in db.query(PmsProgressLog).filter(PmsProgressLog.task_id.in_(task_ids)).all()] if task_ids else []})
+    if task_ids:
+        db.query(PmsProgressLog).filter(PmsProgressLog.task_id.in_(task_ids)).delete(synchronize_session=False)
     db.query(PmsTask).filter(PmsTask.project_id == project_id).delete()
     db.delete(proj)
     record_operation_log(
@@ -993,7 +1007,8 @@ def delete_task(
     if expected_project_id is not None and task.project_id != expected_project_id:
         raise HTTPException(status_code=404, detail="任务不存在或无权访问")
     ensure_project_access(db, task.project_id, scope_context)
-    before = serialize_model(task)
+    before = serialize_model(task, extra={'progress_logs': [serialize_model(row) for row in
+        db.query(PmsProgressLog).filter(PmsProgressLog.task_id == task_id).all()]})
     db.query(PmsProgressLog).filter(PmsProgressLog.task_id == task_id).delete()
     db.delete(task)
     record_operation_log(
@@ -1217,7 +1232,7 @@ def create_archive(
         db.add(archive)
         db.flush()
         from app.services.erp_queue import enqueue
-        enqueue(db, archive, user_id)
+        enqueue(db, archive, user_id, required_permission='project:archive:add')
         record_operation_log(
             db,
             module="项目档案",
@@ -1254,6 +1269,8 @@ def apply_archive_updates(
     request: Request | None = None,
     scope_context: dict | None = None,
     *, archive: PmsProjectArchive | None = None, dry_run: bool = False, commit: bool = True,
+    audit_action: str = 'update', audit_summary: str | None = None,
+    audit_extra: dict | None = None, queue_permission: str | None = None,
 ):
     """Shared validation and application; the governance caller owns its transaction."""
     archive = archive or _claim_enabled_archive_for_write(
@@ -1263,7 +1280,7 @@ def apply_archive_updates(
         action_label="编辑",
         reject_pending=True,
     )
-    before = serialize_model(archive)
+    before = serialize_model(archive, extra=audit_extra)
 
     update_data = _normalize_archive_values(data.model_dump(exclude_unset=True, exclude={'expected_version'}))
     from app.services.offline_archive_fields import OFFLINE_FIELDS
@@ -1355,19 +1372,22 @@ def apply_archive_updates(
         db.flush()
         if sync_queued:
             from app.services.erp_queue import enqueue
-            enqueue(db, archive, user_id)
+            if queue_permission is None:
+                enqueue(db, archive, user_id)
+            else:
+                enqueue(db, archive, user_id, required_permission=queue_permission)
         record_operation_log(
             db,
             module="项目档案",
-            action="update",
+            action=audit_action,
             entity_type="pms_project_archive",
             entity_id=archive.id,
             entity_name=archive.project_name,
             operator_id=user_id,
             request=request,
-            summary=f"更新项目档案：{archive.project_name}",
+            summary=audit_summary or f"更新项目档案：{archive.project_name}",
             before_data=before,
-            after_data=serialize_model(archive),
+            after_data=serialize_model(archive, extra=audit_extra),
         )
         if commit:
             db.commit()

@@ -2,14 +2,15 @@
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { PmsFormDrawer } from '@/form-system'
+import PmsDocumentHistory from '@/document-history/PmsDocumentHistory.vue'
 import { downloadFeedbackFile, retryFeedbackMail, type FeedbackRow } from '@/api/feedback'
 import { useAuthStore } from '@/stores/auth'
 import { mailLabels, feedbackTone } from '@/feedback/model'
 const props=defineProps<{modelValue:boolean;row:FeedbackRow|null;loading:boolean;error:string;label:(code:string,value:unknown,fallback?:string)=>string}>()
 const emit=defineEmits<{'update:modelValue':[boolean];edit:['handle'|'supplement'];refresh:[]}>()
 const auth=useAuthStore(), busy=ref(false)
-const tab=ref('内容')
-watch(()=>props.row?.id,()=>{tab.value='内容'})
+const tab=ref('业务信息')
+watch(()=>props.row?.id,()=>{tab.value='业务信息'})
 const date=(value:string)=>value?.replace('T',' ').slice(0,19)||''
 async function download(file:any){busy.value=true;try{await downloadFeedbackFile(file.id,file.filename)}catch{ElMessage.error('附件下载失败，请重试')}finally{busy.value=false}}
 async function retry(id:number){busy.value=true;try{await retryFeedbackMail(id);ElMessage.success('已重新加入通知队列');emit('refresh')}catch{ElMessage.error('通知重试失败，请刷新后检查权限与状态')}finally{busy.value=false}}
@@ -26,8 +27,9 @@ async function retry(id:number){busy.value=true;try{await retryFeedbackMail(id);
      <dt>具体类别</dt><dd>{{row.category_name}}</dd><dt>影响程度</dt><dd>{{label('feedback_impact',row.impact_id)}}</dd>
      <dt>提报人</dt><dd>{{row.author_name}}</dd><dt>提报时间</dt><dd>{{date(row.created_at)}}</dd><dt>处理人</dt><dd>{{row.handler_name||'尚未受理'}}</dd>
     </dl>
-    <div class="feedback-detail-tabs" role="tablist" aria-label="提报详情页签"><button v-for="name in ['内容','跟进记录','邮件通知']" :key="name" role="tab" :aria-selected="tab===name" :class="{active:tab===name}" @click="tab=name">{{name}}</button></div>
-    <template v-if="tab==='内容'">
+    <div class="feedback-detail-tabs" role="tablist" aria-label="提报详情页签"><button v-for="name in ['业务信息','跟进记录','邮件通知','操作记录']" :key="name" role="tab" :aria-selected="tab===name" :class="{active:tab===name}" @click="tab=name">{{name}}</button></div>
+    <PmsDocumentHistory v-if="tab==='操作记录'" resource="feedback" :entity-id="row.id" :revision="row.version" />
+    <template v-else-if="tab==='业务信息'">
     <section v-for="field in [{key:'description',label:'详细说明'},{key:'steps',label:'复现步骤'},{key:'expected_result',label:'期望结果'}]" :key="field.key" v-show="(row as any)[field.key]"><h4>{{field.label}}</h4><p>{{(row as any)[field.key]}}</p></section>
     <section><h4>附件 <span>{{row.attachments?.length||0}} / 5</span></h4><p v-if="!row.attachments?.length" class="feedback-muted">暂无附件</p><div v-for="file in row.attachments" :key="file.id" class="feedback-file"><span>{{file.filename}}</span><el-button link type="primary" :disabled="busy" @click="download(file)">下载</el-button></div></section>
     <section><h4>处理意见与结论</h4><p>{{row.opinion||'尚未填写处理意见'}}</p><p v-if="row.outcome_id">结论：{{label('feedback_outcome',row.outcome_id)}} · 归因：{{label('feedback_cause',row.cause_id)}}</p></section>

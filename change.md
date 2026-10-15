@@ -1,5 +1,53 @@
 # PMS 变更记录
 
+## 2026-10-15 Mac开发库治理限定升级与基础页面核验
+
+- 原因与批准：用户独立明确批准“仅升级Mac开发库”；4项新权限只建节点不自动授权，服务器/正式环境不动，邮件和金蝶后台保持暂停。
+- 实施：重新核对标准库.runtime/data/pms-dev.db及旧archive-governance-02，保留旧提交源码、受限配置与候选源码；新做备份、完整性检查及副本升级/恢复演练后，独立governance-only脚本实际升级至governance-01，退出0。102档案、1项目、6任务、3用户、4角色及125角色菜单关系逐字段保留；只新增批准结构和4权限节点，0新增授权，发布3表仍为空。
+- 备份与回退：.runtime/governance-local-20261015-130235保存数据库before/升级/恢复副本、状态、逐表哈希、操作脚本、旧源码及受限配置，权限0700/0600；数据库备份SHA256 aa1d34a3c95ad17f649754aff3b0621c9ef34bcb2a5c22cb2bff3c43ff092af5。独立复核发现候选包漏backend/main.py后，保留不完整旧包并明确失效，补齐649项完整候选包candidate-complete-v2.tar.gz（SHA e3389fd188296fa58118c8547bbae02e9f2018c308a70326455b7dce7f0991b8），逐文件对照工作区通过并独立关闭该问题。
+- 启动与页面：维护启动器仅检查结构，进程内暂停ERP/导出/提报邮件/版本邮件线程，不改SMTP配置或授权源码；本机8000与5174健康及代理200，匿名版本/日志读取403。用户自行登录ael，实际档案自动21条、原资格提示及未授权维护入口不展示、单据日志中文差异、关于PMS“开发中/开发环境”、通知空状态和管理员审计技术折叠均核对。没有保存档案或点击同步；最终仅新增4条真实登录/安全审计日志，原185条不变。
+- 现场修复：<=700px原user-name隐藏规则隐藏了整个用户菜单；保留按钮并控制宽度。共享日志空串默认选项显示“请选择”，改用原生“全部操作”占位，不改公共控件/筛选语义。涉及frontend/src/layout/AppLayout.vue、document-history/PmsDocumentHistory.vue、两组对应浏览器测试；新增断言先RED后GREEN，受影响2组浏览器、三项必需契约及build退出0，实际518px再次核对通过，独立复核无重要退化。
+- 记录与边界：本批计划、docs/releases/2026-10-15-governance-local-upgrade.md、总跟踪及本日志同步更新。未授真实维护/发布/投递权限，未测试真实维护写入或正式发版、发信，未改服务器或写金蝶；真实多用户闭环仍待明确授权。现场SQLite日志沿用数据库UTC原值，比本机UTC+8时钟早8小时，跨库日志时间口径另待核对，未盲改历史时间。当前codex/pms-unified-query、HEAD973c9af，未提交、合并或推送。
+
+
+## 2026-10-15 统一治理开发候选：权限、维护、日志与版本通知
+
+- 原因与批准：用户确认治理方案及修订样稿、临时维护规则，明确另一对话暂停后允许启动方案开发。本批沿用既定布局和现有共享模块。
+- 权限及维护：新增业务资源登记和金蝶队列独立执行授权，按新增/编辑/维护/手动同步/重试记录服务端来源，领取及发送前读取当前有效身份和范围；撤权、缺来源失败关闭。新增单条档案维护服务及入口，仍需查看/编辑/维护与数据范围，填写原因并核对中文差异，保留锁、字段、版本及ERP关联保护；普通审批不变，保存及主从并发有迟到响应保护。
+- 日志：底账增加主单关联和中文差异快照，统一递归及文本脱敏、安全业务投影；档案/项目/任务/问题提报接入记录组件。管理员审计采用已批准的标准列表和并排详情，技术信息折叠；补SSO开户/改名同事务记录、删除前完整子记录、后台导出实际结果及失败请求独立限流审计。用户已有发布通知历史时删除返回明确409并建议停用，保留历史关联。
+- 版本及通知：独立运行清单、发布/个人通知/邮件队列，用户菜单关于PMS、显式已读、页面说明更新关联、提报运行版本。发布校验当前构建和验收凭据，首版v1.0.0并严格递增；同构建重复/并发幂等。复用安全SMTP但默认关闭新投递线程，已接受/未知/失败和已读分开，未知不盲目重发；准备固定提交构建清单和交互验证发布身份工具。
+- 升级与回退：数据库目标governance-01，限定旧archive-governance-02；增加日志3列/索引、3张版本通知表、提报运行版本及4项独立权限节点，不自动授角色。生产启动只检查，重复升级不回补已撤节点；提供只读源库升级/恢复副本演练工具及操作材料。
+- 涉及文件：backend/app/services/{business_resources,erp_execution_authorization,archive_maintenance,operation_log_metadata,document_history,security_audit,runtime_release,releases,release_mail,governance_migration,governance_rehearsal}.py及既有授权/项目/队列/SSO/日志/字段/初始化服务；对应模型、Schema、API、main、升级/发布/演练脚本和契约；frontend/src/{document-history,release-center}、AppLayout、ProjectArchive/ProjectList/ProjectProgress/FeedbackDetail/OperationLogList、主题及页面说明、相关浏览器测试；build-server-release.command、release-notes.json和本批规格/计划/验证/升级材料。
+- 验证：38组后端契约全部退出0，391项unittest及资源登记检查；另跑offline_archive 13项退出0。前端三项必需规范、档案筛选、字典/枚举、说明/主从/反馈/档案治理/进度契约及类型构建通过，6组本机Edge全模拟接口流程退出0；构建仅既有大分包警告。队列失败/新旧任务、维护保存并发、分页和任务切换等独立审查问题已修复验证。详细命令、结果及覆盖界限见docs/releases/2026-10-15-governance-development-validation.md。
+- 副本演练：标准Mac源.runtime/data/pms-dev.db版本archive-governance-02；只读复制至/private/tmp/pms-governance-live-copy-20261015，升级/恢复及源未变核验通过。备份SHA256 aa1d34a3c95ad17f649754aff3b0621c9ef34bcb2a5c22cb2bff3c43ff092af5，含业务数据的备份限制权限且不上传Git。实际源库未升级、未授真实账号权限，未发送邮件或写金蝶。
+- 边界：开发候选完成隔离验证，不等于现场用户闭环或MSSQL升级验收；真实升级/部署/授权/发信仍独立批准。当前分支codex/pms-unified-query、HEAD973c9af，尚未提交、合并master、推送或创建PR，保留其他任务资料。
+
+
+## 2026-10-15 首页统计统一产品线与人员数据范围
+
+- 原因：统一权限治理发现首页自行查询项目，遗漏产品线过滤，部门范围缺少部门时放宽。用户已批准启动定稿方案开发。
+- 调整：首页改用公开项目范围查询入口；空上下文默认空结果，按现有产品线与人员／部门范围交集统计，明确全部业务数据授权仍不授予首页动作。
+- 涉及文件：backend/app/services/{dashboard,project}.py、backend/tests/dashboard_scope_contract.py、docs/superpowers/plans/2026-10-15-dashboard-scope-implementation.md。
+- 验证：服务4项先RED后GREEN；补真实路由、同一合成JWT和隔离数据库的产品线／全部数据／查看权撤销及用户禁用后，共5项通过；项目范围14项、ERP组织范围8项和RBAC契约均退出0。只读独立审查未发现生产实现阻断项，已补齐其接口证据建议。
+- 边界：仅本地代码与隔离测试，无前端、数据库结构、真实角色／业务数据、生产或金蝶写入；未提交、合并、推送或部署。不据此宣称全系统权限治理完成。
+
+
+## 2026-10-15 治理样稿精简与审计列表重排
+
+- 原因：用户认可单据操作记录，要求精简版本通知冗余信息，并批准将全局审计重做为标准列表与右侧详情。
+- 调整：通知删除运行摘要，底部仅保留显式已读；关于页仅保留产品、当前版本与环境，管理员技术信息默认折叠；身份、环境、状态和邮件预览收进单一演示设置。审计复用标准查询、列表和分页，默认时间/操作者，其余按单字段添加；支持本地筛选、排序、详情联动及中文前后值。详情与列表并排，避免遮挡操作入口；修复技术折叠的键盘焦点和反馈/关于关闭后的焦点返回。
+- 涉及：frontend/prototypes/development-governance/{App.vue,ReleaseCenter.vue,AuditPreview.vue,audit-model.mjs,PreviewDialog.vue,main.js,model.mjs,preview.css}；frontend/tests/development-governance-{preview-browser,revision-browser,audit.test}.mjs；同日治理设计规格和实施计划；本日志。
+- 验证：通知旧稿、审计缺失模型、技术折叠键盘、弹层返回与操作遮挡均有先失败后通过证据；最终两套Edge浏览器脚本退出0，覆盖审计筛选/重置/添加条件、状态、详情切换、技术折叠、已读与邮件独立、焦点、1366/1100及原日志520窗口。业务API请求0、页面错误0。两项模型测试、三项前端必需契约、正式应用构建与独立样稿构建均退出0；仅大分块、临时输出目录及样稿共享查询引入的静态/动态导入分块提示。内置浏览器已显示最终审计详情，截图08/09/10及通知/关于截图已更新。
+- 边界：仅本地独立演示，无正式页面、后台、权限或数据库调整，无实际邮件发送；保留另一对话改动。本批仍在codex/pms-unified-query，未提交、合并、推送或部署。单据日志已认可，2026-10-15用户已明确审核通过本轮通知与审计样稿，锁定为正式模块的布局及交互基线。
+
+## 2026-10-14 单据操作记录、关于PMS及升级通知交互样稿
+
+- 原因：用户确认统一开发准入标准，并批准先制作独立交互样稿，以确认日志入口、版本展示和升级通知布局。
+- 调整：新增独立模拟页面，单据详情默认业务信息、支持操作记录页签和中文字段对照；单据切换同步更新日志，展示成功、失败、排队、执行和待核查。用户菜单提供关于PMS，展示当前运行版本、历史更新、说明和自动带版本的反馈预览；通知显式标为已读，管理员模拟额外展示技术信息、全局审计及独立邮件投递状态。复用现有主题、字体、表单控件和查询密度，完善小窗口关闭按钮与弹层首尾焦点循环，版本弹层重开及历史切换回到内容顶部。
+- 涉及：frontend/prototypes/development-governance.html、development-governance/{main.js,App.vue,DocumentHistory.vue,ReleaseCenter.vue,PreviewDialog.vue,model.mjs,preview.css}；frontend/tests/development-governance-preview{.test,-browser}.mjs；docs/superpowers/{specs/2026-10-14-pms-development-governance-design.md,plans/2026-10-14-development-governance-preview.md}；本日志。
+- 验证：模型与浏览器行为先失败后通过，覆盖单据隔离、字段投影、通知已读幂等及与邮件分离、历史版本不改变运行版、说明、只读版本反馈、状态重试、键盘关闭/焦点循环、24px查询和13px正文。风格/标准列表/系统一致性三项契约、应用构建和独立样稿构建退出0，仅既有大分块及临时输出目录提示。最终固定构建在5197端口经Mac Edge独立浏览器验证，1366×768、1100×650、520×700检查通过，业务API请求0、页面错误0；内置浏览器实际入口和操作已核对。截图outputs/development-governance-20261014/。
+- 边界：纯演示数据，无业务API、数据库、认证或正式页面修改，不发送邮件；不代表生产权限或Windows/OA嵌入验收。保留另一对话全部改动，本批未提交、合并或推送，样稿布局及显式已读方式待用户确认。
+
 ## 2026-10-13 单据进入规则与角色兼容修复正式发布
 
 - 原因：开发机本批完成后用户明确要求更新到正式环境。
@@ -1923,3 +1971,58 @@
 - 涉及文件：docs/superpowers/plans/2026-10-14-archive-governance-server-release.md；.runtime/archive-governance-release-20261014/{server_release.py,test_release.py}及本日志。
 - 验证：发布助手RED→GREEN，3项契约通过，覆盖精确结构/业务/授权差异限制、枚举/原规则保留、独立批准/备份/停启顺序和无凭据参数。仅只读核对正式bd6f864、干净工作区、版本feedback-02及档案3646/缺负责人3643/缺部门负责人6/有计划值3；ERP和导出活动0。
 - 边界：本条仅记准备，尚未正式备份、升级、停启或发布；不复制开发机测试授权/人员/数据，不合并master或推送GitHub。
+
+### 2026-10-14：档案治理固定发布包与正式前置备份校验
+- 原因：用户批准限定正式升级及部署，要求正式人员资料保留后续维护。
+- 调整：将本批76项文件选择性提交为973c9af1，制作固定934项文件清单发布包；正式备份旧源码、前端、Git历史及私有配置。前置SQLAlchemy MSSQL约束反射未实现而中止后，保留失败状态及旧备份，改为只读sys目录读取检查/唯一约束，完整结构门禁仍保留；重做正式前置校验通过。
+- 涉及文件：本批档案治理源码/测试/说明；.runtime/archive-governance-release-20261014/{package.py,server_release.py,test_release.py,bootstrap.ps1,transfer.py,transfer.plist,release-result.json}；正式发布计划及本日志。
+- 验证：固定包隔离前端构建、清单和bundle通过；固定包后端148项退出0。发布助手兼容回归RED→GREEN，6项退出0；独立只读复核无阻断，真实MSSQL prepared回执business_unchanged=true。新备份目录C:\PMS\.runtime\release-history\archive-20261014-151503-51240f71，旧失败备份及preflight-failed-state.json保留。
+- 边界：截至本条仅程序/配置备份和前置校验完成，backend_stopped=false；数据库完整备份/升级/正式程序替换尚未执行。当前功能分支codex/pms-unified-query，未合并master或推送GitHub；不复制开发机测试角色或人员，不读取升级凭据。
+
+### 2026-10-14：正式数据库备份校验及登录日志差异保护
+- 原因：正式执行完成PMS完整备份校验后，一致性门禁发现前置快照后新增OA登录日志，按保护规则在停服前中止。
+- 调整：保留失败回执和备份，不绕过门禁；发布助手增加仅验证备份前单条成功登录日志追加的校验器，逐行确认旧日志完整，所有其他业务/授权/结构快照严格一致，刷新时保存原状态；继续执行仍重新备份并保留停服前后及升级前检查。
+- 涉及文件：.runtime/archive-governance-release-20261014/{server_release.py,test_release.py,bootstrap.ps1}及本日志。
+- 验证：实际差异仅sys_operation_log从10086至10087，新记录id10089，auth/sso_login成功于15:17:28；原全部日志哈希未变，数据库备份完成15:19:30。校验器业务变更/结构变化/原日志修改/非登录/备份后日志反例RED→GREEN，7项测试退出0，独立窄复核无阻断。
+- 边界：数据库仍feedback-02、PMS未停；升级和正式程序替换尚未完成。没有读取或保存升级密码，没有修改正式日志或人员/授权，也没有自动回滚。
+- 恢复准备核验：日志module采用系统真实中文值“认证”补充RED→GREEN，7项退出0；同一after快照经严格校验后写回发布状态，原状态保存至私有备份preupgrade-login-state.json。prepared-refreshed回执business_unchanged=true、backup verified=true、backend_stopped=false；外部健康status=ok。升级流程已重启等待本地凭据，数据库/程序仍未替换。
+
+### 2026-10-14：档案治理正式限定升级与程序发布完成
+- 原因：用户批准正式archive-governance-02限定升级及部署，并再次本地输入独立升级凭据；人员资料后续维护。
+- 调整：重新创建PMS完整COPY_ONLY/CHECKSUM备份并VERIFYONLY（15:31:58），仅停启PMS；安装申请表、固定状态/7项规则、历史标记，移除档案2项计划列及批准的已有值。发布固定973c9af1源码/前端，保留其他业务/日期、原人员/授权和受保护配置，不复制测试人员或角色。新增字段布局、条件必输、原负责人/部门负责人审批及标准说明正式生效。
+- 涉及文件：本批档案治理源码/测试/说明固定提交；.runtime/archive-governance-release-20261014/release-result.json；正式发布计划及本日志；outputs/archive-governance-20261014/formal-{create,approval,guide,dept}.png。旧程序/配置及回退计划在C:\PMS\.runtime\release-history\archive-20261014-151503-51240f71，SQL备份准确路径见正式deployment-state.json的database_backup。
+- 验证：正式回执published-awaiting-browser-acceptance，版本2026-10-14-archive-governance-02；业务、权限、存量、受保护配置、源文件、实际页面资源、健康及备份校验均true。正式源码HEAD973c9af1、工作区干净，PMS新PID4448。实际Edge正式页面验证档案自动加载、新建字段顺序及主机必输、历史只读/原表来源底部、缺资料提示、审批0条、更新说明和部门负责人跨部门用户选项；未提交测试档案、未保存部门修改。最后健康status=ok；临时传输卸载退出0、18958无监听。
+- 边界：仅技术发布及上述只读页面验收完成；缺人员资料保持空值，真实用户审批闭环和OA iframe展示仍待维护资料后用户验收。未重启SQL Server/OA/Windows，未自动回滚，未合并master或推送GitHub。当前功能分支codex/pms-unified-query；其他任务文件保留。
+
+### 2026-10-15：正式项目档案空负责人限定回填
+- 原因与批准：用户确认按产品线对应部门负责人补齐历史档案，亚电股份归宋林月，无产品线7条留空；追加批准仅本批忽略615条未修改的历史客户空值必输错误，不修改客户内容或全局字段规则。
+- 调整：8吋Bench/12吋Bench共3165条设为郁涛，光伏/电镀444条设为田晓东，Single/HSPM 18条设为丁翠燕，亚电股份9条设为宋林月，合计3636条。等待期间新增5条已有负责人档案，连同原3条全部保留；两张非目标待审批申请原值保留。仅条件更新空manager_id，业务日期、最后编辑人及其他全部档案字段保持；同事务生成3636条统一操作日志，系统维护身份不冒用用户。
+- 备份：正式私有目录C:\PMS\.runtime\archive-owner-backfill-20261015保存before.json、before.sha256、result.json及verification.json；包含3651条档案原值、目标与映射、17张关联/授权/ERP表的原值摘要。备份SHA256为776a88bc6a09de70ae30b05316644113273c1977ed752d52b3ceb4a22236db，写前独占创建及读回校验通过。失败事务自动回滚；后续若需撤销，须重新确认并按目标ID和当前负责人条件恢复，不进行无条件覆盖或全库恢复。
+- 涉及文件：本项目.runtime/archive-owner-backfill-20261015/{backfill.py,test_backfill.py,transfer.py,transfer.plist}、outputs/archive-owner-backfill-20261015/formal-verification.png及本日志；未改应用接口、模型、数据库结构或线上配置。
+- 验证：维护测试11项退出0，覆盖精确映射、已有负责人/无产品线保留、失败连同日志回滚、并发保护、备份篡改、数值精度、目标待批阻断/非目标保留及仅客户例外/其他必输仍拒绝；独立窄复核无阻断。正式事务OWNER_APPLY_EXIT_0；新会话逐字段核对3651条，仅3636条负责人变化，8条已有负责人及7条空产品线保持，17张保护表原值摘要一致，3636条日志ID和before/after逐条匹配，核验退出0。615条客户例外数吻合；健康接口status=ok。
+- 边界：正式版本仍2026-10-14-archive-governance-02、源码973c9af1；未重启PMS/SQL Server/OA/Windows，未写金蝶、改产品线、角色授权、人员归属或全局必输规则。临时传输已卸载，18959无监听。未提交、合并master、推送GitHub或创建PR；无关工作区内容保留。
+
+
+### 2026-10-15：本机日志北京时间修复与临时维护验收完成
+- 原因与批准：用户分别批准仅Mac SQLite日志读取/日期查询修复、ael独立临时维护角色及本机单条手动同步样本验收，结束恢复备注并撤权。
+- 调整：新增operation_log_time适配，SQLite审计及单据日志读时UTC+8，日期条件/候选及起止边界一致；历史存值、结构和MSSQL原时间不变，列表维持ISO字符串兼容。仅重启受控Mac后端，邮件/ERP等worker继续暂停。
+- 涉及文件：backend/app/services/{operation_log_time.py,operation_log.py,document_history.py}、backend/tests/operation_log_time_contract.py；本批计划/验收记录及outputs/governance-time-validation-20261015。私有准备、撤权、核验及备份位于.runtime/governance-maintenance-20261015-133615。
+- 验证：时间契约RED→GREEN（6项），11组相关契约退出0，独立时间/运维审查无重要缺陷；实际5174页面验证原因必填、中文差异、两次维护保存/恢复，同会话撤权后下一维护预览403并记安全审计；日志实际13时段与UTC库值05时段对应，当天查询/候选均12条。git diff --check退出0。
+- 数据保护：原102档案、189日志、4角色全值不变，其他30张保护表/配置全值保持；用户原角色成员集合和有效权限/范围恢复，临时角色停用且0成员/0菜单/0产品线，新4权限授权0。仅保留本机样本LOCAL-GOV-20261015-001（ID103），备注已恢复、manual/未同步，零ERP任务或实际邮件。关联内部流水ID由原用户服务重建，成员关系一致。
+- 备份与边界：验收前DB完整性及SHA256校验通过，c9a1b13d6d13f58e2cc785ceaea1b463b23960f56a7062b7ec1f98cb411748e0；旧源码/配置/配套升级备份保留。未连接或改正式服务器，未合并master、提交或推送GitHub；不将本机验收称为正式发布。
+
+
+### 2026-10-15：Mac产品线名称独立显示修复
+- 原因与批准：用户批准仅Mac新只读名称接口、独立加载、不可选当前值禁用显示及失败重试，原新增/变更校验保持。金蝶候选接口503此前导致PMS本地名称也丢失，详情显示内部ID。
+- 调整：labels接口与options共用原按钮权限/产品线范围，仅查PMS、不访问外部；共享composable独立名称和候选请求、清旧标签及防迟到响应，名称重试不调用候选接口；档案详情仅追加当前禁用值，候选失败禁止改产品线，其余字段保持原授权。新增仍用原可选项，原503/422及后台校验保持，说明同步更新。
+- 涉及文件：backend/app/api/product_lines.py、backend/tests/product_line_labels_contract.py；frontend/src/{api/productLine.ts,composables/useProductLineOptions.ts,views/project/ProjectArchive.vue,page-guide/registry.ts}及product-line-display组合函数/浏览器测试；本批计划、验收记录和outputs/product-line-display-20261015。
+- 验证：后端新4项、前端新5项RED→GREEN；后端6组、前端9项契约及build退出0。隔离浏览器验证503仍可看名称、产品线禁用/其他可编辑、新增拒绝、当前历史值不可选、失败独立重试与窄窗、零写入；产品线列表列同步刷新断言通过。独立复核无重要缺陷。实际5174原用户会话显示12吋Bench，新建在目录不可用时仍拒绝。git diff --check退出0，构建仅已有包体警告。
+- 数据与边界：开发库全部35表/结构、103档案/197日志及权限/配置原值逐项一致，本批零实际写入；备份SHA256 ba784790d3a566e5494f02c665dfae6626b0d1ae7678c34a156df971683f2567。仅刷新Mac受控8000/5174，后台worker继续暂停，5198临时进程已清理。未启用外部连接、改授权或正式环境；仍codex/pms-unified-query、HEAD973c9af，未提交/合并/推送。
+
+
+### 2026-10-15：版本通知真实接口隔离闭环验证
+- 原因与范围：继续已批准治理方案的隔离验证，补足模拟API页面与真实接口之间的闭环；只用新合成库/账号和本机TLS接收器，未改业务逻辑或实际授权。
+- 完成：新增frontend/tests/release-live-e2e.mjs；真实Vue5198→FastAPI8001→合成SQLite，真实SMTP_SSL到环回TLS接收器。验证幂等、4启用受众/停用排除、逐人已读、缺邮箱失败、unknown人工确认重试、同会话发布/管理/重试撤权403。发布清单草稿补日志日期及产品线显示修复，共7项；更新治理状态和本批验收记录。
+- 验证：API、浏览器、最终核验均退出0，独立只读复核无重要缺陷；合成库1发布/4通知、3accepted/1failed，4封本机接收（含受控重试），持续网络回执0外部调用阻断/4本机消息。unknown为夹具注入，未验证真实SMTP中断、企业邮箱或MSSQL。本批无应用逻辑变化，复用同源码前端必需检查/构建及版本邮件契约证据；git diff --check退出0。
+- 涉及：上述联调脚本、release-notes.json、docs/releases/2026-10-15-release-e2e.md、治理跟踪及本日志；私有合成工具在.runtime/release-e2e-20261015-141723，结果和截图在outputs/release-e2e-20261015。
+- 保护与边界：实际Mac35表全值摘要保持，实际发布/版本邮件0，无真实授权或发信；实际5174/8000健康，后台暂停保持。临时5198/8001和TLS接收器已关闭；未连接正式、提交、合并master、推送或生成实际运行版本清单。当前codex/pms-unified-query、HEAD973c9af。

@@ -15,7 +15,7 @@ STATUS_LABELS = {'queued': '等待同步', 'running': '同步中', 'success': '�
                  'failed': '同步失败', 'review': '待核查', 'superseded': '已被新版本替代'}
 
 
-def event(task, status, message, *, target=None):
+def event(task, status, message, *, target=None, authorization=None):
     task.status = status
     task.message = str(message)[:1024]
     history = json.loads(task.history or '[]')
@@ -23,6 +23,8 @@ def event(task, status, message, *, target=None):
                     'status': status, 'message': task.message})
     if target is not None:
         history[-1]['target'] = target
+    if authorization is not None:
+        history[-1]['authorization'] = authorization
     task.history = json.dumps(history, ensure_ascii=False)
 
 
@@ -54,7 +56,10 @@ def _interactive_archive_query(db, user_id):
     return get_scoped_archive_query(db, context)
 
 
-def enqueue(db, archive, operator_id, *, explicit=False):
+def enqueue(db, archive, operator_id, *, explicit=False, required_permission=None):
+    from app.services.erp_execution_authorization import task_permissions
+    action = required_permission or ('project:archive:sync' if explicit else 'project:archive:edit')
+    authorization = {'action': action, 'permissions': task_permissions(action)}
     if archive.erp_sync_policy == 'manual' and not explicit:
         raise HTTPException(409, '此档案仅允许手动同步金蝶')
     # Called inside the archive write transaction, after locking/flushing the row.
@@ -69,7 +74,7 @@ def enqueue(db, archive, operator_id, *, explicit=False):
     archive.erp_error_msg = None
     db.add(task)
     db.flush()
-    event(task, 'queued', '保存成功，等待后台同步', target=_archive_target(db, archive))
+    event(task, 'queued', '保存成功，等待后台同步', target=_archive_target(db, archive), authorization=authorization)
     return task
 
 
@@ -105,6 +110,26 @@ def run_once(db):
         return _run_claimed(db, candidate)
 
 
+def _fail_execution_authorization(db, task_id):
+    from app.services.erp_execution_authorization import authorization_changed
+    from app.services.project_archive_lifecycle import claim_archive_lifecycle_rows
+    db.rollback()
+    task = db.get(ErpSyncTask, task_id, populate_existing=True)
+    archives = claim_archive_lifecycle_rows(db.query(PmsProjectArchive), [task.archive_id])
+    db.refresh(task)
+    event(task, 'failed', authorization_changed().detail['message'])
+    task.finished_at = datetime.now()
+    newest = db.query(ErpSyncTask.id).filter(ErpSyncTask.archive_id == task.archive_id).order_by(ErpSyncTask.id.desc()).first()
+    if archives and newest and newest.id == task.id:
+        archives[0].erp_sync_status = 'failed'
+        archives[0].erp_error_msg = task.message
+    record_operation_log(db, module='同步管理', action='sync', entity_type='pms_project_archive',
+        entity_id=task.archive_id, operator_id=task.operator_id, status='failed',
+        summary='同步执行授权校验未通过，未发送金蝶请求', after_data={'task_id': task.id})
+    db.commit()
+    return True
+
+
 def _run_claimed(db, candidate):
     from app.services import kingdee
     claimed = db.query(ErpSyncTask).filter(ErpSyncTask.id == candidate.id,
@@ -138,13 +163,21 @@ def _run_claimed(db, candidate):
         archive.erp_error_msg = task.message
         db.commit()
         return True
+    from app.services.erp_execution_authorization import authorize_task_execution
+    try:
+        scope_context = authorize_task_execution(db, task, archive)
+    except HTTPException:
+        return _fail_execution_authorization(db, candidate.id)
     task.attempts += 1
     event(task, 'running', '开始执行金蝶登录、保存及提交审核')
     db.commit()
     try:
-        result = kingdee.sync_project_archive_to_erp(db, task.archive_id, user_id=task.operator_id, queue_task_id=task.id)
+        result = kingdee.sync_project_archive_to_erp(db, task.archive_id, user_id=task.operator_id,
+            queue_task_id=task.id, scope_context=scope_context)
     except HTTPException as exc:
         db.rollback()
+        if isinstance(exc.detail, dict) and exc.detail.get('code') == 'ERP_TASK_AUTH_CHANGED':
+            return _fail_execution_authorization(db, candidate.id)
         if isinstance(exc.detail, dict) and exc.detail.get('code') == 'ERP_TASK_SUPERSEDED':
             task = db.get(ErpSyncTask, candidate.id, populate_existing=True)
             event(task, 'superseded', '已由最新保存版本替代，未发送外部请求')
@@ -196,7 +229,7 @@ def retry(db, task_id, user_id, request=None):
         raise HTTPException(409, '档案尚未关联组织产品线，不能同步')
     from app.services.project import validate_archive_for_business_operation
     validate_archive_for_business_operation(db, archive)
-    new_task = enqueue(db, archive, user_id, explicit=True)
+    new_task = enqueue(db, archive, user_id, explicit=True, required_permission='system:sync:retry')
     record_operation_log(db, module='同步管理', action='retry', entity_type='pms_project_archive',
         entity_id=archive.id, entity_name=archive.project_name, operator_id=user_id, request=request,
         summary='管理员重试档案同步', after_data={'task_id': new_task.id, 'previous_task_id': task_id})

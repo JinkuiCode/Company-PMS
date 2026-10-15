@@ -63,6 +63,9 @@ ROLE_TEMPLATES = {
     },
 }
 
+# These grants require an explicit human decision, including recreated templates.
+MANUAL_ONLY_PERMISSIONS = frozenset({'project:archive:maintain', 'system:release:publish', 'system:release:manage', 'system:release:retry'})
+
 
 def permission_ids_for_template(db, role_code: str) -> set[int]:
     """解析模板权限，并补齐目录祖先节点。"""
@@ -70,7 +73,8 @@ def permission_ids_for_template(db, role_code: str) -> set[int]:
 
     template = ROLE_TEMPLATES[role_code]
     permissions = template["permissions"]
-    menus = db.query(SysMenu).filter(SysMenu.status == 1).all()
+    menus = [menu for menu in db.query(SysMenu).filter(SysMenu.status == 1).all()
+             if menu.permission_code not in MANUAL_ONLY_PERMISSIONS]
     if permissions == "*":
         return {menu.id for menu in menus}
 

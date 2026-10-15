@@ -173,7 +173,7 @@ class UserSecurityContract(unittest.TestCase):
         init_db.initialize_user_security(self.db)
         self.assertEqual(self.db.query(SysRoleMenu).filter_by(role_id=admin.id, menu_id=182).count(), 0)
         from app.services.database_revision import CURRENT_DATABASE_REVISION
-        self.assertEqual(CURRENT_DATABASE_REVISION, "2026-10-12-parameter-secret-01")
+        self.assertEqual(CURRENT_DATABASE_REVISION, "2026-10-15-governance-01")
 
     def test_atomic_create_and_reset_log_failure(self):
         self.configure()

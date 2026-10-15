@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import threading
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +19,7 @@ os.environ["SQLITE_DB_PATH"] = str(DB_PATH)
 
 
 def _prepare_database():
+    import app.models.init_db  # Register the current schema before constructing this isolated fixture.
     from app.core.database import Base, engine
     from app.models.dict import SysDict, SysDictItem  # noqa: F401
     from app.models.field_policy import SysBusinessFieldPolicy  # noqa: F401
@@ -53,6 +55,7 @@ def _create_archive(code: str, *, enabled: int = 1) -> int:
     db = SessionLocal()
     try:
         archive = PmsProjectArchive(
+            governance_legacy=True, contract_signed_date=datetime(2020, 1, 1), contract_ship_date=datetime(2020, 2, 1),  # Historical fixture: lifecycle, not required-field validation.
             business_product_line_id=1,
             project_code=code,
             project_name=f"并发档案 {code}",
@@ -83,6 +86,7 @@ def _create_project_context(code: str) -> tuple[int, int, int]:
         db.add_all([dept, user])
         db.flush()
         archive = PmsProjectArchive(
+            governance_legacy=True, contract_signed_date=datetime(2020, 1, 1), contract_ship_date=datetime(2020, 2, 1),  # Historical fixture: lifecycle, not required-field validation.
             business_product_line_id=1,
             project_code=code,
             project_name=f"并发档案 {code}",
@@ -183,6 +187,7 @@ def test_archive_list_enabled_filter_has_explicit_http_tri_state():
         db.add_all([user, role, view_menu])
         db.flush()
         enabled_archive = PmsProjectArchive(
+            governance_legacy=True, contract_signed_date=datetime(2020, 1, 1), contract_ship_date=datetime(2020, 2, 1),  # Historical fixture: lifecycle, not required-field validation.
             business_product_line_id=1,
             project_code="TRISTATE-ENABLED",
             project_name="三态启用档案",
@@ -190,6 +195,7 @@ def test_archive_list_enabled_filter_has_explicit_http_tri_state():
             is_enabled=1,
         )
         disabled_archive = PmsProjectArchive(
+            governance_legacy=True, contract_signed_date=datetime(2020, 1, 1), contract_ship_date=datetime(2020, 2, 1),  # Historical fixture: lifecycle, not required-field validation.
             business_product_line_id=1,
             project_code="TRISTATE-DISABLED",
             project_name="三态禁用档案",
@@ -381,6 +387,7 @@ def test_mssql_lifecycle_query_uses_update_row_lock_and_fixed_order():
             archive_id = next(value for value in values if value in archive_ids)
             captured.append((archive_id, str(compiled).upper()))
             row = PmsProjectArchive(
+            governance_legacy=True, contract_signed_date=datetime(2020, 1, 1), contract_ship_date=datetime(2020, 2, 1),  # Historical fixture: lifecycle, not required-field validation.
                 project_code=f"MSSQL-{archive_id}",
                 project_name=f"MSSQL {archive_id}",
             )

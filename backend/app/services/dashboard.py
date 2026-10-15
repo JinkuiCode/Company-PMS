@@ -5,27 +5,12 @@ from datetime import date, timedelta
 
 from app.models.project import PmsProject, PmsTask
 from app.models.rbac import SysDept
-from app.services.project import get_child_dept_ids
+from app.services.project import get_scoped_project_query
 
 
 def get_dashboard_stats(db: Session, scope_context: dict) -> dict:
     """获取仪表盘统计数据，严格遵守数据权限"""
-    user_id = scope_context["user_id"]
-    dept_id = scope_context["dept_id"]
-    scope = scope_context["data_scope"]
-
-    # 构建带权限过滤的项目基础查询
-    base_query = db.query(PmsProject)
-    if scope == 1:
-        base_query = base_query.filter(PmsProject.pm_id == user_id)
-    elif scope == 2:
-        if dept_id:
-            base_query = base_query.filter(PmsProject.dept_id == dept_id)
-    elif scope == 3:
-        if dept_id:
-            allowed = get_child_dept_ids(db, dept_id)
-            base_query = base_query.filter(PmsProject.dept_id.in_(allowed))
-    # scope == 4: 不过滤
+    base_query = get_scoped_project_query(db, scope_context)
 
     # 获取可见项目 ID 列表（后续统计共用）
     visible_project_ids = [p.id for p in base_query.all()]

@@ -90,7 +90,9 @@
             :required="field => archiveFieldRequired(field.key, undefined, form)"
             :editable="field => !archiveCreateSaving && archiveFieldEditable(field.key)"
             :options="key => archiveDrawerSelectOptions(key, form)" :errors="archiveCreateServerErrors" id-prefix="archive-create"
-            @field-change="updateArchiveCreateField" />
+            @field-change="updateArchiveCreateField">
+            <p v-if="productLines.labelsFailed.value" class="pms-list-load-error" role="alert">产品线名称加载失败 <el-button class="pms-button-navigation" size="small" aria-label="重试产品线名称" :loading="productLines.labelsLoading.value" @click="productLines.loadLabels()">重试</el-button></p>
+          </ArchiveRecordForm>
           <template #footer>
             <el-button type="warning" plain :disabled="archiveCreateSaving" @click="beforeCloseArchiveCreate(() => { dialogVisible = false })">取消</el-button>
             <el-button v-if="hasPermission('project:archive:add')" type="success" :loading="archiveCreateSaving" @click="handleSubmit">新增保存</el-button>
@@ -100,31 +102,39 @@
       <ArchiveChangeList v-else @back="archiveView = 'archives'" @changed="fetchList" />
     </div>
 
-    <PmsFormDrawer v-if="selectedArchive" :model-value="true" :title="selectedArchive.can_edit ? '编辑项目档案' : '查看项目档案'" :busy="archiveDrawerSaving" penetrable :before-close="beforeCloseArchiveDetail">
-      <p class="archive-governance-route">{{ selectedArchive.can_edit ? selectedArchive.change_mode === 'direct' ? '部门负责人修改，保存后直接生效' : '项目负责人修改，提交后等待部门负责人审批' : selectedArchive.edit_reason || '当前档案仅供查看' }}</p>
+    <PmsFormDrawer v-if="selectedArchive" :model-value="true" :title="archiveMaintenanceMode ? '维护项目档案' : selectedArchive.can_edit ? '编辑项目档案' : '查看项目档案'" :busy="archiveDrawerSaving" penetrable :before-close="beforeCloseArchiveDetail">
+      <el-tabs v-model="archiveDetailTab">
+      <el-tab-pane label="业务信息" name="business">
+      <p class="archive-governance-route">{{ archiveMaintenanceMode ? '填写维护原因并确认差异后直接生效' : selectedArchive.can_edit ? selectedArchive.change_mode === 'direct' ? '部门负责人修改，保存后直接生效' : '项目负责人修改，提交后等待部门负责人审批' : selectedArchive.edit_reason || '当前档案仅供查看' }}</p>
+      <p v-if="productLines.labelsFailed.value" class="pms-list-load-error" role="alert">产品线名称加载失败 <el-button class="pms-button-navigation" size="small" aria-label="重试产品线名称" :loading="productLines.labelsLoading.value" @click="productLines.loadLabels()">重试</el-button></p>
+      <p v-else-if="productLines.failed.value && (archiveMaintenanceMode || selectedArchive.can_edit)" class="archive-governance-route" role="status">产品线选项暂不可用，当前值仅供查看。<el-button class="pms-button-navigation" size="small" aria-label="重试产品线选项" :loading="productLines.loading.value" @click="productLines.loadOptions()">重试</el-button></p>
       <ArchiveRecordForm ref="archiveDrawerFormRef" :model="archiveDrawerForm" :groups="archiveDrawerGroups" :rules="archiveDrawerRules"
         :required="archiveDrawerFieldRequired" :editable="archiveDrawerFieldEditable" :options="key => archiveDrawerSelectOptions(key)"
         :format="formatArchiveDrawerValue" :errors="archiveDrawerServerErrors" id-prefix="archive-drawer"
         @field-change="updateArchiveDetailField">
         <OfflineArchiveSource :archive-id="selectedArchive.id" />
       </ArchiveRecordForm>
+      </el-tab-pane>
+      <el-tab-pane label="操作记录" name="history" lazy><PmsDocumentHistory v-if="archiveDetailTab === 'history'" resource="archive" :entity-id="selectedArchive.id" :revision="selectedArchive.change_version" /></el-tab-pane>
+      </el-tabs>
       <template #secondary><el-button v-if="hasPermission('project:archive:sync')" class="pms-button-navigation" :disabled="archivePendingChangeCount > 0 || ['queued','pending','review'].includes(selectedArchive.erp_sync_status)" :loading="manualSyncBusy" @click="submitArchiveSync">同步金蝶</el-button></template>
       <template #footer>
         <el-button type="warning" plain :disabled="archiveDrawerSaving" @click="closeArchiveDrawer">取消</el-button>
-        <el-button v-if="selectedArchive.can_edit && !archiveDrawerReadOnly" :type="selectedArchive.change_mode === 'direct' ? 'success' : 'primary'" :disabled="!archivePendingChangeCount" :loading="archiveDrawerSaving" @click="saveArchiveDrawer()">{{ selectedArchive.change_mode === 'direct' ? '保存生效' : '提交变更' }}</el-button>
+        <el-button v-if="archiveCanMaintain && !archiveMaintenanceMode" type="primary" plain :disabled="archiveDrawerSaving || archivePendingChangeCount > 0" @click="archiveMaintenanceMode = true">维护</el-button>
+        <el-button v-if="!archiveDrawerReadOnly" :type="archiveMaintenanceMode || selectedArchive.change_mode === 'direct' ? 'success' : 'primary'" :disabled="!archivePendingChangeCount" :loading="archiveDrawerSaving" @click="saveArchiveDrawer()">{{ archiveMaintenanceMode ? '确认维护' : selectedArchive.change_mode === 'direct' ? '保存生效' : '提交变更' }}</el-button>
       </template>
     </PmsFormDrawer>
-    <el-dialog v-model="archiveChangeConfirmOpen" title="确认档案变更" width="min(760px,94vw)" align-center :close-on-click-modal="false" :show-close="!archiveChangeSubmitting" :close-on-press-escape="!archiveChangeSubmitting" @closed="cancelArchiveChangeConfirmation">
-      <p class="archive-governance-route">审批人：{{ archiveChangePreview?.approver_name }} · 按原负责人所属部门确定</p>
+    <el-dialog v-model="archiveChangeConfirmOpen" :title="archiveChangeKind === 'maintenance' ? '确认档案维护' : '确认档案变更'" width="min(760px,94vw)" align-center :close-on-click-modal="false" :show-close="!archiveChangeSubmitting" :close-on-press-escape="!archiveChangeSubmitting" @closed="cancelArchiveChangeConfirmation">
+      <p v-if="archiveChangeKind === 'approval'" class="archive-governance-route">审批人：{{ archiveChangePreview?.approver_name }} · 按原负责人所属部门确定</p>
       <el-table :data="archiveChangePreview?.differences || []" border class="pms-dense-table">
         <el-table-column prop="field_label" label="字段" width="130" />
         <el-table-column prop="before_display" label="修改前" />
         <el-table-column prop="after_display" label="修改后" />
       </el-table>
-      <PmsFormField field-id="archive-change-reason" label="变更原因" required :error="archiveChangeReasonError">
-        <PmsTextareaControl id="archive-change-reason" v-model="archiveChangeReason" aria-label="变更原因" :rows="3" :maxlength="1024" :disabled="archiveChangeSubmitting" />
+      <PmsFormField field-id="archive-change-reason" :label="archiveChangeKind === 'maintenance' ? '维护原因' : '变更原因'" required :error="archiveChangeReasonError">
+        <PmsTextareaControl id="archive-change-reason" v-model="archiveChangeReason" :aria-label="archiveChangeKind === 'maintenance' ? '维护原因' : '变更原因'" :rows="3" :maxlength="archiveChangeKind === 'maintenance' ? 500 : 1024" :disabled="archiveChangeSubmitting" />
       </PmsFormField>
-      <template #footer><el-button type="warning" plain :disabled="archiveChangeSubmitting" @click="archiveChangeConfirmOpen = false">返回修改</el-button><el-button type="primary" :loading="archiveChangeSubmitting" @click="submitArchiveChangeRequest">提交审批</el-button></template>
+      <template #footer><el-button type="warning" plain :disabled="archiveChangeSubmitting" @click="archiveChangeConfirmOpen = false">返回修改</el-button><el-button :type="archiveChangeKind === 'maintenance' ? 'success' : 'primary'" :loading="archiveChangeSubmitting" @click="submitArchiveChangeRequest">{{ archiveChangeKind === 'maintenance' ? '确认生效' : '提交审批' }}</el-button></template>
     </el-dialog>
     <SyncLogDrawer v-model="syncLogVisible" :archive-id="syncLogArchiveId" />
   </section>
@@ -164,6 +174,7 @@ import { adaptConditions, validateConditions, cloneQuery, type QueryCondition } 
 import { toQueryFields, toQueryRecord } from '@/query-system/list-adapter'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
+import PmsDocumentHistory from '@/document-history/PmsDocumentHistory.vue'
 import {
   PmsNumberControl,
   PmsDateControl,
@@ -638,7 +649,7 @@ function archiveRegionLabel(fieldKey: string, value: unknown) {
 
 function archiveDrawerSelectOptions(fieldKey: string, values = archiveDrawerForm): PmsOption[] {
   if (offlineEnumCodes[fieldKey]) return (dictOptions[offlineEnumCodes[fieldKey]!] || []).map(option => ({ ...option, value: Number(option.value) }))
-  if (fieldKey === 'product_line_id') return productLines.options.value
+  if (fieldKey === 'product_line_id') return values === archiveDrawerForm ? productLines.currentOptions(values.product_line_id) : productLines.options.value
   if (fieldKey === 'address_province') return archiveRegions.value
   if (fieldKey === 'address_city') return archiveRegions.value.find(region => region.value === values.address_province)?.children || []
   if (fieldKey === 'product_category') return archiveProductCategoryOptions.value
@@ -848,12 +859,16 @@ const form = reactive<Record<string, any>>({
 const archiveCreateServerErrors = reactive<Record<string, string>>({})
 const archiveDrawerServerErrors = reactive<Record<string, string>>({})
 const selectedArchive = ref<any | null>(null)
+let archiveDrawerRevision = 0
+const archiveMaintenanceMode = ref(false)
+const archiveCanMaintain = computed(() => selectedArchive.value?.can_maintain === true
+  && ['project:archive:view', 'project:archive:edit', 'project:archive:maintain'].every(hasPermission))
 const archiveView = ref<'archives' | 'changes'>('archives')
 const archiveDrawerLifecycleConflict = ref(false)
 const archiveDrawerReadOnly = computed(() => (
   selectedArchive.value?.is_enabled !== 1
   || archiveDrawerLifecycleConflict.value
-  || selectedArchive.value?.can_edit !== true
+  || (archiveMaintenanceMode.value ? !archiveCanMaintain.value : selectedArchive.value?.can_edit !== true)
 ))
 const archiveDrawerFormRef = ref<FormInstance>()
 const archiveDrawerForm = reactive<Record<string, any>>({})
@@ -862,6 +877,7 @@ const archivePendingChanges = ref<Record<string, ArchivePendingChange>>({})
 const archiveEditingField = ref<string | null>(null)
 const archiveEditSnapshot = ref<Record<string, any>>({})
 const archiveDrawerSaving = ref(false)
+const archiveDetailTab = ref('business')
 const archivePendingChangeCount = computed(() => {
   const changedKeys = new Set(Object.keys(archivePendingChanges.value))
   const activeFieldKey = archiveEditingField.value
@@ -1253,8 +1269,10 @@ function archiveDrawerValues(row: any) {
 }
 
 function resetArchiveDrawer(row: any) {
+  ++archiveDrawerRevision
   clearArchiveServerErrors(archiveDrawerServerErrors)
   selectedArchive.value = { ...row }
+  archiveMaintenanceMode.value = false
   archiveDrawerLifecycleConflict.value = false
   const values = archiveDrawerValues(row)
   Object.keys(archiveDrawerForm).forEach(key => delete archiveDrawerForm[key])
@@ -1286,7 +1304,7 @@ async function confirmDiscardArchiveChanges() {
 }
 
 const archiveDetailSwitch = createDetailSwitch<any>(async () => {
-  if (archiveDrawerSaving.value) return false
+  if (archiveDrawerSaving.value || archiveChangeConfirmOpen.value) return false
   commitArchiveFieldEdit()
   if (!archivePendingChangeCount.value) return true
   const decision = await confirmDetailSwitch()
@@ -1314,13 +1332,16 @@ async function openArchiveDrawer(row: any) {
 }
 
 async function closeArchiveDrawer() {
-  if (archiveDrawerSaving.value) return
+  if (archiveDrawerSaving.value || archiveChangeConfirmOpen.value) return
   if (!await confirmDiscardArchiveChanges()) return
   archiveDetailSwitch.invalidate()
+  ++archiveDrawerRevision
   selectedArchive.value = null
   archivePendingChanges.value = {}
   archiveEditingField.value = null
   archiveDrawerLifecycleConflict.value = false
+  archiveMaintenanceMode.value = false
+  archiveDetailTab.value = 'business'
 }
 
 function archiveDrawerFieldRequired(field: ArchiveDrawerField) {
@@ -1329,6 +1350,7 @@ function archiveDrawerFieldRequired(field: ArchiveDrawerField) {
 }
 
 function archiveDrawerFieldEditable(field: ArchiveDrawerField) {
+  if (field.key === 'product_line_id' && (productLines.failed.value || productLines.loading.value)) return false
   if (field.key === 'project_code' && (selectedArchive.value?.erp_synced || selectedArchive.value?.data_origin === 'kingdee_initial')) return false
   return !archiveDrawerReadOnly.value
     && !archiveDrawerSaving.value
@@ -1492,6 +1514,7 @@ const archiveChangeSubmitting = ref(false)
 const archiveChangeReason = ref('')
 const archiveChangeReasonError = ref('')
 const archiveChangePreview = ref<any>(null)
+const archiveChangeKind = ref<'approval' | 'maintenance'>('approval')
 let archiveChangeResolve: ((success: boolean) => void) | undefined
 let archiveChangeSubmissionId = ''
 let archiveChangePayload: Record<string, unknown> = {}
@@ -1505,24 +1528,46 @@ function cancelArchiveChangeConfirmation() {
 
 async function submitArchiveChangeRequest() {
   if (archiveChangeSubmitting.value) return
-  if (!archiveChangeReason.value.trim()) { archiveChangeReasonError.value = '请填写变更原因'; return }
+  if (!archiveChangeReason.value.trim()) { archiveChangeReasonError.value = archiveChangeKind.value === 'maintenance' ? '请填写维护原因' : '请填写变更原因'; return }
   archiveChangeSubmitting.value = true
+  archiveDrawerSaving.value = true
+  const archiveId = archiveChangeArchiveId
+  const revision = archiveDrawerRevision
+  const finish = archiveChangeResolve
   try {
-    await request.post(`/projects/archive-changes/${archiveChangeArchiveId}/submit`, {
-      updates: archiveChangePayload, expected_version: archiveChangePreview.value.expected_version,
-      reason: archiveChangeReason.value.trim(), submission_id: archiveChangeSubmissionId,
-    })
-    archivePendingChanges.value = {}
-    archiveEditingField.value = null
-    archiveChangeResolve?.(true)
+    const maintenance = archiveChangeKind.value === 'maintenance'
+    let syncQueued = false
+    if (maintenance) {
+      const result: any = await request.put(`/projects/archives/${archiveId}/maintenance`, {
+        updates: archiveChangePayload, expected_version: archiveChangePreview.value.expected_version,
+        reason: archiveChangeReason.value.trim(),
+      })
+      syncQueued = result.sync_queued === true
+    } else {
+      await request.post(`/projects/archive-changes/${archiveId}/submit`, {
+        updates: archiveChangePayload, expected_version: archiveChangePreview.value.expected_version,
+        reason: archiveChangeReason.value.trim(), submission_id: archiveChangeSubmissionId,
+      })
+    }
+    if (selectedArchive.value?.id === archiveId && archiveDrawerRevision === revision) {
+      archivePendingChanges.value = {}
+      archiveEditingField.value = null
+    }
     archiveChangeResolve = undefined
     archiveChangeConfirmOpen.value = false
-    await fetchList()
-    const row = await fetchArchiveLifecycleSnapshot(archiveChangeArchiveId)
-    if (row && selectedArchive.value?.id === archiveChangeArchiveId) resetArchiveDrawer(row)
-    ElMessage.success('变更已提交审批，正式档案保持原值')
+    try {
+      await fetchList()
+      if (archiveListError.value) throw new Error('List refresh failed')
+      const row = await fetchArchiveLifecycleSnapshot(archiveId)
+      if (row && selectedArchive.value?.id === archiveId && archiveDrawerRevision === revision) resetArchiveDrawer(row)
+    } catch {
+      if (selectedArchive.value?.id === archiveId && archiveDrawerRevision === revision) archiveDrawerLifecycleConflict.value = true
+      ElMessage.warning('已提交成功，但资料刷新失败，请刷新后继续维护')
+    }
+    finish?.(true)
+    ElMessage.success(maintenance ? syncQueued ? '维护已生效，后台将按原策略同步金蝶' : '维护已生效' : '变更已提交审批，正式档案保持原值')
   } catch { /* The shared request handler reports the error; retain the draft and submission id. */ }
-  finally { archiveChangeSubmitting.value = false }
+  finally { archiveChangeSubmitting.value = false; archiveDrawerSaving.value = false }
 }
 
 function archivePolicyValidationFieldKeys(error: any): string[] {
@@ -1656,8 +1701,10 @@ async function saveArchiveDrawer() {
   let syncQueued = false
   try {
     if (Object.keys(payload).length) {
-      if (selectedArchive.value.change_mode === 'approval') {
-        archiveChangePreview.value = await request.post(`/projects/archive-changes/${archiveId}/preview`, { updates: payload, expected_version: selectedArchive.value.change_version })
+      if (archiveMaintenanceMode.value || selectedArchive.value.change_mode === 'approval') {
+        archiveChangeKind.value = archiveMaintenanceMode.value ? 'maintenance' : 'approval'
+        const previewUrl = archiveMaintenanceMode.value ? `/projects/archives/${archiveId}/maintenance/preview` : `/projects/archive-changes/${archiveId}/preview`
+        archiveChangePreview.value = await request.post(previewUrl, { updates: payload, expected_version: selectedArchive.value.change_version })
         archiveChangePayload = payload
         archiveChangeArchiveId = archiveId
         archiveChangeSubmissionId = newSubmissionId()
@@ -1715,6 +1762,7 @@ function resetArchiveSelection() {
 }
 
 async function releaseArchiveDrawerForLifecycle(archiveIds: number[]) {
+  if (archiveDrawerSaving.value || archiveChangeConfirmOpen.value) return false
   if (!selectedArchive.value || !archiveIds.includes(selectedArchive.value.id)) return true
   if (!await confirmDiscardArchiveChanges()) return false
   selectedArchive.value = null

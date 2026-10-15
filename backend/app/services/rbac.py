@@ -297,25 +297,36 @@ def delete_user(db: Session, user_id: int, operator_id: int | None = None, reque
     user = db.query(SysUser).filter(SysUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    role_ids = [ur.role_id for ur in db.query(SysUserRole).filter(SysUserRole.user_id == user_id).all()]
-    before = serialize_model(user, extra={"role_ids": role_ids})
-    db.query(SysUserRole).filter(SysUserRole.user_id == user_id).delete()
-    db.delete(user)
-    db.flush()
-    ensure_recovery_administrator_exists(db)
-    record_operation_log(
-        db,
-        module="系统管理",
-        action="delete",
-        entity_type="sys_user",
-        entity_id=user_id,
-        entity_name=user.real_name,
-        operator_id=operator_id,
-        request=request,
-        summary=f"删除用户：{user.real_name}",
-        before_data=before,
-    )
-    db.commit()
+    from app.models.release import PmsReleaseNotice
+    from sqlalchemy.exc import IntegrityError
+    if db.query(PmsReleaseNotice.id).filter_by(user_id=user_id).first():
+        raise HTTPException(409, '该用户已有升级通知记录，请改为停用以保留历史')
+    try:
+        role_ids = [ur.role_id for ur in db.query(SysUserRole).filter(SysUserRole.user_id == user_id).all()]
+        before = serialize_model(user, extra={"role_ids": role_ids})
+        db.query(SysUserRole).filter(SysUserRole.user_id == user_id).delete()
+        db.delete(user)
+        db.flush()
+        ensure_recovery_administrator_exists(db)
+        record_operation_log(
+            db,
+            module="系统管理",
+            action="delete",
+            entity_type="sys_user",
+            entity_id=user_id,
+            entity_name=user.real_name,
+            operator_id=operator_id,
+            request=request,
+            summary=f"删除用户：{user.real_name}",
+            before_data=before,
+        )
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(409, '该用户已关联业务记录，请改为停用以保留历史') from error
+    except Exception:
+        db.rollback()
+        raise
     return {"msg": "删除成功"}
 
 

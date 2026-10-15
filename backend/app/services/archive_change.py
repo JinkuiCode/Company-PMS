@@ -46,6 +46,7 @@ def _relation(db, archive, users=None, departments=None):
 
 
 def archive_edit_context(db, archive, scope, *, users=None, departments=None, pending=None):
+    from app.services.archive_maintenance import maintenance_context
     owner, dept, head = _relation(db, archive, users, departments)
     actor = (scope or {}).get('user_id')
     has_action = 'project:archive:edit' in (scope or {}).get('permissions', [])
@@ -59,7 +60,8 @@ def archive_edit_context(db, archive, scope, *, users=None, departments=None, pe
     return dict(can_edit=bool(can_edit), change_mode=('direct' if actor == head.id else 'approval') if can_edit else 'readonly',
                 change_version=archive_business_version(archive), approver_id=head.id if head else None,
                 approver_name=f'{head.real_name or head.username}（{head.username}）' if head else '',
-                pending_change_id=pending or None, edit_reason=reason)
+                pending_change_id=pending or None, edit_reason=reason,
+                **maintenance_context(archive, scope, pending))
 
 
 def archive_edit_contexts(db, archives, scope):

@@ -17,6 +17,7 @@ from app.models.user import SysUser
 from app.models.parameter import SysParameter
 from app.models.feedback import FeedbackReport
 from app.models.archive_change import ArchiveChange
+from app.models.release import PmsRelease, PmsReleaseNotice, PmsReleaseMail
 from app.schemas.feedback import FeedbackCreate, FeedbackHandle
 from app.models.erp_task import ErpSyncTask
 from app.models.product_line import SysProductLine, SysRoleProductLine
@@ -49,6 +50,9 @@ from app.services.project_sheet_fields import (
 
 
 MODULE_CONFIGS = (
+    {'key':'release','label':'版本发布','group':'发布字段','model':PmsRelease,'schemas':(),'editable_schemas':()},
+    {'key':'release_notice','label':'个人升级通知','group':'通知字段','model':PmsReleaseNotice,'schemas':(),'editable_schemas':()},
+    {'key':'release_mail','label':'升级邮件投递','group':'投递字段','model':PmsReleaseMail,'schemas':(),'editable_schemas':()},
     {'key':'archive_change','label':'项目档案变更','group':'审批字段','model':ArchiveChange,'schemas':(),'editable_schemas':()},
     {"key": "feedback", "label": "问题提报", "group": "提报字段", "model": FeedbackReport,
      "schemas": (FeedbackCreate, FeedbackHandle), "editable_schemas": (FeedbackCreate, FeedbackHandle)},
@@ -207,6 +211,7 @@ FIELD_LABELS = {
 
 
 ENUM_BINDINGS: dict[tuple[str, str], tuple[str | None, str]] = {
+    ('release_mail', 'status'): (None, 'system_fixed'),
     ('archive_change','status'):('archive_change_status','system_fixed'),
     ("feedback", "type_id"): ("feedback_type", "enum"),
     ("feedback", "module_id"): ("feedback_module", "enum"),
@@ -239,7 +244,7 @@ FIELD_METADATA_OVERRIDES: dict[tuple[str, str], dict[str, Any]] = {
     ('project_archive','governance_legacy'): {'editable':False,'source_type':'system_fixed',
         'description':'仅独立升级及受控历史期初导入标记存量，保留历史必输兼容；普通新增和修改不可设置'},
     ("feedback", "category_id"): {"source_type": "enum", "description": "问题类型引用feedback_issue_category，需求类型引用feedback_request_category"},
-    **{("feedback", field): {"editable": False, "source_type": "system_fixed"} for field in ("report_no", "submission_id", "author_id", "handler_id", "version", "created_at", "updated_at")},
+    **{("feedback", field): {"editable": False, "source_type": "system_fixed"} for field in ("report_no", "submission_id", "author_id", "handler_id", "version", "runtime_version", "created_at", "updated_at")},
     **{(module, field): {"editable": False, "description": "历史停用字段，仅保留旧值，不参与权限或业务维护"}
        for module, field in (("project_archive","product_category"),("project_progress","product_category"),("role","product_category_ids"))},
     ("project_archive", "status"): {

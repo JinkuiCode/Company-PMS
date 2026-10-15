@@ -9,3 +9,4 @@ export const getProductLines = (params: object) => request.get('/product-lines',
 export const getOrganizations = (params: object) => request.get('/product-lines/organizations', { params }) as unknown as Promise<{ items: Organization[]; total: number }>
 export const getRoleProductLines = () => request.get('/product-lines/role-options') as unknown as Promise<{ items: LineOption[] }>
 export const getProductLineOptions = () => request.get('/product-lines/options') as unknown as Promise<{ options: LineOption[]; label_map: Record<string, string> }>
+export const getProductLineLabels = () => request.get('/product-lines/labels') as unknown as Promise<{ label_map: Record<string, string> }>

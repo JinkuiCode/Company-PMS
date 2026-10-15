@@ -20,6 +20,8 @@ class SysOperationLog(Base):
     entity_type: Mapped[str] = mapped_column(NVARCHAR(64), nullable=False, comment="对象类型")
     entity_id: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="对象ID")
     entity_name: Mapped[str | None] = mapped_column(NVARCHAR(256), default=None, comment="对象名称")
+    root_entity_type: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="关联主单类型")
+    root_entity_id: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="关联主单ID")
     operator_id: Mapped[int | None] = mapped_column(Integer, default=None, comment="操作者ID")
     operator_name: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="操作者名称快照")
     ip_address: Mapped[str | None] = mapped_column(NVARCHAR(64), default=None, comment="客户端IP")
@@ -32,6 +34,7 @@ class SysOperationLog(Base):
     before_data: Mapped[str | None] = mapped_column(NVARCHAR(None), default=None, comment="变更前JSON")
     after_data: Mapped[str | None] = mapped_column(NVARCHAR(None), default=None, comment="变更后JSON")
     diff_data: Mapped[str | None] = mapped_column(NVARCHAR(None), default=None, comment="差异JSON")
+    diff_items_data: Mapped[str | None] = mapped_column(NVARCHAR(None), default=None, comment="事件时中文差异快照")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
 
     __table_args__ = (
@@ -40,4 +43,5 @@ class SysOperationLog(Base):
         Index("idx_operation_log_action", "action"),
         Index("idx_operation_log_operator", "operator_id"),
         Index("idx_operation_log_entity", "entity_type", "entity_id"),
+        Index("idx_operation_log_root", "root_entity_type", "root_entity_id", "created_at"),
     )

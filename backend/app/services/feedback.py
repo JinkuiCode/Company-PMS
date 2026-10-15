@@ -14,13 +14,10 @@ from app.services.operation_log import serialize_model, record_operation_log
 from app.services.list_query import apply_list_query
 from app.services.business_list_query import compile_business_query
 from app.services.query_conditions import build_query_clause
+from app.core.business_time import business_time
 
 ENUM_FIELDS = {'type_id': 'feedback_type', 'module_id': 'feedback_module', 'impact_id': 'feedback_impact', 'status_id': 'feedback_status'}
 MAIL_LABELS = {'pending': '待发送', 'waiting': '待配置', 'processing': '发送中', 'sent': '已发送', 'failed': '发送失败', 'unknown': '结果待核查'}
-
-
-def business_time(value):
-    return value.replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=8))) if value.tzinfo is None else value.astimezone(timezone(timedelta(hours=8)))
 
 
 def serialize_feedback(row, exclude=None):
@@ -169,7 +166,9 @@ def create_report(db, context, data, request=None):
         validate_enum_value(db, ENUM_FIELDS[field], getattr(data, field))
     validate_enum_value(db, category_code(data.type_id), data.category_id)
     validate_enum_value(db, 'feedback_status', 1)
-    row = Report(**data.model_dump(), report_no='draft-' + uuid4().hex, author_id=context['user_id'], status_id=1, version=1)
+    from app.services.runtime_release import runtime_info
+    row = Report(**data.model_dump(), report_no='draft-' + uuid4().hex, author_id=context['user_id'], status_id=1, version=1,
+        runtime_version=runtime_info(context)['version'])
     try:
         db.add(row)
         db.flush()

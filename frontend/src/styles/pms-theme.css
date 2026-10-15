@@ -828,3 +828,22 @@ a {
 .pms-dense-table .pms-query-filtered-column {
   background-color: var(--pms-query-filter-tint, #f0f2ff);
 }
+
+/* About and release notices use the approved bounded workspace layout. */
+.pms-release-dialog { height:min(760px,calc(100dvh - 24px)); display:flex; flex-direction:column; }
+.pms-release-dialog .el-dialog__header { flex-shrink:0; padding-bottom:12px; }
+.pms-release-dialog .el-dialog__body { flex:1; min-height:0; padding:0; overflow:hidden; }
+
+/* Semantic actions used by the independent governance modules. */
+.pms-link-navigation { color:var(--pms-info); }
+.pms-link-navigation:hover { color:var(--pms-info); }
+.pms-button-navigation {
+  --el-button-text-color:var(--pms-info); --el-button-bg-color:var(--pms-info-soft);
+  --el-button-border-color:var(--pms-border); --el-button-hover-text-color:var(--pms-info);
+  --el-button-hover-bg-color:var(--pms-info-soft); --el-button-hover-border-color:var(--pms-info);
+}
+.pms-button-reset {
+  --el-button-text-color:var(--pms-warning); --el-button-bg-color:var(--pms-warning-soft);
+  --el-button-border-color:var(--pms-border); --el-button-hover-text-color:var(--pms-warning);
+  --el-button-hover-bg-color:var(--pms-warning-soft); --el-button-hover-border-color:var(--pms-warning);
+}

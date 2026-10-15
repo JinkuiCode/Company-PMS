@@ -42,3 +42,5 @@ class OperationLogResponse(BaseModel):
 class OperationLogListResponse(BaseModel):
     total: int
     items: list[OperationLogResponse]
+    actions: list[dict[str, str]] = Field(default_factory=list)
+    modules: list[dict[str, str]] = Field(default_factory=list)

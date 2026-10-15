@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.security import hash_password, user_access_token
 from app.models.user import SysUser
 from app.models.rbac import SysDept, SysRole, SysUserRole
+from app.services.operation_log import record_operation_log, serialize_model
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +84,15 @@ def find_or_create_user(db: Session, loginid: str, username: str, dept_name: str
             raise HTTPException(status_code=403, detail="账号已被禁用，请联系管理员")
         # 只带工号的重定向不是姓名来源，不能覆盖已维护的员工姓名。
         if username and username != loginid and user.real_name != username:
+            before = serialize_model(user)
             user.real_name = username
-            db.commit()
+            try:
+                record_operation_log(db, module='认证', action='update', entity_type='sys_user',
+                    entity_id=user.id, entity_name=user.real_name, operator_id=user.id,
+                    summary='OA登录更新已验证姓名', before_data=before, after_data=serialize_model(user))
+                db.commit()
+            except Exception:
+                db.rollback(); raise
         return user
 
     if not settings.SSO_AUTO_CREATE_USER:
@@ -112,14 +120,21 @@ def find_or_create_user(db: Session, loginid: str, username: str, dept_name: str
         dept_id=dept_id,
         status=1,
     )
-    db.add(user)
-    db.flush()  # 获取 user.id
+    try:
+        db.add(user)
+        db.flush()  # 获取 user.id
 
-    # 3. OA 自动开户始终分配启用的操作员模板，缺失时上方已失败关闭。
-    db.add(SysUserRole(user_id=user.id, role_id=default_role.id))
+        # 3. OA 自动开户始终分配启用的操作员模板，缺失时上方已失败关闭。
+        db.add(SysUserRole(user_id=user.id, role_id=default_role.id))
 
-    db.commit()
-    db.refresh(user)
+        record_operation_log(db, module='认证', action='create', entity_type='sys_user',
+            entity_id=user.id, entity_name=user.real_name, operator_id=user.id,
+            summary='OA自动创建用户', after_data=serialize_model(user, extra={'role_ids': [default_role.id]}))
+
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback(); raise
     return user
 
 

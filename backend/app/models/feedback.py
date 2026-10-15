@@ -26,6 +26,7 @@ class FeedbackReport(Base):
     cause_id: Mapped[int | None] = mapped_column(Integer, nullable=True, comment='处理归因')
     opinion: Mapped[str | None] = mapped_column(NVARCHAR(None), nullable=True, comment='最新处理意见')
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment='记录版本')
+    runtime_version: Mapped[str | None] = mapped_column(NVARCHAR(32), nullable=True, comment='提报时运行版本')
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, comment='提报时间')
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, comment='最后更新时间')
     __table_args__ = (Index('uq_feedback_submission', 'author_id', 'submission_id', unique=True),)

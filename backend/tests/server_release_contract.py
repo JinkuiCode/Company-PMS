@@ -1,5 +1,5 @@
 """Release provenance and runtime-data exclusion using an isolated Git fixture."""
-import hashlib,json,os,shutil,subprocess,tempfile,unittest,zipfile
+import hashlib,json,os,shutil,subprocess,tempfile,unittest,zipfile,sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -15,8 +15,12 @@ class ReleaseContract(unittest.TestCase):
         files={'backend/app/core/config.py':'fixture config','backend/main.py':'fixture main','backend/requirements.txt':'fixture deps','backend/scripts/check.py':'fixture check','backend/vendor/k3cloud_webapi_sdk-3.0.0-py3-none-any.whl':'fixture wheel','backend/.env.kingdee.example':'K3_READ_ONLY=true','backend/.env.example':'PMS_ENV=production','frontend/index.html':'ENTRY_A\n','frontend/src/main.js':'SOURCE_A\n','frontend/tsconfig.json':'{}','frontend/package.json':'{}','frontend/public/a.txt':'public','ops/windows/Start-Pms.ps1':'fixture ops','docs/PMS服务器发布与回退说明.md':'部署前只读核对与回退','frontend/package-lock.json':'{}'}
         for name,value in files.items():
             p=self.root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(value)
+        (self.root/'release-notes.json').write_text(json.dumps({'version':'v1.0.0'}))
+        (self.root/'backend/scripts/prepare_release_manifest.py').write_text('import argparse,json\np=argparse.ArgumentParser()\nfor name in ("notes","commit","build-id","output"):p.add_argument("--"+name,required=True)\na=p.parse_args();v=json.load(open(a.notes));v.update(commit=a.commit,build_id=a.build_id);open(a.output,"w").write(json.dumps(v))\n')
         shutil.copy2(ROOT/'build-server-release.command',self.root/'build-server-release.command')
-        (self.root/'.gitignore').write_text('frontend/node_modules/\nfrontend/dist/\nbackend/data/\nbackend/.env.local\nrelease/\n')
+        (self.root/'.gitignore').write_text('frontend/node_modules/\nfrontend/dist/\nbackend/data/\nbackend/.env.local\nbackend/.venv/\nrelease/\n')
+        (self.root/'backend/.venv/bin').mkdir(parents=True)
+        (self.root/'backend/.venv/bin/python').symlink_to(sys.executable)
         (self.root/'frontend/node_modules').mkdir();self.commit('A')
         (self.root/'frontend/dist').mkdir();(self.root/'frontend/dist/index.html').write_text('STALE_BUILD')
         (self.root/'backend/.env.local').write_text('FAKE_SECRET_NEVER_PACKAGE')
@@ -34,10 +38,11 @@ class ReleaseContract(unittest.TestCase):
         archive=next((self.root/'release').glob('*.zip'));self.assertEqual(archive.with_suffix('.zip.sha256').read_text().split()[0],hashlib.sha256(archive.read_bytes()).hexdigest())
         with zipfile.ZipFile(archive) as z:
             names=z.namelist();prefix=names[0].split('/')[0]+'/'
-            for name in ['backend/main.py','backend/requirements.txt','backend/app/core/config.py','backend/.env.example','frontend/dist/index.html','ops/windows/Start-Pms.ps1','RELEASE-MANIFEST.txt','SERVER-DEPLOYMENT.md','SHA256SUMS']:
+            for name in ['backend/main.py','backend/requirements.txt','backend/app/core/config.py','backend/.env.example','frontend/dist/index.html','ops/windows/Start-Pms.ps1','release.json','RELEASE-MANIFEST.txt','SERVER-DEPLOYMENT.md','SHA256SUMS']:
                 self.assertIn(prefix+name,names)
             for name in names:self.assertTrue({'.env.local','.git','data','node_modules','tests','__pycache__'}.isdisjoint(Path(name).parts))
             self.assertIn(self.git('rev-parse','HEAD'),z.read(prefix+'RELEASE-MANIFEST.txt').decode())
+            self.assertEqual(json.loads(z.read(prefix+'release.json'))['commit'],self.git('rev-parse','HEAD'))
             for line in z.read(prefix+'SHA256SUMS').decode().splitlines():
                 digest,name=line.split(maxsplit=1);self.assertEqual(digest,hashlib.sha256(z.read(prefix+name)).hexdigest())
     def test_new_commit_rebuilds_frontend_not_stale_dist(self):

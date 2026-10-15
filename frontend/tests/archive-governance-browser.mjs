@@ -1,5 +1,6 @@
 import {chromium,expect} from '@playwright/test'
 import assert from 'node:assert/strict'
+const base=process.env.PMS_GOVERNANCE_URL || 'http://127.0.0.1:5174'
 const browser=await chromium.launch({channel:'msedge',headless:true})
 try{
  const page=await browser.newPage({viewport:{width:1366,height:768}});page.setDefaultTimeout(8000)
@@ -10,7 +11,7 @@ try{
  page.on('pageerror',e=>errors.push(e.message))
  await page.route('**/*',async route=>{
   const url=new URL(route.request().url()),path=url.pathname,method=route.request().method()
-  if(url.origin!=='http://127.0.0.1:5174')return route.abort()
+  if(url.origin!==base)return route.abort()
   if(!path.startsWith('/api/'))return route.continue()
   let body=[]
   if(path==='/api/auth/me')body={id:actor,username:actor===42?'A001':'A002',real_name:actor===42?'项目负责人':'部门负责人',permissions:['project:archive:view','project:archive:add','project:archive:edit']}
@@ -30,7 +31,7 @@ try{
   if(['POST','PUT'].includes(method))writes.push({path,data:route.request().postDataJSON()})
   await route.fulfill({json:body})
  })
- await page.goto('http://127.0.0.1:5174/project/archive')
+ await page.goto(`${base}/project/archive`)
  await expect(page.getByRole('button',{name:'编辑',exact:true})).toBeVisible()
  await page.getByRole('button',{name:'新增档案',exact:true}).click()
  const create=page.getByRole('dialog',{name:'新增项目档案',exact:true})

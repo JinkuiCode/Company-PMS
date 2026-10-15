@@ -8,6 +8,9 @@ export interface GuideViewState {
 }
 
 export const guideDestinations = {
+  progress: { permission: 'project:list:view' },
+  tasks: { permission: 'project:list:view' },
+  audit: { permission: 'system:operation-log:view' },
   archive: { permission: 'project:archive:view' },
   archiveChanges: { permission: 'project:archive:view' },
   purchase: { permission: 'report:purchase:view' },

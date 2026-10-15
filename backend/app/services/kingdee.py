@@ -397,6 +397,14 @@ def sync_project_archive_to_erp(
     :param archive_id: 项目档案 ID
     :return: 包含 success 和 message 的结果字典
     """
+    if queue_task_id is not None:
+        from app.models.erp_task import ErpSyncTask
+        from app.services.erp_execution_authorization import authorize_task_execution, authorization_changed
+        queued_task = db.get(ErpSyncTask, queue_task_id)
+        scope_context = authorize_task_execution(db, queued_task, db.get(PmsProjectArchive, archive_id))
+        if scope_context['user_id'] != user_id:
+            raise authorization_changed()
+
     def validate_claim(current):
         validate_archive_for_business_operation(db, current)
         if queue_task_id is not None:
@@ -406,7 +414,10 @@ def sync_project_archive_to_erp(
             if not latest or latest.id != queue_task_id:
                 raise HTTPException(409, detail={'code': 'ERP_TASK_SUPERSEDED'})
             from app.services.erp_queue import validate_task_target
-            validate_task_target(db, db.get(ErpSyncTask, queue_task_id, populate_existing=True), current)
+            queued = db.get(ErpSyncTask, queue_task_id, populate_existing=True)
+            from app.services.erp_execution_authorization import authorize_task_execution
+            authorize_task_execution(db, queued, current)
+            validate_task_target(db, queued, current)
 
     claimed = claim_archive_for_sync(
         db,

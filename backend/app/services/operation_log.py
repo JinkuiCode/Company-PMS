@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime
 import decimal
 import json
+import re
 from typing import Any
 
 from fastapi import Request
@@ -27,7 +28,14 @@ SENSITIVE_KEYWORDS = (
 )
 MASK_VALUE = "***"
 
+
+def sanitize_text(value: str) -> str:
+    value = re.sub(r'(?i)\bBearer\s+[^\s,;"\']+', 'Bearer ***', value)
+    value = re.sub(r'(?i)((?:password|password_hash|app_?secret|secret|token|api_?key|sign|密码)\s*[=:：]\s*)(?:"[^"]*"|\'[^\']*\'|[^\s,;&]+)', r'\1***', value)
+    return re.sub(r'(https?://)[^/@\s]+:[^/@\s]+@', r'\1***@', value)
+
 ENTITY_CATALOG_MODULES = {
+    'pms_release': 'release', 'pms_release_notice': 'release_notice', 'pms_release_mail': 'release_mail',
     "pms_feedback_report": "feedback",
     "pms_feedback_followup": "feedback_followup",
     "pms_feedback_attachment": "feedback_attachment",
@@ -122,6 +130,8 @@ def sanitize_data(data: Any) -> Any:
         return result
     if isinstance(data, (list, tuple, set)):
         return [sanitize_data(item) for item in data]
+    if isinstance(data, str):
+        return sanitize_text(data)
     return _normalize_value(data)
 
 
@@ -346,8 +356,8 @@ def _request_meta(request: Request | None) -> dict[str, str | None]:
     ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else None)
     return {
         "ip_address": ip_address,
-        "user_agent": request.headers.get("user-agent"),
-        "request_path": request.url.path,
+        "user_agent": sanitize_text(request.headers.get("user-agent", ''))[:512],
+        "request_path": sanitize_text(getattr(request.scope.get('route'), 'path', '[未匹配路由]'))[:256],
         "request_method": request.method,
     }
 
@@ -377,7 +387,7 @@ def record_operation_log(
     after_data: dict[str, Any] | None = None,
     error_msg: str | None = None,
     commit: bool = False,
-) -> SysOperationLog:
+) -> SysOperationLog | None:
     """写入系统操作日志。
 
     调用方在业务事务中记录时保持 commit=False；认证/同步等独立场景可传 commit=True。
@@ -385,6 +395,16 @@ def record_operation_log(
     before_clean = sanitize_data(before_data)
     after_clean = sanitize_data(after_data)
     diff_clean = diff_data(before_data, after_data) if before_data is not None or after_data is not None else None
+    if action == 'update' and status == 'success' and before_data is not None and after_data is not None and not diff_clean:
+        return None
+    from app.services.operation_log_metadata import resolve_log_root, snapshot_display_items
+    root_type, root_id = resolve_log_root(db, entity_type, entity_id, before_clean, after_clean)
+    display_items = snapshot_display_items(db, entity_type, str(entity_id) if entity_id is not None else None,
+        action, diff_clean, after_clean)
+    for item in display_items:
+        for name in ('field_label', 'field_group', 'before_display', 'after_display'):
+            if isinstance(item.get(name), str): item[name] = sanitize_text(item[name])
+        for name in ('before', 'after'): item[name] = sanitize_data(item.get(name))
     meta = _request_meta(request)
     resolved_summary = summary or f"{module}{action}"
 
@@ -393,28 +413,39 @@ def record_operation_log(
         action=action,
         entity_type=entity_type,
         entity_id=str(entity_id) if entity_id is not None else None,
-        entity_name=entity_name,
+        entity_name=sanitize_text(entity_name)[:256] if entity_name else None,
+        root_entity_type=root_type,
+        root_entity_id=root_id,
         operator_id=operator_id,
-        operator_name=_operator_name(db, operator_id),
+        operator_name=sanitize_text(_operator_name(db, operator_id) or '')[:64] or None,
         ip_address=meta["ip_address"],
         user_agent=meta["user_agent"],
         request_path=meta["request_path"],
         request_method=meta["request_method"],
         status=status,
-        summary=resolved_summary,
-        error_msg=error_msg,
+        summary=sanitize_text(resolved_summary)[:512],
+        error_msg=sanitize_text(error_msg)[:1024] if error_msg else None,
         before_data=_json_dumps(before_clean),
         after_data=_json_dumps(after_clean),
         diff_data=_json_dumps(diff_clean),
+        diff_items_data=json.dumps(display_items, ensure_ascii=False, default=str),
     )
     db.add(log)
     if commit:
         db.commit()
         db.refresh(log)
+        if status == 'failed' and request is not None:
+            request.state.audit_failure_recorded = True
     return log
 
 
 OPERATION_ACTION_LABELS = {
+    'verify': '核查结果', 'change_password': '修改密码', 'reset_password': '重置密码',
+    'reset': '恢复设置', 'sso_url_generate': '生成登录链接',
+    'publish': '发布版本', 'read': '确认已读', 'mail_delivery': '邮件投递',
+    'denied': '访问被拒绝', 'failed_write': '写入失败',
+    'maintain': '档案维护', 'submit': '提交变更', 'approve': '审批通过', 'reject': '退回',
+    'withdraw': '撤回', 'import': '导入', 'export': '导出', 'retry': '重试',
     'create': '新增', 'update': '编辑', 'delete': '删除', 'login': '登录',
     'auto_login': '自动登录', 'logout': '退出', 'sso_login': 'SSO 登录',
     'sync': 'ERP 同步', 'batch_sync': '批量同步', 'sso_verify': 'SSO Token',
@@ -423,12 +454,13 @@ OPERATION_ACTION_LABELS = {
 OPERATION_QUERY_LABELS = {'action': OPERATION_ACTION_LABELS, 'status': {'success': '成功', 'failed': '失败'}}
 
 
-def operation_log_columns():
+def operation_log_columns(db=None):
     columns = {name: (getattr(SysOperationLog, name), 'text') for name in (
         'entity_type', 'entity_name', 'operator_name', 'ip_address', 'summary', 'request_path',
     )}
     columns.update({name: (getattr(SysOperationLog, name), 'enum_text') for name in ('module', 'action', 'status')})
-    columns['created_at'] = (SysOperationLog.created_at, 'date')
+    from app.services.operation_log_time import date_column
+    columns['created_at'] = (date_column(db, SysOperationLog.created_at), 'date')
     return columns
 
 
@@ -444,6 +476,8 @@ def _operation_log_query(
     start_time: datetime.datetime | None = None,
     end_time: datetime.datetime | None = None,
 ):
+    from app.services.operation_log_time import query_time
+    start_time, end_time = query_time(db, start_time), query_time(db, end_time)
     query = db.query(SysOperationLog)
 
     if module:
@@ -478,7 +512,7 @@ def _operation_log_query(
 def get_operation_log_column_values(db, *, field, keyword='', page=1, page_size=100,
                                     filters=None, column_filters=None, base_keyword=None, **base):
     from app.services.system_list_query import apply_system_list_query, system_column_values
-    columns = operation_log_columns()
+    columns = operation_log_columns(db)
     query = _operation_log_query(db, keyword=base_keyword, **base)
     query = apply_system_list_query(query, columns, filters, column_filters,
         labels=OPERATION_QUERY_LABELS, exclude_field=field)
@@ -488,7 +522,7 @@ def get_operation_log_column_values(db, *, field, keyword='', page=1, page_size=
 
 def get_operation_logs(db: Session, *, page=1, page_size=15, filters=None, column_filters=None, **base) -> dict[str, Any]:
     from app.services.system_list_query import apply_system_list_query
-    query = apply_system_list_query(_operation_log_query(db, **base), operation_log_columns(),
+    query = apply_system_list_query(_operation_log_query(db, **base), operation_log_columns(db),
         filters, column_filters, labels=OPERATION_QUERY_LABELS)
     total = query.count()
     logs = (
@@ -502,17 +536,35 @@ def get_operation_logs(db: Session, *, page=1, page_size=15, filters=None, colum
     items = []
     for log in logs:
         log_data = serialize_model(log)
+        from app.services.operation_log_time import display_time
+        shown_time = display_time(db, log.created_at)
+        log_data['created_at'] = shown_time.isoformat() if shown_time is not None else None
+        for name in ('summary', 'error_msg', 'entity_name', 'operator_name', 'user_agent', 'request_path'):
+            if isinstance(log_data.get(name), str):
+                log_data[name] = sanitize_text(log_data[name])
+        for name in ('before_data', 'after_data', 'diff_data'):
+            from app.services.operation_log_metadata import json_value
+            log_data[name] = _json_dumps(json_value(log_data.get(name)))
         try:
             raw_diff = json.loads(log.diff_data) if log.diff_data else {}
         except (TypeError, json.JSONDecodeError):
             raw_diff = {}
-        log_data["diff_items"] = build_operation_log_diff_items(
+        saved_items = json_value(log.diff_items_data)
+        log_data["diff_items"] = saved_items if isinstance(saved_items, list) else build_operation_log_diff_items(
             raw_diff,
             entity_type=log.entity_type,
             entity_id=log.entity_id,
-            db=db,
+            db=None,
             catalog=catalog,
-            enum_maps=enum_maps,
+            enum_maps=_enum_label_maps(),
         )
+        # Metadata keys stay intact; all user-supplied values remain sanitized.
+        for item in log_data['diff_items']:
+            for name in ('field_label', 'field_group', 'before_display', 'after_display'):
+                if isinstance(item.get(name), str): item[name] = sanitize_text(item[name])
+            for name in ('before', 'after'): item[name] = sanitize_data(item.get(name))
+        log_data.pop('diff_items_data', None)
         items.append(log_data)
-    return {"total": total, "items": items, "query_version": 2}
+    return {"total": total, "items": items, "query_version": 2,
+            'actions': [{'value': value, 'label': label} for value, label in OPERATION_ACTION_LABELS.items()],
+            'modules': [{'value': value, 'label': value} for (value,) in db.query(SysOperationLog.module).distinct().order_by(SysOperationLog.module)]}

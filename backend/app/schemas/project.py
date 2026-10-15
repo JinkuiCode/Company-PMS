@@ -96,6 +96,8 @@ class ArchiveResponse(ArchiveBusinessFields):
     is_enabled: int = 1
     can_delete: bool = True
     can_edit: bool = False
+    can_maintain: bool = False
+    maintain_reason: str = ''
     change_mode: str = 'readonly'
     change_version: str = ''
     approver_id: int | None = None

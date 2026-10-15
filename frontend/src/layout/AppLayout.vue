@@ -49,8 +49,8 @@
           <span class="header-title">{{ route.meta.title || '项目管理' }}</span>
         </div>
         <div class="header-right">
-          <span class="user-name">{{ authStore.user?.real_name || authStore.user?.username || '当前用户' }}</span>
-          <el-button type="danger" size="small" plain @click="handleLogout">退出</el-button>
+          <el-badge :value="releaseStore.unread" :hidden="!releaseStore.unread" :max="99"><el-button class="pms-button-navigation" :icon="Bell" :aria-label="`升级通知${releaseStore.unread ? `，${releaseStore.unread}条未读` : ''}`" @click="openRelease('notices')">升级通知</el-button></el-badge>
+          <el-dropdown trigger="click" @command="userCommand"><el-button class="user-name pms-button-navigation" aria-label="用户菜单">{{ authStore.user?.real_name || authStore.user?.username || '当前用户' }}</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="about">关于 PMS</el-dropdown-item><el-dropdown-item command="logout" divided>退出</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
         </div>
       </el-header>
       <el-main class="app-main">
@@ -58,10 +58,14 @@
       </el-main>
     </el-container>
   </el-container>
+  <el-dialog v-model="releaseVisible" :title="releaseMode === 'about' ? '关于 PMS' : '升级通知'" class="pms-release-dialog" width="min(1000px,96vw)" align-center destroy-on-close><ReleaseCenter :mode="releaseMode" /></el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { Bell } from '@element-plus/icons-vue'
+import ReleaseCenter from '@/release-center/ReleaseCenter.vue'
+import { useReleaseStore } from '@/release-center/store'
 import { useRouter, useRoute } from 'vue-router'
 import { Fold, Expand, Setting, SetUp, User, Avatar, Menu, Folder, List, DataAnalysis, FolderOpened, Collection, Document, Refresh, OfficeBuilding, ChatLineSquare } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -72,6 +76,11 @@ const Icons: Record<string, any> = { Setting, SetUp, User, Avatar, Menu, Folder,
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const releaseStore = useReleaseStore()
+const releaseVisible = ref(false), releaseMode = ref<'about' | 'notices'>('about')
+function openRelease(mode: 'about' | 'notices') { releaseMode.value = mode; releaseVisible.value = true }
+function userCommand(command: string) { if (command === 'about') openRelease('about'); else if (command === 'logout') handleLogout() }
+watch(() => route.path, () => { releaseVisible.value = false })
 const currentRoute = computed(() => route.path)
 const isCollapse = ref(true)
 const menuTree = ref<any[]>([])
@@ -124,6 +133,7 @@ async function refreshAuthorization() {
 
 onMounted(() => {
   fetchMenus()
+  void releaseStore.refresh()
   // 如果用户信息为空，先获取
   if (!authStore.user) {
     authStore.fetchUser()
@@ -131,7 +141,7 @@ onMounted(() => {
   window.addEventListener('pms:permission-denied', refreshAuthorization)
 })
 
-onBeforeUnmount(() => window.removeEventListener('pms:permission-denied', refreshAuthorization))
+onBeforeUnmount(() => { releaseStore.reset(); window.removeEventListener('pms:permission-denied', refreshAuthorization) })
 </script>
 
 <style scoped>
@@ -242,7 +252,8 @@ onBeforeUnmount(() => window.removeEventListener('pms:permission-denied', refres
 .header-right :deep(.el-button) { height: 24px; min-height: 24px; padding: 0 8px; font-size: 12px; }
 @media (max-width: 700px) {
   .app-aside.is-expanded { position: absolute; top: var(--pms-header-height); bottom: 0; left: 0; z-index: 60; box-shadow: var(--pms-shadow-sm); }
-  .user-name { display: none; }
+  .header-right { gap: 6px; flex-shrink: 0; }
+  .user-name { max-width: 88px; overflow: hidden; }
 }
 
 .menu-icon {

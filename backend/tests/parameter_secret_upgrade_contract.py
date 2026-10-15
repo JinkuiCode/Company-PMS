@@ -31,7 +31,7 @@ class ParameterSecretUpgradeContract(unittest.TestCase):
     def run_upgrade(self, rollback=False):
         self.assertTrue(hasattr(upgrade, "upgrade_parameter_secret_only"), "Missing independent parameter-secret migration")
         # Exercise the old release's bounded entry; the current binary rejects this mode.
-        with patch.object(upgrade, "CURRENT_DATABASE_REVISION", NEW), patch('app.services.database_revision.CURRENT_DATABASE_REVISION', NEW), patch.object(upgrade, "engine", self.engine), patch.object(upgrade, "validate_runtime_config"), patch.object(upgrade, "init_db", side_effect=AssertionError("No historical init")):
+        with patch.object(upgrade, "CURRENT_DATABASE_REVISION", NEW), patch('app.services.database_revision.CURRENT_DATABASE_REVISION', NEW), patch('app.services.governance_migration.verify_governance_structure'), patch.object(upgrade, "engine", self.engine), patch.object(upgrade, "validate_runtime_config"), patch.object(upgrade, "init_db", side_effect=AssertionError("No historical init")):
             upgrade.upgrade_database(parameter_secret_only=not rollback, parameter_secret_rollback=rollback)
 
     def revision(self):
@@ -39,7 +39,7 @@ class ParameterSecretUpgradeContract(unittest.TestCase):
             return connection.exec_driver_sql("SELECT revision FROM pms_database_revision").scalar_one()
 
     def test_revision_is_independently_bumped(self):
-        self.assertEqual(CURRENT_DATABASE_REVISION, '2026-10-12-feedback-02')
+        self.assertEqual(CURRENT_DATABASE_REVISION, '2026-10-15-governance-01')
 
     def test_latest_release_rejects_historical_export_mode_without_changes(self):
         with patch.object(upgrade, "engine", self.engine), patch.object(upgrade, "validate_runtime_config"):

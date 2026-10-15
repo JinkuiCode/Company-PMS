@@ -45,7 +45,7 @@ def operation_log_column_values(
 @router.get("", response_model=OperationLogQueryListResponse, summary="操作日志列表")
 def list_operation_logs(
     page: int = Query(1, ge=1),
-    page_size: int = Query(15, ge=1, le=10000),
+    page_size: int = Query(50, ge=1, le=500),
     module: str | None = Query(None),
     action: str | None = Query(None),
     entity_type: str | None = Query(None),

@@ -3,7 +3,7 @@ from sqlalchemy import Engine, inspect, select
 from app.models.database_revision import PmsDatabaseRevision
 
 
-CURRENT_DATABASE_REVISION = "2026-10-14-archive-governance-02"
+CURRENT_DATABASE_REVISION = "2026-10-15-governance-01"
 UPGRADE_IN_PROGRESS = "upgrading"
 
 
@@ -22,6 +22,12 @@ def check_database_ready(engine: Engine) -> None:
         raise DatabaseUpgradeRequired(
             f"数据库版本不匹配：当前 {revision or '未标记'}，需要 {CURRENT_DATABASE_REVISION}"
         )
+    from app.services.governance_migration import verify_governance_structure
+    try:
+        with engine.connect() as connection:
+            verify_governance_structure(connection)
+    except RuntimeError as exc:
+        raise DatabaseUpgradeRequired(str(exc)) from exc
 
 
 def mark_database_upgrading(engine: Engine) -> None:

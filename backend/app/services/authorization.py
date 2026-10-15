@@ -2,7 +2,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
@@ -21,8 +21,11 @@ AuthorizationContext = dict[str, Any]
 def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
+    request: Request = None,
 ) -> int:
-    return authenticate_session(credentials, db, allow_change=False)["user_id"]
+    user_id = authenticate_session(credentials, db, allow_change=False)["user_id"]
+    if request is not None: request.state.audit_actor_id = user_id
+    return user_id
 
 
 def authenticate_session(credentials, db, *, allow_change=False):

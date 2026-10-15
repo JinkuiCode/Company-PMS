@@ -138,7 +138,24 @@ def update_project_sheet_detail(
     )
 
 
+from app.schemas.archive_maintenance import ArchiveMaintenancePreview, ArchiveMaintenanceRequest
+
+
 # ==================== 项目档案 ====================
+@router.post('/archives/{archive_id}/maintenance/preview', summary='预览档案维护差异')
+def preview_archive_maintenance(archive_id: int, data: ArchiveMaintenancePreview,
+    db: Session = Depends(get_db), scope: dict = Depends(require_permission('project:archive:maintain'))):
+    from app.services.archive_maintenance import preview_archive_maintenance as preview
+    return preview(db, archive_id, data, scope['user_id'], scope_context=scope)
+
+
+@router.put('/archives/{archive_id}/maintenance', summary='维护项目档案')
+def maintain_archive(archive_id: int, data: ArchiveMaintenanceRequest, request: Request,
+    db: Session = Depends(get_db), scope: dict = Depends(require_permission('project:archive:maintain'))):
+    from app.services.archive_maintenance import maintain_archive as maintain
+    return maintain(db, archive_id, data, scope['user_id'], scope_context=scope, request=request)
+
+
 @router.get("/archives/list", summary="项目档案列表")
 def list_archives(
     page: int = Query(1, ge=1), page_size: int = Query(15, ge=1, le=10000),

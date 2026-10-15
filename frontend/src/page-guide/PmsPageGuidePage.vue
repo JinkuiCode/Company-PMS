@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { useReleaseStore } from '@/release-center/store'
 import { useRoute } from 'vue-router'
 import { Document } from '@element-plus/icons-vue'
 import PmsPageGuideContent from './PmsPageGuideContent.vue'
@@ -9,6 +10,9 @@ import type { PageGuideKey } from './types'
 
 const props = defineProps<{ page: PageGuideKey }>()
 const route = useRoute()
+const releases = useReleaseStore()
+const recent = computed(() => releases.runtime?.page_updates?.[props.page])
+onMounted(() => { void releases.refresh() })
 const guide = computed(() => pageGuides[props.page])
 const state = computed(() => readGuideView(guide.value, route.hash))
 const previousTitle = document.title
@@ -18,7 +22,7 @@ onUnmounted(() => { document.title = previousTitle })
 
 <template>
   <main class="pms-guide-page">
-    <header class="pms-guide-page-heading"><el-icon><Document /></el-icon><h1>{{ guide.title }}</h1><span>页面说明</span></header>
+    <header class="pms-guide-page-heading"><el-icon><Document /></el-icon><h1>{{ guide.title }}</h1><span>页面说明</span><span v-if="recent">最近更新 {{ recent.version }}</span></header>
     <div class="pms-guide-page-content"><PmsPageGuideContent :key="route.fullPath" :guide="guide" :initial-state="state" /></div>
   </main>
 </template>

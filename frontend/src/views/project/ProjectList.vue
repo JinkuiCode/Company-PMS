@@ -201,6 +201,8 @@
       </div>
 
       <div class="drawer-body">
+        <PmsPageGuide page="progress" />
+        <el-tabs v-model="projectDetailTab"><el-tab-pane label="业务信息" name="business">
         <section v-if="sheetDetailLoading" class="drawer-section">
           <div class="drawer-note muted">正在加载项目总表字段...</div>
         </section>
@@ -288,6 +290,7 @@
             </div>
           </el-collapse-item>
         </el-collapse>
+        </el-tab-pane><el-tab-pane label="操作记录" name="history" lazy><PmsDocumentHistory v-if="projectDetailTab === 'history'" resource="project" :entity-id="selectedProject.id" /></el-tab-pane></el-tabs>
       </div>
 
       <div class="drawer-savebar">
@@ -309,6 +312,8 @@
 
 <script setup lang="ts">
 import BusinessExportControl from '@/business-export/BusinessExportControl.vue'
+import PmsDocumentHistory from '@/document-history/PmsDocumentHistory.vue'
+import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import { businessExportSnapshot } from '@/business-export/snapshot'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { useSystemQuery } from '@/query-system/system-adapter'
@@ -536,6 +541,7 @@ const filterStatus = ref<number | null>(null)
 const filterDeptId = ref<number | null>(null)
 const filterProductCategory = ref<number | null>(null)
 const selectedProject = ref<ProjectRow | null>(null)
+const projectDetailTab = ref('business')
 const drawerOpenGroups = ref<string[]>([...drawerDefaultExpandedGroupKeys])
 const drawerEditingField = ref<string | null>(null)
 const drawerEditingFieldData = ref<ProjectSheetField | null>(null)
@@ -1842,6 +1848,7 @@ function getRowClass(params: RowClassParams<ProjectRow>) {
 }
 
 watch(() => selectedProject.value?.id, () => {
+  projectDetailTab.value = 'business'
   nextTick(() => agGridRef.value?.api?.redrawRows())
 })
 

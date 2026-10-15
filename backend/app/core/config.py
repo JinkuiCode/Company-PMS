@@ -29,6 +29,8 @@ class Settings(BaseSettings):
 
     PMS_ENV: Literal["development", "production"] = "development"
     APP_NAME: str = "PMS 项目管理系统"
+    PMS_RELEASE_MAIL_WORKER_ENABLED: bool = False
+    PMS_RELEASE_MANIFEST: str = ''
     DEBUG: bool = False
     # Explicitly enabled at deployment; development never writes ERP in the background by default.
     ERP_SYNC_WORKER_ENABLED: bool = False

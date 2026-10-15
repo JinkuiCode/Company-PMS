@@ -10,6 +10,17 @@ from app.services.product_line_source import list_organizations, get_organizatio
 from app.services.business_data_scope import has_all_business_data
 
 router = APIRouter(prefix='/api/product-lines', tags=['产品线管理'])
+BUSINESS_PERMISSIONS = (
+    'project:archive:view', 'project:archive:add', 'project:archive:edit',
+    'project:list:view', 'project:list:add', 'project:list:edit',
+)
+
+
+def _business_lines(db, context):
+    query = db.query(SysProductLine)
+    if not has_all_business_data(context):
+        query = query.filter(SysProductLine.id.in_(context.get('product_line_ids') or []))
+    return query.order_by(SysProductLine.sort, SysProductLine.id).all()
 
 
 @router.get('')
@@ -26,14 +37,17 @@ def organization_candidates(keyword: str = Query('', max_length=100), page: int 
     return list_organizations(keyword, page, page_size)
 
 
+@router.get('/labels')
+def business_labels(db: Session = Depends(get_db),
+                    context=Depends(require_any_permission(*BUSINESS_PERMISSIONS))):
+    """Authorized historical names only; this never makes a line selectable."""
+    return {'label_map': {str(line.id): line.display_name for line in _business_lines(db, context)}}
+
+
 @router.get('/options')
-def business_options(db: Session = Depends(get_db), context=Depends(require_any_permission(
-        'project:archive:view', 'project:archive:add', 'project:archive:edit', 'project:list:view',
-        'project:list:add', 'project:list:edit'))):
-    query = db.query(SysProductLine)
-    if not has_all_business_data(context):
-        query = query.filter(SysProductLine.id.in_(context.get('product_line_ids') or []))
-    lines = query.order_by(SysProductLine.sort, SysProductLine.id).all()
+def business_options(db: Session = Depends(get_db),
+                     context=Depends(require_any_permission(*BUSINESS_PERMISSIONS))):
+    lines = _business_lines(db, context)
     options = []
     for line in lines:
         if not line.is_enabled:

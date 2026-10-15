@@ -51,6 +51,7 @@ DEPLOYMENT_PATHS=(
   ops/windows
   frontend
   build-server-release.command
+  release-notes.json
   docs/PMS服务器发布与回退说明.md
 )
 
@@ -97,7 +98,16 @@ git archive --format=tar "$COMMIT" \
   ops/windows \
   | tar -xf - -C "$BUNDLE_DIR"
 cp -R "$BUILD_SOURCE/frontend/dist" "$BUNDLE_DIR/frontend/dist"
-git show "$COMMIT:docs/PMS服务器发布与回退说明.md" > "$BUNDLE_DIR/SERVER-DEPLOYMENT.md"
+git show "${COMMIT}:release-notes.json" > "$STAGING_DIR/release-notes.json"
+MANIFEST_PYTHON="$ROOT_DIR/backend/.venv/bin/python"
+if [[ ! -x "$MANIFEST_PYTHON" ]]; then
+  printf '缺少后端Python运行时，无法校验运行版本清单。\n' >&2
+  exit 1
+fi
+"$MANIFEST_PYTHON" "$BUNDLE_DIR/backend/scripts/prepare_release_manifest.py" \
+  --notes "$STAGING_DIR/release-notes.json" --commit "$COMMIT" --build-id "$RELEASE_NAME" \
+  --output "$BUNDLE_DIR/release.json"
+git show "${COMMIT}:docs/PMS服务器发布与回退说明.md" > "$BUNDLE_DIR/SERVER-DEPLOYMENT.md"
 
 {
   printf 'PMS server release candidate\n'
@@ -114,7 +124,7 @@ git show "$COMMIT:docs/PMS服务器发布与回退说明.md" > "$BUNDLE_DIR/SERV
 
 (
   cd "$BUNDLE_DIR"
-  find backend frontend ops RELEASE-MANIFEST.txt SERVER-DEPLOYMENT.md -type f -print \
+  find backend frontend ops release.json RELEASE-MANIFEST.txt SERVER-DEPLOYMENT.md -type f -print \
     | LC_ALL=C sort \
     | while IFS= read -r file_path; do
         shasum -a 256 "$file_path"

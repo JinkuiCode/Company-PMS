@@ -40,6 +40,9 @@ class QueueContract(unittest.TestCase):
         self.db.add_all([SysUserRole(user_id=self.user.id, role_id=role.id),
             SysRoleMenu(role_id=role.id, menu_id=menu.id),
             SysRoleProductLine(role_id=role.id, product_line_id=self.line.id)])
+        edit = SysMenu(menu_name='编辑', menu_type='B', permission_code='project:archive:edit', status=1)
+        self.db.add(edit); self.db.flush()
+        self.db.add(SysRoleMenu(role_id=role.id, menu_id=edit.id))
         self.archive = PmsProjectArchive(project_code='TEST', project_name='名称', is_enabled=1,
             business_product_line_id=self.line.id,manager_id=self.user.id,governance_legacy=True)
         self.db.add(self.archive)
@@ -50,7 +53,7 @@ class QueueContract(unittest.TestCase):
         self.engine.dispose()
 
     def enqueue(self):
-        task = erp_queue.enqueue(self.db, self.archive, None)
+        task = erp_queue.enqueue(self.db, self.archive, self.user.id)
         self.db.commit()
         return task
 
@@ -109,7 +112,14 @@ class QueueContract(unittest.TestCase):
                     business_product_line_id=line.id)
                 db.add(archive)
                 db.flush()
-                erp_queue.enqueue(db, archive, None)
+                user = SysUser(username='concurrent-worker', real_name='并发夹具', password_hash='test', status=1)
+                role = SysRole(role_code='concurrent-worker', role_name='并发夹具', data_scope=4, status=1)
+                menu = SysMenu(menu_name='编辑', menu_type='B', permission_code='project:archive:edit', status=1)
+                db.add_all([user, role, menu]); db.flush()
+                db.add_all([SysUserRole(user_id=user.id, role_id=role.id),
+                            SysRoleMenu(role_id=role.id, menu_id=menu.id),
+                            SysRoleProductLine(role_id=role.id, product_line_id=line.id)])
+                erp_queue.enqueue(db, archive, user.id)
                 db.commit()
             entered, release = threading.Event(), threading.Event()
             failures = []
@@ -331,8 +341,9 @@ class QueueContract(unittest.TestCase):
         from app.services.erp_queue_migration import initialize_sync_management
         self.db.add(SysRole(role_name='管理员', role_code='admin', data_scope=4, status=1))
         self.db.commit()
+        existing_grants = self.db.query(SysRoleMenu).count()
         initialize_sync_management(self.db)
-        self.assertEqual(self.db.query(SysRoleMenu).count(), 4)
+        self.assertEqual(self.db.query(SysRoleMenu).count(), existing_grants + 3)
         self.db.query(SysRoleMenu).delete()
         self.db.commit()
         initialize_sync_management(self.db)
@@ -369,7 +380,7 @@ class QueueContract(unittest.TestCase):
         def completed_then_saved(db, archive_id, **kwargs):
             self.archive.erp_sync_status = 'success'
             db.commit()
-            erp_queue.enqueue(db, self.archive, None)
+            erp_queue.enqueue(db, self.archive, self.user.id)
             db.commit()
             return {'success': True, 'message': '已审核'}
         with patch('app.services.kingdee.sync_project_archive_to_erp', side_effect=completed_then_saved):

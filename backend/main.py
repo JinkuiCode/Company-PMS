@@ -3,6 +3,9 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -19,6 +22,8 @@ from app.api import inventory_reports
 from app.api import stock_detail_reports
 from app.api import report_exports
 from app.api import feedback
+from app.api import document_history
+from app.api import releases
 from app.services.authorization import get_current_user_context, require_permission
 from app.models.init_db import init_db
 from app.services.database_revision import check_database_ready
@@ -33,6 +38,9 @@ async def lifespan(app: FastAPI):
         check_database_ready(engine)
     else:
         init_db()
+    from app.services.runtime_release import load_runtime_manifest
+    manifest = load_runtime_manifest()
+    app.version = manifest['version'] if manifest else 'development'
     print(f"   {settings.APP_NAME} 启动成功")
     import threading
     import asyncio
@@ -48,21 +56,45 @@ async def lifespan(app: FastAPI):
     from app.services.feedback_mail import worker as feedback_worker
     feedback_runner = threading.Thread(target=feedback_worker, args=(stop, SessionLocal), daemon=True, name='pms-feedback-mail-worker')
     feedback_runner.start()
+    from app.services.release_mail import worker as release_worker
+    release_runner = threading.Thread(target=release_worker, args=(stop, SessionLocal), daemon=True, name='pms-release-mail-worker') if settings.PMS_RELEASE_MAIL_WORKER_ENABLED else None
+    if release_runner: release_runner.start()
     try:
         yield
     finally:
         stop.set()
         await asyncio.to_thread(export_runner.join, 60)
         await asyncio.to_thread(feedback_runner.join, 60)
+        if release_runner: await asyncio.to_thread(release_runner.join, 60)
         if runner:
             await asyncio.to_thread(runner.join, 300)
 
 
-app = FastAPI(title=settings.APP_NAME, version="0.1.0", lifespan=lifespan)
+app = FastAPI(title=settings.APP_NAME, version="development", lifespan=lifespan)
+app.include_router(document_history.router)
+app.include_router(releases.router)
+
+
+async def audit_failed_request(request, status):
+    from app.services.security_audit import record_request_failure
+    await run_in_threadpool(record_request_failure, request, status)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def audited_http_error(request, exc):
+    await audit_failed_request(request, exc.status_code)
+    return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(Exception)
+async def audited_server_error(request, exc):
+    await audit_failed_request(request, 500)
+    return JSONResponse(status_code=500, content={'detail': '服务器处理失败，请稍后重试或联系管理员'})
 
 
 @app.exception_handler(RequestValidationError)
 async def private_validation_error(request, exc):
+    await audit_failed_request(request, 422)
     if request.url.path.startswith(("/api/auth/", "/api/sso/", "/api/parameters", "/api/users")):
         return JSONResponse(status_code=422, content={"detail": [
             {key: error[key] for key in ("type", "loc", "msg") if key in error}

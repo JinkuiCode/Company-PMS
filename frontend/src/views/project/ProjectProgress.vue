@@ -2,6 +2,7 @@
   <PmsDataList
     ref="progressListRef"
     class="project-progress-page"
+    :class="{ 'is-history-open': historyTask }"
     scrollbar-label="项目进度任务表横向滚动条"
   >
     <template #header>
@@ -21,6 +22,7 @@
       <el-button v-if="hasPermission('project:list:add')" type="primary" size="small" @click="addTask">新增任务</el-button>
     </template>
     <template #toolbar-right>
+      <PmsPageGuide page="tasks" />
       <BusinessExportControl :resource="{kind:'tasks',projectId}" :snapshot="exportSnapshot" :disabled="!columnContext.ready?.()" />
       <span class="filter-count" v-if="filteredRowData.length !== rowData.length">
         已筛选 {{ filteredRowData.length }} / {{ rowData.length }} 条
@@ -46,6 +48,7 @@
         :enableCellTextSelection="true"
         :alwaysShowHorizontalScroll="true"
         @cell-value-changed="onCellValueChanged"
+        @row-clicked="onTaskRowClicked"
         @first-data-rendered="refreshProgressScrollbar"
         @grid-size-changed="refreshProgressScrollbar"
         @column-resized="refreshProgressScrollbar"
@@ -56,6 +59,7 @@
       />
     </template>
   </PmsDataList>
+  <PmsFormDrawer v-if="historyTask" :model-value="true" :title="`${historyTask.task_name} · 操作记录`" penetrable @update:model-value="closeTaskHistory"><PmsDocumentHistory resource="task" :entity-id="historyTask.id" :revision="taskHistoryRevision" /><template #footer><el-button class="pms-button-reset" @click="closeTaskHistory">关闭</el-button></template></PmsFormDrawer>
 </template>
 
 <script setup lang="ts">
@@ -65,8 +69,12 @@ import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { useSystemQuery } from '@/query-system/system-adapter'
 import { toQueryFields } from '@/query-system/list-adapter'
 import { decorateQueryColumns } from '@/query-system/column-grid'
-import { ref, computed, onMounted } from 'vue'
-import { PMS_SINGLE_ACTION_COLUMN } from '@/config/listUi'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { createDetailSwitch } from '@/utils/detailSwitch'
+import { pmsActionColumn } from '@/config/listUi'
+import { PmsFormDrawer } from '@/form-system'
+import PmsDocumentHistory from '@/document-history/PmsDocumentHistory.vue'
+import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back, Search } from '@element-plus/icons-vue'
@@ -90,6 +98,13 @@ ModuleRegistry.registerModules([AllCommunityModule])
 import request from '@/utils/request'
 
 const route = useRoute()
+const historyTask = ref<{ id: number; task_name: string } | null>(null)
+const taskHistoryRevision = ref(0)
+const taskHistorySwitch = createDetailSwitch<{ id: number; task_name: string }>(async () => true, async (row, current) => {
+  if (current()) historyTask.value = row
+})
+function closeTaskHistory() { taskHistorySwitch.invalidate(); historyTask.value = null }
+function onTaskRowClicked(event: any) { if (historyTask.value && event.data) void taskHistorySwitch.select(event.data) }
 const projectId = Number(route.params.id)
 const projectName = route.query.name as string || '项目'
 const localeText = chineseLocaleText
@@ -194,14 +209,14 @@ const columnDefs = computed<ColDef[]>(() => ([
     cellEditor: 'agTextCellEditor',
   },
   {
-    headerName: '操作', ...PMS_SINGLE_ACTION_COLUMN, pinned: 'right', hide: !hasPermission('project:list:delete'),
-    cellRenderer: (params: any) => hasPermission('project:list:delete')
-      ? `<button class="pms-table-action pms-link-danger del-btn" data-id="${params.data.id}">删除</button>`
-      : '',
+    headerName: '操作', ...pmsActionColumn(hasPermission('project:list:delete') ? 2 : 1), pinned: 'right',
+    cellRenderer: () => `<button class="pms-table-action pms-link-navigation history-btn">记录</button>` + (hasPermission('project:list:delete')
+      ? `<button class="pms-table-action pms-link-danger del-btn">删除</button>` : ''),
     onCellClicked: (params: any) => {
       if (params.event.target.classList.contains('del-btn')) {
         handleDeleteTask(params.data.id)
       }
+      if (params.event.target.classList.contains('history-btn')) void taskHistorySwitch.select(params.data)
     },
   },
 ] as ColDef[]).map(definition => definition.editable ? mergePmsAgCellClass(definition) : definition))
@@ -211,16 +226,27 @@ const defaultColDef = {
   cellStyle: { display: 'flex', alignItems: 'center' },
 }
 
+let taskRequestSerial = 0
 async function fetchTasks() {
+  const current = ++taskRequestSerial
   tasksLoading.value = true
   try {
-    rowData.value = (await request.get(`/projects/${projectId}/tasks`)) as any
+    const rows = (await request.get(`/projects/${projectId}/tasks`)) as any[]
+    if (current !== taskRequestSerial) return
+    rowData.value = rows
+    if (historyTask.value) {
+      const latest = rows.find(row => row.id === historyTask.value?.id)
+      if (latest) { await taskHistorySwitch.select(latest); ++taskHistoryRevision.value }
+      else closeTaskHistory()
+    }
     tasksAccepted.value = true
     refreshProgressScrollbar()
   } catch (error) {
+    if (current !== taskRequestSerial) return
+    rowData.value = []; closeTaskHistory()
     tasksAccepted.value = false
     ElMessage.error(error instanceof Error ? error.message : '任务读取失败，请重试')
-  } finally { tasksLoading.value = false }
+  } finally { if (current === taskRequestSerial) tasksLoading.value = false }
 }
 
 async function fetchUsers() {
@@ -272,6 +298,7 @@ async function addTask() {
 async function handleDeleteTask(taskId: number) {
   if (!hasPermission('project:list:delete')) return
   await request.delete(`/projects/${projectId}/tasks/${taskId}`)
+  if (historyTask.value?.id === taskId) closeTaskHistory()
   ElMessage.success('已删除')
   fetchTasks()
 }
@@ -287,12 +314,16 @@ async function loadTaskStatusOptions() {
 }
 
 onMounted(() => { fetchTasks(); fetchUsers(); loadTaskStatusOptions() })
+onBeforeUnmount(() => { ++taskRequestSerial; taskHistorySwitch.invalidate() })
 </script>
 
 <style scoped>
 .project-progress-page {
   min-height: 100%;
+  width: 100%;
 }
+.project-progress-page.is-history-open { width:calc(100% - var(--pms-drawer-width) - var(--pms-query-gap)); }
+@media(max-width:760px){.project-progress-page.is-history-open{width:100%}}
 
 .task-base-filter {
   flex: 0 0 auto;

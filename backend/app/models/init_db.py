@@ -20,6 +20,7 @@ from app.models.report_export import ReportExportJob  # noqa: F401
 from app.models.product_line import SysProductLine, SysRoleProductLine  # noqa: F401
 from app.models.feedback import FeedbackReport, FeedbackFollowup, FeedbackAttachment, FeedbackNotification  # noqa: F401
 from app.models.archive_change import ArchiveChange  # noqa: F401
+from app.models.release import PmsRelease, PmsReleaseNotice, PmsReleaseMail  # noqa: F401
 from app.services.user_security_migration import upgrade_user_security, initialize_user_security
 
 
@@ -33,9 +34,13 @@ def _init_dict_data(db):
     return result
 
 
-def init_db():
+def init_db(*, explicit_upgrade=False):
     """创建所有表，并插入默认数据"""
     is_fresh_database = not inspect(engine).has_table("sys_role")
+    if not is_fresh_database and not explicit_upgrade:
+        from app.services.governance_migration import verify_governance_structure
+        with engine.connect() as connection:
+            verify_governance_structure(connection)
     Base.metadata.create_all(bind=engine)
     upgrade_user_security(engine)
     from app.services.project_archive_semantic_migration import upgrade_project_archive_semantics
@@ -375,7 +380,9 @@ def init_db():
         # 5. 仅全新数据库首次给默认管理员授权；后续启动绝不回补人工撤销的权限
         if is_fresh_database and role:
             db.query(SysRoleMenu).filter(SysRoleMenu.role_id == role.id).delete()
-            all_menus = db.query(SysMenu).all()
+            from app.services.role_templates import MANUAL_ONLY_PERMISSIONS
+            all_menus = [menu for menu in db.query(SysMenu).all()
+                         if menu.permission_code not in MANUAL_ONLY_PERMISSIONS]
             db.add_all([SysRoleMenu(role_id=role.id, menu_id=menu.id) for menu in all_menus])
             db.commit()
 
@@ -457,6 +464,8 @@ def init_db():
         if is_fresh_database:
             from app.services.archive_governance_migration import install_archive_governance
             install_archive_governance(db)
+            from app.services.governance_migration import install_governance_permissions
+            install_governance_permissions(db.connection())
         db.commit()
 
     finally:

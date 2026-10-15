@@ -166,7 +166,7 @@ def run_next(db, stop):
                 '导出失败或查询超时，未提供不完整文件；请重试，持续失败请联系管理员')[:512]
         job.finished_at = datetime.now()
         record_operation_log(db, module='报表导出', action='export', entity_type='report_export',
-            operator_id=job.user_id, summary=job.message,
+            operator_id=job.user_id, summary=job.message, status='success' if job.status == 'success' else 'failed',
             after_data={'job_id': job.id, 'status': job.status, 'row_count': job.processed}, commit=False)
         db.commit()
 
