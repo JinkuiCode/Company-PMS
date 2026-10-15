@@ -1,12 +1,14 @@
-"""Bounded governance upgrade, using isolated SQLite databases only."""
+"""Bounded upgrade and MSSQL metadata checks, without live database access."""
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.dialects.mssql.base import MSDialect
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 TMP = tempfile.TemporaryDirectory()
@@ -17,7 +19,9 @@ from app.core.database import Base
 from app.models.database_revision import PmsDatabaseRevision
 from app.models.rbac import SysMenu, SysRole, SysRoleMenu
 from app.services.database_revision import check_database_ready, DatabaseUpgradeRequired
-from app.services.governance_migration import upgrade_governance, PREVIOUS, REVISION
+from app.services.governance_migration import (
+    upgrade_governance, verify_governance_structure, RELEASE_TABLES, PREVIOUS, REVISION,
+)
 
 
 class GovernanceUpgrade(unittest.TestCase):
@@ -129,6 +133,149 @@ class GovernanceUpgrade(unittest.TestCase):
             self.assertNotIn('NVARCHAR(None)', ddl)
             for index in table.indexes:
                 self.assertIn('CREATE', str(CreateIndex(index).compile(dialect=mssql.dialect())))
+
+
+class MssqlGovernanceMetadata(unittest.TestCase):
+    """Execute the catalog SELECT against an isolated relational sys fixture.
+
+    Column reflection uses model metadata; the unsupported reflection method is
+    the real installed MSSQL dialect method. No SQL Server or business DB is used.
+    """
+    def setUp(self):
+        from app.models.feedback import FeedbackReport
+        from app.models.operation_log import SysOperationLog
+        self.tables = {t.name: t for t in (
+            SysOperationLog.__table__, FeedbackReport.__table__, *RELEASE_TABLES,
+        )}
+        self.schema_name = "pms'bound-schema"
+        self.engine = create_engine('sqlite://')
+        self.catalog = self.engine.connect()
+        self.catalog.exec_driver_sql("ATTACH DATABASE ':memory:' AS sys")
+        for ddl in (
+            'CREATE TABLE sys.schemas(schema_id INTEGER, name TEXT)',
+            'CREATE TABLE sys.tables(object_id INTEGER, schema_id INTEGER, name TEXT)',
+            'CREATE TABLE sys.columns(object_id INTEGER, column_id INTEGER, name TEXT)',
+            'CREATE TABLE sys.indexes(object_id INTEGER, index_id INTEGER, is_unique INTEGER, '
+            'is_primary_key INTEGER, is_disabled INTEGER, is_hypothetical INTEGER, has_filter INTEGER)',
+            'CREATE TABLE sys.index_columns(object_id INTEGER, index_id INTEGER, column_id INTEGER, '
+            'key_ordinal INTEGER, is_included_column INTEGER)',
+        ):
+            self.catalog.exec_driver_sql(ddl)
+        self.catalog.execute(text('INSERT INTO sys.schemas VALUES (1, :name)'), {'name': self.schema_name})
+        self.object_ids = {}
+        for object_id, name in enumerate(self.tables, 1):
+            self.object_ids[name] = object_id
+            self.catalog.execute(text('INSERT INTO sys.tables VALUES (:id, 1, :name)'),
+                                 {'id': object_id, 'name': name})
+            for column_id, column in enumerate(self.tables[name].columns, 1):
+                self.catalog.execute(text('INSERT INTO sys.columns VALUES (:id, :column, :name)'),
+                                     {'id': object_id, 'column': column_id, 'name': column.name})
+        self.add_index('pms_release', 1, ['version'])
+        self.add_index('pms_release', 2, ['manifest_sha256'])
+        self.add_index('pms_release_notice', 1, ['release_id', 'user_id'])
+        self.add_index('pms_release_mail', 1, ['notice_id'])
+        fixture = self
+
+        class MetadataInspector:
+            default_schema_name = fixture.schema_name
+
+            def has_table(self, name):
+                return name in fixture.tables
+
+            def get_columns(self, name):
+                return [dict(name=c.name, type=c.type, nullable=c.nullable) for c in fixture.tables[name].columns]
+
+            def get_indexes(self, name):
+                return [dict(name=i.name, unique=i.unique, column_names=[c.name for c in i.columns])
+                        for i in fixture.tables[name].indexes]
+
+            def get_unique_constraints(self, name):
+                return MSDialect().get_unique_constraints(None, name)
+
+        self.inspector = MetadataInspector()
+        self.queries = []
+        self.connection = SimpleNamespace(dialect=MSDialect(), execute=self.read_catalog)
+
+    def tearDown(self):
+        self.catalog.close()
+        self.engine.dispose()
+
+    def add_index(self, table, index_id, keys, *, included=(), unique=1, primary=0,
+                  disabled=0, hypothetical=0, filtered=0):
+        object_id = self.object_ids[table]
+        self.catalog.execute(text('INSERT INTO sys.indexes VALUES (:obj, :idx, :uq, :pk, :off, :hyp, :filter)'),
+            dict(obj=object_id, idx=index_id, uq=unique, pk=primary, off=disabled, hyp=hypothetical, filter=filtered))
+        columns = {name: i for i, name in enumerate(self.tables[table].columns.keys(), 1)}
+        # Deliberately insert composite keys out of order.
+        for ordinal, name in reversed(list(enumerate(keys, 1))):
+            self.catalog.execute(text('INSERT INTO sys.index_columns VALUES (:obj, :idx, :col, :ord, 0)'),
+                dict(obj=object_id, idx=index_id, col=columns[name], ord=ordinal))
+        for name in included:
+            self.catalog.execute(text('INSERT INTO sys.index_columns VALUES (:obj, :idx, :col, 0, 1)'),
+                dict(obj=object_id, idx=index_id, col=columns[name]))
+
+    def remove_notice_key(self):
+        params = {'obj': self.object_ids['pms_release_notice']}
+        self.catalog.execute(text('DELETE FROM sys.indexes WHERE object_id=:obj'), params)
+        self.catalog.execute(text('DELETE FROM sys.index_columns WHERE object_id=:obj'), params)
+
+    def read_catalog(self, statement, parameters):
+        sql = str(statement)
+        self.assertTrue(sql.lstrip().upper().startswith('SELECT '), 'verification must be read-only')
+        self.assertNotIn(self.schema_name, sql, 'schema must be a bound value')
+        self.assertEqual(parameters['schema_name'], self.schema_name)
+        self.queries.append((sql, parameters))
+        return self.catalog.execute(statement, parameters)
+
+    def verify(self):
+        with patch('app.services.governance_migration.inspect', return_value=self.inspector):
+            verify_governance_structure(self.connection)
+
+    def test_mssql_verifies_without_unsupported_unique_reflection(self):
+        try:
+            self.verify()
+        except NotImplementedError:
+            self.fail('MSSQL verification still calls unsupported unique constraint reflection')
+        self.assertEqual({params['table_name'] for _, params in self.queries},
+                         {'pms_release', 'pms_release_notice', 'pms_release_mail'})
+
+    def test_mssql_orders_key_columns_and_ignores_included_columns(self):
+        self.remove_notice_key()
+        self.add_index('pms_release_notice', 9, ['release_id', 'user_id'], included=['id'])
+        self.verify()
+
+    def test_mssql_never_combines_keys_from_different_indexes(self):
+        self.remove_notice_key()
+        self.add_index('pms_release_notice', 3, ['release_id'])
+        self.add_index('pms_release_notice', 4, ['user_id'])
+        with self.assertRaisesRegex(RuntimeError, '唯一约束不一致：pms_release_notice'):
+            self.verify()
+
+    def test_mssql_rejects_non_enforcing_unique_indexes(self):
+        for attributes in ({'disabled': 1}, {'hypothetical': 1}, {'filtered': 1},
+                           {'unique': 0}, {'primary': 1}):
+            with self.subTest(attributes=attributes):
+                self.remove_notice_key()
+                self.add_index('pms_release_notice', 3, ['release_id', 'user_id'], **attributes)
+                with self.assertRaisesRegex(RuntimeError, '唯一约束不一致：pms_release_notice'):
+                    self.verify()
+
+    def test_mssql_included_column_does_not_complete_required_key(self):
+        self.remove_notice_key()
+        self.add_index('pms_release_notice', 3, ['release_id'], included=['user_id'])
+        with self.assertRaisesRegex(RuntimeError, '唯一约束不一致：pms_release_notice'):
+            self.verify()
+
+    def test_mssql_missing_required_unique_key_is_rejected(self):
+        self.catalog.execute(text('DELETE FROM sys.indexes WHERE object_id=:obj AND index_id=1'),
+                             {'obj': self.object_ids['pms_release']})
+        with self.assertRaisesRegex(RuntimeError, '唯一约束不一致：pms_release'):
+            self.verify()
+
+    def test_mssql_catalog_error_is_not_silently_accepted(self):
+        self.connection.execute = lambda *args: (_ for _ in ()).throw(RuntimeError('catalog unavailable'))
+        with self.assertRaisesRegex(RuntimeError, 'catalog unavailable'):
+            self.verify()
 
 
 if __name__ == '__main__':

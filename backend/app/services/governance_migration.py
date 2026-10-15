@@ -1,5 +1,5 @@
 """Explicit, additive governance upgrade. Application startup never calls it."""
-from sqlalchemy import String, inspect, select
+from sqlalchemy import String, inspect, select, text
 
 from app.models.database_revision import PmsDatabaseRevision
 from app.models.operation_log import SysOperationLog
@@ -42,6 +42,32 @@ def install_governance_permissions(connection):
             menu_name=label, menu_type='B', permission_code=permission, sort=11))
 
 
+def _unique_key_columns(connection, inspector, table):
+    """Read enforced unique keys; MSSQL does not implement UQ reflection."""
+    if connection.dialect.name != 'mssql':
+        keys = {tuple(item['column_names']) for item in inspector.get_unique_constraints(table.name)}
+        keys.update(tuple(item['column_names']) for item in inspector.get_indexes(table.name) if item['unique'])
+        return keys
+    rows = connection.execute(text('''SELECT i.index_id, c.name AS column_name, ic.key_ordinal
+        FROM sys.tables t
+        JOIN sys.schemas s ON s.schema_id=t.schema_id
+        JOIN sys.indexes i ON i.object_id=t.object_id
+        JOIN sys.index_columns ic ON ic.object_id=i.object_id AND ic.index_id=i.index_id
+        JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id
+        WHERE s.name=:schema_name AND t.name=:table_name
+          AND i.is_unique=1 AND i.is_primary_key=0 AND i.is_disabled=0
+          AND i.is_hypothetical=0 AND i.has_filter=0
+          AND ic.key_ordinal>0 AND ic.is_included_column=0
+        ORDER BY i.index_id, ic.key_ordinal'''), {
+            'schema_name': table.schema or inspector.default_schema_name or 'dbo',
+            'table_name': table.name,
+        }).mappings()
+    keys = {}
+    for row in rows:
+        keys.setdefault(row['index_id'], []).append(row['column_name'])
+    return {tuple(columns) for columns in keys.values()}
+
+
 def verify_governance_structure(connection):
     inspector = inspect(connection)
     if not inspector.has_table('sys_operation_log'):
@@ -61,8 +87,7 @@ def verify_governance_structure(connection):
         if not inspector.has_table(table.name) or {row['name'] for row in inspector.get_columns(table.name)} != set(table.columns.keys()):
             raise RuntimeError(f'版本通知表结构不一致：{table.name}')
         expected = {tuple(constraint.columns.keys()) for constraint in table.constraints if constraint.__class__.__name__ == 'UniqueConstraint'}
-        actual = {tuple(item['column_names']) for item in inspector.get_unique_constraints(table.name)}
-        actual.update(tuple(item['column_names']) for item in inspector.get_indexes(table.name) if item['unique'])
+        actual = _unique_key_columns(connection, inspector, table)
         if not expected.issubset(actual): raise RuntimeError(f'版本通知唯一约束不一致：{table.name}')
     column = next((row for row in inspector.get_columns('pms_feedback_report') if row['name'] == 'runtime_version'), None)
     if not column or not column['nullable'] or not isinstance(column['type'], String) or (column['type'].length is not None and column['type'].length < 32):
