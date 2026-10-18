@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
+import { useFormSession } from '@/form-system/useFormSession'
 import { PmsFormDrawer, PmsFormField, PmsTextControl, PmsTreeSelectControl, PmsSelectControl, PmsSwitchControl, type PmsOption } from '@/form-system'
 import OaEmployeePicker, { type OaEmployee } from './OaEmployeePicker.vue'
 
@@ -13,42 +14,48 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean]; saved: [] }>()
 const auth = useAuthStore()
 const editing = computed(() => Boolean(props.user?.id))
 const canEdit = computed(() => auth.hasPermission(editing.value ? 'system:user:edit' : 'system:user:add'))
-const busy = ref(false)
 const resetting = ref(false)
 const oaVisible = ref(false)
 const errors = reactive<Record<string, string>>({})
 const formElement = ref<HTMLFormElement>()
 const form = reactive({ username: '', real_name: '', email: '@aelsystem.com', mobile: '', dept_id: null as number | null, role_ids: [] as number[], status: 1 })
+const formSession = useFormSession({ draft: form, isConflict: (error: any) => error?.response?.status === 409 })
+const busy = formSession.busy
 const validEmail = (email: string) => !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
 watch(() => form.username, value => { if (value.trim()) delete errors.username })
 watch(() => form.real_name, value => { if (value.trim()) delete errors.real_name })
 watch(() => form.email, value => { if (validEmail(value)) delete errors.email })
-let original = ''
+let editorGeneration = 0
 watch(() => props.modelValue, open => {
+  ++editorGeneration
   if (!open) return
   const row = props.user
   Object.assign(form, { username: row?.username || '', real_name: row?.real_name || '', email: row ? row.email || '' : '@aelsystem.com', mobile: row?.mobile || '', dept_id: row ? row.dept_id ?? null : props.defaultDept, role_ids: [...(row?.role_ids || [])], status: row?.status ?? 1 })
   Object.keys(errors).forEach(key => delete errors[key])
-  original = JSON.stringify(form)
+  formSession.capture()
 })
 async function canLeave() {
-  if (busy.value || resetting.value) return false
-  if (props.modelValue && JSON.stringify(form) !== original) {
-    try { await ElMessageBox.confirm('尚有未保存的用户资料，确定关闭吗？', '未保存修改', { type: 'warning', confirmButtonText: '关闭', cancelButtonText: '继续编辑' }) }
+  if (resetting.value) return false
+  if (!props.modelValue) return true
+  return formSession.requestClose(async () => {
+    try { await ElMessageBox.confirm('尚有未保存的用户资料，确定关闭吗？', '未保存修改', { type: 'warning', confirmButtonText: '关闭', cancelButtonText: '继续编辑' }); return true }
     catch { return false }
-  }
-  return true
+  })
 }
 async function beforeClose(done: () => void) {
   if (await canLeave()) done()
 }
 onBeforeRouteLeave(canLeave)
-async function focusFirstInvalid() {
+async function focusFirstInvalid(stillCurrent: () => boolean = () => true) {
   await nextTick()
+  if (!stillCurrent()) return
   formElement.value?.querySelector<HTMLElement>('[aria-invalid="true"]:not(:disabled)')?.focus()
 }
-function close() { void beforeClose(() => emit('update:modelValue', false)) }
-function useEmployee(employee: OaEmployee) { form.username = employee.username; form.real_name = employee.real_name; delete errors.username; delete errors.real_name }
+function close() { return beforeClose(() => emit('update:modelValue', false)) }
+function useEmployee(employee: OaEmployee) {
+  if (busy.value || resetting.value || editing.value || !canEdit.value) return
+  form.username = employee.username; form.real_name = employee.real_name; delete errors.username; delete errors.real_name
+}
 function validate() {
   Object.keys(errors).forEach(key => delete errors[key])
   if (!form.username.trim()) errors.username = '请输入账号（工号）'
@@ -57,22 +64,34 @@ function validate() {
   return !Object.keys(errors).length
 }
 async function save() {
-  if (busy.value || !canEdit.value) return
-  if (!validate()) { await focusFirstInvalid(); return }
-  busy.value = true
-  const values = { real_name: form.real_name.trim(), email: form.email.trim() || null, mobile: form.mobile.trim() || null, dept_id: form.dept_id, role_ids: form.role_ids, status: form.status }
-  try {
-    if (editing.value) await request.put(`/users/${props.user.id}`, values)
-    else await request.post('/users', { ...values, username: form.username.trim() })
-    ElMessage.success(editing.value ? '用户已更新' : '用户已创建')
-    original = JSON.stringify(form)
-    emit('update:modelValue', false)
-    if (editing.value && props.user.id === auth.user?.id) await auth.fetchUser()
-    emit('saved')
-  } catch (error: any) {
-    const detail = error.response?.data?.detail
-    if (Array.isArray(detail)) detail.forEach(item => { const key = item.loc?.at(-1); if (key && key in form) errors[key] = item.msg })
-  } finally { busy.value = false; await focusFirstInvalid() }
+  if (resetting.value || !canEdit.value) return
+  const targetId = props.user?.id
+  const wasEditing = editing.value
+  const generation = editorGeneration
+  const result = await formSession.submit({
+    validate,
+    save: snapshot => {
+      const values = { real_name: snapshot.real_name.trim(), email: snapshot.email.trim() || null,
+        mobile: snapshot.mobile.trim() || null, dept_id: snapshot.dept_id, role_ids: snapshot.role_ids, status: snapshot.status }
+      return wasEditing ? request.put(`/users/${targetId}`, values)
+        : request.post('/users', { ...values, username: snapshot.username.trim() })
+    },
+    onError: (error: any) => {
+      const detail = error.response?.data?.detail
+      if (Array.isArray(detail)) detail.forEach(item => { const key = item.loc?.at(-1); if (key && key in form) errors[key] = item.msg })
+    },
+  })
+  if (result.status !== 'success') {
+    if (result.status === 'invalid' || result.status === 'failed') {
+      await focusFirstInvalid(() => props.modelValue && generation === editorGeneration && !busy.value && !resetting.value)
+    }
+    return
+  }
+  ElMessage.success(wasEditing ? '用户已更新' : '用户已创建')
+  emit('update:modelValue', false)
+  try { if (wasEditing && targetId === auth.user?.id) await auth.fetchUser() }
+  catch { ElMessage.warning('用户资料已保存，权限刷新失败，请刷新页面') }
+  finally { emit('saved') }
 }
 async function resetPassword() {
   if (resetting.value || !auth.hasPermission('system:user:reset-password')) return
@@ -113,7 +132,7 @@ async function resetPassword() {
       <p v-if="!editing" class="user-password-note">初始密码由参数设置提供，首次密码登录后需修改。</p>
     </form>
     <template #secondary><el-button v-if="editing && auth.hasPermission('system:user:reset-password')" :loading="resetting" :disabled="busy" @click="resetPassword">重置密码</el-button></template>
-    <template #footer><el-button :disabled="busy || resetting" @click="close">取消</el-button><el-button v-if="canEdit" type="primary" :loading="busy" :disabled="resetting" native-type="submit" form="pms-user-form">{{ editing ? '保存' : '创建用户' }}</el-button></template>
+    <template #footer><el-button class="pms-button-reset" :disabled="busy || resetting" @click="close">取消</el-button><el-button v-if="canEdit" class="pms-button-save" type="primary" :loading="busy" :disabled="resetting" native-type="submit" form="pms-user-form">{{ editing ? '保存' : '创建用户' }}</el-button></template>
   </PmsFormDrawer>
   <OaEmployeePicker v-model="oaVisible" @select="useEmployee" />
 </template>

@@ -27,6 +27,6 @@ test('invalid states use safe defaults without crashing', () => {
 test('standalone surfaces reuse existing page permission codes', () => {
   assert.deepEqual(Object.fromEntries(Object.entries(guideDestinations).map(([key, value]) => [key, value.permission])), {
     archive: 'project:archive:view', purchase: 'report:purchase:view', inventory: 'report:inventory:view', stock: 'report:stock-detail:list', feedback: 'feedback:view',
-    archiveChanges: 'project:archive:view', archiveDrafts: 'project:archive:draft:manage', users: 'system:user:view', audit: 'system:operation-log:view', progress: 'project:list:view', tasks: 'project:list:view',
+    archiveChanges: 'project:archive:view', archiveDrafts: 'project:archive:draft:manage', users: 'system:user:view', roles: 'system:role:view', enums: 'system:enum:view', audit: 'system:operation-log:view', progress: 'project:list:view', tasks: 'project:list:view',
   })
 })

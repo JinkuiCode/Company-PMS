@@ -56,7 +56,8 @@ import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { useSystemQuery, loadCompleteDataset } from '@/query-system/system-adapter'
 import type { QueryCondition } from '@/query-system/core'
 import { decorateQueryColumns } from '@/query-system/column-grid'
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { usePageLoad } from '@/composables/usePageLoad'
 import { AgGridVue } from 'ag-grid-vue3'
 import { AllCommunityModule, ModuleRegistry, type ColDef } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
@@ -90,7 +91,8 @@ type ModuleOption = { value: string; label: string; count: number }
 
 const localeText = chineseLocaleText
 const dataListRef = ref<InstanceType<typeof PmsDataList>>()
-const loading = ref(false)
+const catalogState = usePageLoad()
+const loading = catalogState.loading
 const rows = ref<FieldCatalogRow[]>([])
 const queryError = ref('')
 const page = ref(1)
@@ -139,7 +141,7 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit:
   { field: 'enum_code', label: '枚举编码', type: 'text' },
   { field: 'description', label: '说明', type: 'text' },
   { field: 'editable', label: '可编辑', type: 'enum', options:[{value:1,label:'是'},{value:0,label:'否'}] },
-], ['field_name', 'module', 'value_type', 'source_type'], {ready:()=>!loading.value,pagination:{page,size:pageSize}})
+], ['field_name', 'module', 'value_type', 'source_type'], {ready:()=>['ready','empty'].includes(catalogState.phase.value),pagination:{page,size:pageSize}})
 const catalogQueryRecord = (row:FieldCatalogRow) => ({...row,editable:Number(row.editable)})
 const filteredRows = computed(() => topRows(rows.value, catalogQueryRecord))
 const total = computed(() => filteredRows.value.length)
@@ -177,23 +179,24 @@ const defaultColDef: ColDef = {
 }
 const queryColumnDefs = computed(() => decorateQueryColumns(columnDefs, () => columnContext))
 
-let listRequestSerial = 0
 async function fetchCatalog() {
-  const requestSerial = ++listRequestSerial
-  loading.value = true
+  const requestSerial = catalogState.begin()
   queryError.value = ''
   try {
-    const response = await loadCompleteDataset(async (page, pageSize) => await request.get('/field-catalog', { params: { page, page_size: pageSize } }) as any, 200, () => requestSerial === listRequestSerial, (row:any) => `${row.module}:${row.field_code}`)
-    if (requestSerial !== listRequestSerial) return
+    const response = await loadCompleteDataset(async (page, pageSize) => await request.get('/field-catalog', { params: { page, page_size: pageSize } }) as any, 200, () => catalogState.isCurrent(requestSerial), (row:any) => `${row.module}:${row.field_code}`)
+    if (!catalogState.isCurrent(requestSerial)) return
     rows.value = response.items || []
+    catalogState.succeed(requestSerial, rows.value.length === 0)
     page.value = Math.min(page.value, Math.max(1, Math.ceil(total.value / pageSize.value)))
     moduleOptions.value = response.modules || []
     await nextTick()
+    if (!catalogState.isCurrent(requestSerial)) return
     refreshScrollbar()
-  } catch {
-    if (requestSerial === listRequestSerial) { rows.value = []; queryError.value = '字段目录未完整读取，请刷新重试' }
-  } finally {
-    if (requestSerial === listRequestSerial) loading.value = false
+  } catch (error) {
+    if (catalogState.isCurrent(requestSerial)) {
+      rows.value = []; queryError.value = '字段目录未完整读取，请刷新重试'
+      catalogState.fail(requestSerial, error)
+    }
   }
 }
 
@@ -207,6 +210,7 @@ function refreshScrollbar() {
 }
 
 onMounted(fetchCatalog)
+onBeforeUnmount(() => catalogState.invalidate())
 </script>
 
 <style scoped>

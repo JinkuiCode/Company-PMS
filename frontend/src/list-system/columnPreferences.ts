@@ -32,6 +32,7 @@ export function createColumnPreferences(options: {
   ownerId: () => number | null
   storage: () => Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
   legacyPrefix?: string
+  legacySelectionKey?: string
 }) {
   function key() {
     const owner = options.ownerId()
@@ -50,7 +51,10 @@ export function createColumnPreferences(options: {
       const version = value.schema_version ?? 0
       if (version !== 0 && version !== 1) return { status: 'unsupported' }
       if (version === 1 && (value.owner_id !== options.ownerId() || value.page_key !== options.pageKey)) return { status: 'unsupported' }
-      return { status: 'ready', value: normalizeColumnPreference(value, schema) }
+      return { status: 'ready', value: normalizeColumnPreference({
+        ...value,
+        selected_column_keys: value.selected_column_keys ?? (options.legacySelectionKey ? value[options.legacySelectionKey] : undefined),
+      }, schema) }
     } catch { return { status: 'unavailable' } }
   }
   function write(value: PmsColumnPreference, schema: PmsColumnSchema) {
@@ -59,8 +63,10 @@ export function createColumnPreferences(options: {
     const current = read(schema)
     if (current.status !== 'ready' && current.status !== 'empty') return { status: current.status }
     try {
+      const normalized = normalizeColumnPreference(value, schema)
       options.storage().setItem(storageKey, JSON.stringify({
-        schema_version: 1, page_key: options.pageKey, owner_id: options.ownerId(), ...normalizeColumnPreference(value, schema),
+        ...(options.legacySelectionKey ? { [options.legacySelectionKey]: normalized.selected_column_keys } : {}),
+        schema_version: 1, page_key: options.pageKey, owner_id: options.ownerId(), ...normalized,
       }))
       return { status: 'saved' as const }
     } catch { return { status: 'unavailable' as const } }

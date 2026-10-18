@@ -1,6 +1,8 @@
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
 
+const base = process.env.PMS_PROGRESS_TEST_BASE || 'http://127.0.0.1:5174'
+assert.equal(new URL(base).hostname, '127.0.0.1')
 const browser = await chromium.launch({ channel: 'msedge', headless: true })
 try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
@@ -11,7 +13,7 @@ try {
   await page.addInitScript(() => localStorage.setItem('access_token', 'mock-only'))
   await page.route('**/*', async route => {
     const { origin, pathname: path } = new URL(route.request().url())
-    if (origin !== 'http://127.0.0.1:5174') return route.abort()
+    if (origin !== base) return route.abort()
     if (!path.startsWith('/api/')) return route.continue()
     const method = route.request().method()
     let body = []
@@ -41,7 +43,7 @@ try {
     assert.equal(Math.round(geometry.width), 460)
     assert.ok(geometry.bottom <= geometry.viewport)
   }
-  await page.goto('http://127.0.0.1:5174/system/user')
+  await page.goto(base + '/system/user')
   await page.getByText('测试部门', { exact: true }).click({ button: 'right' })
   await page.getByText('新增子部门', { exact: true }).click()
   await checkLayout('新增部门')
@@ -64,7 +66,7 @@ try {
   assert.ok(rowGaps.every(gap => Math.abs(gap) <= 1))
   await page.screenshot({ path: '/tmp/pms-dept-drawer-1366.png' })
   await drawer.getByRole('button', { name: '取消', exact: true }).click()
-  await page.goto('http://127.0.0.1:5174/system/enum')
+  await page.goto(base + '/system/enum')
   await page.getByRole('button', { name: '新增值', exact: true }).click()
   await checkLayout('新增枚举值')
   await drawer.getByRole('button', { name: '保存', exact: true }).click()

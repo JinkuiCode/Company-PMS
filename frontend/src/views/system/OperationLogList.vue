@@ -90,6 +90,7 @@ import type { QueryCondition } from '@/query-system/core'
 import type { ColumnQueryContext } from '@/query-system/column-filters'
 import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { usePageLoad } from '@/composables/usePageLoad'
 import { Close } from '@element-plus/icons-vue'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
@@ -170,7 +171,7 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied
   ...toQueryFields(customFilterFields),
   {field:'summary',label:'摘要',type:'text'},
   {field:'request_path',label:'路径',type:'text'},
-], ['created_at','module','action','operator_name'], {requireQuery:true,ready:()=>querySupported.value && !loading.value && !queryError.value})
+], ['created_at','module','action','operator_name'], {requireQuery:true,ready:()=>querySupported.value && ['ready','empty'].includes(logListState.phase.value) && !queryError.value})
 const querySupported = ref(false), queryError = ref('')
 function clearQueryColumns() { clearColumns() }
 function runQuery(conditions: QueryCondition[], preferences: object) {
@@ -181,7 +182,8 @@ function runQuery(conditions: QueryCondition[], preferences: object) {
   page.value = 1
 }
 
-const loading = ref(false)
+const logListState = usePageLoad()
+const loading = logListState.loading
 const logs = ref<OperationLog[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -192,7 +194,6 @@ const visibleLogs = pageColumns.visibleRows
 const detailVisible = ref(false)
 const selectedLog = ref<OperationLog | null>(null)
 
-let logRequestSerial = 0
 let logQueryTimer: ReturnType<typeof setTimeout> | undefined
 
 const diffRows = computed(() => selectedLog.value?.diff_items || [])
@@ -218,8 +219,7 @@ function toEndDate(date?: string) {
 
 async function fetchLogs() {
   clearTimeout(logQueryTimer)
-  const serial = ++logRequestSerial
-  loading.value = true
+  const serial = logListState.begin()
   queryError.value = ''
   try {
     const params: Record<string, string | number | undefined> = {
@@ -228,7 +228,7 @@ async function fetchLogs() {
       ...serverQueryParams(queryApplied.value, []),
     }
     const data = await request.get('/operation-logs', { params }) as unknown as OperationLogListResponse
-    if (serial !== logRequestSerial) return
+    if (!logListState.isCurrent(serial)) return
     querySupported.value = requireServerQueryVersion(data as {query_version?:number}, !!queryApplied.value.length || !!columnFilters.value.length)
     moduleOptions.value = data.modules || []
     actionOptions.value = data.actions || []
@@ -237,11 +237,14 @@ async function fetchLogs() {
       const latest = logs.value.find(row => row.id === selectedLog.value?.id)
       if (latest) await detailSwitch.select(latest); else closeDetail()
     }
+    if (!logListState.isCurrent(serial)) return
     total.value = data.total || 0
+    logListState.succeed(serial, logs.value.length === 0)
   } catch (error) {
-    if (serial === logRequestSerial) { closeDetail(); queryError.value = error instanceof Error ? error.message : '操作日志查询失败，请重试'; logs.value = []; total.value = 0 }
-  } finally {
-    if (serial === logRequestSerial) loading.value = false
+    if (logListState.isCurrent(serial)) {
+      closeDetail(); queryError.value = error instanceof Error ? error.message : '操作日志查询失败，请重试'; logs.value = []; total.value = 0
+      logListState.fail(serial, error)
+    }
   }
 }
 
@@ -287,12 +290,11 @@ function formatPrettyJson(value?: string | null) {
 
 watch([queryApplied, pageSize], () => { page.value = 1; pageColumns.clear() }, { deep: true, flush: 'sync' })
 watch([page, pageSize, queryApplied], () => {
-  ++logRequestSerial
-  loading.value = true
+  logListState.invalidate(true)
   clearTimeout(logQueryTimer)
   logQueryTimer = setTimeout(fetchLogs, 200)
 }, { deep: true })
-onUnmounted(() => { detailSwitch.invalidate(); ++logRequestSerial; clearTimeout(logQueryTimer) })
+onUnmounted(() => { detailSwitch.invalidate(); logListState.invalidate(); clearTimeout(logQueryTimer) })
 
 onMounted(fetchLogs)
 </script>

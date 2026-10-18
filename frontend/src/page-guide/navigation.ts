@@ -19,6 +19,8 @@ export const guideDestinations = {
   stock: { permission: 'report:stock-detail:list' },
   feedback: { permission: 'feedback:view' },
   users: { permission: 'system:user:view' },
+  roles: { permission: 'system:role:view' },
+  enums: { permission: 'system:enum:view' },
 } satisfies Record<PageGuideKey, { permission: string }>
 
 export function isPublicGuidePath(path: string): boolean {

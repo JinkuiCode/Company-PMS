@@ -27,7 +27,7 @@ assert.match(router, /system:field-policy:view/)
 
 assert.match(projectList, /sheet_values/)
 assert.match(projectList, /dynamicRequiredFields/)
-assert.match(projectList, /field\.visible/)
+assert.match(projectList, /resolveFieldMetadata\(field\)\.visible/, 'Project fields must consume shared visibility metadata')
 assert.match(projectList, /required/)
 assert.match(projectList, /focusProjectPolicyValidation/)
 assert.match(archive, /archives\/fields/)

@@ -57,6 +57,7 @@
       </div>
 
         <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="system-user" :fields="queryFields" :defaults="queryDefaults" :loading="loading" :snapshot="() => ({ pageSize })" @query="runQuery" @clear-columns="clearQueryColumns" />
+        <div v-if="userListState.failed.value" class="pms-list-load-error" role="alert">用户数据未完整读取，请重试 <el-button link class="pms-button-navigation" @click="fetchUserList">重试</el-button></div>
         <el-table class="pms-dense-table" height="100%" :data="pagedUsers" v-loading="loading" border stripe size="small">
           <el-table-column prop="id" label="ID" width="70" />
           <el-table-column prop="username" label="账号（工号）" width="120" :class-name="queryColumnClass('username')" :label-class-name="queryColumnClass('username')"><template #header><PmsQueryColumnHeader :params="{contextQuery:() => columnContext,field:'username',displayName:'账号（工号）'}" /></template></el-table-column>
@@ -95,7 +96,7 @@
         </div>
     </div>
 
-    <PmsFormDrawer v-model="deptDialogVisible" :title="isDeptEdit ? '编辑部门' : '新增部门'" :busy="deptSaving">
+    <PmsFormDrawer v-model="deptDialogVisible" :title="isDeptEdit ? '编辑部门' : '新增部门'" :busy="deptSaving" :before-close="beforeDeptClose">
       <h3 class="pms-form-drawer__section">基本信息</h3>
       <el-form id="pms-dept-form" ref="deptFormRef" :model="deptForm" :rules="deptRules" label-position="top" class="pms-standard-dialog-form" @submit.prevent="handleDeptSubmit">
         <el-form-item>
@@ -154,8 +155,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button :disabled="deptSaving" @click="deptDialogVisible = false">取消</el-button>
-        <el-button v-if="isDeptEdit ? hasPermission('system:user:edit') : hasPermission('system:user:add')" type="primary" :loading="deptSaving" :disabled="deptLeadersLoading || Boolean(deptLeaderError)" native-type="submit" form="pms-dept-form">保存</el-button>
+        <el-button class="pms-button-reset" :disabled="deptSaving" @click="closeDeptDialog">取消</el-button>
+        <el-button v-if="isDeptEdit ? hasPermission('system:user:edit') : hasPermission('system:user:add')" class="pms-button-save" type="primary" :loading="deptSaving" :disabled="deptLeadersLoading || Boolean(deptLeaderError)" native-type="submit" form="pms-dept-form">保存</el-button>
       </template>
     </PmsFormDrawer>
 
@@ -170,6 +171,9 @@ import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import { useSystemQuery, loadCompleteDataset } from '@/query-system/system-adapter'
 import type { QueryCondition } from '@/query-system/core'
 import { computed, ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
+import { usePageLoad } from '@/composables/usePageLoad'
+import { useFormSession } from '@/form-system/useFormSession'
 import { pmsActionColumn } from '@/config/listUi'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { OfficeBuilding } from '@element-plus/icons-vue'
@@ -216,8 +220,9 @@ const selectedDeptName = ref('')
 const deptDialogVisible = ref(false)
 const isDeptEdit = ref(false)
 const deptFormRef = ref<FormInstance>()
-const deptSaving = ref(false)
 const deptForm = reactive({ id: 0, parent_id: 0, dept_name: '', leader_id: null as number | null, sort: 0, status: 1 })
+const deptFormSession = useFormSession({ draft: deptForm, isConflict: (error: any) => error?.response?.status === 409 })
+const deptSaving = deptFormSession.busy
 const deptLeaderUsers = ref<Array<{ id: number; real_name: string; username: string }>>([])
 const deptLegacyLeaderLabel = ref('')
 const deptLeadersLoading = ref(false)
@@ -347,8 +352,32 @@ onBeforeUnmount(() => {
 })
 
 // 部门弹窗
-function openDeptDialog(row?: any, parentId?: number) {
+async function canLeaveDepartment() {
+  if (!deptDialogVisible.value) return true
+  return deptFormSession.requestClose(async () => {
+    try {
+      await ElMessageBox.confirm('放弃尚未保存的部门修改？', '未保存修改', { type: 'warning' })
+      return true
+    } catch { return false }
+  })
+}
+
+async function beforeDeptClose(done: () => void) {
+  if (!await canLeaveDepartment()) return
+  deptFormSession.restore()
+  done()
+}
+
+function closeDeptDialog() {
+  return beforeDeptClose(() => { deptDialogVisible.value = false })
+}
+
+onBeforeRouteLeave(canLeaveDepartment)
+
+async function openDeptDialog(row?: any, parentId?: number) {
   if (deptSaving.value) return
+  if (row ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
+  if (deptDialogVisible.value && !await canLeaveDepartment()) return
   if (row ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
   contextMenuVisible.value = false
   isDeptEdit.value = !!(row && row.id)
@@ -360,6 +389,7 @@ function openDeptDialog(row?: any, parentId?: number) {
     Object.assign(deptForm, { id: 0, parent_id: parentId ?? 0, dept_name: '', leader_id: null, sort: 0, status: 1 })
     deptLegacyLeaderLabel.value = ''
   }
+  deptFormSession.capture()
   deptDialogVisible.value = true
   void loadDeptLeaders()
 }
@@ -367,24 +397,16 @@ function openDeptDialog(row?: any, parentId?: number) {
 async function handleDeptSubmit() {
   if (deptSaving.value || deptLeadersLoading.value || deptLeaderError.value) return
   if (isDeptEdit.value ? !hasPermission('system:user:edit') : !hasPermission('system:user:add')) return
-  const valid = await deptFormRef.value?.validate().catch(() => false)
-  if (!valid || deptSaving.value) return
-  deptSaving.value = true
-  try {
-    if (isDeptEdit.value) {
-      await request.put(`/depts/${deptForm.id}`, deptForm)
-      ElMessage.success('部门更新成功')
-    } else {
-      await request.post('/depts', deptForm)
-      ElMessage.success('部门创建成功')
-    }
-    deptDialogVisible.value = false
-    await fetchDeptTree()
-  } catch {
-    // Request interceptor reports the error; keep the draft available for retry.
-  } finally {
-    deptSaving.value = false
-  }
+  const editing = isDeptEdit.value
+  const result = await deptFormSession.submit({
+    validate: async () => Boolean(await deptFormRef.value?.validate().catch(() => false)),
+    save: snapshot => editing ? request.put(`/depts/${snapshot.id}`, snapshot) : request.post('/depts', snapshot),
+    // The request interceptor reports the error; the session preserves input.
+  })
+  if (result.status !== 'success') return
+  ElMessage.success(editing ? '部门更新成功' : '部门创建成功')
+  deptDialogVisible.value = false
+  try { await fetchDeptTree() } catch { /* List refresh failure must not resubmit a successful save. */ }
 }
 
 async function handleDeleteDept(id: number) {
@@ -411,7 +433,8 @@ const roleOptions = computed<PmsOption[]>(() => roleList.value.map(role => ({
   label: String(role.role_name),
   disabled: role.status === 0,
 })))
-const loading = ref(false)
+const userListState = usePageLoad()
+const loading = userListState.loading
 const page = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
 const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit: submitQuery, topRows, pageRows, clearColumns, columnContext, columnFilters, columnClass: queryColumnClass } = useSystemQuery(() => [
@@ -422,7 +445,7 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit:
   { field: 'dept_id', label: '部门', type: 'enum', options: Object.entries(deptMap.value).map(([value,label]) => ({value:Number(value),label})) },
   { field: 'role_names', label: '角色', type: 'text' },
   { field: 'status', label: '状态', type: 'enum', options: [{value:1,label:'启用'},{value:0,label:'禁用'}] },
-], ['username', 'real_name', 'status'], {ready:()=>!loading.value,pagination:{page,size:pageSize}})
+], ['username', 'real_name', 'status'], {ready:()=>userListState.phase.value === 'ready' || userListState.phase.value === 'empty',pagination:{page,size:pageSize}})
 const userQueryRecord = (row:any) => ({...row,role_names:row.role_names?.join('，') || ''})
 const filteredUsers = computed(() => topRows(userList.value, userQueryRecord))
 const total = computed(() => filteredUsers.value.length)
@@ -440,21 +463,20 @@ watch(userList, clearColumns, {flush:'sync'})
 const userDialogVisible = ref(false)
 const editingUser = ref<any>(null)
 
-let listRequestSerial = 0
 async function fetchUserList() {
-  const requestSerial = ++listRequestSerial
-  loading.value = true
+  const requestSerial = userListState.begin()
   const params: any = {}
   if (selectedDeptId.value !== null) params.dept_id = selectedDeptId.value
   try {
-    const res = await loadCompleteDataset(async (page, pageSize) => await request.get('/users', { params: { ...params, page, page_size: pageSize } }) as any, 500, () => requestSerial === listRequestSerial, (row:any) => row.id)
-    if (requestSerial !== listRequestSerial) return
+    const res = await loadCompleteDataset(async (page, pageSize) => await request.get('/users', { params: { ...params, page, page_size: pageSize } }) as any, 500, () => userListState.isCurrent(requestSerial), (row:any) => row.id)
+    if (!userListState.isCurrent(requestSerial)) return
     userList.value = res.items
+    userListState.succeed(requestSerial, userList.value.length === 0)
     page.value = Math.min(page.value, Math.max(1, Math.ceil(total.value / pageSize.value)))
-  } catch {
-    if (requestSerial === listRequestSerial) { userList.value = []; ElMessage.error('用户数据未完整读取，请刷新重试') }
-  } finally {
-    if (requestSerial === listRequestSerial) loading.value = false
+  } catch (cause) {
+    if (!userListState.isCurrent(requestSerial)) return
+    userList.value = []
+    userListState.fail(requestSerial, cause)
   }
 }
 
@@ -472,6 +494,8 @@ async function fetchRoles() {
 }
 
 function openUserDialog(row?: any) {
+  // An open editor owns its target until it is closed through its draft guard.
+  if (userDialogVisible.value) return
   if (row ? !authStore.hasAnyPermission('system:user:edit', 'system:user:reset-password') : !hasPermission('system:user:add')) return
   editingUser.value = row || null
   userDialogVisible.value = true
@@ -495,6 +519,7 @@ onMounted(() => {
   fetchUserList()
   fetchRoles()
 })
+onBeforeUnmount(() => userListState.invalidate())
 </script>
 
 <style scoped>

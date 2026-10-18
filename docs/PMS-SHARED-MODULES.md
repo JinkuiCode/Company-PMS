@@ -13,12 +13,12 @@
 | 本页列筛选 | query-system/page-column-filter.ts、column-filters.ts | 仅当前页快照，翻页／重查清除，不能影响总数／后台导出。 |
 | 业务引用 | query-system/PmsQueryReference.vue、reference.ts | 共享引用候选、分页、多选及已选摘要。 |
 | 列设置 | components/PmsListColumnPicker.vue | 显示、顺序、冻结、列宽的统一交互。 |
-| 列偏好存储 | list-system/columnPreferences.ts（本批新增） | 档案试点，其他页面尚未迁移。账号＋页面键、有效列清理、格式兼容、安全失败。 |
+| 列偏好存储 | list-system/columnPreferences.ts | 档案已正式、进度工作台Mac已接入。账号＋页面键、有效列清理、格式兼容、安全失败。 |
 | 统一字段控件 | form-system/index.ts、components/Pms*Control.vue | 文本、长文本、数字、日期、选择、树、开关、勾选等统一状态。 |
 | 表单／行内／表格容器 | PmsFormDrawer.vue、PmsFormField.vue、PmsInlineField.vue、form-system/ag-grid.ts | 三类交互共用令牌，保留各自容器。 |
-| 表单会话 | form-system/useFormSession.ts（本批新增） | 档案新增试点；原值、草稿、验证／保存互斥、关闭确认、失败投影及重试。详情审批保留专用流程。 |
-| 页面数据状态 | composables/usePageLoad.ts（本批新增） | 档案列表试点；待查询、加载、空结果、失败、重试及请求代次，不持有业务行。 |
-| 字段元数据／错误适配 | form-system/fieldMetadata.ts（本批新增） | 档案试点；配置与代码上限取交集，结构化错误按当前可见字段和页面顺序展示。 |
+| 表单会话 | form-system/useFormSession.ts | 档案新增已正式；进度新增、产品线表单Mac已接入。原值、草稿、验证／保存互斥、关闭确认、失败投影及重试。详情审批保留专用流程。 |
+| 页面数据状态 | composables/usePageLoad.ts | 档案已正式；进度/任务及九个系统列表Mac已接入。待查询、加载、空结果、失败、重试及请求代次，不持有业务行。 |
+| 字段元数据／错误适配 | form-system/fieldMetadata.ts | 档案已正式、进度新增Mac已接入；配置与代码上限取交集，结构化错误按当前可见字段和页面顺序展示。 |
 | 主从切换 | utils/detailSwitch.ts、composables/confirmDetailSwitch.ts | 最新选择生效、草稿保存／放弃／取消；不由本批会话模块取代。 |
 | 授权与资源登记 | backend/app/services/rbac.py、business_resources.py及各业务范围服务 | 运行时权限和数据范围在后端检查，前端隐藏不能代替授权。 |
 | 字段目录与规则 | backend/app/services/field_catalog.py、field_policy.py | 同一生效元数据驱动可见／可编辑／必输；代码决定配置上限，保留存量必填兼容。 |
@@ -50,3 +50,23 @@
 
 
 2026-10-18最新落地状态：上述草稿及四项档案试点共享能力已随d71971d/v1.1.0正式部署，数据库form-draft-02及真实本人草稿保存/恢复/修改/删除、只读记录/说明验收通过；草稿管理保持独立权限。升级通知已发布18条，邮件17accepted/1缺邮箱failed。前述“尚未正式更新/未升级”是2026-10-16阶段状态，不作为当前状态；项目进度及其他管理页的四项行为迁移仍未完成。
+
+2026-10-18后续Mac批次：ProjectList.vue与ProjectProgress.vue已接入usePageLoad及内联重试，隔离真实浏览器两页和必需前端检查通过。任务异步历史切换另有交错测试；仅页面状态完成，列偏好/表单会话/字段适配在进度页仍待迁移，正式仍为v1.1.0。详见[批次计划及结果](superpowers/plans/2026-10-18-progress-page-load.md)。
+
+2026-10-18后续Mac列偏好批次：ProjectList.vue接入共享存储，保留原账号键及selected_sheet_field_keys别名；当前未选有效列旧布局仍保存，失效列清理。未来/损坏/异属缓存保护与存储异常不阻断查询已隔离实页验证，默认档案行为保持。仅Mac，见[计划及结果](superpowers/plans/2026-10-18-progress-column-preferences.md)。
+
+2026-10-18后续Mac表单批次：进度新增窗口接入useFormSession及共享字段元数据/错误投影，关闭保护、互斥、快照、可见控件顺序/日期别名/动态嵌套/ARIA均已隔离实页验证；列表说明入口及5174只读现场通过，表格/详情保持原写路径。至此进度工作台适用的四项共享行为已接入，任务页仅接入页面状态；系统页面仍按下一批继续。正式仍v1.1.0，见[本批结果](superpowers/plans/2026-10-18-progress-form-session.md)。
+
+2026-10-18系统只读批次：DataDictionaryList.vue及OperationLogList.vue接入usePageLoad，完整读取/分页、离页及详情异步总数保护已隔离真实浏览器验证。保留字段目录只读和审计当前布局/授权，无真实写入或正式部署，详见[本批结果](superpowers/plans/2026-10-18-system-readonly-page-state.md)。
+
+2026-10-18系统设置读取批次：ProductLineList.vue及FieldPolicyList.vue接入共享页面状态，失败清旧行、重试和离页保护通过；字段规则模块快速切换的旧响应不再覆盖当前模块。组织绑定、保存/删除/恢复默认和授权均保持原路径，本批只覆盖读取。见[计划及结果](superpowers/plans/2026-10-18-system-settings-page-state.md)。
+
+2026-10-18用户/角色读取批次：UserList.vue、RoleList.vue主列表接入共享状态，用户完整分页及部门参数保持，失败清行/重试、旧响应及卸载已隔离验证。部门管理、用户表单及角色权限树保持专用流程，不把读取迁移报告为表单会话全迁移。见[结果](superpowers/plans/2026-10-18-system-identity-page-state.md)。
+
+2026-10-18专用管理读取批次：枚举定义/值、参数、同步任务接入共享状态，同时保留枚举身份、参数securityEpoch/撤权清内存、同步服务端查询/防抖/轮询。三页隔离行为和原参数安全/枚举身份测试通过；写入会话继续使用原专用流程，尚未统一迁移。正式仍v1.1.0，本机前端已刷新，见[本批结果](superpowers/plans/2026-10-18-system-specialized-page-state.md)。
+
+2026-10-18产品线保存会话批次：既有产品线抽屉接入useFormSession，连续关闭只一次确认，确认/保存互斥、提交快照、409保留输入及重试通过；组织不可改、POST/PUT字段及权限保持。全API模拟验收与5174实际只读打开/取消通过，未真实写入或部署，见[计划及结果](superpowers/plans/2026-10-18-product-line-form-session.md)。用户/角色/部门/枚举等保存适配继续分批推进。
+
+2026-10-18部门保存会话批次：UserList内既有部门抽屉接入useFormSession，未保存关闭/离页/改开目标的一次确认、校验和保存互斥、独立快照及失败保留通过。部门负责人跨部门候选、原权限/接口、删除和拖拽保持。模拟回归及5174只读打开取消通过，仅Mac未真实写入或部署，见[计划及结果](superpowers/plans/2026-10-18-department-form-session.md)。
+
+2026-10-18用户/角色/枚举保存会话批次：三处普通维护抽屉接入共享会话，独立重置、角色树/首页、系统存储值及缓存保留领域适配。角色/枚举说明和升级目录同步登记。至此本批五处普通管理表单（产品线、部门、用户、角色、枚举）完成Mac会话迁移；敏感参数、字段策略批量表、附件幂等和邮件核查保留专用控制器，不强行替换。37项契约、专项隔离、构建及审查通过，尚未提交或部署，见[计划及结果](superpowers/plans/2026-10-18-system-save-sessions.md)。

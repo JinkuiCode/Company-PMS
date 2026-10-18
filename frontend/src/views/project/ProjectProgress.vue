@@ -35,10 +35,14 @@
     </template>
 
     <template #grid>
+      <div v-if="tasksError" class="pms-list-load-error" role="alert">
+        加载失败，请重试 <el-button class="pms-button-navigation" size="small" @click="fetchTasks">重试</el-button>
+      </div>
       <ag-grid-vue
         class="ag-theme-alpine wechat-table pms-ag-grid"
         :class="PMS_AG_GRID_FORM_CLASS"
         :rowData="filteredRowData"
+        :loading="tasksLoading"
         :columnDefs="queryColumnDefs"
         @grid-ready="gridApi = $event.api"
         :defaultColDef="defaultColDef"
@@ -70,6 +74,7 @@ import { useSystemQuery } from '@/query-system/system-adapter'
 import { toQueryFields } from '@/query-system/list-adapter'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { usePageLoad } from '@/composables/usePageLoad'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { pmsActionColumn } from '@/config/listUi'
 import { PmsFormDrawer } from '@/form-system'
@@ -159,7 +164,11 @@ const taskFilterFields = computed<ListFilterField<any>[]>(() => [
 ])
 
 const gridApi = ref<any>(null)
-const tasksLoading = ref(true), tasksAccepted = ref(false)
+const tasksState = usePageLoad()
+tasksState.invalidate(true)
+const tasksLoading = tasksState.loading
+const tasksError = tasksState.failed
+const tasksAccepted = computed(() => ['ready', 'empty'].includes(tasksState.phase.value))
 const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied: queryApplied, columnFilters, submit: submitQuery, filterRows, clearColumns, columnContext } = useSystemQuery(() => toQueryFields(taskFilterFields.value), ['task_name', 'assignee_name', 'status'], {requireQuery:true,ready:()=>tasksAccepted.value && !tasksLoading.value})
 const filteredRowData = computed(() => filterRows(rowData.value))
 const queryColumnDefs = computed(() => decorateQueryColumns(columnDefs.value, () => columnContext))
@@ -226,27 +235,29 @@ const defaultColDef = {
   cellStyle: { display: 'flex', alignItems: 'center' },
 }
 
-let taskRequestSerial = 0
 async function fetchTasks() {
-  const current = ++taskRequestSerial
-  tasksLoading.value = true
+  const current = tasksState.begin()
   try {
     const rows = (await request.get(`/projects/${projectId}/tasks`)) as any[]
-    if (current !== taskRequestSerial) return
+    if (!tasksState.isCurrent(current)) return
     rowData.value = rows
     if (historyTask.value) {
       const latest = rows.find(row => row.id === historyTask.value?.id)
-      if (latest) { await taskHistorySwitch.select(latest); ++taskHistoryRevision.value }
+      if (latest) {
+        await taskHistorySwitch.select(latest)
+        if (!tasksState.isCurrent(current)) return
+        ++taskHistoryRevision.value
+      }
       else closeTaskHistory()
     }
-    tasksAccepted.value = true
+    tasksState.succeed(current, rows.length === 0)
     refreshProgressScrollbar()
   } catch (error) {
-    if (current !== taskRequestSerial) return
+    if (!tasksState.isCurrent(current)) return
     rowData.value = []; closeTaskHistory()
-    tasksAccepted.value = false
+    tasksState.fail(current, error)
     ElMessage.error(error instanceof Error ? error.message : '任务读取失败，请重试')
-  } finally { if (current === taskRequestSerial) tasksLoading.value = false }
+  }
 }
 
 async function fetchUsers() {
@@ -314,7 +325,7 @@ async function loadTaskStatusOptions() {
 }
 
 onMounted(() => { fetchTasks(); fetchUsers(); loadTaskStatusOptions() })
-onBeforeUnmount(() => { ++taskRequestSerial; taskHistorySwitch.invalidate() })
+onBeforeUnmount(() => { tasksState.invalidate(); taskHistorySwitch.invalidate() })
 </script>
 
 <style scoped>

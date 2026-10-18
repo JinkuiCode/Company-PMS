@@ -17,9 +17,10 @@ const userList = read('src/views/system/UserList.vue')
 const dictList = read('src/views/system/DataDictionaryList.vue')
 const enumList = read('src/views/system/EnumList.vue')
 
-for (const field of ['role_codes', 'permissions', 'data_scope', 'product_category_ids']) {
+for (const field of ['role_codes', 'permissions', 'data_scope', 'product_line_ids']) {
   assert.match(authApi, new RegExp(field), `/auth/me 类型应包含 ${field}`)
 }
+assert.doesNotMatch(authApi, /product_category_ids/, '已停用的产品类别不得重新成为登录数据权限字段')
 assert.match(authStore, /function hasPermission/)
 assert.match(authStore, /function hasAnyPermission/)
 assert.match(router, /permission:\s*'project:list:view'/)

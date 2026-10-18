@@ -8,7 +8,7 @@ const { pageGuides, findGuideEntries } = await import(registryFile.href)
 const { migrateReportIdentity } = await import('../src/views/reports/report-identity-layout.ts')
 
 test('approved business surfaces share searchable operation and field instructions', () => {
-  assert.deepEqual(Object.keys(pageGuides).sort(), ['archive', 'archiveChanges', 'archiveDrafts', 'audit', 'feedback', 'inventory', 'progress', 'purchase', 'stock', 'tasks', 'users'])
+  assert.deepEqual(Object.keys(pageGuides).sort(), ['archive', 'archiveChanges', 'archiveDrafts', 'audit', 'enums', 'feedback', 'inventory', 'progress', 'purchase', 'roles', 'stock', 'tasks', 'users'])
   for (const guide of Object.values(pageGuides)) {
     assert.ok(guide.title && guide.operations.length && guide.fields.length)
     assert.equal(new Set(guide.fields.map(item => item.label)).size, guide.fields.length)

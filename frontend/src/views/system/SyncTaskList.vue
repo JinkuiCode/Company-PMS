@@ -8,6 +8,7 @@
     <template #filters>
       <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" list-key="system-sync-task" :fields="queryFields" :defaults="queryDefaults" :ready="querySupported" :loading="loading" :snapshot="() => ({pageSize})" @query="runQuery" @clear-columns="clearQueryColumns" />
       <p v-if="!querySupported" role="status">同步任务接口尚未声明查询 v2 支持，统一查询暂不可用；未执行当前页过滤。</p>
+      <div v-if="taskListState.failed.value" class="pms-list-load-error" role="alert">{{ error }} <el-button link class="pms-button-navigation" @click="fetchTasks">重试</el-button></div>
     </template>
     <template #grid>
       <el-table v-loading="loading" :data="visibleItems" class="pms-dense-table" height="100%" border stripe @selection-change="selected = $event">
@@ -43,6 +44,7 @@ import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import type { QueryCondition } from '@/query-system/core'
 import type { ColumnQueryContext } from '@/query-system/column-filters'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { usePageLoad } from '@/composables/usePageLoad'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PmsDataList from '@/components/PmsDataList.vue'
 import CustomPagination from '@/components/CustomPagination.vue'
@@ -64,7 +66,7 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied
   {field:'attempts',label:'尝试次数',type:'number'},
   {field:'started_at',label:'最后执行时间',type:'date'},
   {field:'message',label:'执行信息',type:'text'},
-], ['project_code','status','operator_name','created_at'], {requireQuery:true,ready:()=>querySupported.value && !loading.value && !error.value})
+], ['project_code','status','operator_name','created_at'], {requireQuery:true,ready:()=>querySupported.value && (taskListState.phase.value === 'ready' || taskListState.phase.value === 'empty') && !error.value})
 const querySupported = ref(false)
 function clearQueryColumns() { clearColumns() }
 function runQuery(conditions: QueryCondition[], preferences: object) {
@@ -74,27 +76,32 @@ function runQuery(conditions: QueryCondition[], preferences: object) {
   if (size && PAGE_SIZE_OPTIONS.includes(size)) pageSize.value = size
   page.value = 1
 }
-const items = ref<any[]>([]), selected = ref<any[]>([]), loading = ref(false), busy = ref(false), error = ref('')
+const taskListState = usePageLoad()
+const loading = taskListState.loading
+const items = ref<any[]>([]), selected = ref<any[]>([]), busy = ref(false), error = ref('')
 const pageColumns = usePageColumnFilter(items, () => queryFields.value, columnFilters, () => [page.value,pageSize.value], undefined, () => clientContext.ready?.() !== false)
 const columnContext: ColumnQueryContext = pageColumns.context
 const visibleItems = pageColumns.visibleRows
 const logVisible = ref(false), archiveId = ref<number | null>(null)
 const workerEnabled = ref(true)
-let serial = 0, timer: ReturnType<typeof setTimeout> | undefined, poll: ReturnType<typeof setInterval> | undefined
+let timer: ReturnType<typeof setTimeout> | undefined, poll: ReturnType<typeof setInterval> | undefined
 const formatTime = (value?: string) => value?.replace('T', ' ').slice(0, 19) || '-'
 const statusTone = (status: string) => status === 'success' ? 'success' : status === 'failed' ? 'danger' : status === 'review' ? 'warning' : 'info'
 function openLogs(row: any) { archiveId.value = row.archive_id; logVisible.value = true }
 async function fetchTasks() {
-  const current = ++serial
-  loading.value = true
+  const ticket = taskListState.begin()
   error.value = ''
   try {
     const data: any = await request.get('/sync-tasks', { params: { ...serverQueryParams(queryApplied.value,[]), page: page.value, page_size: pageSize.value } })
-    if (current !== serial) return
+    if (!taskListState.isCurrent(ticket)) return
     querySupported.value = requireServerQueryVersion(data, !!queryApplied.value.length || !!columnFilters.value.length)
     items.value = data.items; total.value = data.total; selected.value = []; workerEnabled.value = data.worker_enabled !== false
-  } catch { if (current === serial) { items.value = []; total.value = 0; error.value = '任务加载失败，请刷新重试' } }
-  finally { if (current === serial) loading.value = false }
+    taskListState.succeed(ticket, items.value.length === 0)
+  } catch (cause) {
+    if (!taskListState.isCurrent(ticket)) return
+    items.value = []; total.value = 0; selected.value = []; error.value = '任务加载失败，请重试'
+    taskListState.fail(ticket, cause)
+  }
 }
 async function retry(rows: any[]) {
   if (!canRetry.value || busy.value) return
@@ -117,10 +124,10 @@ async function inspect(row: any) {
   catch { /* The shared request handler displays the server error. */ }
   finally { busy.value = false }
 }
-watch([queryApplied, pageSize], () => { page.value = 1; pageColumns.clear(); loading.value = true }, { deep: true, flush: 'sync' })
-watch([queryApplied, page, pageSize], () => { ++serial; clearTimeout(timer); timer = setTimeout(fetchTasks, 200) }, { deep: true })
+watch([queryApplied, pageSize], () => { page.value = 1; pageColumns.clear() }, { deep: true, flush: 'sync' })
+watch([queryApplied, page, pageSize], () => { taskListState.invalidate(true); clearTimeout(timer); timer = setTimeout(fetchTasks, 200) }, { deep: true, flush: 'sync' })
 onMounted(() => { void fetchTasks(); poll = setInterval(() => { if (!busy.value && !loading.value && !selected.value.length && !logVisible.value) void fetchTasks() }, 15000) })
-onUnmounted(() => { ++serial; clearTimeout(timer); clearInterval(poll) })
+onUnmounted(() => { taskListState.invalidate(); clearTimeout(timer); clearInterval(poll) })
 </script>
 
 <style scoped>

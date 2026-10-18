@@ -17,7 +17,9 @@ for route in app.routes:
 for policy in BUSINESS_RESOURCES.values():
     if policy.scope in ('product_line_and_personnel','parent_project','authorized_erp_organizations'):
         assert policy.product_line_source
-assert set(DOCUMENT_RESOURCES) == {'archive','project','task','feedback'}
+assert set(DOCUMENT_RESOURCES) == {'archive','project','task','feedback','draft_management'}
+assert DOCUMENT_RESOURCES['draft_management'].view_permission == 'project:archive:draft:manage'
+assert DOCUMENT_RESOURCES['draft_management'].scope == 'product_line_and_owner_and_manager'
 assert resource_for_route('/api/releases/notices/1/read').scope == 'owner_only'
 # FastAPI declarations contain parameter names, not a caller-provided raw URL.
 assert resource_for_route('/api/releases/{release_id}/deliveries').scope == 'explicit_support_management'

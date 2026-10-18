@@ -5,6 +5,8 @@ import ts from 'typescript'
 import { parse } from '@vue/compiler-sfc'
 import { computed, reactive, ref, watch, nextTick } from 'vue'
 import { useSystemQuery } from '../src/query-system/system-adapter.ts'
+import { usePageLoad } from '../src/composables/usePageLoad.ts'
+import { useFormSession } from '../src/form-system/useFormSession.ts'
 
 const source = readFileSync(new URL('../src/views/system/EnumList.vue', import.meta.url), 'utf8')
 const script = parse(source).descriptor.scriptSetup.content
@@ -12,14 +14,14 @@ const ast = ts.createSourceFile('EnumList.ts', script, ts.ScriptTarget.Latest, t
 const printer = ts.createPrinter()
 const body = ast.statements.filter(statement => !ts.isImportDeclaration(statement)).map(statement => printer.printNode(ts.EmitHint.Unspecified, statement, ast)).join('\n')
 const code = ts.transpileModule(body, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText
-const setup = new Function('dependencies', `const {computed,reactive,ref,watch,onMounted,onBeforeUnmount,onUnmounted,ElMessage,ElMessageBox,loadEnumOptions,useAuthStore,request,useSystemQuery} = dependencies;\n${code}\nreturn {fetchDicts,fetchItems,selectDict,selectedDict,dictItems,queryDraft,filteredItems,columnContext,itemsLoading,submitQuery};`)
+const setup = new Function('dependencies', `const {computed,reactive,ref,watch,onMounted,onBeforeUnmount,onUnmounted,onBeforeRouteLeave,ElMessage,ElMessageBox,loadEnumOptions,useAuthStore,request,useSystemQuery,usePageLoad,useFormSession} = dependencies;\n${code}\nreturn {fetchDicts,fetchItems,selectDict,selectedDict,dictItems,queryDraft,filteredItems,columnContext,itemsLoading,submitQuery};`)
 const definitions = [{id:1,dict_code:'enum_a',dict_name:'A'},{id:2,dict_code:'enum_b',dict_name:'B'}]
 const rowsA = [{id:11,item_value:'11',item_label:'Alpha',status:1},{id:12,item_value:'12',item_label:'Beta',status:0}]
 const rowsB = [{id:21,item_value:'21',item_label:'Gamma',status:1},{id:22,item_value:'22',item_label:'Delta',status:0}]
 async function settle() { await new Promise(resolve => setImmediate(resolve)); await nextTick() }
 async function fixture() {
   const requests = [], unmount = [], errors = []
-  const page = setup({computed,reactive,ref,watch,useSystemQuery,onMounted:()=>{},onBeforeUnmount:fn=>unmount.push(fn),onUnmounted:fn=>unmount.push(fn),
+  const page = setup({computed,reactive,ref,watch,useSystemQuery,usePageLoad,useFormSession,onBeforeRouteLeave:()=>{},onMounted:()=>{},onBeforeUnmount:fn=>unmount.push(fn),onUnmounted:fn=>unmount.push(fn),
     ElMessage:{error:message=>errors.push(message)},ElMessageBox:{},loadEnumOptions:async()=>{},useAuthStore:()=>({hasPermission:()=>false}),
     request:{get:path=>path==='/dicts' ? Promise.resolve(definitions) : new Promise((resolve,reject)=>requests.push({path,resolve,reject}))},
   })

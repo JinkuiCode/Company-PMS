@@ -5,6 +5,7 @@ import vm from 'node:vm'
 import ts from 'typescript'
 import { parse } from '@vue/compiler-sfc'
 import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { usePageLoad } from '../src/composables/usePageLoad.ts'
 
 const source = readFileSync(new URL('../src/views/system/ParameterList.vue', import.meta.url), 'utf8')
 const { descriptor } = parse(source)
@@ -23,7 +24,7 @@ function harness(request = { get: async () => ({ items: [row()] }), put: async (
   const auth = { hasPermission: code => permissions[code.endsWith(':view') ? 'view' : 'edit'] }
   const hooks = {}
   const context = vm.createContext({
-    computed, nextTick, ref, watch, request, useAuthStore: () => auth,
+    computed, nextTick, ref, watch, request, usePageLoad, useAuthStore: () => auth,
     onMounted: callback => { hooks.mount = callback },
     onBeforeUnmount: callback => { hooks.unmount = callback },
     onBeforeRouteLeave: callback => { hooks.leave = callback },
@@ -31,7 +32,7 @@ function harness(request = { get: async () => ({ items: [row()] }), put: async (
     ElMessage: { success() {} }, ElMessageBox: { confirm: async () => {} },
     document: { getElementById: () => null },
   })
-  vm.runInContext(script + '\nglobalThis.subject = { items, value, editing, load, edit, save, revealSecret, currentValue };', context)
+  vm.runInContext(script + '\nglobalThis.subject = { items, value, editing, load, edit, save, revealSecret, currentValue, failed };', context)
   return { ...context.subject, permissions, hooks }
 }
 
@@ -74,6 +75,7 @@ test('403 clears revealed memory, and unmount invalidates in-flight requests', a
   await denied.load()
   assert.equal(denied.items.value.length, 0)
   assert.equal(denied.value.value, '')
+  assert.equal(denied.failed.value, true, '403清除内存后仍须保留读取失败反馈')
   let resolve
   const subject = harness({ get: () => new Promise(done => { resolve = done }) })
   subject.items.value = [row()]

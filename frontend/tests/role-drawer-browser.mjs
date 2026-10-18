@@ -1,6 +1,8 @@
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
 
+const base = process.env.PMS_PROGRESS_TEST_BASE || 'http://127.0.0.1:5174'
+assert.equal(new URL(base).hostname, '127.0.0.1')
 const browser = await chromium.launch({ channel: 'msedge', headless: true })
 try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
@@ -15,7 +17,7 @@ try {
   ] }
   await page.route('**/*', async route => {
     const { origin, pathname: path } = new URL(route.request().url())
-    if (origin !== 'http://127.0.0.1:5174') return route.abort()
+    if (origin !== base) return route.abort()
     if (!path.startsWith('/api/')) return route.continue()
     let body = []
     if (path === '/api/auth/me') body = { id: 1, username: 'mock', permissions: ['system:role:view', 'system:role:add', 'system:role:edit'] }
@@ -31,7 +33,7 @@ try {
     }
     await route.fulfill({ json: body })
   })
-  await page.goto('http://127.0.0.1:5174/system/role')
+  await page.goto(base + '/system/role')
   await page.getByRole('button', { name: '新增角色', exact: true }).click()
   const drawer = page.locator('.pms-form-drawer:visible')
   await expect(drawer).toBeVisible()

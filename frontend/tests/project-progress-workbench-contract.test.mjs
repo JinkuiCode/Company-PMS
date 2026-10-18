@@ -309,13 +309,14 @@ assert.match(
 )
 assert.match(
   projectList,
-  /const listRequestSerial = ref\(0\)/,
-  'Project list should version concurrent list requests',
+  /const progressListState = usePageLoad\(\)/,
+  'Project list should use the shared request lifecycle',
 )
 assert.match(
   projectList,
-  /const requestSerial = \+\+listRequestSerial\.value[\s\S]*?if \(requestSerial !== listRequestSerial\.value\) return/,
+  /const requestSerial = progressListState\.begin\(\)[\s\S]*?if \(!progressListState\.isCurrent\(requestSerial\)\) return/,
   'An older list response must not overwrite a later selected-field request',
 )
+assert.match(projectList, /onBeforeUnmount\(\(\) => \{ progressListState\.invalidate\(\) \}\)/, 'Leaving must invalidate pending list responses')
 
 console.log('project progress workbench contract passed')

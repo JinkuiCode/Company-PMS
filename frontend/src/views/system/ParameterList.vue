@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { usePageLoad } from '@/composables/usePageLoad'
 import { pmsActionColumn } from '@/config/listUi'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
@@ -20,10 +21,11 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit:
   { field: 'group', label: '分组', type: 'enum', options: groups.value },
   { field: 'description', label: '用途', type: 'text' },
   { field: 'configured', label: '设置状态', type: 'enum', options:[{value:1,label:'已设置'},{value:0,label:'未设置'}] },
-], ['name', 'group'], {ready:()=>!loading.value})
+], ['name', 'group'], {ready:()=>parameterListState.phase.value === 'ready' || parameterListState.phase.value === 'empty'})
 function clearQueryColumns() { clearColumns() }
-const loading = ref(false)
-const failed = ref(false)
+const parameterListState = usePageLoad()
+const loading = parameterListState.loading
+const failed = parameterListState.failed
 const editing = ref<Parameter | null>(null)
 const value = ref('')
 const revealSecret = ref(false)
@@ -33,13 +35,12 @@ const table = ref()
 const filtered = computed(() => filterRows(items.value, row => ({ name: row.name, code: row.code, group: row.group, description: row.description, configured: Number(row.configured) })))
 let active = true
 let securityEpoch = 0
-let loadSequence = 0
 function resetDraft() {
   editing.value = null; value.value = ''; error.value = ''; revealSecret.value = false
 }
 function clearMemory() {
   securityEpoch++
-  loadSequence++
+  parameterListState.invalidate()
   for (const item of items.value) if (item.sensitive) item.value = null
   items.value = []
   resetDraft()
@@ -68,20 +69,25 @@ async function focusFirstInvalid() {
 async function load() {
   if (!active || !auth.hasPermission('system:parameter:view')) { clearMemory(); return }
   const epoch = securityEpoch
-  const sequence = ++loadSequence
-  loading.value = true
-  failed.value = false
+  const ticket = parameterListState.begin()
   try {
     const result = await request.get('/parameters') as any
-    if (active && epoch === securityEpoch && sequence === loadSequence && auth.hasPermission('system:parameter:view')) {
+    if (active && epoch === securityEpoch && parameterListState.isCurrent(ticket) && auth.hasPermission('system:parameter:view')) {
       for (const item of items.value) if (item.sensitive) item.value = null
       items.value = result.items.map((item: Parameter) => item.sensitive && item.code !== 'user.initial_password' ? { ...item, value: null } : item)
+      parameterListState.succeed(ticket, items.value.length === 0)
     }
   } catch (e: any) {
-    if (!active || epoch !== securityEpoch || sequence !== loadSequence) return
-    if (e.response?.status === 401 || e.response?.status === 403) clearMemory()
-    failed.value = true
-  } finally { if (sequence === loadSequence || epoch !== securityEpoch) loading.value = false }
+    if (!active || epoch !== securityEpoch || !parameterListState.isCurrent(ticket)) return
+    if (e.response?.status === 401 || e.response?.status === 403) {
+      clearMemory()
+      parameterListState.fail(parameterListState.begin(), e)
+      return
+    }
+    for (const item of items.value) if (item.sensitive) item.value = null
+    items.value = []
+    parameterListState.fail(ticket, e)
+  }
 }
 async function discard() {
   if (saving.value) return false

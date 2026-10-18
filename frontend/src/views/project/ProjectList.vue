@@ -18,6 +18,7 @@
 
         <template #toolbar-right>
           <div class="pms-query-utilities">
+            <PmsPageGuide page="progress" />
             <BusinessExportControl :resource="{kind:'projects'}" :snapshot="exportSnapshot" :disabled="!columnContext.ready?.()" />
             <PmsListColumnPicker
               v-model="selectedSheetFieldKeys"
@@ -38,6 +39,9 @@
         </template>
 
         <template #grid>
+          <div v-if="progressListError" class="pms-list-load-error" role="alert">
+            加载失败，请重试 <el-button class="pms-button-navigation" size="small" @click="fetchList">重试</el-button>
+          </div>
           <ag-grid-vue
             ref="agGridRef"
             class="ag-theme-alpine wechat-table pms-ag-grid progress-workbench-grid"
@@ -86,52 +90,52 @@
           />
         </template>
 
-        <el-dialog v-model="dialogVisible" title="新增项目" width="620px" class="project-create-dialog">
-          <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="pms-standard-dialog-form project-create-form">
+        <el-dialog v-model="dialogVisible" title="新增项目" width="620px" class="project-create-dialog" :before-close="beforeCreateClose" :show-close="!projectCreateSession.busy.value" :close-on-click-modal="!projectCreateSession.busy.value" :close-on-press-escape="!projectCreateSession.busy.value">
+          <el-form ref="formRef" :model="form" :rules="rules" :disabled="projectCreateSession.busy.value" label-position="top" class="pms-standard-dialog-form project-create-form">
             <el-form-item v-if="isProgressPolicyVisible('archive_id')" prop="archive_id">
-              <PmsFormField field-id="project-archive" label="项目档案" required>
-                <PmsSelectControl id="project-archive" v-model="form.archive_id" :options="projectArchiveOptions" filterable placeholder="请选择项目档案（自动带出编号和名称）" aria-label="项目档案" @change="onArchiveChange" />
+              <PmsFormField field-id="project-archive" label="项目档案" required :error="projectCreateServerErrors.archive_id" v-slot="{ describedBy, invalid }">
+                <PmsSelectControl id="project-archive" v-model="form.archive_id" :options="projectArchiveOptions" filterable placeholder="请选择项目档案（自动带出编号和名称）" aria-label="项目档案" @change="onArchiveChange" :disabled="projectCreateSession.busy.value" :error="projectCreateServerErrors.archive_id" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
               </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="isProgressPolicyVisible('project_code')">
-              <PmsFormField field-id="project-code" label="项目编号">
-                <PmsTextControl id="project-code" v-model="form.project_code" disabled placeholder="由档案自动带出" aria-label="项目编号" />
+            <el-form-item v-if="isProgressPolicyVisible('project_code')" prop="project_code">
+              <PmsFormField field-id="project-code" label="项目编号" :error="projectCreateServerErrors.project_code" v-slot="{ describedBy, invalid }">
+                <PmsTextControl id="project-code" v-model="form.project_code" disabled placeholder="由档案自动带出" aria-label="项目编号" :error="projectCreateServerErrors.project_code" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
               </PmsFormField>
             </el-form-item>
-            <el-form-item v-if="isProgressPolicyVisible('project_name')">
-              <PmsFormField field-id="project-name" label="项目名称">
-                <PmsTextControl id="project-name" v-model="form.project_name" disabled placeholder="由档案自动带出" aria-label="项目名称" />
+            <el-form-item v-if="isProgressPolicyVisible('project_name')" prop="project_name">
+              <PmsFormField field-id="project-name" label="项目名称" :error="projectCreateServerErrors.project_name" v-slot="{ describedBy, invalid }">
+                <PmsTextControl id="project-name" v-model="form.project_name" disabled placeholder="由档案自动带出" aria-label="项目名称" :error="projectCreateServerErrors.project_name" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
               </PmsFormField>
             </el-form-item>
             <el-form-item v-if="isProgressPolicyVisible('dept_id')" prop="dept_id">
-              <PmsFormField field-id="project-dept" label="所属部门" :required="isProgressPolicyRequired('dept_id')">
-                <PmsTreeSelectControl id="project-dept" v-model="form.dept_id" :data="deptList" :props="{ label: 'dept_name', value: 'id', children: 'children' }" check-strictly :disabled="!isProgressPolicyEditable('dept_id')" aria-label="所属部门" />
+              <PmsFormField field-id="project-dept" label="所属部门" :required="isProgressPolicyRequired('dept_id')" :error="projectCreateServerErrors.dept_id" v-slot="{ describedBy, invalid }">
+                <PmsTreeSelectControl id="project-dept" v-model="form.dept_id" :data="deptList" :props="{ label: 'dept_name', value: 'id', children: 'children' }" check-strictly :disabled="projectCreateSession.busy.value || !isProgressPolicyEditable('dept_id')" aria-label="所属部门" :error="projectCreateServerErrors.dept_id" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
               </PmsFormField>
             </el-form-item>
             <el-form-item v-if="isProgressPolicyVisible('pm_id')" prop="pm_id">
-              <PmsFormField field-id="project-manager" label="项目经理" :required="isProgressPolicyRequired('pm_id')">
-                <PmsSelectControl id="project-manager" v-model="form.pm_id" :options="projectManagerOptions" :disabled="!isProgressPolicyEditable('pm_id')" aria-label="项目经理" />
+              <PmsFormField field-id="project-manager" label="项目经理" :required="isProgressPolicyRequired('pm_id')" :error="projectCreateServerErrors.pm_id" v-slot="{ describedBy, invalid }">
+                <PmsSelectControl id="project-manager" v-model="form.pm_id" :options="projectManagerOptions" :disabled="projectCreateSession.busy.value || !isProgressPolicyEditable('pm_id')" aria-label="项目经理" :error="projectCreateServerErrors.pm_id" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
               </PmsFormField>
             </el-form-item>
             <el-row :gutter="12">
               <el-col v-if="isProgressPolicyVisible('project_start_date')" :span="12">
                 <el-form-item prop="start_date">
-                  <PmsFormField field-id="project-start-date" label="开始日期" :required="isProgressPolicyRequired('project_start_date')">
-                    <PmsDateControl id="project-start-date" v-model="form.start_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!isProgressPolicyEditable('project_start_date')" aria-label="开始日期" />
+                  <PmsFormField field-id="project-start-date" label="开始日期" :required="isProgressPolicyRequired('project_start_date')" :error="projectCreateServerErrors.start_date" v-slot="{ describedBy, invalid }">
+                    <PmsDateControl id="project-start-date" v-model="form.start_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="projectCreateSession.busy.value || !isProgressPolicyEditable('project_start_date')" aria-label="开始日期" :error="projectCreateServerErrors.start_date" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
                   </PmsFormField>
                 </el-form-item>
               </el-col>
               <el-col v-if="isProgressPolicyVisible('original_planned_ship_date')" :span="12">
                 <el-form-item prop="end_date">
-                  <PmsFormField field-id="project-end-date" label="结束日期" :required="isProgressPolicyRequired('original_planned_ship_date')">
-                    <PmsDateControl id="project-end-date" v-model="form.end_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="!isProgressPolicyEditable('original_planned_ship_date')" aria-label="结束日期" />
+                  <PmsFormField field-id="project-end-date" label="结束日期" :required="isProgressPolicyRequired('original_planned_ship_date')" :error="projectCreateServerErrors.end_date" v-slot="{ describedBy, invalid }">
+                    <PmsDateControl id="project-end-date" v-model="form.end_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="projectCreateSession.busy.value || !isProgressPolicyEditable('original_planned_ship_date')" aria-label="结束日期" :error="projectCreateServerErrors.end_date" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
                   </PmsFormField>
                 </el-form-item>
               </el-col>
             </el-row>
             <el-form-item v-if="isProgressPolicyVisible('budget')" prop="budget">
-              <PmsFormField field-id="project-budget" label="预算(万)" :required="isProgressPolicyRequired('budget')">
-                <PmsNumberControl id="project-budget" v-model="form.budget" :min="0" :precision="2" placeholder="请输入预算" :disabled="!isProgressPolicyEditable('budget')" aria-label="预算" />
+              <PmsFormField field-id="project-budget" label="预算(万)" :required="isProgressPolicyRequired('budget')" :error="projectCreateServerErrors.budget" v-slot="{ describedBy, invalid }">
+                <PmsNumberControl id="project-budget" v-model="form.budget" :min="0" :precision="2" placeholder="请输入预算" :disabled="projectCreateSession.busy.value || !isProgressPolicyEditable('budget')" aria-label="预算" :error="projectCreateServerErrors.budget" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
               </PmsFormField>
             </el-form-item>
             <template v-if="dynamicRequiredFields.length || dynamicRequiredProjectFields.length">
@@ -140,34 +144,36 @@
                 v-for="field in dynamicRequiredProjectFields"
                 :key="field.field_key"
                 :prop="`project_values.${field.field_key}`"
+
                 :rules="[{ required: true, message: `请填写${field.label}`, trigger: ['blur', 'change'] }]"
               >
-                <PmsFormField :field-id="`project-required-${field.field_key}`" :label="field.label" required>
-                  <PmsNumberControl v-if="['number', 'percent', 'progress'].includes(field.value_type)" :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" :min="field.value_type === 'progress' ? 0 : undefined" :max="field.value_type === 'progress' ? 100 : undefined" :aria-label="field.label" />
-                  <PmsDateControl v-else-if="field.value_type === 'date' || field.value_type === 'datetime'" :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" type="date" value-format="YYYY-MM-DD" :aria-label="field.label" />
-                  <PmsTextareaControl v-else-if="field.value_type === 'long_text'" :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" :rows="3" :placeholder="`请输入${field.label}`" :aria-label="field.label" />
-                  <PmsTextControl v-else :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" :placeholder="`请输入${field.label}`" :aria-label="field.label" />
+                <PmsFormField :field-id="`project-required-${field.field_key}`" :label="field.label" required :error="projectCreateServerErrors[`project_values.${field.field_key}`]" v-slot="{ describedBy, invalid }">
+                  <PmsNumberControl v-if="['number', 'percent', 'progress'].includes(field.value_type)" :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" :min="field.value_type === 'progress' ? 0 : undefined" :max="field.value_type === 'progress' ? 100 : undefined" :aria-label="field.label" :disabled="projectCreateSession.busy.value" :error="projectCreateServerErrors[`project_values.${field.field_key}`]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
+                  <PmsDateControl v-else-if="field.value_type === 'date' || field.value_type === 'datetime'" :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" type="date" value-format="YYYY-MM-DD" :aria-label="field.label" :disabled="projectCreateSession.busy.value" :error="projectCreateServerErrors[`project_values.${field.field_key}`]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
+                  <PmsTextareaControl v-else-if="field.value_type === 'long_text'" :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" :rows="3" :placeholder="`请输入${field.label}`" :aria-label="field.label" :disabled="projectCreateSession.busy.value" :error="projectCreateServerErrors[`project_values.${field.field_key}`]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
+                  <PmsTextControl v-else :id="`project-required-${field.field_key}`" v-model="form.project_values[field.field_key]" :placeholder="`请输入${field.label}`" :aria-label="field.label" :disabled="projectCreateSession.busy.value" :error="projectCreateServerErrors[`project_values.${field.field_key}`]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
                 </PmsFormField>
               </el-form-item>
               <el-form-item
                 v-for="field in dynamicRequiredFields"
                 :key="field.key"
                 :prop="`sheet_values.${field.key}`"
+
                 :rules="[{ required: true, message: `请填写${field.label}`, trigger: ['blur', 'change'] }]"
               >
-                <PmsFormField :field-id="`sheet-required-${field.key}`" :label="field.label" required>
-                  <PmsSelectControl v-if="field.value_type === 'select'" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :options="sheetFieldFilterOptions(field)" filterable :placeholder="`请选择${field.label}`" :aria-label="field.label" />
-                  <PmsNumberControl v-else-if="['number', 'percent', 'progress'].includes(field.value_type)" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :min="field.value_type === 'progress' ? 0 : undefined" :max="field.value_type === 'progress' ? 100 : undefined" :aria-label="field.label" />
-                  <PmsDateControl v-else-if="field.value_type === 'date' || field.value_type === 'datetime'" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" type="date" value-format="YYYY-MM-DD" :aria-label="field.label" />
-                  <PmsTextareaControl v-else-if="field.value_type === 'long_text'" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :rows="3" :placeholder="`请输入${field.label}`" :aria-label="field.label" />
-                  <PmsTextControl v-else :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :placeholder="`请输入${field.label}`" :aria-label="field.label" />
+                <PmsFormField :field-id="`sheet-required-${field.key}`" :label="field.label" required :error="projectCreateServerErrors[`sheet_values.${field.key}`]" v-slot="{ describedBy, invalid }">
+                  <PmsSelectControl v-if="field.value_type === 'select'" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :options="sheetFieldFilterOptions(field)" filterable :placeholder="`请选择${field.label}`" :aria-label="field.label" :disabled="projectCreateSession.busy.value" :error="projectCreateServerErrors[`sheet_values.${field.key}`]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
+                  <PmsNumberControl v-else-if="['number', 'percent', 'progress'].includes(field.value_type)" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :min="field.value_type === 'progress' ? 0 : undefined" :max="field.value_type === 'progress' ? 100 : undefined" :aria-label="field.label" :disabled="projectCreateSession.busy.value" :error="projectCreateServerErrors[`sheet_values.${field.key}`]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
+                  <PmsDateControl v-else-if="field.value_type === 'date' || field.value_type === 'datetime'" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" type="date" value-format="YYYY-MM-DD" :aria-label="field.label" :disabled="projectCreateSession.busy.value" :error="projectCreateServerErrors[`sheet_values.${field.key}`]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
+                  <PmsTextareaControl v-else-if="field.value_type === 'long_text'" :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :rows="3" :placeholder="`请输入${field.label}`" :aria-label="field.label" :disabled="projectCreateSession.busy.value" :error="projectCreateServerErrors[`sheet_values.${field.key}`]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
+                  <PmsTextControl v-else :id="`sheet-required-${field.key}`" v-model="form.sheet_values[field.key]" :placeholder="`请输入${field.label}`" :aria-label="field.label" :disabled="projectCreateSession.busy.value" :error="projectCreateServerErrors[`sheet_values.${field.key}`]" :aria-describedby="describedBy" :aria-invalid="invalid || undefined" />
                 </PmsFormField>
               </el-form-item>
             </template>
           </el-form>
           <template #footer>
-            <el-button @click="dialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="handleSubmit">确定</el-button>
+            <el-button class="pms-button-reset" :disabled="projectCreateSession.busy.value" @click="requestCreateClose">取消</el-button>
+            <el-button type="success" :loading="projectCreateSession.busy.value" @click="handleSubmit">确定</el-button>
           </template>
         </el-dialog>
       </PmsDataList>
@@ -201,7 +207,6 @@
       </div>
 
       <div class="drawer-body">
-        <PmsPageGuide page="progress" />
         <el-tabs v-model="projectDetailTab"><el-tab-pane label="业务信息" name="business">
         <section v-if="sheetDetailLoading" class="drawer-section">
           <div class="drawer-note muted">正在加载项目总表字段...</div>
@@ -323,7 +328,10 @@ import { columnSortModel, sortClientRows, type ClientRowSort } from '@/query-sys
 import type { QueryCondition } from '@/query-system/core'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
-import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
+import { usePageLoad } from '@/composables/usePageLoad'
+import { createColumnPreferences, type PmsColumnSchema } from '@/list-system/columnPreferences'
+import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   Close,
@@ -364,6 +372,9 @@ import {
   PmsTextareaControl,
   PmsTreeSelectControl,
   mergePmsAgCellClass,
+  useFormSession,
+  resolveFieldMetadata,
+  mapFormFieldErrors,
   type PmsOption,
 } from '@/form-system'
 import type { PmsControlValue } from '@/form-system'
@@ -581,8 +592,16 @@ const columnPreferencesReady = ref(false)
 const columnPreferenceWritesEnabled = ref(false)
 const columnStateRestored = ref(false)
 const columnPreferenceOwnerId = ref<number | null>(null)
+const progressColumnPreferences = createColumnPreferences({
+  pageKey: 'project-progress-list',
+  ownerId: () => columnPreferenceOwnerId.value,
+  storage: () => localStorage,
+  legacyPrefix: COLUMN_STORAGE_KEY,
+  legacySelectionKey: 'selected_sheet_field_keys',
+})
 const restoringColumnState = ref(false)
-const listRequestSerial = ref(0)
+const progressListState = usePageLoad()
+progressListState.invalidate(true)
 
 const productCategoryOptions = ref<ListFilterOption[]>([])
 const productCategoryLabelMap = reactive<Record<string, string>>({})
@@ -630,9 +649,10 @@ const sheetFieldMetaMap = computed(() => {
   return new Map(sheetFieldMetas.value.map(field => [field.key, field]))
 })
 
-const dynamicRequiredFields = computed(() => sheetFieldMetas.value.filter(field => (
-  field.visible && field.required && field.editable && field.source_type === 'detail'
-)))
+const dynamicRequiredFields = computed(() => sheetFieldMetas.value.filter(field => {
+  const metadata = resolveFieldMetadata(field, { readonly: field.computed || field.source_type !== 'detail' })
+  return metadata.visible && metadata.required && metadata.editable && field.source_type === 'detail'
+}))
 const handledCreatePolicyFields = new Set([
   'archive_id',
   'dept_id',
@@ -643,9 +663,9 @@ const handledCreatePolicyFields = new Set([
   'budget',
 ])
 const dynamicRequiredProjectFields = computed(() => Object.values(progressFieldPolicies.value).filter(field => (
-  field.visible
-  && field.required
-  && field.editable
+  resolveFieldMetadata(field).visible
+  && resolveFieldMetadata(field).required
+  && resolveFieldMetadata(field).editable
   && field.source_type === 'project'
   && !handledCreatePolicyFields.has(field.field_key)
 )))
@@ -795,6 +815,13 @@ const form = reactive({
   project_values: {} as Record<string, any>,
   sheet_values: {} as Record<string, any>,
 })
+const projectCreateSession = useFormSession({
+  draft: form,
+  clone: (value): typeof form => JSON.parse(JSON.stringify(value)),
+  isConflict: (error: any) => error?.response?.status === 409,
+})
+const projectCreateServerErrors = reactive<Record<string, string>>({})
+watch(form, () => { Object.keys(projectCreateServerErrors).forEach(key => delete projectCreateServerErrors[key]) }, { deep: true })
 
 const rules = computed<FormRules>(() => {
   const nextRules: FormRules = {
@@ -964,16 +991,24 @@ function progressPolicy(fieldKey: string) {
 }
 
 function isProgressPolicyVisible(fieldKey: string) {
-  if (fieldKey === 'product_category') return false
-  return progressPolicy(fieldKey)?.visible !== false
+  return progressFieldMetadata(fieldKey).visible
 }
 
 function isProgressPolicyEditable(fieldKey: string) {
-  return progressPolicy(fieldKey)?.editable !== false
+  return progressFieldMetadata(fieldKey).editable
 }
 
 function isProgressPolicyRequired(fieldKey: string) {
-  return progressPolicy(fieldKey)?.required === true
+  return progressFieldMetadata(fieldKey).required
+}
+
+function progressFieldMetadata(fieldKey: string) {
+  const policy = progressPolicy(fieldKey)
+  return resolveFieldMetadata(policy, {
+    hidden: fieldKey === 'product_category',
+    readonly: ['project_code', 'project_name'].includes(fieldKey) || ['computed', 'system'].includes(policy?.source_type || ''),
+    required: ['archive_id', 'dept_id', 'pm_id'].includes(fieldKey) ? true : undefined,
+  })
 }
 
 function escapeHtml(value: unknown) {
@@ -1309,9 +1344,18 @@ function refreshListScrollbar() {
   nextTick(() => projectListRef.value?.refreshScrollbar())
 }
 
-function columnPreferenceStorageKey() {
-  if (columnPreferenceOwnerId.value == null) return null
-  return `${COLUMN_STORAGE_KEY}:${columnPreferenceOwnerId.value}`
+function progressColumnSchema(): PmsColumnSchema {
+  const allowed = new Set(sheetFieldMetas.value.filter(field => field.list_available).map(field => field.key))
+  const fixed = new Set([...allowed].map(sheetColumnId))
+  const collect = (definitions: Array<ColDef<ProjectRow> | ColGroupDef<ProjectRow>>) => definitions.forEach(definition => {
+    if ('children' in definition) collect(definition.children)
+    else if (definition.hide !== true) {
+      const id = definition.colId || definition.field
+      if (id) fixed.add(id)
+    }
+  })
+  collect(columnDefs.value)
+  return { allowed, fixed, defaults: defaultSelectedSheetFieldKeys.value }
 }
 
 async function resolveColumnPreferenceOwner() {
@@ -1326,26 +1370,25 @@ async function resolveColumnPreferenceOwner() {
 }
 
 function readStoredColumnPreferences(): ColumnPreferenceState | null {
-  const storageKey = columnPreferenceStorageKey()
-  if (!storageKey) return null
-  const raw = localStorage.getItem(storageKey)
-  if (!raw) return null
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
+  const result = progressColumnPreferences.read(progressColumnSchema())
+  return result.status === 'ready'
+    ? { selected_sheet_field_keys: result.value.selected_column_keys, columnState: result.value.columnState }
+    : null
 }
 
 function persistColumnPreferences() {
   if (!columnPreferencesReady.value || !columnPreferenceWritesEnabled.value) return
-  const storageKey = columnPreferenceStorageKey()
-  if (!storageKey) return
-  const state: ColumnPreferenceState = {
-    selected_sheet_field_keys: [...selectedSheetFieldKeys.value],
-    columnState: gridApi.value?.getColumnState?.() || [],
-  }
-  localStorage.setItem(storageKey, JSON.stringify(state))
+  const schema = progressColumnSchema()
+  const previous = progressColumnPreferences.read(schema)
+  const current = gridApi.value?.getColumnState?.() || []
+  const currentIds = new Set(current.map((state: ColumnState) => state.colId))
+  const unselected = previous.status === 'ready'
+    ? previous.value.columnState.filter(state => !currentIds.has(state.colId))
+    : []
+  progressColumnPreferences.write({
+    selected_column_keys: [...selectedSheetFieldKeys.value],
+    columnState: [...current, ...unselected],
+  }, schema)
 }
 
 function restoreColumnState() {
@@ -1415,33 +1458,32 @@ function handleColumnResized(event: any) {
   persistColumnPreferences()
 }
 
-const progressListLoading = ref(true)
-const progressListAccepted = ref(false)
+const progressListLoading = progressListState.loading
+const progressListError = progressListState.failed
+const progressListAccepted = computed(() => ['ready', 'empty'].includes(progressListState.phase.value))
 async function fetchList() {
-  const requestSerial = ++listRequestSerial.value
-  progressListLoading.value = true
+  const requestSerial = progressListState.begin()
   const params: Record<string, unknown> = { all_rows: true }
   if (requestedSheetFieldKeys.value.length) {
     params.sheet_field_keys = requestedSheetFieldKeys.value.join(',')
   }
   try {
     const res = await request.get('/projects', { params }) as any
-    if (requestSerial !== listRequestSerial.value) return
+    if (!progressListState.isCurrent(requestSerial)) return
     if (!Array.isArray(res.items) || res.items.length !== res.total) throw Error('项目未完整读取，不能执行客户端查询')
     rowData.value = res.items.map(normalizeProjectRow)
-    progressListAccepted.value = true
     serverTotal.value = res.total
     if (selectedProject.value && !drawerHasPendingChanges.value && !drawerSaving.value) {
       selectedProject.value = rowData.value.find(row => row.id === selectedProject.value?.id) || null
     }
+    progressListState.succeed(requestSerial, rowData.value.length === 0)
     refreshListScrollbar()
   } catch (error) {
-    if (requestSerial === listRequestSerial.value) {
-      rowData.value = []; serverTotal.value = 0; progressListAccepted.value = false
+    if (progressListState.isCurrent(requestSerial)) {
+      rowData.value = []; serverTotal.value = 0
+      progressListState.fail(requestSerial, error)
       ElMessage.error(error instanceof Error ? error.message : '项目读取失败，请重试')
     }
-  } finally {
-    if (requestSerial === listRequestSerial.value) progressListLoading.value = false
   }
 }
 
@@ -1894,7 +1936,7 @@ function onArchiveChange(archiveId: number) {
 }
 
 function openCreateDialog() {
-  if (!hasPermission('project:list:add')) return
+  if (!hasPermission('project:list:add') || projectCreateSession.busy.value) return
   formRef.value?.resetFields()
   Object.assign(form, {
     id: 0,
@@ -1910,69 +1952,76 @@ function openCreateDialog() {
     project_values: {},
     sheet_values: {},
   })
+  Object.keys(projectCreateServerErrors).forEach(key => delete projectCreateServerErrors[key])
+  projectCreateSession.capture()
   dialogVisible.value = true
 }
 
-function policyValidationFieldKeys(error: any): string[] {
-  const detail = error?.response?.data?.detail
-  if (!['FIELD_POLICY_VALIDATION_FAILED', 'FIELD_POLICY_INVALID'].includes(detail?.code)) return []
-  if (!Array.isArray(detail?.fields)) return []
-  return detail.fields
-    .map((field: any) => String(field?.field_key || '').trim())
-    .filter(Boolean)
+async function requestCreateClose() {
+  const allowed = await projectCreateSession.requestClose(async () => {
+    try {
+      await ElMessageBox.confirm('还有未保存的内容，是否放弃？', '未保存的内容', {
+        type: 'warning', confirmButtonText: '放弃修改', cancelButtonText: '继续填写',
+        confirmButtonType: 'danger', cancelButtonClass: 'pms-button-reset',
+      })
+      return true
+    } catch { return false }
+  })
+  if (allowed) { projectCreateSession.restore(); dialogVisible.value = false }
+  return allowed
 }
 
+async function beforeCreateClose(done: () => void) { if (await requestCreateClose()) done() }
+onBeforeRouteLeave(async () => !dialogVisible.value || await requestCreateClose())
+
 async function focusProjectPolicyValidation(error: any) {
-  const fieldKeys = policyValidationFieldKeys(error)
-  if (!fieldKeys.length) return
-
+  const detail = error?.response?.data?.detail
+  if (!Array.isArray(detail) && !['FIELD_POLICY_VALIDATION_FAILED', 'FIELD_POLICY_INVALID'].includes(detail?.code)) return
   await fetchSheetFieldMetadata()
-  await nextTick()
-  const directFieldMap: Record<string, string> = {
-    archive_id: 'archive_id',
-    dept_id: 'dept_id',
-    pm_id: 'pm_id',
-    project_start_date: 'start_date',
-    original_planned_ship_date: 'end_date',
-    budget: 'budget',
+  const apiAliases: Record<string, string> = { start_date: 'project_start_date', end_date: 'original_planned_ship_date' }
+  const canonicalError = Array.isArray(detail)
+    ? { response: { data: { detail: detail.map(item => Array.isArray(item?.loc) && item.loc.length === 2 && item.loc[0] === 'body' && apiAliases[item.loc[1]]
+      ? { ...item, loc: ['body', apiAliases[item.loc[1]]] } : item) } } }
+    : error
+  const direct = [
+    ['archive_id', 'archive_id'], ['project_code', 'project_code'], ['project_name', 'project_name'],
+    ['dept_id', 'dept_id'], ['pm_id', 'pm_id'], ['project_start_date', 'start_date'],
+    ['original_planned_ship_date', 'end_date'], ['budget', 'budget'],
+  ].filter(([key]) => isProgressPolicyVisible(key!))
+  const controls = [...direct,
+    ...dynamicRequiredProjectFields.value.map(field => [field.field_key, `project_values.${field.field_key}`]),
+    ...dynamicRequiredFields.value.map(field => [field.key, `sheet_values.${field.key}`]),
+  ]
+  const mapped = mapFormFieldErrors(canonicalError, controls.map(([key]) => key!), () => true)
+  for (const [key, prop] of controls) {
+    if (mapped.errors[key!]) projectCreateServerErrors[prop!] = mapped.errors[key!]!
   }
-  const props = fieldKeys.map((fieldKey) => {
-    if (directFieldMap[fieldKey]) return directFieldMap[fieldKey]
-    const sheetField = sheetFieldMetaMap.value.get(fieldKey)
-    if (sheetField?.source_type === 'detail') return `sheet_values.${fieldKey}`
-    if (progressPolicy(fieldKey)?.source_type === 'project') return `project_values.${fieldKey}`
-    return ''
-  }).filter(Boolean)
-  if (!props.length) return
-
-  await formRef.value?.validateField(props).catch(() => false)
-  formRef.value?.scrollToField(props[0])
+  await nextTick()
+  const first = controls.find(([key]) => key === mapped.firstField)?.[1]
+  if (first) formRef.value?.scrollToField(first)
 }
 
 async function handleSubmit() {
   if (!hasPermission('project:list:add')) return
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-  const payload: Record<string, unknown> = {
-    archive_id: form.archive_id,
-    project_code: form.project_code,
-    project_name: form.project_name,
-    dept_id: form.dept_id,
-    pm_id: form.pm_id,
-    ...form.project_values,
-    sheet_values: { ...form.sheet_values },
-  }
-  if (isProgressPolicyEditable('node_status')) payload.status = form.status
-  if (isProgressPolicyEditable('project_start_date')) payload.start_date = form.start_date || null
-  if (isProgressPolicyEditable('original_planned_ship_date')) payload.end_date = form.end_date || null
-  if (isProgressPolicyEditable('budget')) payload.budget = form.budget
-  try {
-    await request.post('/projects', payload)
+  const result = await projectCreateSession.submit({
+    validate: async () => Boolean(await formRef.value?.validate().catch(() => false)),
+    save: async snapshot => {
+      const payload: Record<string, unknown> = {
+        archive_id: snapshot.archive_id, project_code: snapshot.project_code, project_name: snapshot.project_name,
+        dept_id: snapshot.dept_id, pm_id: snapshot.pm_id, ...snapshot.project_values, sheet_values: { ...snapshot.sheet_values },
+      }
+      if (isProgressPolicyEditable('node_status')) payload.status = snapshot.status
+      if (isProgressPolicyEditable('project_start_date')) payload.start_date = snapshot.start_date || null
+      if (isProgressPolicyEditable('original_planned_ship_date')) payload.end_date = snapshot.end_date || null
+      if (isProgressPolicyEditable('budget')) payload.budget = snapshot.budget
+      return request.post('/projects', payload)
+    },
+    onError: focusProjectPolicyValidation,
+  })
+  if (result.status === 'success') {
     ElMessage.success('创建成功')
     dialogVisible.value = false
     fetchList()
-  } catch (error) {
-    await focusProjectPolicyValidation(error)
   }
 }
 
@@ -1983,6 +2032,7 @@ onMounted(async () => {
   await nextTick()
   completeColumnPreferenceRestore()
 })
+onBeforeUnmount(() => { progressListState.invalidate() })
 </script>
 
 <style scoped>

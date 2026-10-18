@@ -8,6 +8,7 @@
         </div>
         <PmsTextControl v-model="searchText" size="compact" clearable placeholder="搜索枚举" aria-label="搜索枚举" />
       </div>
+      <div v-if="dictListState.failed.value" class="pms-list-load-error" role="alert">枚举列表读取失败 <el-button link class="pms-button-navigation" @click="fetchDicts">重试</el-button></div>
       <div class="enum-master-list">
         <button
           v-for="item in filteredDicts"
@@ -38,6 +39,7 @@
               <span v-for="binding in selectedDict.bindings" :key="binding">{{ binding }}</span>
             </div>
           </div>
+          <div class="pms-system-toolbar-actions">
           <el-button
             v-if="selectedDict.allow_add && hasPermission('system:enum:add')"
             type="primary"
@@ -46,9 +48,12 @@
           >
             新增值
           </el-button>
+          <PmsPageGuide page="enums" />
+          </div>
         </header>
 
         <PmsQueryWorkspace entry-mode="document" :key="activeEnumIdentity" v-model="queryDraft" :list-key="`system-enum-values-${selectedDict.dict_code}`" :fields="queryFields" :defaults="queryDefaults" :loading="itemsLoading" @query="submitQuery" @clear-columns="clearQueryColumns" />
+        <div v-if="enumItemsState.failed.value" class="pms-list-load-error" role="alert">枚举值读取失败 <el-button link class="pms-button-navigation" @click="fetchItems">重试</el-button></div>
         <el-table
           :key="activeEnumIdentity"
           v-loading="itemsLoading"
@@ -108,7 +113,7 @@
       <el-empty v-else description="暂无可维护的业务枚举" />
     </section>
 
-    <PmsFormDrawer v-model="itemDialogVisible" :title="isItemEdit ? '编辑枚举值' : '新增枚举值'" :busy="itemSaving">
+    <PmsFormDrawer v-model="itemDialogVisible" :title="isItemEdit ? '编辑枚举值' : '新增枚举值'" :busy="itemSaving" :before-close="beforeItemClose">
       <h3 class="pms-form-drawer__section">{{ itemDict?.dict_name }}</h3>
       <el-form id="pms-enum-form" ref="itemFormRef" :model="itemForm" :rules="itemRules" label-position="top" class="pms-standard-dialog-form" @submit.prevent="handleItemSubmit">
         <el-form-item>
@@ -142,8 +147,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button :disabled="itemSaving" @click="itemDialogVisible = false">取消</el-button>
-        <el-button v-if="hasPermission(isItemEdit ? 'system:enum:edit' : 'system:enum:add')" type="primary" :loading="itemSaving" native-type="submit" form="pms-enum-form">保存</el-button>
+        <el-button class="pms-button-reset" :disabled="itemSaving" @click="closeItemDialog">取消</el-button>
+        <el-button v-if="hasPermission(isItemEdit ? 'system:enum:edit' : 'system:enum:add')" class="pms-button-save" type="primary" :loading="itemSaving" native-type="submit" form="pms-enum-form">保存</el-button>
       </template>
     </PmsFormDrawer>
   </div>
@@ -152,8 +157,12 @@
 <script setup lang="ts">
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
+import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import { useSystemQuery } from '@/query-system/system-adapter'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
+import { usePageLoad } from '@/composables/usePageLoad'
+import { useFormSession } from '@/form-system/useFormSession'
 import { pmsActionColumn } from '@/config/listUi'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
@@ -190,26 +199,26 @@ const dictList = ref<EnumDefinition[]>([])
 const selectedDictId = ref<number | null>(null)
 const dictItems = ref<EnumItem[]>([])
 const searchText = ref('')
-const itemsLoading = ref(false)
+const dictListState = usePageLoad()
+const enumItemsState = usePageLoad()
+const itemsLoading = enumItemsState.loading
 const selectedDict = computed(() => dictList.value.find(item => item.id === selectedDictId.value) || null)
 const activeEnumIdentity = computed(() => selectedDict.value ? `${selectedDict.value.id}:${selectedDict.value.dict_code}` : '')
 const acceptedEnumIdentity = ref('')
-let itemsRequestRevision = 0
 const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, applied: queryApplied, submitted: querySubmitted, submit: submitQuery, filterRows, clearColumns, columnContext, columnFilters, setResultRows, columnClass: queryColumnClass } = useSystemQuery(() => [
   { field:'item_value', label:'存储值', type:'text' },
   { field:'item_label', label:'显示名称', type:'text' },
   { field:'sort', label:'排序', type:'number' },
   { field:'reference_count', label:'引用数', type:'number' },
   { field:'status', label:'状态', type:'enum', options:[{value:1,label:'启用'},{value:0,label:'禁用'}] },
-], ['item_label', 'status'], {ready:()=>!!activeEnumIdentity.value && acceptedEnumIdentity.value === activeEnumIdentity.value && !itemsLoading.value})
+], ['item_label', 'status'], {ready:()=>!!activeEnumIdentity.value && acceptedEnumIdentity.value === activeEnumIdentity.value && (enumItemsState.phase.value === 'ready' || enumItemsState.phase.value === 'empty')})
 const filteredItems = computed(() => filterRows(acceptedEnumIdentity.value === activeEnumIdentity.value ? dictItems.value : []))
 function clearQueryColumns() { clearColumns() }
 
 watch(activeEnumIdentity, () => {
-  ++itemsRequestRevision
+  enumItemsState.invalidate()
   acceptedEnumIdentity.value = ''
   dictItems.value = []
-  itemsLoading.value = false
   queryDraft.value = []
   queryApplied.value = []
   querySubmitted.value = false
@@ -238,11 +247,28 @@ function selectFirstDict() {
 }
 
 async function fetchDicts() {
-  dictList.value = (await request.get('/dicts')) as EnumDefinition[]
-  selectFirstDict()
+  const ticket = dictListState.begin()
+  try {
+    const definitions = (await request.get('/dicts')) as EnumDefinition[]
+    if (!dictListState.isCurrent(ticket)) return
+    dictList.value = definitions
+    dictListState.succeed(ticket, definitions.length === 0)
+    selectFirstDict()
+  } catch (cause) {
+    if (!dictListState.isCurrent(ticket)) return
+    dictList.value = []
+    selectedDictId.value = null
+    dictListState.fail(ticket, cause)
+  }
 }
 
-function selectDict(id: number) {
+async function selectDict(id: number) {
+  if (id === selectedDictId.value) return
+  if (itemSaving.value) return
+  if (itemDialogVisible.value) {
+    if (!await canLeaveItem()) return
+    itemDialogVisible.value = false
+  }
   selectedDictId.value = id
   fetchItems()
 }
@@ -251,18 +277,19 @@ async function fetchItems() {
   const identity = activeEnumIdentity.value
   const id = selectedDict.value?.id
   if (!identity || !id) return
-  const revision = ++itemsRequestRevision
-  const isCurrent = () => revision === itemsRequestRevision && identity === activeEnumIdentity.value
-  itemsLoading.value = true
+  const ticket = enumItemsState.begin()
+  const isCurrent = () => enumItemsState.isCurrent(ticket) && identity === activeEnumIdentity.value
   try {
     const items = (await request.get(`/dicts/${id}/items`)) as EnumItem[]
     if (!isCurrent()) return
     dictItems.value = items
     acceptedEnumIdentity.value = identity
-  } catch {
-    if (isCurrent()) ElMessage.error('枚举值加载失败，请重试')
-  } finally {
-    if (isCurrent()) itemsLoading.value = false
+    enumItemsState.succeed(ticket, items.length === 0)
+  } catch (cause) {
+    if (!isCurrent()) return
+    dictItems.value = []
+    acceptedEnumIdentity.value = ''
+    enumItemsState.fail(ticket, cause)
   }
 }
 
@@ -274,50 +301,62 @@ async function refreshSelectedEnumCache() {
 const itemDialogVisible = ref(false)
 const isItemEdit = ref(false)
 const itemFormRef = ref<FormInstance>()
-const itemSaving = ref(false)
 const itemDict = ref<EnumDefinition | null>(null)
 const itemForm = reactive({ id: 0, item_value: '', item_label: '', sort: 0, status: 1 })
+const itemFormSession = useFormSession({ draft: itemForm, isConflict: (error: any) => error?.response?.status === 409 })
+const itemSaving = itemFormSession.busy
 const itemRules: FormRules = {
   item_label: [{ required: true, message: '请输入显示名称' }],
 }
 
 function openItemDialog(row?: EnumItem) {
-  if (itemSaving.value || !selectedDict.value) return
+  if (itemDialogVisible.value || itemSaving.value || !selectedDict.value) return
   if (!hasPermission(row ? 'system:enum:edit' : 'system:enum:add')) return
   itemDict.value = selectedDict.value
   isItemEdit.value = Boolean(row)
   Object.assign(itemForm, row
     ? { id: row.id, item_value: row.item_value, item_label: row.item_label, sort: row.sort, status: row.status }
     : { id: 0, item_value: '', item_label: '', sort: dictItems.value.length + 1, status: 1 })
+  itemFormSession.capture()
   itemDialogVisible.value = true
 }
 
+async function canLeaveItem() {
+  if (itemSaving.value) return false
+  if (!itemDialogVisible.value) return true
+  return itemFormSession.requestClose(async () => {
+    try {
+      await ElMessageBox.confirm('放弃尚未保存的枚举修改？', '未保存修改', { type: 'warning' })
+      return true
+    } catch { return false }
+  })
+}
+async function beforeItemClose(done: () => void) {
+  if (await canLeaveItem()) done()
+}
+function closeItemDialog() { return beforeItemClose(() => { itemDialogVisible.value = false }) }
+onBeforeRouteLeave(canLeaveItem)
+
 async function handleItemSubmit() {
   if (itemSaving.value || !hasPermission(isItemEdit.value ? 'system:enum:edit' : 'system:enum:add')) return
-  const valid = await itemFormRef.value?.validate().catch(() => false)
-  if (!valid || !itemDict.value || itemSaving.value) return
-  const payload = {
-    item_label: itemForm.item_label,
-    sort: itemForm.sort,
-    status: itemForm.status,
-  }
-  itemSaving.value = true
+  if (!itemDict.value) return
+  const target = { id: itemDict.value.id, code: itemDict.value.dict_code, editing: isItemEdit.value }
+  const result = await itemFormSession.submit({
+    validate: async () => Boolean(await itemFormRef.value?.validate().catch(() => false)),
+    save: snapshot => {
+      const payload = { item_label: snapshot.item_label, sort: snapshot.sort, status: snapshot.status }
+      return target.editing ? request.put(`/dicts/items/${snapshot.id}`, payload) : request.post(`/dicts/${target.id}/items`, payload)
+    },
+  })
+  if (result.status !== 'success') return
+  ElMessage.success(target.editing ? '枚举值已更新' : '枚举值已新增')
+  itemDialogVisible.value = false
   try {
-    if (isItemEdit.value) {
-      await request.put(`/dicts/items/${itemForm.id}`, payload)
-      ElMessage.success('枚举值已更新')
-    } else {
-      await request.post(`/dicts/${itemDict.value.id}/items`, payload)
-      ElMessage.success('枚举值已新增')
-    }
-    itemDialogVisible.value = false
-    await loadEnumOptions(itemDict.value.dict_code, true)
-    await Promise.all([fetchItems(), fetchDicts()])
+    await loadEnumOptions(target.code, true)
   } catch {
-    // Request interceptor reports the error; keep the draft available for retry.
-  } finally {
-    itemSaving.value = false
+    ElMessage.warning('枚举值已保存，选项刷新失败，请刷新页面')
   }
+  await Promise.all([fetchItems(), fetchDicts()])
 }
 
 async function handleToggleStatus(row: EnumItem) {
@@ -343,7 +382,7 @@ async function handleDeleteItem(row: EnumItem) {
 }
 
 onMounted(fetchDicts)
-onBeforeUnmount(() => { ++itemsRequestRevision })
+onBeforeUnmount(() => { dictListState.invalidate(); enumItemsState.invalidate() })
 </script>
 
 <style scoped>

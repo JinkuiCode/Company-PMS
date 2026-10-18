@@ -27,6 +27,7 @@
 
     <template #filters>
       <PmsQueryWorkspace entry-mode="document" v-model="queryDraft" :list-key="`system-field-policy-${moduleCode}`" :fields="queryFields" :defaults="queryDefaults" :loading="loading" @query="submitQuery" @clear-columns="clearQueryColumns" />
+      <div v-if="failed" class="pms-list-load-error" role="alert">字段规则读取失败，请重试 <el-button link class="pms-button-navigation" @click="fetchPolicies">重试</el-button></div>
     </template>
 
     <template #grid>
@@ -105,7 +106,8 @@
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
 import { useSystemQuery } from '@/query-system/system-adapter'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { usePageLoad } from '@/composables/usePageLoad'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PmsDataList from '@/components/PmsDataList.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -157,7 +159,8 @@ const sourceOptions: PmsOption[] = [
 ]
 const sourceLabelMap = Object.fromEntries(sourceOptions.map(item => [item.value, item.label]))
 
-const loading = ref(false)
+const policyListState = usePageLoad()
+const loading = policyListState.loading, failed = policyListState.failed
 const saving = ref(false)
 const rows = ref<FieldPolicy[]>([])
 const groupOptions = ref<Array<{ key: string; label: string }>>([])
@@ -172,7 +175,7 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit:
   { field: 'group', label: '分组', type: 'enum', options: groupSelectOptions.value.map(o => ({value:String(o.value),label:o.label})) },
   { field: 'source_type', label: '来源', type: 'enum', options: sourceOptions.map(o => ({value:String(o.value),label:o.label})) },
   ...(['visible','editable','required','list_available'] as const).map(field => ({ field, label: {visible:'业务显示',editable:'允许编辑',required:'必填',list_available:'列表可选'}[field], type:'enum' as const, options:[{value:1,label:'是'},{value:0,label:'否'}] })),
-], ['label', 'group', 'source_type'], {ready:()=>!loading.value})
+], ['label', 'group', 'source_type'], {ready:()=>policyListState.phase.value === 'ready' || policyListState.phase.value === 'empty'})
 const filteredRows = computed(() => filterRows(rows.value, row => ({...row, visible:Number(row.visible),editable:Number(row.editable),required:Number(row.required),list_available:Number(row.list_available)})))
 function clearQueryColumns() { clearColumns() }
 
@@ -213,14 +216,19 @@ function handleRequiredChange(field: FieldPolicy) {
 }
 
 async function fetchPolicies() {
-  loading.value = true
+  const ticket = policyListState.begin()
   dirtyKeys.clear()
   try {
     const response = await request.get('/field-policies', { params: { module: moduleCode.value } }) as unknown as FieldPolicyResponse
+    if (!policyListState.isCurrent(ticket)) return
     rows.value = response.items.map(field => ({ ...field }))
     groupOptions.value = response.groups || []
-  } finally {
-    loading.value = false
+    policyListState.succeed(ticket, rows.value.length === 0)
+  } catch (cause) {
+    if (!policyListState.isCurrent(ticket)) return
+    rows.value = []
+    groupOptions.value = []
+    policyListState.fail(ticket, cause)
   }
 }
 
@@ -255,6 +263,7 @@ async function restoreDefaults() {
 }
 
 onMounted(fetchPolicies)
+onBeforeUnmount(() => policyListState.invalidate())
 </script>
 
 <style scoped>

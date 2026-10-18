@@ -1,6 +1,8 @@
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
 
+const base = process.env.PMS_PROGRESS_TEST_BASE || 'http://127.0.0.1:5174'
+assert.equal(new URL(base).hostname, '127.0.0.1')
 const browser = await chromium.launch({ channel: 'msedge', headless: true })
 let page
 try {
@@ -17,7 +19,7 @@ try {
   await page.addInitScript(() => localStorage.setItem('access_token', 'ui-test'))
   await page.route('**/*', async route => {
     const url = new URL(route.request().url()), path = url.pathname, method = route.request().method()
-    if (url.origin !== 'http://127.0.0.1:5174') return route.abort()
+    if (url.origin !== base) return route.abort()
     if (!path.startsWith('/api/')) return route.continue()
     let body = []
     if (path === '/api/auth/me') body = { id: 1, username: 'admin-test', real_name: '测试管理员', home_path: '/system/user', must_change_password: mustChange, permissions: mustChange ? [] : permissions }
@@ -34,7 +36,7 @@ try {
     else if (path === '/api/auth/change-password') { const data = route.request().postDataJSON(); assert.equal(data.new_password, data.confirm_password); mustChange = false; body = { access_token: 'changed-token', must_change_password: false } }
     await route.fulfill({ json: body })
   })
-  await page.goto('http://127.0.0.1:5174/system/user')
+  await page.goto(base + '/system/user')
   await page.getByRole('button', { name: '新增用户', exact: true }).click()
   let drawer = page.locator('.pms-form-drawer').filter({ has: page.locator('#user-real-name') })
   await expect(drawer).toBeVisible()
@@ -81,7 +83,7 @@ try {
   await page.getByRole('button', { name: '展开或收起PMS菜单' }).click()
   await page.getByRole('menuitem', { name: '参数设置' }).click()
   await expect(page).toHaveURL(/\/system\/parameter$/)
-  await expect(page.getByRole('combobox', { name: '参数分组' })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: '查询2值' })).toBeVisible()
   await page.getByRole('menuitem', { name: '用户管理' }).click()
   await expect(page).toHaveURL(/\/system\/user$/)
   await page.getByRole('button', { name: '编辑', exact: true }).click()
@@ -95,17 +97,22 @@ try {
   await page.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(page).toHaveURL(/\/system\/parameter$/)
   assert.equal(saves.length, 1)
-  const group = page.getByRole('combobox', { name: '参数分组' })
+  const group = page.getByRole('combobox', { name: '查询2值' })
   await group.press('ArrowDown')
   await page.getByRole('option', { name: '界面', exact: true }).click()
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   await expect(page.getByText('用户初始密码', { exact: true })).toHaveCount(0)
   await expect(page.getByText('显示参数', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '重置', exact: true }).click()
   await group.press('ArrowDown')
   await page.getByRole('option', { name: '账号安全', exact: true }).click()
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   await expect(page.getByText('显示参数', { exact: true })).toHaveCount(0)
-  await page.getByRole('textbox', { name: '搜索参数', exact: true }).fill('不存在')
+  await page.getByRole('textbox', { name: '查询1值', exact: true }).fill('不存在')
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   await expect(page.getByText('用户初始密码', { exact: true })).toHaveCount(0)
-  await page.getByRole('textbox', { name: '搜索参数', exact: true }).fill('')
+  await page.getByRole('textbox', { name: '查询1值', exact: true }).fill('')
+  await page.getByRole('button', { name: '查询', exact: true }).click()
   await page.getByRole('button', { name: '修改', exact: true }).click()
   await page.getByRole('button', { name: '保存', exact: true }).click()
   const secret = page.getByRole('textbox', { name: '新参数值' })
@@ -123,15 +130,15 @@ try {
   await page.screenshot({ path: '/tmp/pms-parameter-A.png' })
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await expect.poll(() => parameterSave?.version).toBe(0)
-  await expect(page.getByText('已设置 · 不回显')).toBeVisible()
+  await expect(page.getByText('已设置 · 需重新保存后回显')).toBeVisible()
   await expect(page.locator('input[type=password]')).toHaveCount(0)
   await page.getByRole('button', { name: '修改', exact: true }).click()
   await expect(secret).toHaveValue('')
   await expect(secret).toHaveAttribute('type', 'password')
-  await expect(page.getByText('已设置 · 不回显')).toBeVisible()
+  await expect(page.getByText('已设置 · 需重新保存后回显')).toBeVisible()
   await page.getByRole('button', { name: '取消', exact: true }).click()
   mustChange = true
-  await page.goto('http://127.0.0.1:5174/system/user')
+  await page.goto(base + '/system/user')
   await expect(page).toHaveURL(/\/change-password$/)
   await expect(page.locator('#new-password')).toHaveAttribute('aria-describedby', 'new-password-hint')
   await page.getByRole('button', { name: '保存并继续' }).click()

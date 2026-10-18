@@ -1,6 +1,8 @@
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
 
+const base = process.env.PMS_PROGRESS_TEST_BASE || 'http://127.0.0.1:5174'
+assert.equal(new URL(base).hostname, '127.0.0.1')
 const browser = await chromium.launch({ channel: 'msedge', headless: true })
 try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
@@ -16,7 +18,7 @@ try {
   await page.addInitScript(() => localStorage.setItem('access_token', 'mock-only'))
   await page.route('**/*', async route => {
     const url = new URL(route.request().url()), path = url.pathname
-    if (url.origin !== 'http://127.0.0.1:5174') return route.abort()
+    if (url.origin !== base) return route.abort()
     if (!path.startsWith('/api/')) return route.continue()
     let body = []
     if (path === '/api/auth/me') body = { id: 1, username: 'mock', permissions: ['system:user:view', 'system:user:add', 'system:user:edit'] }
@@ -42,7 +44,7 @@ try {
     }
     return route.fulfill({ json: body })
   })
-  await page.goto('http://127.0.0.1:5174/system/user')
+  await page.goto(base + '/system/user')
   const drawer = page.locator('.pms-form-drawer:visible')
   const leader = drawer.locator('[aria-label="部门负责人"] .el-select__wrapper')
   async function edit(name) {
@@ -82,6 +84,8 @@ try {
   await expect(leader).toContainText('同名（A002）')
   failSave = false
   await drawer.getByRole('button', { name: '取消', exact: true }).click()
+  await page.getByRole('dialog', { name: '未保存修改', exact: true }).getByRole('button', { name: '确定', exact: true }).click()
+  await expect(drawer).toHaveCount(0)
   await edit('历史部门')
   await leader.click()
   await expect(page.getByRole('option', { name: '历史负责人（A003）（不可选）', exact: true })).toHaveAttribute('aria-disabled', 'true')

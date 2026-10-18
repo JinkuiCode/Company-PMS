@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { usePageLoad } from '@/composables/usePageLoad'
 import { pmsActionColumn } from '@/config/listUi'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import PmsQueryColumnHeader from '@/query-system/PmsQueryColumnHeader.vue'
@@ -13,7 +14,7 @@ import { useAuthStore } from '@/stores/auth'
 import PmsDataList from '@/components/PmsDataList.vue'
 import CustomPagination from '@/components/CustomPagination.vue'
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/config/listUi'
-import { PmsFormDrawer, PmsFormField, PmsTextControl, PmsSelectControl, PmsNumberControl, PmsSwitchControl } from '@/form-system'
+import { PmsFormDrawer, PmsFormField, PmsTextControl, PmsSelectControl, PmsNumberControl, PmsSwitchControl, useFormSession } from '@/form-system'
 import { getProductLines, getOrganizations, type ProductLine, type Organization } from '@/api/productLine'
 
 const auth = useAuthStore()
@@ -25,7 +26,7 @@ const { fields: queryFields, defaults: queryDefaults, draft: queryDraft, submit:
   { field: 'organization_name', label: '金蝶组织名称', type: 'text' },
   { field: 'sort', label: '排序', type: 'number' },
   { field: 'is_enabled', label: '状态', type: 'enum', options: [{value:1,label:'启用'},{value:0,label:'禁用'}] },
-], ['display_name', 'is_enabled'], {ready:()=>!loading.value && !failed.value,pagination:{page,size:pageSize}})
+], ['display_name', 'is_enabled'], {ready:()=>lineListState.phase.value === 'ready' || lineListState.phase.value === 'empty',pagination:{page,size:pageSize}})
 const lineQueryRecord = (row:ProductLine) => ({...row,is_enabled:Number(row.is_enabled)})
 const filteredItems = computed(() => topRows(items.value, lineQueryRecord))
 const total = computed(() => filteredItems.value.length)
@@ -38,24 +39,30 @@ function runQuery(conditions: QueryCondition[], preferences: object) {
 }
 function clearQueryColumns() { clearColumns() }
 watch(items, clearColumns, {flush:'sync'})
-const loading = ref(false), failed = ref(false), saving = ref(false), opened = ref(false)
+const lineListState = usePageLoad()
+const loading = lineListState.loading, failed = lineListState.failed
+const deleting = ref(false), opened = ref(false)
 const editing = ref<ProductLine | null>(null)
 const organizations = ref<Organization[]>([]), organizationSearch = ref(''), organizationPage = ref(1), organizationTotal = ref(0)
 const organizationsLoading = ref(false), organizationFailed = ref(false), error = ref('')
 const form = reactive({ organization_id: null as number | null, display_name: '', sort: 0, is_enabled: true })
-let listVersion = 0, organizationVersion = 0, baseline = ''
-const dirty = computed(() => JSON.stringify(form) !== baseline)
+const lineFormSession = useFormSession({ draft: form, isConflict: (cause: any) => cause?.response?.status === 409 })
+const saving = computed(() => deleting.value || lineFormSession.busy.value)
+let organizationVersion = 0
 const organizationOptions = computed(() => organizations.value.map(row => ({ value: row.organization_id, label: `${row.code} · ${row.name}` })))
 async function load() {
-  const version = ++listVersion
-  loading.value = true; failed.value = false
+  const ticket = lineListState.begin()
   try {
-    const data = await loadCompleteDataset((page, pageSize) => getProductLines({ page, page_size: pageSize }), 500, () => version === listVersion, (row:any) => row.id)
-    if (version !== listVersion) return
+    const data = await loadCompleteDataset((page, pageSize) => getProductLines({ page, page_size: pageSize }), 500, () => lineListState.isCurrent(ticket), (row:any) => row.id)
+    if (!lineListState.isCurrent(ticket)) return
     items.value = data.items
+    lineListState.succeed(ticket, items.value.length === 0)
     page.value = Math.min(page.value, Math.max(1, Math.ceil(total.value / pageSize.value)))
-  } catch { if (version === listVersion) failed.value = true }
-  finally { if (version === listVersion) loading.value = false }
+  } catch (cause) {
+    if (!lineListState.isCurrent(ticket)) return
+    items.value = []
+    lineListState.fail(ticket, cause)
+  }
 }
 async function loadOrganizations() {
   const version = ++organizationVersion
@@ -69,9 +76,13 @@ async function loadOrganizations() {
 }
 async function close() {
   if (saving.value) return false
-  if (opened.value && dirty.value) {
-    try { await ElMessageBox.confirm('放弃尚未保存的产品线修改？', '未保存修改', { type: 'warning' }) }
-    catch { return false }
+  if (opened.value) {
+    const allowed = await lineFormSession.requestClose(async () => {
+      try { await ElMessageBox.confirm('放弃尚未保存的产品线修改？', '未保存修改', { type: 'warning' }); return true }
+      catch { return false }
+    })
+    if (!allowed) return false
+    lineFormSession.restore()
   }
   opened.value = false; ++organizationVersion
   return true
@@ -80,7 +91,7 @@ async function open(row?: ProductLine) {
   if (!auth.hasPermission(row ? 'system:product-line:edit' : 'system:product-line:add') || !await close()) return
   editing.value = row || null; error.value = ''
   Object.assign(form, { organization_id: row?.organization_id ?? null, display_name: row?.display_name || '', sort: row?.sort || 0, is_enabled: row ? !!row.is_enabled : true })
-  baseline = JSON.stringify(form); opened.value = true
+  lineFormSession.capture(); opened.value = true
   if (!row) { organizationSearch.value = ''; organizationPage.value = 1; await loadOrganizations() }
 }
 function selectOrganization(value: unknown) {
@@ -90,28 +101,37 @@ function selectOrganization(value: unknown) {
 }
 async function save() {
   if (saving.value || !auth.hasPermission(editing.value ? 'system:product-line:edit' : 'system:product-line:add')) return
-  if (!form.organization_id || !form.display_name.trim()) { error.value = '请选择金蝶组织并填写产品线名称'; return }
-  saving.value = true; error.value = ''
-  try {
-    const fields = { display_name: form.display_name.trim(), sort: form.sort }
-    if (editing.value) await request.put(`/product-lines/${editing.value.id}`, { ...fields, is_enabled: form.is_enabled, expected_updated_at: editing.value.updated_at })
-    else await request.post('/product-lines', { ...fields, organization_id: form.organization_id })
+  const target = editing.value ? { id: editing.value.id, updated_at: editing.value.updated_at } : null
+  error.value = ''
+  const result = await lineFormSession.submit({
+    validate: () => {
+      if (!form.organization_id || !form.display_name.trim()) { error.value = '请选择金蝶组织并填写产品线名称'; return false }
+      return true
+    },
+    save: snapshot => {
+      const fields = { display_name: snapshot.display_name.trim(), sort: snapshot.sort }
+      if (target) return request.put(`/product-lines/${target.id}`, { ...fields, is_enabled: snapshot.is_enabled, expected_updated_at: target.updated_at })
+      return request.post('/product-lines', { ...fields, organization_id: snapshot.organization_id })
+    },
+    onError: (cause: any) => { error.value = cause?.response?.status === 409 ? '名称、组织冲突或记录已被修改，请关闭并刷新后重试' : '保存失败，请检查后重试' },
+  })
+  if (result.status === 'success') {
     opened.value = false; ElMessage.success('产品线已保存'); await load()
-  } catch (e: any) { error.value = e.response?.status === 409 ? '名称、组织冲突或记录已被修改，请关闭并刷新后重试' : '保存失败，请检查后重试' }
-  finally { saving.value = false }
+  }
 }
 async function remove(row: ProductLine) {
   if (!auth.hasPermission('system:product-line:delete') || saving.value) return
   try { await ElMessageBox.confirm(`删除产品线“${row.display_name}”？已被引用的产品线不能删除。`, '删除产品线', { type: 'warning' }) } catch { return }
-  saving.value = true
+  deleting.value = true
   try { await request.delete(`/product-lines/${row.id}`); ElMessage.success('已删除'); await load() }
   catch { /* The shared request handler displays the rejection; keep the row. */ }
-  finally { saving.value = false }
+  finally { deleting.value = false }
 }
 function searchOrganizations() { organizationPage.value = 1; void loadOrganizations() }
 watch(pageSize, () => { page.value = 1 })
 onBeforeRouteLeave(close)
 onMounted(load)
+onBeforeUnmount(() => { lineListState.invalidate(); ++organizationVersion })
 </script>
 
 <template>
@@ -135,18 +155,18 @@ onMounted(load)
     <form id="product-line-form" :inert="saving" @submit.prevent="save">
       <h3 class="pms-form-drawer__section">组织归属</h3>
       <template v-if="!editing">
-        <PmsFormField field-id="organization-search" label="查找组织"><PmsTextControl id="organization-search" v-model="organizationSearch" aria-label="查找金蝶组织" @keydown.enter.prevent="searchOrganizations" /><el-button size="small" :loading="organizationsLoading" @click="searchOrganizations">查询</el-button></PmsFormField>
+        <PmsFormField field-id="organization-search" label="查找组织"><PmsTextControl id="organization-search" v-model="organizationSearch" :disabled="saving" aria-label="查找金蝶组织" @keydown.enter.prevent="searchOrganizations" /><el-button size="small" :disabled="saving" :loading="organizationsLoading" @click="searchOrganizations">查询</el-button></PmsFormField>
         <div v-if="organizationFailed" role="alert">金蝶组织读取失败 <el-button link @click="loadOrganizations">重试</el-button></div>
-        <PmsFormField field-id="organization" label="金蝶组织" required><PmsSelectControl id="organization" :model-value="form.organization_id" :options="organizationOptions" :disabled="organizationsLoading || organizationFailed" aria-label="金蝶组织" @update:model-value="selectOrganization" /></PmsFormField>
+        <PmsFormField field-id="organization" label="金蝶组织" required><PmsSelectControl id="organization" :model-value="form.organization_id" :options="organizationOptions" :disabled="saving || organizationsLoading || organizationFailed" aria-label="金蝶组织" @update:model-value="selectOrganization" /></PmsFormField>
         <div v-if="organizationTotal > 50" class="product-line-org-pager"><el-button :disabled="organizationPage <= 1 || organizationsLoading" @click="organizationPage--; loadOrganizations()">上一页</el-button><span>{{ organizationPage }} / {{ Math.ceil(organizationTotal / 50) }}</span><el-button :disabled="organizationPage * 50 >= organizationTotal || organizationsLoading" @click="organizationPage++; loadOrganizations()">下一页</el-button></div>
       </template>
       <PmsFormField v-else field-id="organization" label="金蝶组织" hint="组织绑定创建后不可更改"><PmsTextControl id="organization" :model-value="`${editing.organization_code} · ${editing.organization_name}`" readonly aria-label="金蝶组织" /></PmsFormField>
       <h3 class="pms-form-drawer__section">显示设置</h3>
-      <PmsFormField field-id="line-name" label="产品线名称" required :error="error"><PmsTextControl id="line-name" v-model="form.display_name" maxlength="128" aria-label="产品线名称" :error="error" /></PmsFormField>
-      <PmsFormField field-id="line-sort" label="排序"><PmsNumberControl id="line-sort" v-model="form.sort" :min="0" :max="1000000" :precision="0" aria-label="产品线排序" /></PmsFormField>
-      <PmsFormField v-if="editing" field-id="line-enabled" label="启用" hint="禁用后不再用于新建，已授权的历史记录仍可查看"><PmsSwitchControl id="line-enabled" v-model="form.is_enabled" aria-label="启用产品线" /></PmsFormField>
+      <PmsFormField field-id="line-name" label="产品线名称" required :error="error"><PmsTextControl id="line-name" v-model="form.display_name" :disabled="saving" maxlength="128" aria-label="产品线名称" :error="error" /></PmsFormField>
+      <PmsFormField field-id="line-sort" label="排序"><PmsNumberControl id="line-sort" v-model="form.sort" :disabled="saving" :min="0" :max="1000000" :precision="0" aria-label="产品线排序" /></PmsFormField>
+      <PmsFormField v-if="editing" field-id="line-enabled" label="启用" hint="禁用后不再用于新建，已授权的历史记录仍可查看"><PmsSwitchControl id="line-enabled" v-model="form.is_enabled" :disabled="saving" aria-label="启用产品线" /></PmsFormField>
     </form>
-    <template #footer><el-button :disabled="saving" @click="close">取消</el-button><el-button type="primary" native-type="submit" form="product-line-form" :loading="saving">保存</el-button></template>
+    <template #footer><el-button class="pms-button-reset" :disabled="saving" @click="close">取消</el-button><el-button type="success" native-type="submit" form="product-line-form" :loading="saving">保存</el-button></template>
   </PmsFormDrawer>
 </template>
 

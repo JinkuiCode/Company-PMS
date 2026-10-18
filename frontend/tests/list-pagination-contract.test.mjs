@@ -14,7 +14,6 @@ const progress = read('views/project/ProjectList.vue')
 assert.match(progress, /:pagination="false"/, 'Progress uses shared pagination after complete dataset filtering')
 assert.match(progress, /pagination:\{page,size:pageSize\}/, 'Progress shared query adapter owns pagination')
 assert.match(progress, /all_rows: true/, 'Client-side filtering must use one complete result, not shifting offset chunks')
-for (const file of ['views/system/UserList.vue', 'views/system/DataDictionaryList.vue']) {
-  assert.match(read(file), /requestSerial !== listRequestSerial/, `${file}: old responses must not overwrite newer page/filter requests`)
-}
+assert.match(read('views/system/UserList.vue'), /!userListState\.isCurrent\(requestSerial\)/, 'User shared lifecycle must reject old responses')
+assert.match(read('views/system/DataDictionaryList.vue'), /!catalogState\.isCurrent\(requestSerial\)/, 'Catalog shared lifecycle must reject old responses')
 console.log('list pagination contract passed')

@@ -2324,3 +2324,77 @@
 - 调整：固定助手逐项核对程序/配置/进程/数据库/验收回执后，以现有发布权限调用统一服务创建v1.1.0和18条个人站内记录及投递任务；有界处理本批邮件。通过提报处理页将FB-202610-000001置已完成、已交付，补充实际版本/验收/使用说明。未动系统程序或结构/保护配置，没有启停PMS或操作金蝶。
 - 涉及：正式发布/通知/投递表、提报version3及统一日志；ops/releases/archive-drafts-20261018/closeout.py及5项测试；本轮收尾/计划/进度/共享索引/待办及本日志。
 - 验证：5项隔离RED→GREEN、独立复审无剩余Critical/Important，提交源副本再跑5项退出0；限源单文件传输门禁通过且已关闭。真实发布release_id2/published_by ael，18站内未读、17accepted/1缺邮箱ael failed，全部单次尝试，无unknown或重试，旧v1.0.2记录保持；页面显示v1.1.0清单及说明链接，提报已完成且SQL核对version3/status5。accepted仅表示SMTP接受；ael站内保留。长期角色不撤销，原范围保持。Git整合随后执行。
+
+
+### 2026-10-18：将v1.1.0代码及收尾材料统一到主分支和GitHub/服务器
+- 原因与批准：用户同意按剩余任务顺序执行，包含主分支合并和GitHub上传；仅纳入已验收代码和明确收尾材料。
+- 调整：14项允许清单提交d81ba3b；验证祖先和远端后CAS快速前移master，非强制推送。服务器先保存Git历史，再通过固定增量bundle仅对齐23项docs/ops/change.md，切至master；其他工作区资料保留，功能分支继续用于后续开发。
+- 涉及：Mac/GitHub/服务器Git引用与上述23项元数据；本轮收尾记录、change.md及outputs源码对齐证据。固定702项前后端/清单、保护配置和数据库不变。
+- 验证：GitHub真实ls-remote、本地HEAD/master和服务器master均d81ba3b8065a431e50558e635352f3ffe9d96e69。服务器PID6760/health保持，实际构建仍d71971d/v1.1.0；2项RED→GREEN含真实临时Git克隆，独立审查无Critical/Important。无重启、SQL变更、授权变化、force或重复通知，临时传输已关闭。当前新增本段为后续工作区记录，不伪造历史提交已包含自身结果。
+
+
+### 2026-10-18：项目进度两页接入共享页面状态
+- 原因与批准：继续用户已批准的治理共享模块分批迁移；原两页各自维护请求序号，失败仅短暂消息，缺少持续重试入口。
+- 调整：工作台与任务列表接入usePageLoad，统一加载/空结果/失败/重试；响应应用前及任务历史切换后校验请求代次，卸载废弃请求。查询就绪仍要求本次完整成功，保留分页/列偏好/权限/表格自动保存路径。仅刷新Mac前端缓存，后端和正式不变。
+- 涉及：frontend/src/views/project/ProjectList.vue、ProjectProgress.vue；progress-page-load-browser.mjs、project-progress-workbench-contract.test.mjs；本计划、共享索引及待办。
+- 验证：浏览器缺少失败入口RED→两页GREEN，全部API模拟/业务写入0；含任务历史异步交错。页面状态5项、工作台/分页契约、三项强制规范契约及构建退出0；保留既有大文件提示。独立审查无Critical/Important；标准5174实际列表只读验证通过，后端PID4640保持。未提交、部署或通知，不把本批扩写成其他共享模块或全页权限验收已完成。
+
+### 2026-10-18：项目进度接入共享列偏好并保留旧布局
+- 原因与批准：继续已批准共享模块旧页迁移；进度旧选择字段与档案不同，直接替换会丢失旧选择，原直接缓存读写也缺少保护。
+- 调整：共享存储新增可选旧字段别名，默认行为保持；进度页保留原账号键，v1写入兼容双字段，清理失效列并保护未来/损坏/异属缓存。页面合并当前grid缺失的有效旧列状态，当前布局优先，保留未选列宽度/冻结/排序。
+- 涉及：frontend/src/list-system/columnPreferences.ts、views/project/ProjectList.vue；column-preferences.test.mjs、progress-column-preferences-browser.mjs、计划及模块索引。
+- 验证：单元7项、真实浏览器三类RED→GREEN（别名、版本化接入、未选有效列保留），账号隔离/缓存读写受限/保护场景通过；两页状态回归、工作台/分页及三项必需规范、构建exit0。独立审查Important已修复并复审，无剩余Critical/Important。仅本机代码与模拟API，无真实数据、授权、正式部署或Git操作。
+
+### 2026-10-18：项目进度新增接入共享表单会话与字段适配
+- 原因与批准：继续已批准共享行为旧页迁移，保留原新增窗口和表格自动保存。原新增没有重复保存/关闭保护，字段错误依赖后端顺序且无法稳定就地提示。
+- 调整：新增窗口接入useFormSession快照及互斥，验证/保存/错误定位期间锁定输入和关闭；脏表单关闭/路由离开单次确认，失败保留输入。元数据和结构化错误使用共享解析器，核心三项必输、隐藏/引用/计算上限保持，日期API别名和动态嵌套字段按页面顺序投影，复用PmsFormField及ARIA。已有说明入口移到列表工具栏，更新说明；保存采用既有青绿语义。
+- 涉及：frontend/src/views/project/ProjectList.vue、page-guide/registry.ts；progress-form-session-browser.mjs、field-policy-contract.test.mjs；本计划、共享索引及待办。
+- 验证：关闭/说明/日期别名/计算明细场景RED→GREEN；真实浏览器全API模拟覆盖重复保存、busy输入/导航锁、422定位锁、固定/日期/动态及ARIA、失败保留和成功重试，无真实项目写入。会话9项/元数据5项、字段策略/工作台/分页/说明/表单及三项强制规范、构建exit0，前两批浏览器回归通过。独立审查Important/Minor均已解决；5174实页只读列表与空新增取消通过，仅刷新Mac前端，后端PID4640及正式v1.1.0不变，未提交/部署/通知。
+
+### 2026-10-18：字段目录与操作审计接入共享页面状态
+- 原因与批准：继续已批准系统页分批迁移；隔离测试复现目录离页后仍应用响应、审计详情await后旧总数回写。
+- 调整：两个只读列表接入usePageLoad；目录保持完整读取/一致性/身份去重，成功后夹取页码；审计保留服务端查询与分页，防抖/卸载废弃旧请求、详情await后检查ticket。已有错误/刷新及审计布局保持。
+- 涉及：frontend/src/views/system/DataDictionaryList.vue、OperationLogList.vue；system-readonly-page-state-browser.mjs、list-pagination-contract.test.mjs、operation-log-contract.test.mjs、计划与索引。
+- 验证：两项实际RED→GREEN，完整300行分页、旧响应/错误、重试、空结果、卸载与详情竞态通过，全API模拟且拒绝非GET；共享状态5项、分页/目录/审计/说明契约、三项强制规范及构建exit0，独立复跑/审查无Critical/Important。旧审计契约在未改HEAD也失败，已对齐此前确认的布局/查询规则；未改页面基线。无真实业务/配置/权限/库写入，无正式部署、Git或通知。
+
+### 2026-10-18：产品线与字段规则接入共享读取状态
+- 原因与批准：继续已批准系统页分批迁移，隔离复现产品线读取失败留旧行、字段规则旧模块响应覆盖新模块。
+- 调整：两页主列表接入usePageLoad；当前成功后才开放查询，失败清行并提供重试，卸载废弃响应；字段规则分组与当前行同步应用。产品线组织候选仍使用独立代次，保存/删除/恢复默认及授权不变。
+- 涉及：frontend/src/views/system/ProductLineList.vue、FieldPolicyList.vue；system-settings-page-state-browser.mjs、本批计划及共享索引。
+- 验证：两项实际RED→两页GREEN，失败/重试、空结果、离页与模块交错通过，全API模拟且拒绝非GET；前端相关契约13项、后端字段目录/枚举契约、三项强制规范及构建exit0，独立审查无Critical/Important/Minor。仅Mac未提交或部署，无真实业务/配置/权限/库写入或通知。
+
+### 2026-10-18：用户与角色主列表接入共享读取状态
+- 原因与批准：继续已批准系统页分批迁移；原读取失败仅短暂消息或抛出，缺少持续重试及卸载保护。
+- 调整：两页接入usePageLoad、当前成功就绪、失败清行/重试及卸载废弃；用户完整读取/部门快照/去重/夹页保持，角色表格增加已有loading反馈。用户/部门/角色写入和权限树流程不改。
+- 涉及：frontend/src/views/system/UserList.vue、RoleList.vue；system-identity-page-state-browser.mjs、分页和RBAC契约、本批计划、共享索引和待办。
+- 验证：两页失败入口RED→GREEN，最新响应、空结果及卸载通过；相关契约16项、三项必需规范及构建exit0，独立审查无Critical/Important/Minor。旧RBAC契约在原HEAD同样失败，已对齐先前批准的产品线字段，权限实现不变。全部API模拟且拒绝非GET，仅Mac无真实写入、正式部署或Git操作。
+
+### 2026-10-18：枚举、参数和同步管理接入共享读取状态
+- 原因与批准：继续已批准系统旧页分批接入；三页失败反馈或旧数据残留经隔离复现，需要在领域安全保护外共享读取状态。
+- 调整：枚举主定义/值独立状态、失败清行/重试及卸载；参数保留active/securityEpoch、撤权与敏感内存清理，401/403清理后仍保持失败反馈；同步保留v2服务端查询、轮询及业务核查，分页防抖同步废弃旧响应。保存/删除/重试/权限接口不改；仅刷新Mac前端。
+- 涉及：frontend/src/views/system/EnumList.vue、ParameterList.vue、SyncTaskList.vue；system-specialized-page-state-browser.mjs、参数安全与枚举身份测试；本批计划和共享索引。
+- 验证：三页原行为及403反馈RED→GREEN；最终三页全API模拟浏览器、最后参数修正复验、27项相关契约、三项必需规范及构建退出0。独立审查无Critical/Important/Minor。本机5174前端PID18448，后端4640保持；没有真实业务/参数/权限写入、正式部署、数据库或Git操作。
+
+### 2026-10-18：修正两项滞后的治理验收契约
+- 原因与批准：执行已批准的权限/日志验收矩阵时，两项旧测试预期与已正式批准并落地的草稿管理及form-draft-02不一致；原HEAD文件摘要相同，非本轮运行代码引入。
+- 调整：资源登记契约纳入既有draft_management及其独立权限/范围断言；用户安全契约版本期望由form-draft-01对齐form-draft-02，不改后端权限、迁移或运行实现。整理当前矩阵并明确静态、隔离及现场边界。
+- 涉及：backend/tests/business_resource_registry_contract.py、user_security_contract.py；docs/releases/2026-10-18-permission-log-matrix.md及配套计划/待办。
+- 验证：两项既有失败修正后退出0；35组隔离契约全0，396个unittest执行项及5组脚本，测试和后端摘要当前匹配。独立审查无Critical/Important，计数Minor已更正。使用临时库和拒绝真实网络，不修改真实授权、数据库、业务或配置；正式多用户/OA/ERP链路仍待现场，不报告全系统最终验收通过。
+
+### 2026-10-18：产品线表单接入共享保存会话
+- 原因与批准：继续已批准管理页适用保存会话分批迁移；隔离复现连续关闭弹出两个未保存确认。
+- 调整：既有抽屉接入useFormSession，关闭确认和保存互斥；提交固定目标/版本及独立快照，失败保留输入、成功才关闭。删除busy独立并与会话busy合并，字段禁用反馈和保存/取消语义色统一。组织绑定不可改、原接口体和权限码保持。
+- 涉及：frontend/src/views/system/ProductLineList.vue、frontend/tests/product-line-form-session-browser.mjs、本批计划、共享索引、待办及当前矩阵。
+- 验证：双确认RED→浏览器GREEN；确认中写入0、必输、重复保存、输入/路由锁、409保留/重试、原POST/PUT及缺权限拒绝通过；所有API模拟。两页读取回归、18项相关契约、三项强制规范与构建exit0，独立审查无Critical/Important/Minor。5174现有账号只读打开/取消及组织只读通过，未保存任何真实修改、未触发组织查询；不改后端/库/授权/正式或Git。
+
+### 2026-10-18：部门表单接入共享保存会话
+- 原因与批准：延续已批准系统页分批迁移，隔离复现取消会直接丢弃尚未保存的部门输入。
+- 调整：部门抽屉接入useFormSession；关闭、离页、改开目标共用一次确认；从校验开始互斥，保存使用独立快照，失败保留输入、成功才关闭。保留原权限、接口体及负责人候选、删除/拖拽流程；说明同步。
+- 涉及：frontend/src/views/system/UserList.vue、frontend/src/page-guide/registry.ts、frontend/tests/department-form-session-browser.mjs、department-leader-browser.mjs、本批计划与共享索引/待办。
+- 验证：实际RED→模拟浏览器GREEN，负责人和用户/角色读取回归、34项相关/强制规范契约及构建exit0；独立审查无Critical/Important/Minor。5174只读打开未改即取消，无真实部门/权限写入；无后端、数据库、正式部署或Git操作。
+
+### 2026-10-18：用户、角色与枚举统一保存保护
+- 原因与批准：继续已批准的治理旧页分批迁移；用户双关闭出现两次确认，角色/枚举取消直接丢弃已隔离复现。
+- 调整：三页接入共享会话，统一关闭/路由确认、提交互斥、快照和失败保留。用户打开时不允许改目标，原独立重置规则保持；角色完整初始化后建立基线，保留父子/查看依赖/首页及正ID转换；枚举持久化成功与缓存失败分开。自身资料保存后身份刷新失败有明确反馈、不重复写入。角色/枚举独立说明与前后端静态目录同步。
+- 涉及：UserFormDrawer.vue、UserList.vue、RoleList.vue、EnumList.vue、page-guide/{types,navigation,registry}.ts、backend/app/services/runtime_release.py（仅GUIDES两项）、release_guide_registry_contract.py、system-save-session-browser.mjs及相关既有测试、本批计划和模块索引。
+- 验证：三页RED→最终模拟GREEN；37项前端契约、构建、用户/独立重置/参数/改密、角色树/首页、部门/枚举、专用列表回归exit0；字段目录/枚举/登记及发布18项、邮件5项隔离契约exit0。独立审查Minor已关闭，无未关闭C/I/M；5174实际只读打开取消通过。无真实写入/重置/授权、数据库、后端重启、正式环境或Git操作。
