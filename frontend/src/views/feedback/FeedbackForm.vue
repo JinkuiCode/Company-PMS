@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, toRaw, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { PmsFormDrawer, PmsFormField, PmsTextControl, PmsSelectControl, PmsTextareaControl, type PmsOption } from '@/form-system'
+import { PmsFormDrawer, PmsFormField, PmsTextControl, PmsSelectControl, PmsTextareaControl, useFormSession, type PmsOption } from '@/form-system'
 import { freshFeedback, categoryCode, allowedOutcomes, validateFeedback, newSubmissionId, type FeedbackMode } from '@/feedback/model'
 import { submitFeedback, handleFeedback, supplementFeedback, uploadFeedbackFile, type FeedbackRow } from '@/api/feedback'
 import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
@@ -10,13 +10,19 @@ import { Paperclip } from '@element-plus/icons-vue'
 const auth=useAuthStore()
 const props=defineProps<{modelValue:boolean; mode:FeedbackMode; row:FeedbackRow|null; options:(code:string)=>PmsOption[]}>()
 const emit=defineEmits<{'update:modelValue':[boolean]; saved:[FeedbackRow]}>()
-const draft=ref<Record<string,any>>(freshFeedback()), initial=ref(''), errors=ref<Record<string,string>>({}), files=ref<File[]>([]), busy=ref(false), saved=ref<FeedbackRow|null>(null), banner=ref('')
-const dirty=computed(()=>JSON.stringify(draft.value)!==initial.value || files.value.length>0)
+const draft=ref<Record<string,any>>(freshFeedback()), errors=ref<Record<string,string>>({}), files=ref<File[]>([]), busy=ref(false), saved=ref<FeedbackRow|null>(null), banner=ref('')
+// The close session shares confirmation exclusion; multipart persistence stays in save().
+const closeSession=useFormSession({
+ draft:{get values(){return draft.value},get attachments(){return files.value}},
+ clone:value=>({values:structuredClone(toRaw(value.values)),attachments:[...value.attachments]}),
+ equals:(left,right)=>JSON.stringify(left.values)===JSON.stringify(right.values)&&left.attachments.length===right.attachments.length&&left.attachments.every((file,index)=>file===right.attachments[index]),
+})
+const dirty=closeSession.dirty
 const submissionId=ref('')
 watch(()=>props.modelValue,value=>{if(value)submissionId.value=''})
 const title=computed(()=>props.mode==='new'?'新增提报':props.mode==='handle'?'处理提报':'补充信息')
 watch(draft,()=>{if(Object.keys(errors.value).length)errors.value=validateFeedback(draft.value,props.mode)},{deep:true})
-watch(()=>props.modelValue,value=>{if(!value)return; saved.value=null; files.value=[]; errors.value={};banner.value='';draft.value=props.mode==='new'?freshFeedback():props.mode==='handle'?{status_id:props.row?.status_id===1?2:props.row?.status_id,outcome_id:props.row?.outcome_id||null,cause_id:props.row?.cause_id||null,opinion:''}:{description:''};initial.value=JSON.stringify(draft.value)})
+watch(()=>props.modelValue,value=>{if(!value)return; saved.value=null; files.value=[]; errors.value={};banner.value='';draft.value=props.mode==='new'?freshFeedback():props.mode==='handle'?{status_id:props.row?.status_id===1?2:props.row?.status_id,outcome_id:props.row?.outcome_id||null,cause_id:props.row?.cause_id||null,opinion:''}:{description:''};closeSession.capture()})
 const selects=computed(()=>props.mode==='new'?[{key:'type_id',label:'提报类型',code:'feedback_type'},{key:'module_id',label:'涉及模块',code:'feedback_module'},{key:'category_id',label:'具体类别',code:categoryCode(draft.value.type_id)},{key:'impact_id',label:'影响程度',code:'feedback_impact'}]:props.mode==='handle'?[{key:'status_id',label:'处理状态',code:'feedback_status'},{key:'outcome_id',label:'处理结论',code:'feedback_outcome'},{key:'cause_id',label:'处理归因',code:'feedback_cause'}]:[])
 const texts=computed<{key:string;label:string;short?:boolean}[]>(()=>props.mode==='new'?[{key:'title',label:'标题',short:true},{key:'description',label:'详细说明'},...(draft.value.type_id===1?[{key:'steps',label:'复现步骤'}]:[]),{key:'expected_result',label:'期望结果'}]:props.mode==='handle'?[{key:'opinion',label:'处理意见'}]:[{key:'description',label:'补充信息'}])
 function options(field:{key:string;code:string}) { return field.key==='outcome_id'?props.options(field.code).filter(option=>allowedOutcomes(draft.value.status_id).includes(Number(option.value))):props.options(field.code) }
@@ -35,16 +41,21 @@ async function save() {
   else row=props.mode==='handle'?await handleFeedback(props.row.id,{...draft.value,version:props.row.version}):await supplementFeedback(props.row.id,{...draft.value,version:props.row.version})
   saved.value=row;emit('saved',row)
   while(files.value.length){const result=await uploadFeedbackFile(row,files.value[0]!,props.mode==='new'?submissionId.value:undefined);row={...row,version:result.version};saved.value=row;files.value.shift()}
-  initial.value=JSON.stringify(draft.value); submissionId.value='';emit('saved',row);emit('update:modelValue',false);ElMessage.success('已保存；邮件通知由后台独立处理');return true
+  closeSession.capture(); submissionId.value='';emit('saved',row);emit('update:modelValue',false);ElMessage.success('已保存；邮件通知由后台独立处理');return true
  }catch(error:any){banner.value=saved.value?'提报内容已保存，部分附件尚未上传。可重试附件或取消后在详情中补传。':error.response?.status===409?'记录已被修改，请取消并刷新详情后重试':'保存失败，请检查填写内容后重试';return false}
  finally{busy.value=false}
 }
 async function guard() {
  if(busy.value)return false
- if(!dirty.value)return true
- const decision=await confirmDetailSwitch()
- if(decision==='save')return save()
- return decision==='discard'
+ let committed=false
+ const allowed=await closeSession.requestClose(async()=>{
+  const decision=await confirmDetailSwitch()
+  if(decision==='save'){committed=await save();return committed}
+  return decision==='discard'
+ })
+ // Saving inside the confirmation cannot capture while its close lock is held.
+ if(committed)closeSession.capture()
+ return allowed
 }
 async function close(done?:()=>void){if(await guard()){emit('update:modelValue',false);done?.()}}
 function addFiles(event:Event){const input=event.target as HTMLInputElement; const incoming=Array.from(input.files||[]);input.value='';if(files.value.length+incoming.length+(props.row?.attachments?.length||0)>5||incoming.some(file=>file.size>10*1024*1024)){ElMessage.warning('每单最多5个附件，每个不超过10MB');return}files.value.push(...incoming)}

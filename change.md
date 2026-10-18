@@ -2406,3 +2406,17 @@
 - 涉及：已批准60项（详见候选说明及outputs逐文件清单）、change.md、docs/releases/2026-10-18-shared-governance-candidate-preparation.md；产物位于release/shared-governance-v1.2.0-20261018，不纳入Git。
 - 验证：60项提交哈希一致；固定快照三项必需规范及构建退出0。ZIP425项/424摘要、421来源字节比对、运行清单解析及源码另库恢复60项均通过，746项其他文件保持，旧v1.1.0包及bundle摘要保持；隔离夹具与静态地理码目录校验修正后通过，记录保留。ZIP摘要54991d76a1840f1e495a852966688abe8b46dda4973698ce42ad8c7424f2a74c；独立包审查无未关闭Critical/Important/Minor。
 - 边界：无master合并、GitHub推送、正式部署、数据库升级、真实授权、通知/邮件或金蝶动作；正式版本没有因此变化，现场本人/OA及真实金蝶写入仍待验。
+
+
+### 2026-10-18：增加实施连续性检查并补逐路径证据
+- 原因与批准：用户要求解决反复无必要暂停并执行剩余任务；既有规则没有被落实，不能继续只用口头保证。
+- 调整：项目AGENTS接入ops本地结束检查和被忽略的活跃台账；有ready/in_progress必须继续。全部阻塞需具体问题/输入及请求引用，用户延期另需指示引用，拒绝“等待继续”。每次检查自动追加最小记录（时间、结论、原因、活跃ID及台账摘要），不保存凭据。不是平台钩子或真实授权判定。新增逐写路径隔离契约及收尾计划/证据清单。
+- 涉及：AGENTS.md、ops/check_work_continuity.py、ops/tests/test_work_continuity.py、backend/tests/write_path_classification_contract.py；本轮两份计划、收尾说明及模块索引/待办。
+- 验证：连续性检查首批RED→6项GREEN；独立审查Important（空泛already_requested可绕过）追加RED→最终10项GREEN并关闭。78条写方法逐项分类：72静态日志链+1附件间接日志+3只读+2禁用，4项实际隔离测试通过，含auth/sso命名空间以外69条写路由无登录请求均被既有403拦截；不等同已登录授权或78条完整运行验收。旧35组契约摘要匹配并按规则复用，所有新测试网络拒绝/临时库，不写真实业务或授权。
+
+### 2026-10-18：提报表单接入共享关闭互斥（仅Mac）
+- 原因与批准：剩余页面核对复现两次并发关闭弹两次确认；用户单独批准call_e4f447331a1c45afbde5ce81fe0c8b02仅Mac修复验收，明确排除Git、正式及原固定包变更。
+- 调整：FeedbackForm复用useFormSession.requestClose，正文及File身份/顺序参与快照；保留保存/放弃/取消以及正文提交、附件分步/重试和版本冲突控制器。确认中选择保存，待关闭锁释放后仅成功保存更新基线，避免保存后仍dirty。
+- 涉及：frontend/src/views/feedback/FeedbackForm.vue、frontend/tests/feedback-close-session.test.mjs、feedback-close-session-browser.mjs、page-guide/registry.ts配套说明；本批计划及收尾说明。
+- 验证：实际控制器+真实Vue六项先2项RED→GREEN；保存后dirty的审查Minor补RED→GREEN并关闭；共享会话9项、提报契约、三项强制规范及最终构建exit0。最终源码模拟Edge覆盖一次确认、取消/放弃、空表单、仅附件、确认保存单POST及干净基线，通过；API全部模拟。5174只读空新增/取消且既有2条记录保持，前端刷新后最终模块可读，后端PID4640保持。临时5198缓存旧模块已确认并单独重启后复验，不用旧通过结果充当最终验收。
+- 边界：没有真实提交/附件/邮件/ERP、数据库或授权变化，无Git提交/合并/推送；正式未部署。原a3/v1.2.0包保留，新修复尚未纳入候选。
