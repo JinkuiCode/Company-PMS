@@ -20,6 +20,7 @@ from app.models.report_export import ReportExportJob  # noqa: F401
 from app.models.product_line import SysProductLine, SysRoleProductLine  # noqa: F401
 from app.models.feedback import FeedbackReport, FeedbackFollowup, FeedbackAttachment, FeedbackNotification  # noqa: F401
 from app.models.archive_change import ArchiveChange  # noqa: F401
+from app.models.form_draft import PmsFormDraft  # noqa: F401
 from app.models.release import PmsRelease, PmsReleaseNotice, PmsReleaseMail  # noqa: F401
 from app.services.user_security_migration import upgrade_user_security, initialize_user_security
 
@@ -41,6 +42,8 @@ def init_db(*, explicit_upgrade=False):
         from app.services.governance_migration import verify_governance_structure
         with engine.connect() as connection:
             verify_governance_structure(connection)
+            from app.services.form_draft_management_migration import verify_draft_management_structure
+            verify_draft_management_structure(connection)
     Base.metadata.create_all(bind=engine)
     upgrade_user_security(engine)
     from app.services.project_archive_semantic_migration import upgrade_project_archive_semantics
@@ -466,6 +469,8 @@ def init_db(*, explicit_upgrade=False):
             install_archive_governance(db)
             from app.services.governance_migration import install_governance_permissions
             install_governance_permissions(db.connection())
+            from app.services.form_draft_management_migration import install_draft_management_permission
+            install_draft_management_permission(db.connection())
         db.commit()
 
     finally:

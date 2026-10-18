@@ -55,10 +55,11 @@ def preview_import(db,payload,scope):
         if not values["project_code"].strip():error("项目编号不能为空","project_code")
         if row["source_id"] in ids:error("来源ID已被其他批次使用")
         if values.get("product_line_id") is not None:error("期初产品线必须留空","product_line_id")
-        quantity=values.get("quantity")
-        if quantity is not None:
-            q=Decimal(str(quantity))
-            if abs(q)>=Decimal("1e12") or q.as_tuple().exponent < -8:error("数量超出12位整数或8位小数精度","quantity")
+        from app.services.archive_quantity import validate_archive_quantity
+        try:
+            validate_archive_quantity(values.get('quantity'))
+        except ValueError as exc:
+            error(str(exc), 'quantity')
         for key,meta in {**OFFLINE_FIELDS,"equipment_series":{"enum_code":"equipment_series"}}.items():
             if meta["enum_code"] and updates.get(key) is not None:
                 enum_key=(meta["enum_code"],str(updates[key]))

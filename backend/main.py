@@ -23,6 +23,8 @@ from app.api import stock_detail_reports
 from app.api import report_exports
 from app.api import feedback
 from app.api import document_history
+from app.api import form_drafts
+from app.api import form_draft_management
 from app.api import releases
 from app.services.authorization import get_current_user_context, require_permission
 from app.models.init_db import init_db
@@ -73,6 +75,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.APP_NAME, version="development", lifespan=lifespan)
 app.include_router(document_history.router)
 app.include_router(releases.router)
+app.include_router(form_drafts.router)
+app.include_router(form_draft_management.router)
 
 
 async def audit_failed_request(request, status):

@@ -1,13 +1,12 @@
 """RBAC 运行时授权契约测试。"""
 import os
+import tempfile
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = ROOT / "data" / "pms-test-rbac.db"
-
-if DB_PATH.exists():
-    DB_PATH.unlink()
+TEST_DATABASE = tempfile.TemporaryDirectory()
+DB_PATH = Path(TEST_DATABASE.name) / 'rbac.db'
 
 os.environ["DB_DIALECT"] = "sqlite"
 os.environ["SQLITE_DB_PATH"] = str(DB_PATH)
@@ -324,6 +323,13 @@ def test_init_db_does_not_restore_revoked_admin_permission():
         db.flush()
         if not db.query(SysUserRole).filter_by(user_id=admin.id, role_id=role.id).first():
             db.add(SysUserRole(user_id=admin.id, role_id=role.id))
+        # Complete the current fixture's explicit management node before testing
+        # startup. Production startup must never create this node or grant it.
+        if not db.query(SysMenu).filter_by(path='/project/archive',permission_code='project:archive:list').first():
+            db.add(SysMenu(id=22,parent_id=2,menu_name='项目档案',menu_type='C',path='/project/archive',permission_code='project:archive:list'))
+            db.flush()
+        from app.services.form_draft_management_migration import install_draft_management_permission
+        install_draft_management_permission(db.connection())
         db.commit()
     finally:
         db.close()

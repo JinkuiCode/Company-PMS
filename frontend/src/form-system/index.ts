@@ -21,3 +21,8 @@ export type {
   PmsControlVariant,
   PmsOption,
 } from './types'
+
+export { useFormSession } from './useFormSession'
+export type { PmsFormPhase, PmsFormSubmitResult } from './useFormSession'
+export { resolveFieldMetadata, mapFormFieldErrors } from './fieldMetadata'
+export type { PmsFieldPolicy } from './fieldMetadata'

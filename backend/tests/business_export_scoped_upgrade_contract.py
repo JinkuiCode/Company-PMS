@@ -41,7 +41,7 @@ class ExportUpgradeContract(unittest.TestCase):
     def upgrade(self):
         module = importlib.import_module("scripts.upgrade_database")
         self.assertIn("business_export_only", module.upgrade_database.__annotations__, "Missing scoped upgrade mode")
-        with patch.object(module, "CURRENT_DATABASE_REVISION", CURRENT_DATABASE_REVISION), patch.object(database_revision, "CURRENT_DATABASE_REVISION", CURRENT_DATABASE_REVISION), patch('app.services.governance_migration.verify_governance_structure'), patch.object(module, "engine", self.engine), patch.object(module, "validate_runtime_config"), patch.object(module, "init_db", side_effect=AssertionError("Historical init must not run")):
+        with patch.object(module, "CURRENT_DATABASE_REVISION", CURRENT_DATABASE_REVISION), patch.object(database_revision, "CURRENT_DATABASE_REVISION", CURRENT_DATABASE_REVISION), patch('app.services.governance_migration.verify_governance_structure'), patch('app.services.form_draft_migration.verify_form_draft_structure'), patch.object(module, "engine", self.engine), patch.object(module, "validate_runtime_config"), patch.object(module, "init_db", side_effect=AssertionError("Historical init must not run")):
             module.upgrade_database(business_export_only=True)
 
     def snapshot(self, model):

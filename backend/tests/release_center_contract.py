@@ -83,6 +83,82 @@ class Releases(unittest.TestCase):
         self.assertEqual(self.db.query(PmsRelease).count(), 0)
         self.assertEqual(self.db.query(PmsReleaseNotice).count(), 0)
 
+    def use_version(self, version):
+        self.manifest['version'] = version
+        self.receipt['manifest_sha256'] = releases.manifest_digest(self.manifest)
+
+    def publish_approved_initial(self):
+        try:
+            return self.publish()
+        except HTTPException as error:
+            self.fail(f'已批准且验收匹配的首次v1.0.2不应被拒绝：{error.detail}')
+
+    def test_approved_initial_v102_keeps_only_real_release_and_audits_initialization(self):
+        import json
+        from app.models.operation_log import SysOperationLog
+        from app.models.user import SysUser
+        self.other.status = 0; self.db.commit()
+        self.use_version('v1.0.2')
+        first = self.publish_approved_initial(); second = self.publish()
+        self.assertEqual(first.id, second.id)
+        self.assertEqual([row.version for row in self.db.query(PmsRelease)], ['v1.0.2'])
+        enabled = self.db.query(SysUser).filter_by(status=1).count()
+        self.assertEqual(self.db.query(PmsReleaseNotice).count(), enabled)
+        self.assertEqual(self.db.query(PmsReleaseMail).count(), enabled)
+        audit = self.db.query(SysOperationLog).filter_by(entity_type='pms_release', action='publish').one()
+        after = json.loads(audit.after_data)
+        self.assertTrue(after['initial_release'])
+        self.assertIn('首次启用升级通知', after['initial_release_reason'])
+        from app.services.operation_log import get_operation_logs
+        entry = next(item for item in get_operation_logs(self.db)['items'] if item['id'] == audit.id)
+        labels = {item['field_key']: item['field_label'] for item in entry['diff_items']}
+        self.assertEqual(labels['initial_release'], '首次启用升级通知')
+        self.assertEqual(labels['initial_release_reason'], '首次发布说明')
+
+    def test_initial_exception_rejects_all_other_nonbaseline_versions(self):
+        for version in ('v1.0.1', 'v1.0.3', 'v1.1.0', 'v2.0.0'):
+            with self.subTest(version=version):
+                self.use_version(version)
+                with self.assertRaises(HTTPException): self.publish()
+                self.db.rollback()
+                self.assertEqual(self.db.query(PmsRelease).count(), 0)
+                self.assertEqual(self.db.query(PmsReleaseNotice).count(), 0)
+
+    def test_initial_v102_still_requires_successful_acceptance_and_live_permission(self):
+        from app.models.rbac import SysRoleMenu
+        self.use_version('v1.0.2'); self.receipt['accepted'] = False
+        with self.assertRaises(HTTPException): self.publish()
+        self.receipt['accepted'] = True
+        with patch.object(releases, 'load_runtime_manifest', return_value={**self.manifest, 'build_id': 'wrong-build'}):
+            with self.assertRaises(HTTPException): self.publish()
+        self.db.query(SysRoleMenu).delete(); self.db.commit()
+        with self.assertRaises(HTTPException): self.publish()
+        self.assertEqual(self.db.query(PmsRelease).count(), 0)
+        self.assertEqual(self.db.query(PmsReleaseMail).count(), 0)
+
+    def test_bootstrap_does_not_allow_skips_or_downgrades_after_first_publication(self):
+        self.use_version('v1.0.2'); self.publish_approved_initial()
+        for version in ('v1.0.1', 'v1.0.4'):
+            with self.subTest(version=version):
+                self.use_version(version)
+                with self.assertRaises(HTTPException): self.publish()
+                self.db.rollback()
+        self.use_version('v1.0.3'); self.publish()
+        self.assertEqual(self.db.query(PmsRelease).count(), 2)
+
+    def test_v102_exception_is_not_available_after_v100(self):
+        self.publish(); self.use_version('v1.0.2')
+        with self.assertRaises(HTTPException): self.publish()
+        self.assertEqual(self.db.query(PmsRelease).count(), 1)
+
+    def test_initial_v102_audit_failure_rolls_back_entire_publication(self):
+        self.use_version('v1.0.2')
+        with patch.object(releases, 'record_operation_log', side_effect=RuntimeError('audit failure')):
+            with self.assertRaises(RuntimeError): self.publish_approved_initial()
+        self.db.rollback()
+        for model in (PmsRelease, PmsReleaseNotice, PmsReleaseMail):
+            self.assertEqual(self.db.query(model).count(), 0)
+
     def test_live_revoke_is_enforced_even_with_stale_context(self):
         from app.models.rbac import SysRoleMenu
         self.db.query(SysRoleMenu).delete(); self.db.commit()
@@ -112,11 +188,12 @@ class Releases(unittest.TestCase):
 
     def test_simultaneous_same_release_returns_the_same_publication(self):
         import sqlite3, tempfile, threading
+        from contextlib import closing
         from sqlalchemy import create_engine, event
         from sqlalchemy.orm import Session
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)/'concurrent.db'
-            with self.engine.connect() as connection, sqlite3.connect(path) as target:
+            with self.engine.connect() as connection, closing(sqlite3.connect(path)) as target:
                 connection.connection.driver_connection.backup(target)
             engine = create_engine('sqlite:///' + str(path), connect_args={'timeout': 15, 'check_same_thread': False})
             gate = threading.Barrier(2); ids = []; errors = []
@@ -138,6 +215,10 @@ class Releases(unittest.TestCase):
                     self.assertEqual(db.query(PmsReleaseNotice).count(), 3)
             finally:
                 event.remove(Session, 'before_flush', before_flush); engine.dispose()
+
+    def test_simultaneous_initial_v102_creates_only_one_audience(self):
+        self.use_version('v1.0.2')
+        self.test_simultaneous_same_release_returns_the_same_publication()
 
     def test_actual_api_uses_session_identity_and_live_manage_grants(self):
         from fastapi import FastAPI

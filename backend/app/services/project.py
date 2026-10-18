@@ -1191,6 +1191,7 @@ def create_archive(
     user_id: int,
     request: Request | None = None,
     scope_context: dict | None = None,
+    *, commit: bool = True,
 ):
     """创建项目档案"""
     values = _normalize_archive_values(data.model_dump())
@@ -1245,7 +1246,8 @@ def create_archive(
             summary=f"创建项目档案：{archive.project_name}",
             after_data=serialize_model(archive),
         )
-        db.commit()
+        if commit:
+            db.commit()
     except IntegrityError as exc:
         db.rollback()
         _ensure_archive_unique_values(db, values)
@@ -1257,7 +1259,8 @@ def create_archive(
     except Exception:
         db.rollback()
         raise
-    db.refresh(archive)
+    if commit:
+        db.refresh(archive)
     return {"msg": "创建成功", "id": archive.id}
 
 

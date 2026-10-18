@@ -4,9 +4,9 @@ from fastapi import HTTPException
 from app.models.operation_log import SysOperationLog
 from app.services.authorization import enforce_permission
 from app.services.operation_log import (
-    OPERATION_ACTION_LABELS, build_operation_log_diff_items, sanitize_data, sanitize_text,
+    OPERATION_ACTION_LABELS, sanitize_data, sanitize_text, _catalog_index, _enum_label_maps,
 )
-from app.services.operation_log_metadata import json_value
+from app.services.operation_log_metadata import json_value, resolve_display_items
 from app.services.business_resources import DOCUMENT_RESOURCES
 from app.services.operation_log_time import display_time
 
@@ -24,7 +24,10 @@ def _authorize(db, resource, entity_id, scope):
     entity_type, permission, policy, label = definition.entity_type, definition.view_permission, definition.field_policy, definition.label
     enforce_permission(scope or {}, permission)
     from app.services.project import ensure_archive_access, ensure_project_access
-    if resource == 'archive':
+    if resource == 'draft_management':
+        from app.services.form_draft_management import require_draft
+        require_draft(db,scope,entity_id)
+    elif resource == 'archive':
         ensure_archive_access(db, entity_id, scope)
     elif resource == 'project':
         ensure_project_access(db, entity_id, scope)
@@ -55,6 +58,8 @@ def _query(db, resource, entity_type, entity_id):
 
 
 def _allowed_fields(db, policy, entity_type):
+    if entity_type == 'pms_form_draft':
+        return {'owner_id','status','version','archive_id'}
     if policy:
         from app.services.field_policy import get_effective_field_policies
         return {item['key'] for item in get_effective_field_policies(db, policy)['items'] if item['visible']}
@@ -63,15 +68,8 @@ def _allowed_fields(db, policy, entity_type):
     return {item['field_code'] for item in build_field_catalog() if item['module'] == module}
 
 
-def _project_items(db, log, allowed):
-    items = json_value(log.diff_items_data)
-    if not isinstance(items, list):
-        after = json_value(log.after_data, {})
-        if log.entity_type == 'pms_archive_change' and log.action == 'submit':
-            items = json_value(after.get('differences_json'), [])
-        else:
-            items = build_operation_log_diff_items(json_value(log.diff_data, {}),
-                entity_type=log.entity_type, entity_id=log.entity_id, db=None)
+def _project_items(db, log, allowed, *, catalog=None, enum_maps=None):
+    items = resolve_display_items(db, log, catalog=catalog, enum_maps=enum_maps)
     result = []
     for item in items:
         if not isinstance(item, dict):
@@ -91,6 +89,8 @@ def _project_items(db, log, allowed):
             'field_group': item.get('field_group'),
             **{name: sanitize_data(item.get(name)) for name in ('before', 'after')},
             **{name: sanitize_text(str(item.get(name, '-'))) for name in ('before_display', 'after_display')},
+            **{name: item[name] for name in ('before_name_source', 'after_name_source')
+               if item.get(name) in ('current', 'snapshot')},
         })
     return result
 
@@ -104,6 +104,7 @@ def get_document_history(db, resource, entity_id, scope, *, page=1, page_size=50
     total = query.count()
     logs = query.order_by(SysOperationLog.created_at.desc(), SysOperationLog.id.desc()).offset((page-1)*page_size).limit(page_size).all()
     allowed = _allowed_fields(db, policy, entity_type)
+    catalog, enum_maps = _catalog_index(), _enum_label_maps(db)
     items = []
     for log in logs:
         fields = allowed
@@ -120,5 +121,5 @@ def get_document_history(db, resource, entity_id, scope, *, page=1, page_size=50
         items.append(dict(id=log.id, actor=sanitize_text(log.operator_name or '系统'),
             created_at=display_time(db, log.created_at), action=log.action, action_label=action_label,
             status=log.status, status_label=STATUS_LABELS.get(log.status, '已记录'), source=source,
-            summary=summary, diff_items=_project_items(db, log, fields)))
+            summary=summary, diff_items=_project_items(db, log, fields, catalog=catalog, enum_maps=enum_maps)))
     return {'total': total, 'items': items, 'actions': actions}

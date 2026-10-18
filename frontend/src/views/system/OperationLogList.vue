@@ -75,7 +75,7 @@
       <dl class="audit-meta"><dt>操作者</dt><dd>{{ selectedLog.operator_name || '-' }}</dd><dt>时间</dt><dd>{{ formatDateTime(selectedLog.created_at) }}</dd><dt>单据</dt><dd>{{ selectedLog.entity_name || selectedLog.entity_id || '-' }}</dd><dt>模块</dt><dd>{{ selectedLog.module }}</dd><dt>动作</dt><dd>{{ actionLabel(selectedLog.action) }}</dd><dt>结果</dt><dd>{{ selectedLog.status === 'success' ? '成功' : '失败' }}</dd></dl>
       <section class="audit-section"><h3>摘要</h3><p>{{ selectedLog.summary }}</p><p v-if="selectedLog.error_msg" class="detail-error">{{ selectedLog.error_msg }}</p></section>
       <section class="audit-section"><h3>字段变化</h3><table v-if="diffRows.length" class="audit-diff"><thead><tr><th scope="col">字段</th><th scope="col">变更前</th><th scope="col">变更后</th></tr></thead><tbody><tr v-for="row in diffRows" :key="row.field_key"><th scope="row">{{ row.field_label }}</th><td>{{ row.before_display }}</td><td>{{ row.after_display }}</td></tr></tbody></table><p v-else class="operation-log-hint">本次操作没有字段变化。</p></section>
-      <details :key="selectedLog.id" class="audit-technical"><summary>技术信息</summary><dl class="audit-meta"><dt>IP</dt><dd>{{ selectedLog.ip_address || '-' }}</dd><dt>路径</dt><dd>{{ selectedLog.request_method }} {{ selectedLog.request_path || '-' }}</dd><dt>记录ID</dt><dd>{{ selectedLog.id }}</dd></dl><h3>原始快照</h3><pre>{{ formatPrettyJson(selectedLog.before_data) }}</pre><pre>{{ formatPrettyJson(selectedLog.after_data) }}</pre></details>
+      <details :key="selectedLog.id" class="audit-technical"><summary>技术信息</summary><p v-if="diffRows.some(row => row.before_name_source === 'current' || row.after_name_source === 'current')">旧记录未保存名称的负责人或产品线，显示当前关联名称；已保存的历史名称保持原样。</p><dl class="audit-meta"><dt>IP</dt><dd>{{ selectedLog.ip_address || '-' }}</dd><dt>路径</dt><dd>{{ selectedLog.request_method }} {{ selectedLog.request_path || '-' }}</dd><dt>记录ID</dt><dd>{{ selectedLog.id }}</dd></dl><h3>原始快照</h3><pre>{{ formatPrettyJson(selectedLog.before_data) }}</pre><pre>{{ formatPrettyJson(selectedLog.after_data) }}</pre></details>
     </div>
   </aside>
   </section>
@@ -135,6 +135,8 @@ type OperationLogDiffItem = {
   after?: unknown
   before_display: string
   after_display: string
+  before_name_source?: string
+  after_name_source?: string
 }
 
 type OperationLogListResponse = {

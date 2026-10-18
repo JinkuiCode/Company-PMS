@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { isFormSystemSelector } from './helpers/form-style-scope.mjs'
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
 const entry = read('../src/form-system/index.ts')
@@ -19,9 +20,8 @@ assert.match(tokens, /\.pms-form-control[\s\S]*box-sizing:\s*border-box/)
 assert.match(tokens, /\.pms-form-control--binary/)
 assert.match(shell, /pms-form-control--\$\{props\.variant\}/)
 for (const line of tokens.split('\n').filter((line) => /\.el-(input|select|textarea)/.test(line))) {
-  assert.match(
-    line.trim(),
-    /^\.pms-(form-control|form-grid)\b/,
+  assert.ok(
+    isFormSystemSelector(line),
     `Element Plus internals must stay under a form-system namespace: ${line}`,
   )
 }

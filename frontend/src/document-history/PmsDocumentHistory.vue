@@ -6,11 +6,12 @@ import CustomPagination from '@/components/CustomPagination.vue'
 import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
 import request from '@/utils/request'
 
-type Difference = { field_key: string; field_label: string; before_display: string; after_display: string }
+type Difference = { field_key: string; field_label: string; before_display: string; after_display: string; before_name_source?: string; after_name_source?: string }
 type Event = { id: number; actor: string; created_at: string; action: string; action_label: string;
   status: string; status_label: string; source: string; summary: string; diff_items: Difference[] }
 type Response = { total: number; items: Event[]; actions: { value: string; label: string }[] }
-const props = defineProps<{ resource: 'archive' | 'project' | 'task' | 'feedback'; entityId: number; revision?: string | number }>()
+const props = defineProps<{ resource: 'archive' | 'project' | 'task' | 'feedback' | 'draft_management'; entityId: number | string; revision?: string | number }>()
+const emit=defineEmits<{'access-denied':[status:403|404]}>()
 const state = ref<'loading' | 'ready' | 'error' | 'denied'>('loading')
 const action = ref(''), page = ref(1), pageSize = ref(DEFAULT_PAGE_SIZE)
 const result = ref<Response>({ total: 0, items: [], actions: [] })
@@ -28,7 +29,10 @@ async function load() {
   result.value = { total: 0, items: [], actions: [] }
   expanded.value = new Set()
   try {
-    const response = await request.get<never, Response>(`/document-history/${props.resource}/${props.entityId}`, {
+    const path=props.resource==='draft_management'
+      ? `/archive-draft-management/${encodeURIComponent(String(props.entityId))}/history`
+      : `/document-history/${props.resource}/${props.entityId}`
+    const response = await request.get<never, Response>(path, {
       params: { page: page.value, page_size: pageSize.value, action: action.value || undefined },
     })
     if (current !== serial) return
@@ -37,6 +41,7 @@ async function load() {
   } catch (error: any) {
     if (current !== serial) return
     state.value = [403, 404].includes(error.response?.status) ? 'denied' : 'error'
+    if(state.value==='denied')emit('access-denied',error.response.status)
   }
 }
 watch(() => [props.resource, props.entityId, props.revision], () => {
@@ -66,6 +71,7 @@ function time(value: string) { return value.replace('T', ' ').slice(0, 19) }
           <p class="history-summary">{{ row.summary }}</p>
           <div class="history-meta"><span>{{ row.source }}</span><button v-if="row.diff_items.length" type="button" class="history-text-button" :aria-expanded="expanded.has(row.id)" :aria-controls="`history-diff-${row.id}`" @click="toggle(row.id)">{{ expanded.has(row.id) ? '收起' : '查看' }} {{ row.diff_items.length }} 项字段变化<ArrowUp v-if="expanded.has(row.id)" /><ArrowDown v-else /></button></div>
           <table v-if="expanded.has(row.id)" :id="`history-diff-${row.id}`" class="history-diff" aria-label="字段变化"><thead><tr><th scope="col">字段</th><th scope="col">原值</th><th scope="col">新值</th></tr></thead><tbody><tr v-for="field in row.diff_items" :key="field.field_key"><th scope="row">{{ field.field_label }}</th><td>{{ field.before_display }}</td><td>{{ field.after_display }}</td></tr></tbody></table>
+          <details v-if="expanded.has(row.id) && row.diff_items.some(field => field.before_name_source === 'current' || field.after_name_source === 'current')" class="history-name-note"><summary>名称说明</summary><p>旧记录未保存名称的负责人或产品线，显示当前关联名称；已保存的历史名称保持原样。</p></details>
         </li>
       </ol>
       <CustomPagination v-if="result.total > pageSize || pageSize !== DEFAULT_PAGE_SIZE || page > 1" v-model="page" v-model:page-size="pageSize" :total="result.total" />

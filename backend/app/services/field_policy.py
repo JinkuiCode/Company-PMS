@@ -364,6 +364,12 @@ def validate_business_field_write(
     merged = {**current_values, **updates}
 
     if module_code == MODULE_PROJECT_ARCHIVE:
+        if 'quantity' in updates and (is_create or updates['quantity'] != current_values.get('quantity')):
+            from app.services.archive_quantity import validate_archive_quantity
+            try:
+                validate_archive_quantity(updates['quantity'])
+            except ValueError as exc:
+                errors.append({'field_key': 'quantity', 'message': str(exc)})
         for key in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS:
             applies = is_create or not entity_governance_legacy
             if applies and _is_empty(merged.get(key)):

@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { getProductLineLabels, getProductLineOptions, type LineOption } from '@/api/productLine'
 
-export function useProductLineOptions() {
+export function useProductLineOptions(fetchOptions = getProductLineOptions) {
   const options = ref<LineOption[]>([])
   const labels = ref<Record<string, string>>({})
   const loading = ref(false), failed = ref(false)
@@ -30,7 +30,7 @@ export function useProductLineOptions() {
     const current = ++version
     loading.value = true; failed.value = false
     try {
-      const data = await getProductLineOptions()
+      const data = await fetchOptions()
       if (current !== version) return
       options.value = data.options
     } catch {

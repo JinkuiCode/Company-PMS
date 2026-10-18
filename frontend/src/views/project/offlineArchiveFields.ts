@@ -20,3 +20,12 @@ export function normalizeOfflineValue(key:string,value:unknown) {
  if(key==='quantity'||offlineEnumCodes[key])return Number(value)
  return value
 }
+
+/** Validate without rounding, clamping, or rewriting an unchanged legacy quantity. */
+export function archiveQuantityError(value: unknown, original?: unknown, allowUnchanged = false): string | null {
+ if (value === '' || value == null) return null
+ if (allowUnchanged && original != null && original !== '' && Number(value) === Number(original)) return null
+ const quantity = typeof value === 'boolean' ? NaN : Number(value)
+ if (!Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity <= 0) return '数量只允许填写正整数'
+ return quantity < 1e12 ? null : '数量最多允许12位正整数'
+}

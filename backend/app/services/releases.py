@@ -11,6 +11,10 @@ from app.services.operation_log import record_operation_log
 from app.services.runtime_release import manifest_digest, validated_manifest, load_runtime_manifest
 from app.core.business_time import business_time
 
+# Approved 2026-10-16: initialize notices at the already deployed patch line.
+# This exception applies only to an empty release ledger; it is not a skip rule.
+INITIAL_NOTICE_VERSION = 'v1.0.2'
+
 
 def release_view(row):
     return {'id': row.id, 'version': row.version, 'title': row.title, 'summary': row.summary,
@@ -47,11 +51,13 @@ def publish_release(db, context, manifest, receipt, request=None):
         return current
     latest = db.query(PmsRelease).order_by(PmsRelease.id.desc()).first()
     target = _version(manifest['version'])
+    initial_notice = latest is None and manifest['version'] == INITIAL_NOTICE_VERSION
     if latest:
         major, minor, fix = _version(latest.version)
         allowed = {(major, minor, fix+1), (major, minor+1, 0), (major+1, 0, 0)}
         if target not in allowed: raise HTTPException(422, '版本须按主版本、功能或修复顺序递增')
-    elif target != (1, 0, 0): raise HTTPException(422, '首个统一管理的正式版本须为v1.0.0')
+    elif target != (1, 0, 0) and not initial_notice:
+        raise HTTPException(422, '首次发布须为v1.0.0或已批准的初始化版本v1.0.2')
     try:
         release = PmsRelease(version=manifest['version'], title=validated['title'], summary=validated['summary'],
             content_json=json.dumps(validated['changes'], ensure_ascii=False), manifest_sha256=digest,
@@ -62,9 +68,13 @@ def publish_release(db, context, manifest, receipt, request=None):
             notice = PmsReleaseNotice(release_id=release.id, user_id=user.id)
             db.add(notice); db.flush()
             db.add(PmsReleaseMail(notice_id=notice.id))
+        audit_values = {'version': release.version, 'manifest_sha256': digest}
+        if initial_notice:
+            audit_values.update(initial_release=True,
+                initial_release_reason='首次启用升级通知，以当前已验收v1.0.2建首条记录；历史版本保留部署档案，不补造旧通知')
         record_operation_log(db, module='版本发布', action='publish', entity_type='pms_release',
             entity_id=release.id, entity_name=release.version, operator_id=context['user_id'], request=request,
-            summary=f'发布{release.version}', after_data={'version': release.version, 'manifest_sha256': digest})
+            summary=f'发布{release.version}', after_data=audit_values)
         db.commit(); db.refresh(release)
         return release
     except IntegrityError:

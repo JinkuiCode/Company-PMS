@@ -18,7 +18,7 @@ class ImportContract(unittest.TestCase):
         u=SysUser(username="import-test",password_hash="x",real_name="测试",status=1);self.db.add(u);self.db.commit()
         self.uid=u.id
         self.scope={"user_id":u.id,"data_scope":4,"permissions":["business:data:all"]}
-        self.payload={"rows":[{"source_id":"S1-R2","source_sheet":"主机A","source_row":2,"values":{"project_code":"A-1","project_name":None,"quantity":"2.5"}},{"source_id":"S1-R3","source_sheet":"主机A","source_row":3,"values":{"project_code":"A-2","project_name":"有名"}}]}
+        self.payload={"rows":[{"source_id":"S1-R2","source_sheet":"主机A","source_row":2,"values":{"project_code":"A-1","project_name":None,"quantity":"2"}},{"source_id":"S1-R3","source_sheet":"主机A","source_row":3,"values":{"project_code":"A-2","project_name":"有名"}}]}
     def tearDown(self):self.db.close();self.e.dispose()
     def test_preview_and_apply_idempotent(self):
         from app.services.offline_archive_import import preview_import,apply_import

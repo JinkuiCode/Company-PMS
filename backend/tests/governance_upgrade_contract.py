@@ -47,8 +47,10 @@ class GovernanceUpgrade(unittest.TestCase):
 
     def test_additive_upgrade_preserves_history_and_grants_nobody(self):
         upgrade_governance(self.engine)
-        check_database_ready(self.engine)
+        # Historical target stays governance-01; current startup must reject it.
+        with self.assertRaises(DatabaseUpgradeRequired): check_database_ready(self.engine)
         with self.engine.connect() as c:
+            verify_governance_structure(c)
             self.assertEqual(c.execute(text('SELECT revision FROM pms_database_revision')).scalar(), REVISION)
             self.assertEqual(c.execute(text('SELECT COUNT(*) FROM sys_role_menu')).scalar(), 1)
             self.assertEqual(c.execute(text('SELECT before_data FROM sys_operation_log')).scalar(), '{"name":"旧值"}')
@@ -107,16 +109,21 @@ class GovernanceUpgrade(unittest.TestCase):
             with self.engine.connect() as c, sqlite3.connect(source) as target:
                 c.connection.driver_connection.backup(target)
             before = fingerprint(source)
-            result = rehearse(source, Path(tmp)/'rehearsal')
+            with patch('app.services.database_revision.CURRENT_DATABASE_REVISION', REVISION):
+                result = rehearse(source, Path(tmp)/'rehearsal')
             self.assertTrue(result['restore_copy_verified'])
             self.assertEqual(fingerprint(source), before)
             self.assertEqual(fingerprint(Path(tmp)/'rehearsal/restored.db'), before)
 
     def test_current_full_installer_does_not_recreate_deleted_manual_nodes(self):
+        from app.models.form_draft import PmsFormDraft
+        from app.services.form_draft_management_migration import upgrade_draft_management
         from scripts import upgrade_database as upgrade
         upgrade_governance(self.engine)
         with self.engine.begin() as c:
             c.exec_driver_sql("DELETE FROM sys_menu WHERE permission_code='project:archive:maintain'")
+        with self.engine.begin() as c: PmsFormDraft.__table__.drop(c)
+        upgrade_draft_management(self.engine)
         with patch.object(upgrade, 'engine', self.engine), patch.object(upgrade, 'validate_runtime_config'), patch.object(upgrade, 'init_db') as initializer:
             upgrade.upgrade_database()
             initializer.assert_not_called()

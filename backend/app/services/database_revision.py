@@ -3,7 +3,7 @@ from sqlalchemy import Engine, inspect, select
 from app.models.database_revision import PmsDatabaseRevision
 
 
-CURRENT_DATABASE_REVISION = "2026-10-15-governance-01"
+CURRENT_DATABASE_REVISION = "2026-10-16-form-draft-02"
 UPGRADE_IN_PROGRESS = "upgrading"
 
 
@@ -26,6 +26,8 @@ def check_database_ready(engine: Engine) -> None:
     try:
         with engine.connect() as connection:
             verify_governance_structure(connection)
+            from app.services.form_draft_management_migration import verify_draft_management_structure
+            verify_draft_management_structure(connection)
     except RuntimeError as exc:
         raise DatabaseUpgradeRequired(str(exc)) from exc
 

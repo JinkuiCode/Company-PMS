@@ -125,11 +125,15 @@ class DocumentHistory(unittest.TestCase):
         self.assertIn(old, result['diff_items'][0]['after_display'])
         self.assertNotIn('old-secret', json.dumps(result))
 
-    def test_legacy_event_does_not_invent_a_historical_reference_name(self):
+    def test_legacy_event_identifies_fallback_as_current_not_historical_name(self):
         log = self.log(before_data={'manager_id': self.owner.id}, after_data={'manager_id': self.other.id})
         log.diff_items_data = None
         self.other.real_name = '不可当作旧姓名'; self.db.commit()
-        self.assertNotIn('不可当作旧姓名', self.history().text)
+        response = self.history()
+        self.assertEqual(response.status_code, 200, response.text)
+        item = response.json()['items'][0]['diff_items'][0]
+        self.assertEqual(item['after_display'], '不可当作旧姓名（other）')
+        self.assertIsNone(log.diff_items_data)
 
     def test_deleted_child_event_remains_on_surviving_project(self):
         from app.models.project import PmsTask

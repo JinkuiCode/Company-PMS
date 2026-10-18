@@ -1,5 +1,39 @@
 # PMS 变更记录
 
+## 2026-10-16 全局表单规范两项遗留收尾（本机）
+
+- 原因与批准：用户明确同意仅在本机处理查询密度检查及升级通知单个勾选框，不改接口、权限、数据库或真实邮件，不部署、合并或推送。
+- 调整：表单样式契约使用独立测试辅助函数，接受已批准查询作用域，仍拒绝业务页面前缀、伪同名及同一行逗号混入；升级通知unknown邮件重试核查改用现有PmsCheckboxControl，保留条件、绑定、忙碌禁用及文案，补充可访问名称。
+- 涉及文件：frontend/src/release-center/ReleaseCenter.vue、frontend/tests/form-system-contract.test.mjs、tests/helpers/form-style-scope.mjs、tests/form-style-scope.test.mjs、tests/release-retry-control-browser.mjs；模块索引、治理跟踪、本批计划与验收记录。
+- 验证：新增2项样式范围测试先RED后GREEN；表单契约、全局控件接入、表单布局、必需3项规范及类型构建全部退出0。隔离真实Vue页面验证unknown双条件、键盘勾选、忙碌禁用、失败留值/再次提交、waiting/failed条件和模拟撤权隐藏通过，真实邮件及业务写入0。独立只读审查无本批阻断项。
+- 边界：仅重启Mac前端清除旧预览缓存，未改共享样式或后端逻辑、未授真实权限、未发邮件。当前功能分支工作区保留，未提交、合并、推送或部署。见docs/releases/2026-10-16-form-compliance-local.md。
+
+## 2026-10-16 治理共享行为模块与档案试点（本机）
+
+- 原因与批准：用户同意继续已定稿治理方案，并明确先不部署正式环境；复用当前工作区及既有布局，按独立模块、档案试点实施。
+- 调整：新增表单会话、页面状态/过期响应、列偏好版本及账号隔离、字段元数据/结构化错误适配。新增校验前锁定防重复提交，失败保留草稿且异步错误定位完成才解锁；查询/防抖/离页统一废弃旧请求；列偏好拒绝覆盖未知版本、保留固定业务列及原宽度，存储失败不阻断查询；字段错误落在当前可见控件，历史必填和后端授权不变。
+- 涉及文件：frontend/src/form-system/{useFormSession,fieldMetadata,index}.ts、composables/usePageLoad.ts、list-system/columnPreferences.ts、views/project/ProjectArchive.vue、page-guide/registry.ts及对应行为/浏览器/契约；docs/PMS-SHARED-MODULES.md、PMS-UI-STANDARD.md、治理规格/跨批跟踪/4份实施计划和同日验收记录。
+- 验证：25项新增共享模块行为先RED后GREEN；最终组合49项通过、14组前端检查含必需3项及build、2组后端目录/枚举契约全部退出0；4组隔离真实Vue浏览器流程退出0。独立审查两项问题已修复；新增固定列宽与实际存储拒绝分支断言通过。真实Mac只读核对列表22条及详情，新增仍因既有金蝶组织目录不可用受阻，未创建真实档案。
+- 既有失败与边界：两条额外全局表单检查有既有作用域口径/版本通知原始勾选控件问题，保留证据并另列迁移，不报告全系统合规。仅本机前端重启，无实际数据库/权限/配置变更、金蝶写入或邮件；未提交、合并、推送、部署或发布通知。完整证据见docs/releases/2026-10-16-governance-shared-local.md。
+
+## 2026-10-16 档案日志排序、名称精简与数量正整数校验（本机）
+
+- 原因与批准：用户确认日志字段按新建页面排序、名称去掉“当前名称”后缀并保留按需说明、数量只输入正整数；追加正式-1纠正为1，后由用户自行处理。
+- 调整：共享后端排序与名称来源标记；前端单据名称说明/审计技术信息；共用数量校验覆盖新增、修改、维护、变更审批和导入，不改原日志、不自动改历史值。前端复用数字控件和规则，维护模式重挂载档案子表单刷新现有库的辅助禁用状态，父级草稿保留。
+- 涉及：backend/app/services/{archive_quantity,archive_log_presentation,field_policy,offline_archive_import,operation_log_references,operation_log_metadata,document_history}.py及相关契约；frontend/src/{document-history/PmsDocumentHistory.vue,views/system/OperationLogList.vue,views/project/ArchiveRecordForm.vue,views/project/ProjectArchive.vue,views/project/offlineArchiveFields.ts,page-guide/registry.ts}和3个新测试；规格/计划及本机验收记录。
+- 验证：新增11项、10组后端检查通过；前端必需规范、档案筛选、字典/枚举、数量/顺序/说明及最终构建通过，仅原有大分包警告。隔离实页验证拒绝非法输入且不自动改值、旧值未变兼容、仅quantity:1提交及按需名称说明；本机5174真实既有日志16字段已核对。真实新增入口受现有产品线依赖阻断，其行为以隔离实页和真实API覆盖，未执行真实新增保存。独立审查及表单重挂载增量复审无阻塞。
+- 边界：未部署正式、迁移或授新权限、未发信/写金蝶；正式A-202666由用户自行改为1后，代理仅只读核对，未重复改数或补造日志。本机后台继续暂停；保留当前分支，未提交、合并或推送。详细证据见docs/releases/2026-10-16-archive-log-quantity-local.md及outputs/archive-log-quantity-20261016/。
+
+
+## 2026-10-16 日志引用名称修复正式发布 v1.0.2
+
+- 原因与批准：用户确认负责人显示姓名、产品线只显示名称，并批准正式部署、ael临时发布角色、18人站内通知及17个有效邮箱通知。
+- 调整：部署固定候选6ebc2d2e，单据/审计统一后端引用名称解析，缺历史快照补当前名称并标注，不改原日志；首条发布v1.0.2及两页说明。发布后临时角色解除关联、禁用清权；仅开启版本邮件开关，其他配置和数据范围保留。
+- 涉及：backend/app/services/{operation_log,operation_log_metadata,operation_log_references,releases}.py及对应契约，frontend/src/page-guide/registry.ts、固定包/清单、受控安装/发布/邮件助手、docs/releases/2026-10-16-log-reference-production.md及实施计划。
+- 验证：正式A-202666单据及审计中文值一致、无产品线ID标题；24项枚举与100条历史原值核对。Windows12+14+15+18项通过；安装安全8项/恢复3场、发布5项/邮件启用5项通过。18通知、17邮件accepted、1位超级管理员缺有效邮箱failed，无待处理/未知。角色无关联无授权；最终PID5656健康、结构不变。
+- 备份与边界：旧程序/前端/清单/配置已备份并校验恢复，仅停启PMS，无数据库升级、SQL/OA重启或金蝶写入。独立候选已本地锁定，主工作区未新增提交、合并或推送；真实通知与投递事实保留。
+
+
 ## 2026-10-15 Mac开发库治理限定升级与基础页面核验
 
 - 原因与批准：用户独立明确批准“仅升级Mac开发库”；4项新权限只建节点不自动授权，服务器/正式环境不动，邮件和金蝶后台保持暂停。
@@ -2045,3 +2079,193 @@
 - 边界：应用源代码及测试调整完成，新固定包生成结果随后记录；未连接正式、修改实际数据库或授权、启停服务、部署、合并master、推送GitHub或真实通知。不将本机测试称为MSSQL现场验收。
 
 - 本批打包闭环：修复提交`98ac38c77f4b0bf40764f38257084b7fde5b4c81`，新包release/governance-mssql-20261015/pms-server-98ac38c7-20261015.zip，SHA256 `09b906b83c392c41788d5c55f6f452197a43549c7d4e74cf7b596c84c9aa14f4`。固定提交前端重建退出0；405文件/404摘要/207源码一致，独立产物复核通过，旧包保留且哈希保持。新旧解压内容仅治理修复和3项版本摘要元数据不同，前端字节一致。Mac35表/配置及362份范围外文件原值保持，实际发布/邮件0；治理跟踪与升级回退材料改指新候选，未将本地验证称为真实MSSQL验收。
+
+
+### 2026-10-15：正式MSSQL隔离演练助手准备
+- 原因与批准：用户独立批准现在执行正式只读预检、完整备份与全新另名库恢复/升级演练，排除正式库升级、停服、程序替换、授权、通知及Git合并推送。
+- 调整：新增受控助手、隔离安全测试、限定228的双文件传输/脱敏回执服务及固定SHA引导。助手具有新库/新文件防覆盖、双重DB_NAME门禁、候选校验、全表与结构/授权保持、后台隔离、生产PID/前端/清单和受保护配置指纹；不复用旧发布助手的正式停服、升级或恢复命令。
+- 涉及：.runtime/governance-mssql-rehearsal-20261015/{server_rehearsal.py,test_server_rehearsal.py,transfer.py,bootstrap.ps1}、本批计划及演练记录、本日志；运维脚本和outputs不提交Git或安装包。
+- 验证：分阶段RED→GREEN，最终13项本地标准库测试退出0，核心独立审查无剩余阻断；真实pyodbc Cursor超时属性疑点已用回归修复为Connection属性。当前正式主机/IP、源码973c9af及健康只读核对通过。
+- 边界：截至本条尚未传输或运行维护助手、输入SQL身份、备份、恢复或创建隔离库；不将本地安全测试称为真实MSSQL演练成功。
+
+- 本批执行前复核补充：transfer/bootstrap审查通过，13项最终测试0，非228端点访问实测404；临时限定传输已启动。远程引导输入被Mac锁屏/物理输入保护拦截，尚无服务器执行回执；已记录待解锁检查点，未将命令尝试报告为备份、恢复或真实MSSQL演练成功。
+
+- 解锁后执行：先确认本次目录不存在，再运行固定引导。正式228新私有暂存目录及两文件SHA校验、真实预检通过，回执源HEAD973c9af1/库PMS/archive-governance-02/SQL2017 14.0.1000.169、SQLAlchemy2.0.37与pyodbc5.2.0匹配，健康/配置保持、未停PMS。维护进程停在隐藏SQL身份输入，已请用户本地输入；备份、恢复、隔离升级尚未取得完成回执，未替换正式程序或执行正式升级。
+
+
+### 2026-10-15：真实MSSQL备份、隔离恢复及治理升级演练完成
+- 原因与批准：继续本次已获批服务器演练，用户本地隐藏输入SQL管理身份；正式库升级、停服、程序替换与授权/通知仍排除。
+- 完成：SQL230对PMS做COPY_ONLY/CHECKSUM完整备份并VERIFYONLY，恢复全新库PMS_GOV_REHEARSAL_20261015_2d7e991f；候选98ac38c7限定升级、启动结构核验及重复执行通过。备份SHA256 a432bef60ea64747ccb30d7817396681e7f20906e603832f3344fcc5f5e66e01，路径见演练记录。
+- 验证：真实SQL2017现场回执complete；新进程独立只读核验退出0。29张既有业务/授权表摘要保持，3652档案/13776日志保留，4新增权限零授权，3版本通知新表0行。正式HEAD973c9af1/源版本archive-governance-02、干净工作区、原PID/前端/清单及配置保持，健康正常。
+- 涉及：本项目.runtime/governance-mssql-rehearsal-20261015受控材料、outputs同名安全回执，本批演练计划/记录和升级回退/治理跟踪文档。未改应用代码、正式配置或数据。
+- 收尾：临时18960传输已关闭并核对无监听/连接拒绝；备份和隔离库保留。未合并、推送、正式升级/部署或发真实通知。正式维护窗口须另行批准。
+
+### 2026-10-15：正式切换受控助手准备
+- 原因与批准：用户批准正式切换维护窗口，重新备份、停启PMS、限定升级和部署固定候选98ac38c7，验收后台暂停；授权/通知/Git合并推送仍排除。
+- 完成：新增私有切换助手、受控启动封锁和四文件限定传输；固定候选增量Git bundle已生成。新增停写后备份/真实恢复门禁、源码/配置备份及严格换行校正，凭据仅用户本地隐藏输入后经stdin进入升级子进程；不自动数据库恢复。
+- 涉及：.runtime/governance-production-cutover-20261015、本批计划/切换记录、outputs同名测试与哈希证据、本日志；候选业务源码与固定ZIP未变。
+- 验证：分阶段RED→GREEN，13项安全测试通过；现场只读确认日常运行身份在演练库3新表有效DML权限及autoRestart=false。独立审查和现场实际切换继续，尚未宣称正式部署完成。
+
+- 执行前补强及服务器准备：旧Settings/运行清单、SSO GET、换行与新进程PID/原SID绑定门禁最终16测试通过，独立审查无阻断；一次性Git副本真实安装核对通过。服务器实际preflight及旧程序/配置/Git历史备份、候选源码副本校验成功，停在隐藏SQL身份输入，已请用户本地输入。正式库/源码仍原版本、PMS未停、配置保持。临时传输18961将于本阶段结束关闭，尚未执行正式升级或替换。
+
+### 2026-10-15：正式治理库升级及固定候选受控部署
+- 原因与批准：继续已明确批准的正式切换窗口，用户本地隐藏输入SQL管理身份后执行；不授新权限、不通知、不合并推送，后台及业务写入验收期间受限。
+- 完成：仅停启PMS；停写后全新COPY_ONLY/CHECKSUM完整备份、VERIFYONLY和另名fc5f4117恢复/快照核对通过；正式SQL230/PMS由archive-governance-02限定升级至governance-01。固定候选98ac38c7在应用主机228部署，源码detached该提交、静态文件和根运行版本清单与ZIP一致，受控启动v1.0.0。
+- 回退材料：服务器previous-program保留原源码/历史bundle、前端/配置/附件；SQL备份PMS_GOV_CUTOVER_20261015_fc5f4117.bak及恢复副本保留，备份SHA256 6d5d46a8e77b6ac1ad683e18a31f9aaea0008808502299453b1013edf1adf2da；具体路径/LSN见本批切换记录。未做覆盖恢复。
+- 验证：实际部署回执成功；新进程独立只读检查退出0。29张既有业务/授权表升级保持核验通过，3652档案、13787原日志保留；新权限零角色授权、新版本通知3表0行。源代码/配置/文件/前端入口、结构、新表有效DML及新旧运行SID/PID绑定通过。登录活动允许新增认证审计，不将其作为业务变化。
+- 涉及：正式库本批限定结构、服务器固定候选及根release.json；项目私有切换助手/回执、正式切换计划/记录、本日志。候选业务代码未临时修改，只有生成release.json为服务器预期未跟踪文件。
+- 边界：ERP/导出/邮件后台、业务修改和SSO入口继续受控暂停；实际页面等待ael登录验收。未重启SQL Server/OA/Windows、写金蝶或发通知，未新授权、提交、合并master或推送GitHub。临时传输尚供验收回执使用，阶段结束关闭。
+
+### 2026-10-15：正式受控实页验收与获批应用名称修正完成
+- 原因与批准：ael登录完成正式只读验收；关于页暴露旧受保护配置APP_NAME乱码，用户另行明确批准只修正该项并受控重启，其余配置/库/代码保持。
+- 调整：配置先私有备份、精确字节替换及dotenv其他项相等验证；仅重启受控PMS，同SID/新PID3000/四类worker和写入封锁核验，原配置哈希和旧启动记录不覆盖。配置前后SHA见正式切换记录；私有配置不入Git、不打印凭据。
+- 涉及：正式受保护配置APP_NAME、.runtime/governance-production-cutover-20261015/{name_fix.py,test_name_fix.py,transfer.py}及私有备份/回执；本批正式记录、计划/恢复方案、outputs验收摘要和本日志。固定候选与数据库结构本批未再改。
+- 验证：名称修复RED→GREEN3项，新增固定传输白名单RED→GREEN16项，独立窄复核无阻断。实页显示正确产品名/v1.0.0/正式环境；档案默认筛选/倒序、产品线名称、2条单据日志及中文差异、共享说明、通知空状态和管理员审计详情均通过。最终新连接全文件/结构/除获批项外配置/业务摘要/原13787日志保留及4新权限有效拒绝通过，新版本表仍0。
+- 收尾：18961临时传输全部结束、连接拒绝；原备份和另名恢复库保留。只读恢复预检无待执行ERP/导出/邮件。当前受控切换批准范围完成，常规写入/OA入口和原后台恢复另行批准；新授权/真实升级通知/Git合并推送未执行。
+
+### 2026-10-15：正式PMS恢复常规运行
+- 原因与批准：用户明确批准解除临时业务写入/OA维护封锁，按既有配置恢复ERP、导出和问题邮件后台，版本邮件继续关闭。
+- 完成：新增受控恢复助手，核对固定候选/配置/库版本/队列，备份既有运行日志并保留旧受控证明；仅停启PMS，通过原Start-Pms.ps1启动main:app，新PID7160，后台和常规入口恢复。未执行DB升级或回退、授权、版本通知、Git提交/合并/推送。
+- 涉及：.runtime/governance-resume-20261015/{resume_runtime.py,test_resume.py,transfer.py,bootstrap.ps1}及服务器私有恢复/日志材料；docs/releases/2026-10-15-governance-normal-runtime.md、切换记录/操作材料/计划、outputs安全回执与本日志。固定候选业务代码未改。
+- 验证：安全测试6项通过、独立脚本复核无阻断；实际恢复回执normal-runtime-verified，健康/正常PID/原SID/文件/配置/结构版本检查通过。无旧待发任务，恢复后队列不变；正式ael会话、档案311条/倒序和关于v1.0.0复验通过。无参数SSO422只证明维护封锁解除，不代表完整OA登录验收。18962临时传输关闭且连接拒绝；原备份保留。
+
+### 2026-10-16：统一操作日志枚举名称显示修复（本地）
+- 原因与批准：用户确认旧日志枚举显示数字，批准本地统一修复、测试和页面验收；不部署正式环境，不改历史原始记录。
+- 调整：后台审计与单据日志共用读取解析，读取实际字典含停用项；保留已有中文快照，旧数字展示按字段目录和事件上下文补名称，未知项明确提示。补齐多选/逗号历史值、问题/需求类别及同步/邮件协议标签；数据库实际可配置选项优先于初始选项，普通数值、引用及权限/日期/脱敏规则保持。
+- 文件：backend/app/services/{operation_log.py,operation_log_metadata.py,document_history.py}；新增backend/tests/operation_log_enum_display_contract.py；docs/releases/2026-10-16-operation-log-enum-local-verification.md及outputs/log-enum-display-20261016验收材料。无数据库结构、初始化或前端生产源码调整。
+- 验证：两轮TDD RED→GREEN，最终15项针对性测试通过（覆盖24个目录枚举绑定）；另7项后端契约及2项前端字典/枚举契约退出0，独立复核无剩余重要缺陷，diff检查通过。隔离本机真实API和实页核验后台/单据相同中文值，数量保持数字；未操作真实业务库、ERP或邮件。当前分支codex/pms-unified-query，本批未提交、打包、合并、推送或部署。
+
+### 2026-10-16：日志枚举修复v1.0.1正式程序部署
+- 原因与批准：用户另行明确要求部署正式环境，范围仅已验收日志显示修复；不升级库、不改授权/受保护配置，不发布真实升级通知。
+- 完成：独立发布副本固定63baffec（相对98ac38c7仅3服务文件+回归测试），生成v1.0.1包与运行清单。正式228主机只读预检、原源码/历史bundle/清单/配置/日志备份校验后，仅停启PMS并切换固定程序，新PID2652；原后台常规运行、版本邮件关闭。没有数据库迁移或恢复、金蝶样本写入、邮件测试、GitHub推送或主分支合并。
+- 涉及：正式服务器backend本批源码与新增回归测试、根release.json；release/log-enum-20261016固定包；.runtime/log-enum-release-20261016部署/回退/核验助手及私有材料；docs/releases/2026-10-16-operation-log-enum-production.md、本地验收补记和outputs安全回执。
+- 验证：8项安全检查、2场景一次性真实Git安装/混合文件回退演练、固定源码15测试、独立最终审查均通过。正式健康/OpenAPI v1.0.1/原身份/全文件/配置/结构版本检查通过；新进程MSSQL实际24枚举绑定及授权档案日志查询通过，100条历史日志原值摘要保持，服务器核验无DB写入。18963传输已关闭。ael登录后的实页验收已完成：A-202664后台新增日志与单据新增记录的类别/机型/设备系列/单位/同步方式均显示名称，数量仍1.0，同步日志显示等待同步→同步成功；关于页v1.0.1/正式环境。只读验收没有业务修改、同步或通知；原工作区和GitHub未提交/合并/推送。
+
+
+### 2026-10-16：日志关联名称本地修复及v1.0.2候选准备
+- 原因与批准：用户指出正式A-202666旧日志负责人显示17；已批准补齐负责人和产品线名称、本地修复包、通知草稿及页面说明，不含正式部署、通知发送或发布规则变更。
+- 调整：新建operation_log_references共享引用解析；历史名称快照优先，只有编号时补充并标注当前名称，关联不存在时明确提示；两种日志共用，不改历史原值与权限；按用户追加要求，产品线字段去除ID字样且值只显示名称。完整名称快照不再查询当前引用资料。
+- 涉及：backend/app/services/operation_log.py、operation_log_metadata.py、operation_log_references.py；backend/tests/document_history_contract.py、operation_log_reference_display_contract.py；frontend/src/page-guide/registry.ts；本批计划、发布说明、私有候选及outputs证据。
+- 验证：新增12项引用回归与原单据14项、枚举15项通过，RED→GREEN和SQL查询监听覆盖；12项后端脚本退出0。前端3项必需契约、数据字典、枚举管理、页面说明检查与构建均退出0。独立复核性能问题修正后无阻塞。
+- 边界：主工作区未提交/合并/推送，固定候选仅私有源码库锁定；未部署正式、迁移数据库、改授权或发送通知。正式首条通知强制v1.0.0而运行已v1.0.1的差异已明确记录，v1.0.2通知仍待发布初始化规则批准，不绕过现有发布校验。
+
+
+### 2026-10-16：首次升级通知v1.0.2初始化规则
+- 原因与批准：用户明确同意首次启用升级通知可用正式验收后的v1.0.2建首条记录，之后严格递增，不补造v1.0.0/v1.0.1旧通知。本轮仅本地实施和更新候选包。
+- 调整：发布表为空时增加固定v1.0.2例外，保留原v1.0.0首版路径；有记录后禁止借此跳号或倒退。统一发布审计新增初始化标识和中文原因，字段标签同样中文展示。
+- 涉及：backend/app/services/releases.py、operation_log.py；backend/tests/release_center_contract.py；本轮实施计划、v1.0.2发布说明、候选包和outputs/log-reference-bootstrap-20261016证据。
+- 验证：发布中心原11项增至18项，RED→GREEN；覆盖首次例外、幂等、错误首版、后续跳号倒退、即时撤权、无效验收与异构构建、审计失败整体回滚及并发通知去重。独立只读复核无阻塞。前端源码与已验证构建未变，复用前一候选的前端检查证据。
+- 边界：无数据库迁移、API参数或权限变更；不自动发布、不授予角色、不补写历史版本。只在私有候选源码库锁定，不提交混合工作区、不合并或推送；未部署正式、生成真实通知或发送邮件。原候选与v1.0.1包保留。
+
+
+### 2026-10-16：正式切换前Windows隔离测试连接释放修复
+- 原因：正式切换预检在停服前因Windows锁定SQLite临时文件而中止；原PMS v1.0.1健康，未创建本轮程序备份、未停服或改业务库。
+- 调整：release_center_contract.py使用contextlib.closing显式关闭备份用SQLite连接，仅修复测试资源释放；候选业务程序字节保持。必要验证修复属于已批准正式切换方案范围，原候选保留，新候选单独锁定。
+- 涉及：backend/tests/release_center_contract.py、本批发布说明、私有候选和部署助手、outputs/log-reference-deploy-20261016；无数据库结构或业务规则变更。
+- 验证：原失败证据来自Windows现场WinError32；本地发布中心18项重跑通过，随后必须再经服务器同一完整18项测试，不跳过并发或放宽门禁。
+
+### 2026-10-16：新增档案服务器草稿（本机开发和隔离验证）
+- 原因与批准：FB-202610-000001需要中途保存新增档案。用户确认多份本人草稿、服务器保存、跨电脑恢复等完整规则，仅批准Mac代码、升级工具及隔离验证；真实升级/写入/部署/Git另批。
+- 调整：独立草稿存储、本人接口、版本冲突和未知结果核对；正式创建与草稿使用同事务，失败保留、重复提交不重复建档。复用现有抽屉和表单会话，新增我的草稿、保存草稿和关闭三选，恢复锁定及晚响应失效；停用值显示名称，必要反馈在可见区，实时权限和字段投影不放宽。统一草稿日志仅记录元信息，协议值中文展示。
+- 升级准备：新版本2026-10-16-form-draft-01、form-drafts-only限定入口及只读SQLite副本备份/升级/恢复工具。结构核验包括约束表达式和归属外键；只在合成临时库执行。共享指纹读取显式关闭SQLite连接，历史迁移测试按各自目标验证。
+- 涉及：backend/app/models、schemas、api中的form_draft文件，services/form_drafts.py、form_draft_migration.py、form_draft_rehearsal.py；models/init_db.py、services/database_revision.py、project.py、business_resources.py、field_catalog.py、operation_log.py、governance_rehearsal.py，main.py和scripts升级/演练入口；frontend/src/form-system/usePersistentDraft.ts、api/formDraft.ts、views/project/ArchiveDraftList.vue、ProjectArchive.vue、page-guide/registry.ts；相关契约、模拟浏览器、交互样稿和本批规格/计划/清单/交付记录。
+- 验证：新后端草稿10项、升级恢复7项、前端草稿5项RED→GREEN；原档案、权限、日志、枚举和迁移回归及前端必需契约、构建通过。3个隔离浏览器通过，包括慢恢复锁、关闭保护、冲突另存、超时核对、操作裁切和反馈可见性。独立审查发现均修正复核关闭。命令/退出码/源码摘要见outputs/archive-persistent-drafts-20261016/verification.json。
+- 边界：真实Mac只读核对仍governance-01、无草稿表，后端未重启。未访问正式环境，无真实库升级/业务写入/授权/邮件/金蝶/Git提交合并推送。样稿待用户验收，SQL2017仅DDL编译，真实现场演练和实际验收尚待批准。详见docs/releases/2026-10-16-archive-drafts-local.md。
+
+### 2026-10-16：保存草稿仅编号、名称必输
+- 原因与批准：用户追加要求草稿操作只要求项目编号和名称，正式保存保留现有必输项；按前文必输项讨论执行，其他已填写值的格式/数量合法性检查不变。
+- 调整：前后端均拒绝编号/名称缺失、空值或纯空白；其他正式必输项可暂空。保存草稿使用独立小校验，关闭时保存失败保留输入；正式新增仍完整验证并调用原创建服务。样稿、说明及规格同步更新，无结构或授权变更。
+- 涉及：backend/app/services/form_drafts.py、backend/tests/form_draft_contract.py；frontend/src/views/project/archiveDraftValidation.ts、ProjectArchive.vue、frontend/src/page-guide/registry.ts、frontend/prototypes/archive-drafts/entry.ts及对应校验/浏览器测试；草稿规格、两份本地交付记录和本日志。
+- 验证：后端11项、前端校验/持久化测试、必需契约及构建通过；3个隔离浏览器验证两项必输与正式完整校验、关闭保护和原冲突/超时流程。证据outputs/archive-draft-identity-20261016/verification.json。仅刷新本机前端，无真实数据库升级/写入、正式部署或Git提交合并推送；管理员草稿管理方案仍未获批实施。
+
+### 2026-10-16：草稿与正式保存必输提示交互样稿
+- 原因与批准：用户要求先做样稿试用，解决草稿仅两项必输但界面仍满屏必输标记的困惑；仅样稿范围。
+- 调整：打开/恢复仅编号名称红星，正式保存启用完整及条件必输并定位首错，再保存草稿清除缺项错误且保留数量等格式错误；保留两个保存按钮，无模式控件。采用prototypes独立页面快照继续复用统一组件，内存模拟数据。
+- 涉及：frontend/prototypes/archive-drafts/ArchiveValidationPreview.vue、entry.ts；frontend/tests/archive-draft-intent-preview-browser.mjs；本批计划、交付记录和证据。
+- 验证：RED→GREEN浏览器及既有样稿回归通过，真实API请求0；前端style/list/system/form-system/archive-filter契约和build退出0，3张截图人工核对，用户tab3已刷新打开。实际档案页、共享表单、草稿服务摘要与批前一致。未改真实数据库/授权/正式环境，未提交合并推送。证据outputs/archive-draft-intent-preview-20261016/verification.json。
+
+### 2026-10-16：草稿与正式保存必输提示本机接入
+- 原因与批准：用户通过双态提示样稿，在已批准Mac开发范围接入实际新增页，解决保存草稿时额外必输标记造成困惑。
+- 调整：打开/恢复仅编号名称必输；正式保存按原完整及条件规则提示并定位首错；再存草稿清除缺填错误、保留格式错误，允许部分地址暂存、数量仍正整数。按钮改正式保存，无模式控件；详情维护和后端不变，样稿回用实际组件并移除临时快照。
+- 涉及：frontend/src/views/project/ProjectArchive.vue、page-guide/registry.ts、prototypes/archive-drafts/entry.ts；新增archive-draft-intent-browser测试及受按钮名影响4个浏览器脚本；草稿规格/计划/交付记录/待办。
+- 验证：实际路由RED→GREEN、持久化/表单会话/数量/两个样稿共6个浏览器通过，真实业务写入0；style/list/system/form-system/archive-filter/page-guide及build退出0，3张截图核对，独立复核无阻塞。共享表单及后端摘要不变；真实Mac库仍governance-01且无草稿表，未升级/部署/Git提交合并推送。证据outputs/archive-draft-intent-local-20261016/verification.json。
+
+### 2026-10-16：Mac草稿库升级及真实本人草稿验收
+- 原因与批准：用户单独批准仅Mac备份恢复、governance-01→form-draft-01及测试草稿保存恢复修改删除，不生成正式档案。
+- 调整：固定配套程序/旧程序；源只读备份和副本恢复验证后，通过限定升级新增草稿表与版本标记。本机受控启动仅检查、暂停四类后台并阻断正式业务写入，配置/授权保持。独立脚本暴露依赖加载问题后，最小修复form_draft_migration.py显式导入SysUser，补独立CLI及独立readiness进程测试；模型、DDL和目标版本未变。
+- 涉及：backend/app/services/form_draft_migration.py、backend/tests/form_draft_upgrade_contract.py；真实Mac限定结构、.runtime私有固定程序/备份/演练/受控启动/回退材料；本批计划/交付/待办及outputs安全证据。
+- 验证：独立进程RED→GREEN；固定候选草稿11项、升级8项、只读源副本升级恢复和旧程序兼容、真实限定升级/幂等/readiness及完整性检查通过。ael实页保存、刷新恢复、改名保存再刷新、删除通过，恢复红星2项；唯一测试草稿已删除，未生成正式档案。原32表、199条日志、授权及ERP/邮件任务保持。独立复核无阻塞；证据outputs/archive-drafts-mac-20261016/verification.json。正式环境、金蝶、真实邮件和Git提交合并推送均未动。
+
+### 2026-10-16：草稿产品线必输与精简管理准备（本机代码及隔离验证）
+- 原因与批准：用户要求保存草稿增加产品线必输，并明确取消转交、回收站和恢复，只保留查看及删除。按本机开发/样稿/隔离验证范围实施；真实库升级、授权和正式窗口仍另批。
+- 调整：草稿三项必输为编号、名称、产品线；新增只读取PMS本地授权产品线的候选接口，避免金蝶在线依赖，新增页和样稿同步。独立草稿管理API按产品线及创建人/负责人双重范围提供列表、只读详情、日志和删除；停用人员使用历史部门判断范围，不按管理员角色旁路。删除按归属/版本/active条件原子执行，日志失败整体回滚，不改正式档案、不调用ERP或发信。修复继续保存时隐藏/只读历史字段被整体覆盖丢失，仍拒绝客户端篡改。
+- 升级准备：目标form-draft-02只显式安装未授权管理节点，不增加交接字段或创建人列；冻结历史01结构，保留governance-01→01→02同事务链式升级、结构/节点冲突拒绝与启动只读检查。新增只读源库的副本升级/恢复演练工具；测试明确区分历史版本校验与当前程序就绪校验，两个旧契约改用临时测试库。
+- 涉及：backend/app/services/form_drafts.py、form_draft_management.py、form_draft_migration.py、form_draft_management_migration.py、form_draft_management_rehearsal.py、database_revision.py、role_templates.py、business_resources.py、document_history.py；api/form_drafts.py、api/form_draft_management.py、main.py、models/init_db.py、scripts/upgrade_database.py及rehearse_draft_management.py和对应契约。前端api/formDraft.ts、useProductLineOptions.ts、ProjectArchive.vue、archiveDraftValidation.ts、page-guide登记和说明；精简管理交互样稿及相关浏览器测试。
+- 验证：草稿14项、管理删除6项、02升级/独立CLI/恢复7项、历史01升级8项和治理升级16项均通过；字段目录/枚举、单据日志14项、日志引用与枚举、RBAC及日志服务检查通过。草稿实际组件与模拟接口6组浏览器通过；精简管理样稿删除确认/取消/冲突验证通过、无真实API请求。前端style/list/system/page-guide/data-dictionary/enum/archive-filter及build退出0。独立审查确认隐藏字段修复有效，未发现关键问题。
+- 状态：管理真实页面仍待精简样稿验收后接入；实际Mac库仍form-draft-01，运行的受控后端仍为此前固定程序，不能将隔离验证视为新规则的实页验收。正式环境只读核对为v1.0.2/governance-01，本批未升级实际库、授予权限、部署或Git提交合并推送。证据见outputs/archive-draft-management-20261016/。
+
+### 2026-10-16：草稿管理样稿增加列表删除
+- 原因与批准：用户要求“在列表中增加删除按钮”，按该具体修订更新样稿，不视为整个管理页或实际升级已获验收。
+- 调整：列表操作列展示查看、删除，复用统一双按钮96px列宽与操作间距，两按钮保持单行。列表与详情共用一次删除确认，取消不改数据，确认期间避免重复操作；冲突提示在列表可见且保留列表与目标草稿。同步说明和规格。
+- 涉及：frontend/prototypes/archive-draft-management/App.vue、frontend/tests/archive-draft-management-preview-browser.mjs、frontend/src/page-guide/registry.ts，以及草稿管理规格和进度记录。
+- 验证：列表删除入口及按钮换行用例RED→GREEN；模拟浏览器覆盖列表/详情确认、取消、删除和版本冲突，真实API请求0；实页截图核对同一行查看与删除。style/list/system/page-guide及build通过，保留既有包体提示。证据outputs/archive-draft-management-20261016/list-delete-verification.json。未接入实际管理页、未改后端/实际库/授权/正式环境，未Git提交合并推送。
+
+### 2026-10-18：按通过样稿接入草稿管理页面并固定本机候选
+- 原因与批准：用户通过列表“查看、删除”样稿并批准接入；复用已确认的三项草稿必输及简单管理规则。程序实施于10月16日，本次中断恢复后核对源摘要并补齐交付记录。
+- 调整：接入独立草稿管理路由、档案页权限入口、标准查询/分页、只读详情、共享操作记录与页面说明。列表/详情共用一次删除确认；冲突、结果未知、撤权及晚响应保持受控。后端输出可见字段中文投影和内部产品线筛选键，不在前端重建业务翻译表。无转交、回收站或恢复入口。
+- 涉及：frontend/src/views/project/ArchiveDraftManagement.vue、ProjectArchive.vue，api/archiveDraftManagement.ts、router/index.ts、document-history/PmsDocumentHistory.vue、page-guide目录；backend/app/services/form_draft_management.py、runtime_release.py；相关契约/浏览器测试、规格/计划/进度与验证收据。
+- 验证：管理后端7项、本人草稿14项、单据日志14项及适用前后端必需检查、构建通过；实际Vue组件模拟浏览器覆盖全部分页筛选、列表/详情删除、取消/冲突、撤权/拒绝清空、过期响应和未知结果停止重试，独立审查问题均关闭。本机只读源库副本升级恢复、旧01程序回退读取、受控助手副本启动通过；689项候选文件摘要固定。证据outputs/archive-draft-management-20261016/real-page-verification.json。
+- 边界：实际Mac库仍01，未实际升级或授予管理权限；本次未访问或修改正式环境、未发邮件或操作金蝶；未Git提交、合并或推送。副本启动助手只用于备份恢复准备，不代表02真实验收或正式上线。
+
+### 2026-10-18：获批执行Mac草稿管理02升级及临时验收授权
+- 原因与批准：用户明确批准仅Mac升级与临时权限验收。本批不含正式环境、Git及真实通知。
+- 调整：重新备份本机01库并隔离升级恢复、旧01程序读取核验后，用固定候选的独立限定升级入口升至form-draft-02；仅版本表和一个未授权节点变化。先在副本验证授权/撤回助手，再给ael追加仅草稿管理的临时角色，原角色与有效人员/部门/产品线及其余权限保持。统一日志记录维护授权。
+- 涉及：本机.runtime/data/pms-dev.db、本轮私有固定候选/备份/受控助手、docs/releases/2026-10-18-archive-draft-management-mac.md、管理进度与待办、本日志；未改业务程序源码。
+- 验证：实际升级和readiness通过，原历史表及授权保持、配置摘要保持；四类worker未运行，金蝶/OA/正式写入封锁；前端全部程序摘要与固定候选一致。当前等待本机用户登录进行真实UI验收，尚未完成页面验收及临时撤权，不报告整批完成。证据outputs/archive-draft-management-mac-20261018/verification.json。
+
+### 2026-10-18：完成Mac草稿管理真实验收、撤权及服务器演练准备
+- 原因与批准：继续已获批Mac真实验收及已通过管理样稿的接入；完成后续发布所需的隔离演练准备。实际服务器备份恢复仍需另批。
+- 调整：实页详情字段原按注册顺序展示，补充字段错误前置；复用已确认新增档案顺序修正，创建人保持最后。保留原固定候选，生成仅服务与测试两文件不同的r2并仅重启本轮受控后端。通过系统UI完成两份明确标记草稿的保存、刷新恢复、修改、列表删除取消/确认及详情删除、说明和操作记录；随后撤销临时角色。
+- 涉及：backend/app/services/form_draft_management.py、backend/tests/form_draft_management_contract.py；本机标记草稿及必要日志、私有candidate-r2/受控助手；docs/releases本机验收与SQL演练准备、计划/待办/进度及本日志。
+- 验证：顺序回归RED→GREEN，管理8项、本人14项、单据日志14项退出0，真实r2详情顺序复验通过。未重新登录的当前会话下一次查询即403，入口隐藏，原有效授权完全恢复。两份草稿逻辑删除并保留3次保存+2次删除日志，无正式档案创建；原历史草稿、日志、业务表、人员/角色/授权及ERP/邮件队列、保护配置均保持。前端无变化，复用当前源摘要一致的必需检查/构建证据。
+- 发布准备：复用并收窄SQL2017备份恢复助手，固定与r2一致的后端快照，禁止覆盖原库/文件、仅隔离库升级、不自动授权；14项本机安全测试和独立审查（含引导摘要链）通过。助手尚未监听、上传或访问正式环境，不能视为SQL实际演练通过。证据outputs/archive-draft-management-mac-20261018/verification.json及server-rehearsal-preparation.json。无真实邮件/金蝶/Git/正式环境变更。
+
+### 2026-10-18：获批传入草稿隔离演练材料并通过助手预检
+- 原因与批准：用户明确批准立即执行服务器隔离演练，正式程序及数据库版本保持。
+- 调整：仅在228的全新私有演练目录传入固定助手和后端快照，限制目录ACL，独立核对两份SHA256后启动；本机临时传输仅绑定公司接口、限定正式228来源和两个路径，下载后已停止。没有替换正式程序或修改正式库。
+- 涉及：服务器C:/PMS/.runtime/archive-draft-mssql-rehearsal-20261018、新版演练记录与进度、outputs/archive-draft-mssql-server-20261018、本日志；Git不动。
+- 验证：现场正式6ebc2d2e/v1.0.2/governance-01与原PID5656健康保持，工作区仅已知release.json；助手preflight-verified通过后停在隐藏SQL用户名输入提示。备份/恢复/升级尚未执行，等待用户输入现有SQL管理员身份，不报告演练完成。材料摘要与已审查版本保持。
+
+### 2026-10-18：完成获批SQL完整备份与隔离恢复，升级失败现场保留
+- 原因与批准：用户已批准服务器隔离演练并在维护窗口隐藏输入独立SQL身份。
+- 实际调整：完成SQL230/PMS的COPY_ONLY/CHECKSUM完整备份、VERIFYONLY/单集及SHA256核验，恢复至全新PMS_DRAFT_REHEARSAL_20261018_f66bb9ee。隔离升级遇NotImplementedError后停止，事务回滚；备份及失败库保留，无覆盖、清理或自动重跑。
+- 涉及：SQL服务器新备份和隔离库、服务器私有演练回执、docs/releases演练记录/待办及outputs/archive-draft-mssql-server-20261018失败证据；正式程序、正式结构和应用源码未改，Git不动。
+- 验证：只读确认失败库仍governance-01且无草稿表，正式库实际版本保持governance-01；正式v1.0.2/6ebc2d2e健康，PID5656、前端和版本清单指纹与演练前相同。定位为SQLAlchemy2.0.37 MSSQL检查约束反射未实现；本机修正原型8项测试通过但仅为待批准方案，未视作已实施修复或SQL演练成功。正式切换仍未执行。
+
+
+### 2026-10-18：获批修复草稿MSSQL约束读取并固定重演候选
+- 原因与批准：隔离演练证明SQLAlchemy MSSQL未实现检查约束反射，用户批准精确兼容修复及全新隔离库复验，保留原包/备份/失败库。
+- 调整：MSSQL使用按schema和表名参数化的只读系统目录查询，仅接受启用且受信任的检查约束；完整名称/表达式校验保留。SQLite原路径、DDL/版本/事务/授权不变。固定r3及新独立演练包，助手只更换摘要与新目录，不覆盖旧现场。
+- 涉及：backend/app/services/form_draft_migration.py、backend/tests/form_draft_mssql_reflection_contract.py、私有candidate-r3/新演练包；演练记录、进度、待办和本日志。
+- 验证：新增专项RED→GREEN8项，原01升级8项、02升级7项、本人草稿14项、管理8项、治理升级16项全部退出0；新助手14项通过。独立审查无Critical/Important，339个后端文件与r3逐字节一致、引导摘要匹配。本机未重启或改实际库；正式程序/库未替换，Git不动。实际SQL2017重演结果另记。
+
+
+### 2026-10-18：新候选传入独立目录并通过重演预检
+- 原因与批准：继续已批准的兼容修复及新隔离库演练。
+- 调整：新建228私有演练r2目录，传入并独立核对新固定助手/ZIP摘要后启动。正式程序未替换，旧目录/备份/失败库保留；临时来源限定传输已停止。
+- 涉及：服务器C:/PMS/.runtime/archive-draft-mssql-rehearsal-20261018-r2及本轮演练记录/观察证据。
+- 验证：现场显示preflight-verified、awaiting-local-sql-identity；停在SQL用户名隐藏输入。新备份/恢复/升级尚未开始，待用户输入现有身份；不报告演练成功。未正式升级、授权、通知或Git操作。
+
+
+### 2026-10-18：新隔离库SQL2017升级演练通过
+- 原因与批准：继续用户已批准的精确兼容修复及全新库复验；用户重新在隐藏窗口输入现有SQL管理员身份。
+- 实际调整：在线COPY_ONLY/CHECKSUM完整备份并VERIFYONLY、单集/SHA256校验后，恢复到PMS_DRAFT_REHEARSAL_20261018_37eea38c并仅在该库升级至form-draft-02。原备份、失败库及旧包保留。
+- 涉及：SQL服务器新备份/新隔离库及228私有r2回执；演练记录/进度/计划/待办、outputs/archive-draft-mssql-server-20261018完成观察及截图。
+- 验证：实际MSSQL升级、启动前结构及重复升级不变检查通过；32张原表、3653条档案及原授权保持，空草稿表，无默认授权和发布记录。日常身份四项权限满足且未追加授权。正式v1.0.2/governance-01健康，运行与保护配置保持、未停服；Git不动，无通知/邮件/金蝶操作。不将演练当正式上线或完整应用/API验收。
+
+
+### 2026-10-18：按批准清单整理v1.1.0本地发布身份
+- 原因与批准：用户批准仅本地提交已验收功能/修复/测试/文档，固定真实提交候选并准备隔离测试切换助手；正式维护窗口另批。
+- 调整：核对r3的690项摘要与当前源码全部一致；明确提交允许清单并准备统一用户更新清单，排除原始Excel、输出截图、私有材料、旧样稿和其他任务资料。
+- 涉及：本轮获批代码/测试/文档清单及docs/releases/v1.1.0-notes.json；change.md。
+- 验证：复用当前摘要一致的Mac实页、前后端必需检查/构建与SQL2017新隔离库演练证据；本地提交和正式包身份将在完成后追加，不将准备声明为部署。正式版本仍v1.0.2，本轮不合并或推送。

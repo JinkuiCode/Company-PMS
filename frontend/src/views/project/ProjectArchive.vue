@@ -15,6 +15,8 @@
           <el-icon style="margin-right:4px;"><Plus /></el-icon>
           新增档案
         </el-button>
+        <el-button v-if="hasPermission('project:archive:add') && hasPermission('project:archive:view')" class="pms-button-navigation" size="small" @click="openArchiveDraftList">我的草稿</el-button>
+        <el-button v-if="hasPermission('project:archive:draft:manage') && hasPermission('project:archive:view')" class="pms-button-navigation" size="small" @click="archiveRouter.push('/project/archive-drafts')">草稿管理</el-button>
         <el-button class="pms-button-auxiliary" v-if="hasPermission('project:archive:toggle')" size="small" :disabled="selectedRows.length === 0" @click="handleBatchEnabledChange(true)">
           批量启用
           <span v-if="selectedRows.length" style="margin-left:4px;">({{ selectedRows.length }})</span>
@@ -86,29 +88,48 @@
     </template>
 
         <PmsFormDrawer v-model="dialogVisible" title="新增项目档案" :busy="archiveCreateSaving" :before-close="beforeCloseArchiveCreate">
+          <p v-if="archiveDraftProductLines.failed.value" class="pms-list-load-error" role="alert">产品线选项暂不可用，请重试后再保存。<el-button class="pms-button-navigation" size="small" :loading="archiveDraftProductLines.loading.value" @click="archiveDraftProductLines.loadOptions()">重试产品线</el-button></p>
+          <p v-if="archiveDraftWarnings.length" role="status" class="archive-governance-route">{{ archiveDraftWarnings.join('；') }}</p>
+          <div v-if="persistentDraft.conflict.value" role="alert" class="pms-list-load-error">草稿已有更新，本次输入已保留。
+            <el-button class="pms-button-navigation" size="small" :disabled="archiveCreateSaving" @click="loadLatestArchiveDraft">加载最新草稿</el-button>
+            <el-button type="success" plain size="small" :disabled="archiveCreateSaving" @click="saveArchiveDraftAsNew">另存为新草稿</el-button>
+          </div>
+          <p v-if="persistentDraft.unknown.value" role="alert" class="pms-list-load-error">保存结果尚未确认，请先核对，避免重复新增。
+            <el-button class="pms-button-navigation" size="small" :loading="archiveDraftChecking" @click="reconcileArchiveDraft">核对保存结果</el-button>
+          </p>
           <ArchiveRecordForm ref="formRef" class="archive-create-form" :model="form" :groups="archiveCreateGroups" :rules="rules"
-            :required="field => archiveFieldRequired(field.key, undefined, form)"
-            :editable="field => !archiveCreateSaving && archiveFieldEditable(field.key)"
+            :required="field => archiveCreateIntentRequired(field.key)" :validate-on-rule-change="false"
+            :editable="field => !archiveCreateSaving && !persistentDraft.unknown.value && !archiveCloseChoiceVisible && archiveFieldEditable(field.key)"
             :options="key => archiveDrawerSelectOptions(key, form)" :errors="archiveCreateServerErrors" id-prefix="archive-create"
             @field-change="updateArchiveCreateField">
             <p v-if="productLines.labelsFailed.value" class="pms-list-load-error" role="alert">产品线名称加载失败 <el-button class="pms-button-navigation" size="small" aria-label="重试产品线名称" :loading="productLines.labelsLoading.value" @click="productLines.loadLabels()">重试</el-button></p>
           </ArchiveRecordForm>
           <template #footer>
             <el-button type="warning" plain :disabled="archiveCreateSaving" @click="beforeCloseArchiveCreate(() => { dialogVisible = false })">取消</el-button>
-            <el-button v-if="hasPermission('project:archive:add')" type="success" :loading="archiveCreateSaving" @click="handleSubmit">新增保存</el-button>
+            <el-button type="success" plain :disabled="archiveCreateSaving || Boolean(persistentDraft.unknown.value) || persistentDraft.conflict.value" @click="saveArchiveDraft">保存草稿</el-button>
+            <el-button v-if="hasPermission('project:archive:add')" type="success" :disabled="Boolean(persistentDraft.unknown.value) || persistentDraft.conflict.value" :loading="archiveCreateSaving" @click="handleSubmit">正式保存</el-button>
           </template>
         </PmsFormDrawer>
       </PmsDataList>
       <ArchiveChangeList v-else @back="archiveView = 'archives'" @changed="fetchList" />
     </div>
 
+    <ArchiveDraftList v-model="archiveDraftListVisible" :resuming="archiveCreateOpening" @resume="resumeArchiveDraft" />
+    <el-dialog v-model="archiveCloseChoiceVisible" title="未保存修改" width="460px" :close-on-click-modal="false" @closed="resolveArchiveCloseChoice('continue')">
+      <p>保存草稿后，可从“我的草稿”继续填写。放弃本次修改会保留此前保存的草稿。</p>
+      <template #footer>
+        <el-button type="warning" plain @click="resolveArchiveCloseChoice('discard')">放弃本次修改</el-button>
+        <el-button class="pms-button-navigation" @click="resolveArchiveCloseChoice('continue')">继续编辑</el-button>
+        <el-button type="success" @click="resolveArchiveCloseChoice('save')">保存草稿并关闭</el-button>
+      </template>
+    </el-dialog>
     <PmsFormDrawer v-if="selectedArchive" :model-value="true" :title="archiveMaintenanceMode ? '维护项目档案' : selectedArchive.can_edit ? '编辑项目档案' : '查看项目档案'" :busy="archiveDrawerSaving" penetrable :before-close="beforeCloseArchiveDetail">
       <el-tabs v-model="archiveDetailTab">
       <el-tab-pane label="业务信息" name="business">
       <p class="archive-governance-route">{{ archiveMaintenanceMode ? '填写维护原因并确认差异后直接生效' : selectedArchive.can_edit ? selectedArchive.change_mode === 'direct' ? '部门负责人修改，保存后直接生效' : '项目负责人修改，提交后等待部门负责人审批' : selectedArchive.edit_reason || '当前档案仅供查看' }}</p>
       <p v-if="productLines.labelsFailed.value" class="pms-list-load-error" role="alert">产品线名称加载失败 <el-button class="pms-button-navigation" size="small" aria-label="重试产品线名称" :loading="productLines.labelsLoading.value" @click="productLines.loadLabels()">重试</el-button></p>
       <p v-else-if="productLines.failed.value && (archiveMaintenanceMode || selectedArchive.can_edit)" class="archive-governance-route" role="status">产品线选项暂不可用，当前值仅供查看。<el-button class="pms-button-navigation" size="small" aria-label="重试产品线选项" :loading="productLines.loading.value" @click="productLines.loadOptions()">重试</el-button></p>
-      <ArchiveRecordForm ref="archiveDrawerFormRef" :model="archiveDrawerForm" :groups="archiveDrawerGroups" :rules="archiveDrawerRules"
+      <ArchiveRecordForm :key="`${selectedArchive.id}-${archiveMaintenanceMode}`" ref="archiveDrawerFormRef" :model="archiveDrawerForm" :groups="archiveDrawerGroups" :rules="archiveDrawerRules"
         :required="archiveDrawerFieldRequired" :editable="archiveDrawerFieldEditable" :options="key => archiveDrawerSelectOptions(key)"
         :format="formatArchiveDrawerValue" :errors="archiveDrawerServerErrors" id-prefix="archive-drawer"
         @field-change="updateArchiveDetailField">
@@ -147,9 +168,14 @@ import ArchiveRecordForm from './ArchiveRecordForm.vue'
 import { newSubmissionId } from '@/utils/submissionId'
 import ArchiveChangeList from './ArchiveChangeList.vue'
 import { orderArchiveGroups, governanceFieldVisible, governanceFieldRequired } from './archiveGovernance'
-import { offlineArchiveFields, offlineEnumCodes, normalizeOfflineValue } from './offlineArchiveFields'
+import { offlineArchiveFields, offlineEnumCodes, normalizeOfflineValue, archiveQuantityError } from './offlineArchiveFields'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { usePersistentDraft, type PersistentDraft } from '@/form-system/usePersistentDraft'
+import { archiveDraftApi } from '@/api/formDraft'
+import ArchiveDraftList from './ArchiveDraftList.vue'
+import { archiveDraftIdentityErrors } from './archiveDraftValidation'
 import { ref, reactive, computed, defineComponent, h, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Delete, Search, Close } from '@element-plus/icons-vue'
@@ -177,6 +203,9 @@ import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import PmsDocumentHistory from '@/document-history/PmsDocumentHistory.vue'
 import {
   PmsNumberControl,
+  useFormSession,
+  resolveFieldMetadata,
+  mapFormFieldErrors,
   PmsDateControl,
   PmsFormField,
   PmsFormDrawer,
@@ -188,6 +217,8 @@ import {
 import { type ListFilterField, type ListFilterOption, useListFilters } from '@/composables/useListFilters'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { useProductLineOptions } from '@/composables/useProductLineOptions'
+import { usePageLoad } from '@/composables/usePageLoad'
+import { createColumnPreferences, normalizeColumnPreference } from '@/list-system/columnPreferences'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
 import { getArchiveRegions, type ArchiveRegion } from '@/api/project'
@@ -198,7 +229,9 @@ import { archiveReference } from '@/query-system/archive-reference'
 
 const localeText = chineseLocaleText
 const authStore = useAuthStore()
+const archiveRouter = useRouter()
 const productLines = useProductLineOptions()
+const archiveDraftProductLines = useProductLineOptions(archiveDraftApi.productLines)
 const syncLogVisible = ref(false)
 const syncLogArchiveId = ref<number | null>(null)
 const manualSyncBusy = ref(false)
@@ -376,28 +409,31 @@ function archiveFieldPolicy(fieldKey: string) {
   return effectiveArchiveFieldMap.value.get(fieldKey)
 }
 
+function archiveFieldState(fieldKey: string) {
+  return resolveFieldMetadata(archiveFieldPolicy(fieldKey), {
+    hidden: fieldKey === 'product_category',
+    readonly: ['product_category', 'customer_full_name'].includes(fieldKey),
+  })
+}
+
 function archiveFieldVisible(fieldKey: string) {
-  if (fieldKey === 'product_category') return false
-  const field = archiveFieldPolicy(fieldKey)
-  return field?.visible !== false
+  return archiveFieldState(fieldKey).visible
 }
 
 function archiveFieldEditable(fieldKey: string) {
-  if (['product_category', 'customer_full_name'].includes(fieldKey)) return false
-  return archiveFieldPolicy(fieldKey)?.editable !== false
+  return archiveFieldState(fieldKey).editable
 }
 
 function archiveFieldRequired(fieldKey: string, createdAt?: string, values: Record<string, any> = form) {
   const field = archiveFieldPolicy(fieldKey)
-  if (field) return governanceFieldRequired(field, { ...values, created_at: createdAt,
+  const required = field ? governanceFieldRequired(field, { ...values, created_at: createdAt,
     governance_legacy: selectedArchive.value?.governance_legacy }, !createdAt, selectedArchive.value || undefined)
-  return legacyArchiveRequiredFields.has(fieldKey)
+    : legacyArchiveRequiredFields.has(fieldKey)
+  return resolveFieldMetadata(field, { hidden: fieldKey === 'product_category', required }).required
 }
 
 function archiveColumnListAvailable(columnKey: string) {
-  if (columnKey === 'product_category') return false
-  const field = archiveFieldPolicy(archiveColumnPolicyKey[columnKey] || columnKey)
-  return field ? field.visible && field.list_available : true
+  return archiveFieldState(archiveColumnPolicyKey[columnKey] || columnKey).listAvailable
 }
 
 const archiveColumnGroups = computed(() => ARCHIVE_COLUMN_GROUP_DEFINITIONS.map(group => ({
@@ -409,6 +445,19 @@ const availableArchiveColumnKeys = computed(() => new Set(baseArchiveColumnKeys.
 const fixedArchiveColumnKeys = new Set(['archive_selection', 'archive_actions'])
 const selectedArchiveColumnKeys = ref<string[]>([...defaultArchiveColumnKeys.value])
 const archiveColumnPreferenceOwnerId = ref<number | null>(null)
+const archiveColumnPreferences = createColumnPreferences({
+  pageKey: 'project-archive', ownerId: () => archiveColumnPreferenceOwnerId.value,
+  storage: () => localStorage, legacyPrefix: ARCHIVE_COLUMN_STORAGE_KEY,
+})
+function archiveColumnSchema() {
+  return { allowed: availableArchiveColumnKeys.value, defaults: defaultArchiveColumnKeys.value, fixed: new Set([...fixedArchiveColumnKeys, 'project_code', 'project_name']) }
+}
+let archiveColumnWarningShown = false
+function warnArchiveColumnStorage() {
+  if (archiveColumnWarningShown) return
+  archiveColumnWarningShown = true
+  ElMessage.warning('列设置无法读取或保存，暂用本次布局；可在列设置中恢复默认后重试')
+}
 const archiveColumnPreferencesReady = ref(false)
 const archiveColumnPreferenceWritesEnabled = ref(false)
 const archiveColumnStateRestored = ref(false)
@@ -419,11 +468,6 @@ function onGridReady(params: any) {
   gridApi = params.api
   completeArchiveColumnPreferenceRestore()
   scheduleArchiveScrollbarMetrics()
-}
-
-function archiveColumnPreferenceStorageKey() {
-  if (archiveColumnPreferenceOwnerId.value == null) return null
-  return `${ARCHIVE_COLUMN_STORAGE_KEY}:${archiveColumnPreferenceOwnerId.value}`
 }
 
 async function resolveArchiveColumnPreferenceOwner() {
@@ -443,58 +487,50 @@ function normalizeArchiveColumnKeys(keys: unknown) {
 }
 
 function readArchiveColumnPreferences(): ArchiveColumnPreferenceState | null {
-  const storageKey = archiveColumnPreferenceStorageKey()
-  if (!storageKey) return null
-
-  const raw = localStorage.getItem(storageKey)
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw)
-      return {
-        selected_column_keys: normalizeArchiveColumnKeys(parsed?.selected_column_keys),
-        columnState: Array.isArray(parsed?.columnState) ? parsed.columnState : [],
-      }
-    } catch { /* 忽略损坏的当前版本缓存 */ }
-  }
-
-  const legacyRaw = localStorage.getItem(LEGACY_ARCHIVE_LAYOUT_KEY)
-  if (!legacyRaw) return null
+  const result = archiveColumnPreferences.read(archiveColumnSchema())
+  if (result.status === 'ready') return result.value as ArchiveColumnPreferenceState
+  if (result.status === 'anonymous') return null
+  if (result.status !== 'empty') { warnArchiveColumnStorage(); return null }
   try {
+    const legacyRaw = localStorage.getItem(LEGACY_ARCHIVE_LAYOUT_KEY)
+    if (!legacyRaw) return null
     const legacyState = JSON.parse(legacyRaw)
     if (!Array.isArray(legacyState)) return null
-    const visibleKeys = defaultArchiveColumnKeys.value.filter((key) => {
-      const state = legacyState.find((item: ColumnState) => item.colId === key)
-      return state?.hide !== true
-    })
-    return { selected_column_keys: visibleKeys, columnState: legacyState }
+    const visibleKeys = defaultArchiveColumnKeys.value.filter(key => !legacyState.some(state => state?.colId === key && state.hide === true))
+    return normalizeColumnPreference({ selected_column_keys: visibleKeys, columnState: legacyState }, archiveColumnSchema()) as ArchiveColumnPreferenceState
   } catch {
+    warnArchiveColumnStorage()
     return null
   }
 }
 
 function persistArchiveColumnPreferences() {
   if (!archiveColumnPreferencesReady.value || !archiveColumnPreferenceWritesEnabled.value) return
-  const storageKey = archiveColumnPreferenceStorageKey()
-  if (!storageKey) return
   const state: ArchiveColumnPreferenceState = {
     selected_column_keys: [...selectedArchiveColumnKeys.value],
     columnState: gridApi?.getColumnState?.() || [],
   }
-  localStorage.setItem(storageKey, JSON.stringify(state))
-  localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY)
+  saveArchiveColumnPreferences(state)
 }
 
-function restoreSelectedArchiveColumnKeys() {
-  const saved = readArchiveColumnPreferences()
+function saveArchiveColumnPreferences(state: ArchiveColumnPreferenceState) {
+  const result = archiveColumnPreferences.write(state, archiveColumnSchema())
+  if (result.status === 'saved') {
+    try { localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY) } catch { warnArchiveColumnStorage() }
+  } else if (result.status !== 'anonymous') warnArchiveColumnStorage()
+}
+
+function restoreSelectedArchiveColumnKeys(override?: ArchiveColumnPreferenceState) {
+  const saved = override ?? readArchiveColumnPreferences()
   selectedArchiveColumnKeys.value = saved
     ? normalizeArchiveColumnKeys(saved.selected_column_keys)
     : [...defaultArchiveColumnKeys.value]
 }
 
-function restoreArchiveColumnState() {
+function restoreArchiveColumnState(override?: ArchiveColumnPreferenceState) {
   if (!archiveColumnPreferencesReady.value || !gridApi || archiveColumnStateRestored.value) return
   archiveColumnStateRestored.value = true
-  const saved = readArchiveColumnPreferences()
+  const saved = override ?? readArchiveColumnPreferences()
   if (!saved?.columnState.length) return
   restoringArchiveColumnState.value = true
   try {
@@ -557,9 +593,9 @@ function handleArchiveColumnResized(event: any) {
 }
 
 function restoreArchiveColumnDefaults() {
-  const storageKey = archiveColumnPreferenceStorageKey()
-  if (storageKey) localStorage.removeItem(storageKey)
-  localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY)
+  const result = archiveColumnPreferences.clear()
+  if (result.status !== 'cleared') { warnArchiveColumnStorage(); return }
+  try { localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY) } catch { warnArchiveColumnStorage() }
   selectedArchiveColumnKeys.value = [...defaultArchiveColumnKeys.value]
   nextTick(() => {
     gridApi?.resetColumnState?.()
@@ -648,14 +684,21 @@ function archiveRegionLabel(fieldKey: string, value: unknown) {
 }
 
 function archiveDrawerSelectOptions(fieldKey: string, values = archiveDrawerForm): PmsOption[] {
-  if (offlineEnumCodes[fieldKey]) return (dictOptions[offlineEnumCodes[fieldKey]!] || []).map(option => ({ ...option, value: Number(option.value) }))
-  if (fieldKey === 'product_line_id') return values === archiveDrawerForm ? productLines.currentOptions(values.product_line_id) : productLines.options.value
-  if (fieldKey === 'address_province') return archiveRegions.value
-  if (fieldKey === 'address_city') return archiveRegions.value.find(region => region.value === values.address_province)?.children || []
-  if (fieldKey === 'product_category') return archiveProductCategoryOptions.value
-  if (fieldKey === 'manager_id') return archiveUserOptions.value
-  if (fieldKey === 'equipment_series') return archiveEquipmentSeriesOptions.value
-  return []
+  let options: PmsOption[] = []
+  let enumCode = offlineEnumCodes[fieldKey]
+  if (enumCode) options = (dictOptions[enumCode] || []).map(option => ({ ...option, value: Number(option.value) }))
+  else if (fieldKey === 'product_line_id') options = (values === form ? archiveDraftProductLines : productLines).currentOptions(values.product_line_id)
+  else if (fieldKey === 'address_province') options = archiveRegions.value
+  else if (fieldKey === 'address_city') options = archiveRegions.value.find(region => region.value === values.address_province)?.children || []
+  else if (fieldKey === 'product_category') options = archiveProductCategoryOptions.value
+  else if (fieldKey === 'manager_id') options = archiveUserOptions.value
+  else if (fieldKey === 'equipment_series') { options = archiveEquipmentSeriesOptions.value; enumCode = 'equipment_series' }
+  const value = values[fieldKey]
+  if (values === form && value !== null && value !== undefined && value !== '' && !options.some(option => String(option.value) === String(value))) {
+    const label = archiveDraftValueLabels.value[fieldKey] || (enumCode ? dictLabelMaps[enumCode]?.[String(value)] : undefined) || '原选项已不可用'
+    options = [...options, { value, label, disabled: true }]
+  }
+  return options
 }
 
 function archiveDrawerSelectPlaceholder(fieldKey: string) {
@@ -766,7 +809,8 @@ const archiveFilterFields = computed<ListFilterField<any>[]>(() => ([
 const { customFilters } = useListFilters(archiveFilterFields)
 const archiveWorkspaceReady = ref(false)
 const archiveAppliedFilters = ref<QueryCondition[]>([])
-const archiveHasQueried = ref(false)
+const archiveListState = usePageLoad()
+const archiveHasQueried = archiveListState.hasQueried
 const archiveColumnFilters = ref<ColumnFilter[]>([])
 const archivePageColumns = usePageColumnFilter(rowData, () => archiveQueryFields.value, archiveColumnFilters, () => [page.value, pageSize.value], row => toQueryRecord(row, archiveFilterFields.value), () => archiveHasQueried.value && !archiveListLoading.value)
 const visibleArchiveRows = archivePageColumns.visibleRows
@@ -805,10 +849,10 @@ async function submitArchiveQuery(conditions:QueryCondition[], preferences:any) 
     const writable = archiveColumnPreferenceWritesEnabled.value
     archiveColumnPreferenceWritesEnabled.value = false
     try {
-      const key = archiveColumnPreferenceStorageKey()
-      if (key) localStorage.setItem(key,JSON.stringify(preferences.columns))
-      restoreSelectedArchiveColumnKeys(); archiveColumnStateRestored.value = false
-      await nextTick(); restoreArchiveColumnState()
+      const chosen = normalizeColumnPreference(preferences.columns, archiveColumnSchema()) as ArchiveColumnPreferenceState
+      saveArchiveColumnPreferences(chosen)
+      restoreSelectedArchiveColumnKeys(chosen); archiveColumnStateRestored.value = false
+      await nextTick(); restoreArchiveColumnState(chosen)
     } finally { archiveColumnPreferenceWritesEnabled.value = writable }
   }
   page.value = 1
@@ -825,15 +869,15 @@ watch(archiveColumnFilters, () => nextTick(() => {
   agGridRef.value?.api?.refreshCells({ force: true })
 }), { deep: true })
 
-async function fetchDictOptions(code: string) {
+async function fetchDictOptions(code: string, force = false) {
   try {
-    const definition = await loadEnumOptions(code)
+    const definition = await loadEnumOptions(code, force)
     dictOptions[code] = definition.items
     dictLabelMaps[code] = definition.label_map
     await nextTick()
     agGridRef.value?.api?.refreshCells({ columns: [code], force: true })
     if (code === 'product_line') agGridRef.value?.api?.refreshCells({ columns: ['product_line_id'], force: true })
-  } catch { /* ignore */ }
+  } catch (error) { if (force) throw error }
 }
 
 function scheduleArchiveScrollbarMetrics() {
@@ -842,8 +886,6 @@ function scheduleArchiveScrollbarMetrics() {
 
 // ========== 新增弹窗与编辑抽屉 ==========
 const dialogVisible = ref(false)
-const archiveCreateSaving = ref(false)
-const archiveCreateSnapshot = ref('')
 const formRef = ref<FormInstance>()
 const form = reactive<Record<string, any>>({
   id: 0,
@@ -856,6 +898,35 @@ const form = reactive<Record<string, any>>({
   serial_no: '',
   ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, field.key === 'product_line_id' || field.value_type === 'number' || (field.value_type === 'select' && !field.key.startsWith('address_')) ? null : ''])),
 })
+const archiveCreateValidationIntent = ref<'draft' | 'formal'>('draft')
+function archiveCreateIntentRequired(fieldKey: string) {
+  return archiveCreateValidationIntent.value === 'draft'
+    ? ['project_code', 'project_name', 'product_line_id'].includes(fieldKey)
+    : archiveFieldRequired(fieldKey, undefined, form)
+}
+async function setArchiveCreateValidationIntent(intent: 'draft' | 'formal') {
+  archiveCreateValidationIntent.value = intent
+  clearArchiveServerErrors(archiveCreateServerErrors)
+  formRef.value?.clearValidate()
+  await nextTick()
+  formRef.value?.clearValidate()
+}
+const archiveCreateSession = useFormSession({
+  draft: form,
+  isConflict: (error: any) => error?.response?.status === 409,
+})
+const archiveCreateSaving = computed(() => archiveCreateSession.busy.value || archiveCreateOpening.value || archiveDraftChecking.value)
+const persistentDraft = usePersistentDraft(archiveDraftApi)
+const archiveDraftListVisible = ref(false), archiveDraftChecking = ref(false)
+const archiveDraftWarnings = ref<string[]>([])
+const archiveDraftValueLabels = ref<Record<string,string>>({})
+const archiveCloseChoiceVisible = ref(false)
+let archiveCloseResolver: ((choice: 'save' | 'discard' | 'continue') => void) | null = null
+function resolveArchiveCloseChoice(choice: 'save' | 'discard' | 'continue') {
+  const resolve = archiveCloseResolver
+  archiveCloseResolver = null; archiveCloseChoiceVisible.value = false
+  resolve?.(choice)
+}
 const archiveCreateServerErrors = reactive<Record<string, string>>({})
 const archiveDrawerServerErrors = reactive<Record<string, string>>({})
 const selectedArchive = ref<any | null>(null)
@@ -922,9 +993,11 @@ function archiveAddressComplete(values: Record<string, any>) {
 }
 
 function buildArchiveRules(values: Record<string, any>, createdAt?: string, historical = false): FormRules {
-  const nextRules: FormRules = effectiveArchiveFields.value.length || historical ? {} : { ...legacyArchiveRules }
+  const draftMode = values === form && archiveCreateValidationIntent.value === 'draft'
+  const fallbackRules = draftMode ? { project_code: legacyArchiveRules.project_code, project_name: legacyArchiveRules.project_name } : legacyArchiveRules
+  const nextRules: FormRules = effectiveArchiveFields.value.length || historical ? {} : { ...fallbackRules }
   effectiveArchiveFields.value
-    .filter(field => field.visible && archiveFieldRequired(field.field_key, createdAt, values) && !(historical && !values[field.field_key] && !field.required_effective_at))
+    .filter(field => field.visible && (values === form ? archiveCreateIntentRequired(field.field_key) : archiveFieldRequired(field.field_key, createdAt, values)) && !(historical && !values[field.field_key] && !field.required_effective_at))
     .forEach((field) => {
       nextRules[field.field_key] = [{
         required: true,
@@ -933,6 +1006,7 @@ function buildArchiveRules(values: Record<string, any>, createdAt?: string, hist
       }]
     })
   for (const key of ['address_province', 'address_city', 'address_detail']) {
+    if (values === form && archiveCreateValidationIntent.value === 'draft') continue
     if (!archiveFieldVisible(key) || !archiveFieldEditable(key)) continue
     const existing = nextRules[key]
     nextRules[key] = [...(Array.isArray(existing) ? existing : existing ? [existing] : []), {
@@ -940,6 +1014,14 @@ function buildArchiveRules(values: Record<string, any>, createdAt?: string, hist
       trigger: ['blur', 'change'],
     }]
   }
+  const existingQuantityRules = nextRules.quantity
+  nextRules.quantity = [...(Array.isArray(existingQuantityRules) ? existingQuantityRules : existingQuantityRules ? [existingQuantityRules] : []), {
+    validator: (_rule, value, callback) => {
+      const message = archiveQuantityError(value, selectedArchive.value?.quantity, values === archiveDrawerForm)
+      callback(message ? new Error(message) : undefined)
+    },
+    trigger: ['blur', 'change'],
+  }]
   return nextRules
 }
 const rules = computed<FormRules>(() => buildArchiveRules(form))
@@ -1082,11 +1164,10 @@ const defaultColDef = {
 }
 
 // ========== 数据加载 ==========
-const archiveListLoading = ref(false)
-const archiveListError = ref(false)
+const archiveListLoading = archiveListState.loading
+const archiveListError = archiveListState.failed
 const archiveSort = ref<Array<{ colId: string; sort: string }>>([{ colId: 'project_code', sort: 'desc' }])
 function archiveExportSnapshot(){return businessExportSnapshot(archiveAppliedFilters.value,[],gridApi,{enabled:'all'})}
-let archiveListRequestSerial = 0
 let archiveQueryReady = false
 let archiveQueryTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -1095,9 +1176,7 @@ async function fetchList() {
   if (Object.keys(errors).length) { ElMessage.warning(Object.values(errors).join('；')); return }
   archivePageColumns.clear()
   clearTimeout(archiveQueryTimer)
-  const requestSerial = ++archiveListRequestSerial
-  archiveListLoading.value = true
-  archiveListError.value = false
+  const requestSerial = archiveListState.begin()
   agGridRef.value?.api?.deselectAll?.()
   selectedRows.value = []
   try {
@@ -1113,7 +1192,7 @@ async function fetchList() {
         sort: JSON.stringify(archiveSort.value),
       },
     })
-    if (requestSerial !== archiveListRequestSerial) return
+    if (!archiveListState.isCurrent(requestSerial)) return
     total.value = res.total
     const lastPage = Math.max(1, Math.ceil(res.total / pageSize.value))
     if (page.value > lastPage) {
@@ -1121,23 +1200,19 @@ async function fetchList() {
       return await fetchList()
     }
     rowData.value = res.items
-    archiveHasQueried.value = true
+    archiveListState.succeed(requestSerial, !res.items.length)
     scheduleArchiveScrollbarMetrics()
-  } catch {
-    if (requestSerial !== archiveListRequestSerial) return
+  } catch (error) {
+    if (!archiveListState.fail(requestSerial, error)) return
     rowData.value = []
     total.value = 0
-    archiveListError.value = true
-  } finally {
-    if (requestSerial === archiveListRequestSerial) archiveListLoading.value = false
   }
 }
 
 function scheduleArchiveQuery() {
   if (!archiveQueryReady) return
   page.value = 1
-  ++archiveListRequestSerial
-  archiveListLoading.value = true
+  archiveListState.invalidate(true)
   agGridRef.value?.api?.deselectAll?.()
   selectedRows.value = []
   clearTimeout(archiveQueryTimer)
@@ -1155,7 +1230,7 @@ function handleArchiveSortChanged() {
   scheduleArchiveQuery()
 }
 
-onUnmounted(() => { clearTimeout(archiveQueryTimer); ++archiveListRequestSerial })
+onUnmounted(() => { clearTimeout(archiveQueryTimer); archiveListState.invalidate() })
 
 async function fetchUsers() {
   userList.value = (await request.get('/users/options')) as any
@@ -1180,18 +1255,15 @@ watch(() => selectedArchive.value?.id, () => {
 // ========== 新增与字段级抽屉编辑 ==========
 const archiveCreateOpening = ref(false)
 async function openCreateDialog() {
-  if (!hasPermission('project:archive:add') || archiveCreateOpening.value) return
+  if (!hasPermission('project:archive:add') || archiveCreateOpening.value || archiveCreateSaving.value) return
+  if (dialogVisible.value && !await mayCloseArchiveCreate()) return
   archiveCreateOpening.value = true
-  await productLines.load()
+  await archiveDraftProductLines.load()
   archiveCreateOpening.value = false
-  if (productLines.failed.value) {
-    ElMessage.error('产品线读取失败，请重新点击新增档案重试')
-    return
-  }
-  if (!productLines.options.value.length) {
-    ElMessage.warning('没有可用的产品线权限，请联系管理员')
-    return
-  }
+  if (persistentDraft.unknown.value) { ElMessage.warning('请先核对上次保存结果'); return }
+  persistentDraft.startNew()
+  archiveCreateValidationIntent.value = 'draft'
+  archiveDraftWarnings.value = []; archiveDraftValueLabels.value = {}
   formRef.value?.resetFields()
   clearArchiveServerErrors(archiveCreateServerErrors)
   Object.assign(form, {
@@ -1205,34 +1277,126 @@ async function openCreateDialog() {
     serial_no: '',
     ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, field.key === 'product_line_id' || field.value_type === 'number' || (field.value_type === 'select' && !field.key.startsWith('address_')) ? null : ''])),
   })
-  form.product_line_id = productLines.options.value.length === 1 ? productLines.options.value[0]!.value : null
-  archiveCreateSnapshot.value = JSON.stringify(form)
+  form.product_line_id = archiveDraftProductLines.options.value.length === 1 ? archiveDraftProductLines.options.value[0]!.value : null
+  archiveCreateSession.capture()
   dialogVisible.value = true
 }
 
-async function beforeCloseArchiveCreate(done: () => void) {
-  if (archiveCreateSaving.value) return
-  if (JSON.stringify(form) !== archiveCreateSnapshot.value) {
-    try {
-      await ElMessageBox.confirm('新增档案有未保存的修改，确定放弃吗？', '未保存修改', { type: 'warning' })
-    } catch { return }
-  }
-  done()
+async function mayCloseArchiveCreate() {
+  if (archiveCreateSaving.value || archiveDraftChecking.value || archiveCloseChoiceVisible.value) return false
+  if (persistentDraft.unknown.value) { ElMessage.warning('请先核对上次保存结果'); return false }
+  if (!archiveCreateSession.dirty.value) return true
+  archiveCloseChoiceVisible.value = true
+  const choice = await new Promise<'save' | 'discard' | 'continue'>(resolve => { archiveCloseResolver = resolve })
+  if (choice === 'save') return saveArchiveDraft()
+  return choice === 'discard'
 }
-
-function buildArchiveCreatePayload() {
-  const payload: Record<string, unknown> = {}
-  const values: Record<string, unknown> = {
-    project_code: form.project_code,
-    project_name: form.project_name,
-    customer: form.customer || null,
-    manager_id: form.manager_id,
-    equipment_series: form.equipment_series,
-    product_category: form.product_category,
-    serial_no: form.serial_no || null,
-    ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, normalizeOfflineValue(field.key, form[field.key])])),
+async function beforeCloseArchiveCreate(done: () => void) {
+  if (await mayCloseArchiveCreate()) done()
+}
+async function openArchiveDraftList() {
+  if (dialogVisible.value && !await mayCloseArchiveCreate()) return
+  dialogVisible.value = false
+  archiveDraftListVisible.value = true
+}
+async function refreshArchiveDraftMetadata() {
+  await Promise.all([
+    fetchEffectiveArchiveFields(), archiveDraftProductLines.load(), fetchUsers(),
+    fetchDictOptions('equipment_series', true),
+    ...Object.values(offlineEnumCodes).map(code => fetchDictOptions(code, true)), fetchArchiveRegions(),
+  ])
+  if (!effectiveArchiveFields.value.length) throw new Error('字段规则读取失败，请重试')
+}
+async function applyArchiveDraft(row: PersistentDraft) {
+  if (row.status === 'used') { ElMessage.info('该草稿已保存为正式档案'); return }
+  archiveCreateValidationIntent.value = 'draft'
+  formRef.value?.resetFields()
+  const defaults = archiveDrawerValues({})
+  Object.assign(form, defaults, row.payload, {id: 0})
+  // Draft read responses are projected by current visibility; noneditable values only display.
+  persistentDraft.attach(row)
+  archiveDraftWarnings.value = row.warnings || []; archiveDraftValueLabels.value = row.value_labels || {}
+  clearArchiveServerErrors(archiveCreateServerErrors)
+  archiveCreateSession.capture()
+  archiveDraftListVisible.value = false; dialogVisible.value = true
+}
+let archiveDraftLoadTicket = 0
+async function resumeArchiveDraft(id: string) {
+  if (archiveCreateOpening.value || archiveCreateSaving.value) return
+  archiveCreateOpening.value = true
+  const ticket = ++archiveDraftLoadTicket
+  try {
+    await refreshArchiveDraftMetadata()
+    const row = await archiveDraftApi.get(id)
+    if (ticket === archiveDraftLoadTicket) await applyArchiveDraft(row)
   }
-  Object.entries(values).forEach(([fieldKey, value]) => {
+  catch { ElMessage.warning('草稿未能恢复，已保存内容仍保留，请核对权限或重试') }
+  finally { archiveCreateOpening.value = false }
+}
+async function loadLatestArchiveDraft() {
+  if (!persistentDraft.id.value) return
+  try { await ElMessageBox.confirm('加载最新草稿将替换本次未保存输入，是否继续？', '加载最新草稿', {type:'warning'}) }
+  catch { return }
+  await resumeArchiveDraft(persistentDraft.id.value)
+}
+async function saveArchiveDraftAsNew() {
+  if (archiveCreateSaving.value || persistentDraft.unknown.value) return
+  persistentDraft.startNew()
+  await saveArchiveDraft()
+}
+async function saveArchiveDraft() {
+  if (!hasPermission('project:archive:add') || persistentDraft.unknown.value) return false
+  const result = await archiveCreateSession.submit({
+    validate: async () => {
+      await setArchiveCreateValidationIntent('draft')
+      const valid = Boolean(await formRef.value?.validate().catch(() => false))
+      const errors = archiveDraftIdentityErrors(form)
+      const firstField = Object.keys(errors)[0]
+      if (!firstField) return valid
+      Object.assign(archiveCreateServerErrors, errors)
+      await nextTick()
+      formRef.value?.scrollToField(firstField)
+      return false
+    },
+    save: snapshot => persistentDraft.save(buildArchiveCreatePayload(snapshot)),
+    onError: error => focusArchivePolicyValidation(error),
+  })
+  if (result.status === 'success') { ElMessage.success('草稿已保存'); return true }
+  return false
+}
+async function reconcileArchiveDraft() {
+  if (archiveDraftChecking.value) return
+  archiveDraftChecking.value = true
+  try {
+    const result = await persistentDraft.reconcile()
+    if (result?.status === 'used') {
+      ElMessage.success('已确认新增成功'); dialogVisible.value = false; void fetchList()
+    } else if (!persistentDraft.conflict.value) ElMessage.info('已核对，可继续保存')
+  } catch { ElMessage.warning('暂时无法核对，请保留页面并稍后重试') }
+  finally { archiveDraftChecking.value = false }
+}
+onBeforeRouteLeave(async () => !dialogVisible.value || await mayCloseArchiveCreate())
+function protectArchiveDraftUnload(event: BeforeUnloadEvent) {
+  if (dialogVisible.value && (archiveCreateSession.dirty.value || archiveCreateSaving.value || persistentDraft.unknown.value)) {
+    event.preventDefault(); event.returnValue = ''
+  }
+}
+window.addEventListener('beforeunload', protectArchiveDraftUnload)
+onUnmounted(() => { archiveDraftLoadTicket++; window.removeEventListener('beforeunload', protectArchiveDraftUnload); resolveArchiveCloseChoice('continue') })
+
+function buildArchiveCreatePayload(values: Record<string, any> = form) {
+  const payload: Record<string, unknown> = {}
+  const fields: Record<string, unknown> = {
+    project_code: values.project_code,
+    project_name: values.project_name,
+    customer: values.customer || null,
+    manager_id: values.manager_id,
+    equipment_series: values.equipment_series,
+    product_category: values.product_category,
+    serial_no: values.serial_no || null,
+    ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, normalizeOfflineValue(field.key, values[field.key])])),
+  }
+  Object.entries(fields).forEach(([fieldKey, value]) => {
     if (!archiveFieldVisible(fieldKey) || !archiveFieldEditable(fieldKey)) return
     payload[fieldKey] = value
   })
@@ -1611,31 +1775,50 @@ async function focusArchiveUniqueConflict(
 
 async function focusArchivePolicyValidation(error: any, targetForm = formRef) {
   const fieldKeys = archivePolicyValidationFieldKeys(error)
-  if (!fieldKeys.length) return
+  const fastApiFields = Array.isArray(error?.response?.data?.detail)
+  if (!fieldKeys.length && !fastApiFields) return
   await fetchEffectiveArchiveFields()
+  const presented = mapFormFieldErrors(error, archiveOrderedGroups.flatMap(group => group.fields.map(field => field.key)), archiveFieldVisible)
+  if (!presented.firstField) return
+  Object.assign(targetForm === formRef ? archiveCreateServerErrors : archiveDrawerServerErrors, presented.errors)
   await nextTick()
-  const visibleProps = fieldKeys.filter(fieldKey => archiveFieldVisible(fieldKey))
-  if (!visibleProps.length) return
-  await targetForm.value?.validateField(visibleProps).catch(() => false)
-  targetForm.value?.scrollToField(visibleProps[0])
+  await targetForm.value?.validateField(Object.keys(presented.errors)).catch(() => false)
+  targetForm.value?.scrollToField(presented.firstField)
 }
 
 async function handleSubmit() {
-  if (!hasPermission('project:archive:add') || archiveCreateSaving.value) return
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  archiveCreateSaving.value = true
-  try {
-    await request.post('/projects/archives', buildArchiveCreatePayload())
+  if (!hasPermission('project:archive:add')) return
+  let firstInvalidField: string | undefined
+  const result = await archiveCreateSession.submit({
+    validate: async () => {
+      await setArchiveCreateValidationIntent('formal')
+      try { return Boolean(await formRef.value?.validate()) }
+      catch (fields) {
+        const errors = fields && typeof fields === 'object' ? fields as Record<string, unknown> : {}
+        firstInvalidField = archiveCreateGroups.value.flatMap(group => group.fields).find(field => Object.hasOwn(errors, field.key))?.key
+        return false
+      }
+    },
+    save: async snapshot => {
+      await persistentDraft.save(buildArchiveCreatePayload(snapshot))
+      return persistentDraft.submit()
+    },
+    onError: async error => {
+      if (await focusArchiveUniqueConflict(error, formRef, archiveCreateServerErrors)) return
+      await focusArchivePolicyValidation(error)
+    },
+  })
+  if (result.status === 'invalid' && firstInvalidField) {
+    await nextTick()
+    formRef.value?.scrollToField(firstInvalidField)
+    document.getElementById(`archive-create-${firstInvalidField}`)?.focus({preventScroll: true})
+  }
+  if (result.status === 'success') {
     ElMessage.success('已保存，后台将自动同步金蝶')
     dialogVisible.value = false
     fetchList()
-  } catch (error) {
-    if (await focusArchiveUniqueConflict(error, formRef, archiveCreateServerErrors)) return
-    await focusArchivePolicyValidation(error)
-  } finally {
-    archiveCreateSaving.value = false
+  } else if (result.status === 'failed' && result.presentationError) {
+    ElMessage.warning('保存失败，字段提示未能加载，请核对填写内容后重试')
   }
 }
 

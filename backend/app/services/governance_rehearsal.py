@@ -2,6 +2,7 @@
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from urllib.parse import quote
 from sqlalchemy import create_engine
@@ -15,7 +16,7 @@ def _readonly(path):
 
 def _copy(source, target):
     if target.exists(): raise RuntimeError('演练文件已存在，禁止覆盖')
-    with _readonly(source) as original, sqlite3.connect(target) as copied:
+    with closing(_readonly(source)) as original, closing(sqlite3.connect(target)) as copied:
         original.backup(copied)
         if copied.execute('PRAGMA integrity_check').fetchone()[0] != 'ok': raise RuntimeError('数据库备份完整性检查失败')
     target.chmod(0o600)
@@ -23,7 +24,7 @@ def _copy(source, target):
 
 def fingerprint(path):
     result = {}
-    with _readonly(path) as db:
+    with closing(_readonly(path)) as db:
         for name, ddl in db.execute("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"):
             quoted = '"' + name.replace('"', '""') + '"'
             rows = sorted(json.dumps(row, ensure_ascii=False, default=str) for row in db.execute(f'SELECT * FROM {quoted}'))
@@ -41,7 +42,10 @@ def rehearse(source, output):
     _copy(source, backup); _copy(backup, upgraded)
     engine = create_engine('sqlite:///' + str(upgraded))
     try:
-        upgrade_governance(engine); check_database_ready(engine)
+        upgrade_governance(engine)
+        # This is the historical governance rehearsal, not readiness for later revisions.
+        from app.services.governance_migration import verify_governance_structure
+        with engine.connect() as connection:verify_governance_structure(connection)
     finally: engine.dispose()
     _copy(backup, restored)
     if fingerprint(restored) != before or fingerprint(source) != before:

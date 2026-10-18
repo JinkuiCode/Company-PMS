@@ -6,7 +6,7 @@ import request from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 import { useReleaseStore } from './store'
 import CustomPagination from '@/components/CustomPagination.vue'
-import { PmsFormField, PmsTextareaControl } from '@/form-system'
+import { PmsFormField, PmsTextareaControl, PmsCheckboxControl } from '@/form-system'
 import { DEFAULT_PAGE_SIZE } from '@/config/listUi'
 import { pageGuides } from '@/page-guide/registry'
 import type { PageGuideKey } from '@/page-guide/types'
@@ -108,7 +108,7 @@ onBeforeUnmount(() => { ++serial; ++deliverySerial })
     </div>
     <CustomPagination v-if="total > pageSize || pageSize !== DEFAULT_PAGE_SIZE || page > 1" v-model="page" v-model:page-size="pageSize" :total="total" />
     <el-dialog :model-value="!!mailPreview" title="邮件预览" width="min(720px,94vw)" append-to-body @update:model-value="mailPreview = null"><template v-if="mailPreview"><h3>{{ mailPreview.subject }}</h3><pre class="release-mail-preview">{{ mailPreview.text }}</pre></template></el-dialog>
-    <el-dialog :model-value="!!retryRow" title="确认重试邮件" width="min(520px,94vw)" append-to-body :close-on-click-modal="false" :show-close="!busy" @update:model-value="!busy && (retryRow = null)"><PmsFormField field-id="release-retry-reason" label="重试原因" required><PmsTextareaControl v-model="retryReason" aria-label="重试原因" :disabled="busy" /></PmsFormField><el-checkbox v-if="retryRow?.status === 'unknown'" v-model="checkedNotReceived" :disabled="busy">已人工核查，确认用户未收到邮件</el-checkbox><template #footer><el-button class="pms-button-reset" :disabled="busy" @click="retryRow = null">取消</el-button><el-button type="primary" :disabled="!retryReason.trim() || (retryRow?.status === 'unknown' && !checkedNotReceived)" :loading="busy" @click="retry">确认重试</el-button></template></el-dialog>
+    <el-dialog :model-value="!!retryRow" title="确认重试邮件" width="min(520px,94vw)" append-to-body :close-on-click-modal="false" :show-close="!busy" @update:model-value="!busy && (retryRow = null)"><PmsFormField field-id="release-retry-reason" label="重试原因" required><PmsTextareaControl v-model="retryReason" aria-label="重试原因" :disabled="busy" /></PmsFormField><PmsCheckboxControl v-if="retryRow?.status === 'unknown'" v-model="checkedNotReceived" :disabled="busy" aria-label="已人工核查，确认用户未收到邮件">已人工核查，确认用户未收到邮件</PmsCheckboxControl><template #footer><el-button class="pms-button-reset" :disabled="busy" @click="retryRow = null">取消</el-button><el-button type="primary" :disabled="!retryReason.trim() || (retryRow?.status === 'unknown' && !checkedNotReceived)" :loading="busy" @click="retry">确认重试</el-button></template></el-dialog>
   </section>
 </template>
 

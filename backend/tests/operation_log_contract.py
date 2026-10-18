@@ -3,13 +3,15 @@
 这些测试优先约束结构和关键工具函数，避免后续模块新增写操作时各自为政。
 """
 import os
+import tempfile
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
-os.environ.setdefault("DB_DIALECT", "sqlite")
-os.environ.setdefault("SQLITE_DB_PATH", "data/pms-test-operation-log.db")
+TEST_DATABASE = tempfile.TemporaryDirectory()
+os.environ['DB_DIALECT']='sqlite'
+os.environ['SQLITE_DB_PATH']=str(Path(TEST_DATABASE.name)/'operation-log.db')
 
 
 def read(path: str) -> str:

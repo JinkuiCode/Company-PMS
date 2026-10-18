@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import ts from 'typescript'
 import { parse } from '@vue/compiler-sfc'
+import { governanceFieldRequired } from '../src/views/project/archiveGovernance.ts'
+import { resolveFieldMetadata } from '../src/form-system/fieldMetadata.ts'
 
 const view = readFileSync(new URL('../src/views/project/ProjectArchive.vue', import.meta.url), 'utf8')
 const script = view.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
@@ -11,11 +13,11 @@ test('archive template remains valid', () => assert.deepEqual(parse(view).errors
 test('detailed address uses unified long text controls; create controls lock during save', () => {
   assert.match(view, /key: 'contact_phone', label: '联系人手机'/)
   assert.match(view, /key: 'address_detail', label: '详细地址', value_type: 'long_text'/)
-  assert.equal((view.match(/<PmsTextareaControl/g) || []).length, 2)
+  const fields = readFileSync(new URL('../src/views/project/ArchiveRecordForm.vue', import.meta.url), 'utf8')
+  assert.match(fields, /<PmsTextareaControl[^>]*:readonly="!editable\(field\)"/)
   const createTemplate = view.slice(view.indexOf('<PmsFormDrawer'), view.indexOf('</PmsFormDrawer>'))
-  for (const control of createTemplate.matchAll(/<Pms(?:Text|Textarea|Select|Date)Control[\s\S]*?\/>/g)) {
-    assert.match(control[0], /:disabled="archiveCreateSaving \|\|/, 'Every create control must explicitly disable while saving')
-  }
+  assert.match(createTemplate, /:editable="field => !archiveCreateSaving && archiveFieldEditable\(field.key\)"/)
+  assert.match(createTemplate, /:busy="archiveCreateSaving"/)
 })
 function functions(names, bindings = {}) {
   const declarations = ast.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text))
@@ -29,7 +31,7 @@ test('new fields use shared metadata groups, not default columns', () => {
     assert.match(view, new RegExp(`key: '${key}'`), `${key} must have a field definition`)
   }
   assert.match(view, /<PmsFormDrawer[^>]*[\s\S]*?title="新增项目档案"/)
-  assert.doesNotMatch(view, /<el-dialog/)
+  assert.doesNotMatch(view, /<el-dialog[^>]*title="新增项目档案"/)
   assert.match(view, /productLines\.load\(/)
   assert.match(view, /baseArchiveColumnKeys\.filter\(key => !archiveExpansionKeys\.has\(key\)\)/)
 })
@@ -38,6 +40,7 @@ test('required policy exempts archives created before activation, not new archiv
   const policy = { required: true, required_effective_at: '2026-09-20T00:00:00Z' }
   const { archiveFieldRequired } = functions(['archiveFieldRequired'], {
     archiveFieldPolicy: () => policy, legacyArchiveRequiredFields: new Set(),
+    form: {}, selectedArchive: {value: null}, governanceFieldRequired, resolveFieldMetadata,
   })
   assert.equal(archiveFieldRequired('contract_signed_date'), true)
   assert.equal(archiveFieldRequired('contract_signed_date', '2026-09-19T23:59:59Z'), false)
@@ -124,10 +127,10 @@ test('creation defaults only the authenticated manager; editing preserves the re
   const form = {}
   const bindings = {
     form, formRef: { value: null }, hasPermission: () => true,
-    archiveCreateOpening: { value: false }, productLines: { load: async () => {}, failed: { value: false }, options: { value: [{value:7}, {value:8}] } },
+    archiveCreateOpening: { value: false }, archiveCreateSaving: { value: false }, archiveCreateSession: { capture() {} }, productLines: { load: async () => {}, failed: { value: false }, options: { value: [{value:7}, {value:8}] } },
     clearArchiveServerErrors: () => {}, archiveCreateServerErrors: {},
     archiveExpansionFields: [{ key: 'product_line_id' }, { key: 'contract_ship_date' }],
-    authStore: { user: { id: 42 } }, archiveCreateSnapshot: { value: '' }, dialogVisible: { value: false },
+    authStore: { user: { id: 42 } }, dialogVisible: { value: false },
   }
   const { openCreateDialog, archiveDrawerValues, archiveDateValue } = functions(['openCreateDialog', 'archiveDrawerValues', 'archiveDateValue'], bindings)
   await openCreateDialog()

@@ -17,6 +17,7 @@ from app.models.user import SysUser
 from app.models.parameter import SysParameter
 from app.models.feedback import FeedbackReport
 from app.models.archive_change import ArchiveChange
+from app.models.form_draft import PmsFormDraft
 from app.models.release import PmsRelease, PmsReleaseNotice, PmsReleaseMail
 from app.schemas.feedback import FeedbackCreate, FeedbackHandle
 from app.models.erp_task import ErpSyncTask
@@ -50,6 +51,7 @@ from app.services.project_sheet_fields import (
 
 
 MODULE_CONFIGS = (
+    {'key':'form_draft','label':'本人表单草稿','group':'草稿字段','model':PmsFormDraft,'schemas':(),'editable_schemas':()},
     {'key':'release','label':'版本发布','group':'发布字段','model':PmsRelease,'schemas':(),'editable_schemas':()},
     {'key':'release_notice','label':'个人升级通知','group':'通知字段','model':PmsReleaseNotice,'schemas':(),'editable_schemas':()},
     {'key':'release_mail','label':'升级邮件投递','group':'投递字段','model':PmsReleaseMail,'schemas':(),'editable_schemas':()},
@@ -211,6 +213,8 @@ FIELD_LABELS = {
 
 
 ENUM_BINDINGS: dict[tuple[str, str], tuple[str | None, str]] = {
+    ('form_draft','status'): (None, 'system_fixed'),
+    ('form_draft','resource'): (None, 'system_fixed'),
     ('release_mail', 'status'): (None, 'system_fixed'),
     ('archive_change','status'):('archive_change_status','system_fixed'),
     ("feedback", "type_id"): ("feedback_type", "enum"),

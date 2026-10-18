@@ -106,11 +106,26 @@ def upgrade_parameter_secret_only(*, rollback=False) -> None:
 
 def upgrade_database(*, business_export_only: bool = False, parameter_secret_only: bool = False,
                      parameter_secret_rollback: bool = False, feedback_only: bool = False, archive_governance_only: bool = False,
-                     governance_only: bool = False) -> None:
-    if sum((business_export_only, parameter_secret_only, parameter_secret_rollback, feedback_only, archive_governance_only, governance_only)) > 1:
+                     governance_only: bool = False, form_drafts_only: bool = False, draft_management_only: bool = False) -> None:
+    if sum((business_export_only, parameter_secret_only, parameter_secret_rollback, feedback_only, archive_governance_only, governance_only, form_drafts_only, draft_management_only)) > 1:
         raise RuntimeError("限定升级与回滚模式不能同时使用")
     validate_runtime_config(settings)
+    if draft_management_only:
+        from app.services.form_draft_management_migration import upgrade_draft_management
+        upgrade_draft_management(engine)
+        check_database_ready(engine)
+        return
+    if form_drafts_only:
+        from app.services.form_draft_migration import REVISION
+        if CURRENT_DATABASE_REVISION != REVISION:raise RuntimeError('当前程序需要草稿管理限定升级，请勿使用历史限定升级模式')
+        from app.services.form_draft_migration import upgrade_form_drafts
+        upgrade_form_drafts(engine)
+        check_database_ready(engine)
+        return
     if governance_only:
+        from app.services.governance_migration import REVISION
+        if CURRENT_DATABASE_REVISION != REVISION:
+            raise RuntimeError("当前程序需要草稿限定升级，请勿使用历史限定升级模式")
         from app.services.governance_migration import upgrade_governance
         upgrade_governance(engine)
         check_database_ready(engine)
@@ -164,6 +179,8 @@ def upgrade_database(*, business_export_only: bool = False, parameter_secret_onl
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--form-drafts-only', action='store_true', help='仅从governance-01新增本人表单草稿存储，不改权限或业务数据')
+    modes.add_argument('--draft-management-only', action='store_true', help='仅从governance-01或form-draft-01升级草稿管理，新增权限不授予角色')
     modes.add_argument('--governance-only', action='store_true', help='从档案治理02升级日志关联、快照及无默认授权的维护权限')
     modes.add_argument('--archive-governance-only',action='store_true',help='仅升级档案变更申请、必输规则及移除档案计划字段')
     modes.add_argument("--feedback-only", action="store_true", help="仅新增问题提报表、菜单与一次性模板权限")
@@ -173,5 +190,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     upgrade_database(business_export_only=args.business_export_only, parameter_secret_only=args.parameter_secret_only,
                      parameter_secret_rollback=args.parameter_secret_rollback, feedback_only=args.feedback_only, archive_governance_only=args.archive_governance_only,
-                     governance_only=args.governance_only)
+                     governance_only=args.governance_only, form_drafts_only=args.form_drafts_only, draft_management_only=args.draft_management_only)
     print("数据库升级完成")

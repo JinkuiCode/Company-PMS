@@ -15,6 +15,8 @@ class ResourcePolicy:
 
 
 BUSINESS_RESOURCES = {
+    'draft_management': ResourcePolicy('pms_form_draft', 'project:archive:draft:manage', 'product_line_and_owner_and_manager', 'archiveDrafts', None, '档案草稿', 'product_line_id'),
+    'form_draft': ResourcePolicy('pms_form_draft', 'project:archive:add', 'owner_and_current_archive_creation_scope', 'archive', 'project_archive', '本人档案草稿', 'product_line_id'),
     'archive': ResourcePolicy('pms_project_archive', 'project:archive:view', 'product_line_and_personnel', 'archive', 'project_archive', '项目档案', 'business_product_line_id', 'pms_project_archive'),
     'project': ResourcePolicy('pms_project', 'project:list:view', 'product_line_and_personnel', 'progress', 'project_progress', '项目进度', 'archive.business_product_line_id', 'pms_project'),
     'task': ResourcePolicy('pms_task', 'project:list:view', 'parent_project', 'tasks', None, '任务', 'project.archive.business_product_line_id', 'pms_project'),
@@ -39,10 +41,12 @@ BUSINESS_RESOURCES = {
     'health': ResourcePolicy('service_health', 'public', 'public_health_only', None),
 }
 
-DOCUMENT_RESOURCES = {key: BUSINESS_RESOURCES[key] for key in ('archive', 'project', 'task', 'feedback')}
+DOCUMENT_RESOURCES = {key: BUSINESS_RESOURCES[key] for key in ('archive', 'project', 'task', 'feedback', 'draft_management')}
 
 # Longest prefix first, with the path-parameter spellings from FastAPI routes.
 ROUTE_RESOURCES = {
+    '/api/archive-draft-management': 'draft_management',
+    '/api/form-drafts': 'form_draft',
     '/api/document-history': 'document_history',
     '/api/releases/notices': 'release_notice', '/api/releases/mail': 'release_delivery',
     '/api/releases/{release_id}/deliveries': 'release_delivery', '/api/releases/publish': 'release_publication',

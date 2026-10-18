@@ -141,6 +141,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '项目进度', permission: 'project:list:view' },
       },
       {
+        path: 'project/archive-drafts',
+        name: 'ArchiveDraftManagement',
+        component: () => import('@/views/project/ArchiveDraftManagement.vue'),
+        meta: { title: '草稿管理', permission: 'project:archive:draft:manage' },
+      },
+      {
         path: 'project/archive',
         name: 'ProjectArchive',
         component: () => import('@/views/project/ProjectArchive.vue'),
