@@ -23,3 +23,8 @@ PYTHONPATH=backend:backend/.venv-deps312 python3 -B ops/releases/archive-drafts-
 前三类仅用标准库、私有固定包和一次性Git副本，无SQL/服务操作。受控启动检查复制本机SQLite库，实际执行ASGI生命周期/版本/结构/中间件；为允许SQLite替身，单独替换正式MSSQL配置校验，不替代真实SQL2017部署验收。不开监听、不外联，副本字节保持。
 
 包、bundle、固定引导及运行清单位于被Git忽略的`.runtime/archive-draft-release-20261018`；该目录不进Git，不含凭据。引导的所有摘要在执行前再次验证；当前没有监听或传输服务。正式操作顺序和批准边界见本轮正式切换方案。
+
+
+## v1.1.0通知收尾
+
+`closeout.py`为已独立批准的真实发布及有界投递助手，安装到服务器私有`.runtime/archive-draft-closeout-20261018`后才可运行；要求原候选、配置、同一正常进程及真实验收回执，用户本地隐藏输入现有ael密码。仅消费现有发布权限，不创建/撤销角色、不重启PMS、不改配置/结构。最多处理本次18条邮件，unknown/pending等立即停止，旧版终态不重发。执行状态存在时拒绝重跑；检查真实回执后再决定后续操作。相关隔离验证为`test_closeout.py`，SMTP全部mock；材料存在不代表再次发布授权。
