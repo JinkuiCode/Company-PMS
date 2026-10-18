@@ -2398,3 +2398,11 @@
 - 调整：三页接入共享会话，统一关闭/路由确认、提交互斥、快照和失败保留。用户打开时不允许改目标，原独立重置规则保持；角色完整初始化后建立基线，保留父子/查看依赖/首页及正ID转换；枚举持久化成功与缓存失败分开。自身资料保存后身份刷新失败有明确反馈、不重复写入。角色/枚举独立说明与前后端静态目录同步。
 - 涉及：UserFormDrawer.vue、UserList.vue、RoleList.vue、EnumList.vue、page-guide/{types,navigation,registry}.ts、backend/app/services/runtime_release.py（仅GUIDES两项）、release_guide_registry_contract.py、system-save-session-browser.mjs及相关既有测试、本批计划和模块索引。
 - 验证：三页RED→最终模拟GREEN；37项前端契约、构建、用户/独立重置/参数/改密、角色树/首页、部门/枚举、专用列表回归exit0；字段目录/枚举/登记及发布18项、邮件5项隔离契约exit0。独立审查Minor已关闭，无未关闭C/I/M；5174实际只读打开取消通过。无真实写入/重置/授权、数据库、后端重启、正式环境或Git操作。
+
+
+### 2026-10-18：本地锁定共享治理v1.2.0候选
+- 原因与批准：用户单独批准本轮已验收60项文件在当前功能分支提交并打包，排除其他任务及私有材料；终点仅本地候选。
+- 调整：应用提交a3c8a67（父d81ba3b），从该提交完整归档独立构建v1.2.0固定ZIP、运行清单、来源摘要及增量源码bundle。升级说明采用已批准独立清单并记录来源，保留根目录历史v1.0.0清单及旧候选；本批文档回执与应用提交分开。
+- 涉及：已批准60项（详见候选说明及outputs逐文件清单）、change.md、docs/releases/2026-10-18-shared-governance-candidate-preparation.md；产物位于release/shared-governance-v1.2.0-20261018，不纳入Git。
+- 验证：60项提交哈希一致；固定快照三项必需规范及构建退出0。ZIP425项/424摘要、421来源字节比对、运行清单解析及源码另库恢复60项均通过，746项其他文件保持，旧v1.1.0包及bundle摘要保持；隔离夹具与静态地理码目录校验修正后通过，记录保留。ZIP摘要54991d76a1840f1e495a852966688abe8b46dda4973698ce42ad8c7424f2a74c；独立包审查无未关闭Critical/Important/Minor。
+- 边界：无master合并、GitHub推送、正式部署、数据库升级、真实授权、通知/邮件或金蝶动作；正式版本没有因此变化，现场本人/OA及真实金蝶写入仍待验。
