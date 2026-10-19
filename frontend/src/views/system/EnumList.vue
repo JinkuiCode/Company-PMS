@@ -400,7 +400,7 @@ onBeforeUnmount(() => { dictListState.invalidate(); enumItemsState.invalidate() 
   min-width: 0;
   flex-direction: column;
   border-right: 1px solid var(--pms-border);
-  background: #f8fafc;
+  background: var(--pms-surface-muted);
 }
 
 .enum-master-head {
@@ -452,8 +452,8 @@ onBeforeUnmount(() => { dictListState.invalidate(); enumItemsState.invalidate() 
 }
 
 .enum-master-item.active {
-  border-color: #c7d2fe;
-  background: #eef2ff;
+  border-color: var(--pms-accent-border);
+  background: var(--pms-primary-soft);
 }
 
 .enum-master-name {
@@ -475,14 +475,14 @@ onBeforeUnmount(() => { dictListState.invalidate(); enumItemsState.invalidate() 
   align-self: center;
   padding: 2px 5px;
   border-radius: 4px;
-  background: #e2e8f0;
-  color: #64748b;
+  background: var(--pms-neutral-soft);
+  color: var(--pms-text-secondary);
   font-size: 10px;
 }
 
 .enum-mode.configurable {
-  background: #dcfce7;
-  color: #047857;
+  background: var(--pms-success-soft);
+  color: var(--pms-success);
 }
 
 .enum-detail {
@@ -552,7 +552,7 @@ onBeforeUnmount(() => { dictListState.invalidate(); enumItemsState.invalidate() 
 }
 
 .has-reference {
-  color: #b45309;
+  color: var(--pms-warning);
   font-weight: 650;
 }
 

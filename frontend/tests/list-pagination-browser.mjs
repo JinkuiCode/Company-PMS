@@ -1,5 +1,6 @@
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
+import {choosePageSize} from './page-size-helper.mjs'
 import { verifyColumnLayout, verifyDynamicColumnDraft } from './grid-layout-browser-helper.mjs'
 
 const browser = await chromium.launch({ headless: true, channel: 'msedge' })
@@ -98,7 +99,7 @@ try {
   await page.getByRole('textbox', { name: '搜索项目档案' }).fill('甲客户')
   await expect(page.getByText('共 470 条')).toBeVisible()
   assert.equal(requests.at(-1).page, '1')
-  await page.locator('.page-size-select').selectOption('20')
+  await choosePageSize(page,20)
   await expect.poll(() => requests.at(-1).page_size).toBe('20')
   assert.equal(requests.at(-1).keyword, '甲客户')
   await page.getByRole('textbox', { name: '搜索项目档案' }).fill('CODE-0001')

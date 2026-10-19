@@ -25,8 +25,8 @@ function openDetail(value?: PurchaseDetailEntry) {
 </template>
 <style scoped>
 .purchase-report-workspace,.purchase-detail-view{display:flex;flex-direction:column;min-height:0;min-width:0;flex:1;height:100%}
-.purchase-report-workspace :deep(.purchase-view-switch){display:flex;height:var(--pms-query-height);border-radius:4px;flex-shrink:0;background:#f7f8fc;}
-.purchase-report-workspace :deep(.purchase-view-switch button){height:var(--pms-query-height);padding:0 10px;border:1px solid var(--pms-border);border-radius:3px;background:transparent;color:#59638e;font:inherit;font-size:12px;white-space:nowrap;cursor:pointer}
+.purchase-report-workspace :deep(.purchase-view-switch){display:flex;height:var(--pms-query-height);border-radius:4px;flex-shrink:0;background:var(--pms-surface-muted);}
+.purchase-report-workspace :deep(.purchase-view-switch button){height:var(--pms-query-height);padding:0 10px;border:1px solid var(--pms-border);border-radius:3px;background:transparent;color:var(--pms-text-secondary);font:inherit;font-size:12px;white-space:nowrap;cursor:pointer}
 .purchase-report-workspace :deep(.purchase-view-switch button+button){border-left:0;}
-.purchase-report-workspace :deep(.purchase-view-switch button[aria-pressed=true]){background:white;color:var(--pms-primary);font-weight:600;box-shadow:0 1px 2px #1620330c;}
+.purchase-report-workspace :deep(.purchase-view-switch button[aria-pressed=true]){background:var(--pms-surface);color:var(--pms-primary);font-weight:600;box-shadow:var(--pms-shadow-sm);}
 </style>

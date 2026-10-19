@@ -1,0 +1,3335 @@
+{
+  "purchase": {
+    "fields": [
+      {
+        "key": "product_line_name",
+        "label": "产品线",
+        "value_type": "text",
+        "group": "项目信息",
+        "description": "请购组织匹配 PMS 产品线显示名称；未配置时显示金蝶组织名称并标注未配置产品线，不按项目档案产品线替代",
+        "source_table": "T_PUR_REQUISITION",
+        "source_column": "FAPPLICATIONORGID",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "project_code",
+        "label": "项目编码",
+        "value_type": "text",
+        "group": "项目信息",
+        "description": "申请明细项目辅助资料 F_TWBJ_ASSISTANT_83G 对应编码",
+        "source_table": "T_BAS_ASSISTANTDATAENTRY",
+        "source_column": "FNUMBER",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "material_code",
+        "label": "物料编码",
+        "value_type": "text",
+        "group": "物料信息",
+        "description": "按申请明细 FMATERIALID 关联",
+        "source_table": "T_BD_MATERIAL",
+        "source_column": "FNUMBER",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "material_name",
+        "label": "物料名称",
+        "value_type": "text",
+        "group": "物料信息",
+        "description": "中文语言 2052",
+        "source_table": "T_BD_MATERIAL_L",
+        "source_column": "FNAME",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "specification",
+        "label": "规格型号",
+        "value_type": "text",
+        "group": "物料信息",
+        "description": "中文语言 2052",
+        "source_table": "T_BD_MATERIAL_L",
+        "source_column": "FSPECIFICATION",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "unit_name",
+        "label": "申请单位",
+        "value_type": "text",
+        "group": "采购申请",
+        "description": "申请明细 FUNITID；累计数量均换算到此单位",
+        "source_table": "T_BD_UNIT_L",
+        "source_column": "FNAME",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "bill_no",
+        "label": "申请单编号",
+        "value_type": "text",
+        "group": "采购申请",
+        "description": "一行对应一条申请明细，不按物料编码合并",
+        "source_table": "T_PUR_REQUISITION",
+        "source_column": "FBILLNO",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "line_no",
+        "label": "申请单行号",
+        "value_type": "number",
+        "group": "采购申请",
+        "description": "单据行号，内部关联使用 FENTRYID",
+        "source_table": "T_PUR_REQENTRY",
+        "source_column": "FSEQ",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "application_date",
+        "label": "申请日期",
+        "value_type": "date",
+        "group": "采购申请",
+        "description": "使用申请日期，不使用创建日期",
+        "source_table": "T_PUR_REQUISITION",
+        "source_column": "FAPPLICATIONDATE",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "document_status",
+        "label": "数据状态",
+        "value_type": "text",
+        "group": "采购申请",
+        "description": "固定仅纳入已审核 C 且申请明细业务终止 FMRPTERMINATESTATUS 为正常 A 的申请行；状态仅展示，不提供查询条件",
+        "source_table": "T_PUR_REQUISITION",
+        "source_column": "FDOCUMENTSTATUS",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "close_status",
+        "label": "关闭状态",
+        "value_type": "text",
+        "group": "采购申请",
+        "description": "关闭不会抹去已发生的订单和入库",
+        "source_table": "T_PUR_REQUISITION",
+        "source_column": "FCLOSESTATUS",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "requested",
+        "label": "申请数量",
+        "value_type": "number",
+        "group": "采购申请",
+        "description": "保留原申请数量",
+        "source_table": "T_PUR_REQENTRY",
+        "source_column": "FREQQTY",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "approved",
+        "label": "批准数量",
+        "value_type": "number",
+        "group": "采购申请",
+        "description": "待下单计算基数；使用批准基本数量换算",
+        "source_table": "T_PUR_REQENTRY",
+        "source_column": "FAPPROVEQTY",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "ordered",
+        "label": "累计下单数量",
+        "value_type": "number",
+        "group": "采购订单",
+        "description": "汇总当前关联量，排除未审核、作废订单；不用 OLD 数量",
+        "source_table": "T_PUR_POORDERENTRY_LK",
+        "source_column": "FBASEUNITQTY",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "last_order_date",
+        "label": "最近订单日期",
+        "value_type": "date",
+        "group": "采购订单",
+        "description": "有效关联订单日期最大值",
+        "source_table": "T_PUR_POORDER",
+        "source_column": "FDATE",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "supplier_name",
+        "label": "供应商",
+        "value_type": "text",
+        "group": "采购订单",
+        "description": "不同供应商显示多家供应商，逐单名称在明细中展示",
+        "source_table": "T_BD_SUPPLIER_L",
+        "source_column": "FNAME",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "order_statuses",
+        "label": "订单数据状态",
+        "value_type": "text",
+        "group": "采购订单",
+        "description": "已验证来源的关联订单状态去重显示，不取单张代表全部",
+        "source_table": "T_PUR_POORDER",
+        "source_column": "FDOCUMENTSTATUS",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "received",
+        "label": "累计入库数量",
+        "value_type": "number",
+        "group": "采购入库",
+        "description": "有效实收入库基本数量换算；来源不明确时为空",
+        "source_table": "T_STK_INSTOCKENTRY",
+        "source_column": "FBASEUNITQTY",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "returned",
+        "label": "累计退料数量",
+        "value_type": "number",
+        "group": "采购入库",
+        "description": "只减有效入库后退料；收料退料不重复扣减",
+        "source_table": "T_PUR_MRBENTRY_LK",
+        "source_column": "FBASEUNITQTY",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "net_received",
+        "label": "累计净入库数量",
+        "value_type": "number",
+        "group": "采购入库",
+        "description": "累计入库数量减累计退料数量",
+        "source_table": null,
+        "source_column": null,
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "last_stock_date",
+        "label": "最近入库日期",
+        "value_type": "date",
+        "group": "采购入库",
+        "description": "有效关联入库日期最大值",
+        "source_table": "T_STK_INSTOCK",
+        "source_column": "FDATE",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "stock_statuses",
+        "label": "入库数据状态",
+        "value_type": "text",
+        "group": "采购入库",
+        "description": "已验证来源的关联入库状态去重显示，不取单张代表全部",
+        "source_table": "T_STK_INSTOCK",
+        "source_column": "FDOCUMENTSTATUS",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "pending_order",
+        "label": "待下单数量",
+        "value_type": "number",
+        "group": "进度",
+        "description": "批准数量减累计下单数量；仅统计已审核且业务终止正常的申请行，超量保留负数",
+        "source_table": null,
+        "source_column": null,
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "pending_receipt",
+        "label": "待入库数量",
+        "value_type": "number",
+        "group": "进度",
+        "description": "累计下单数量减累计净入库数量；超量保留负数",
+        "source_table": null,
+        "source_column": null,
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "progress",
+        "label": "采购进度",
+        "value_type": "text",
+        "group": "进度",
+        "description": "未下单、部分下单、待入库、已完成或数据待核对；系统固定计算状态",
+        "source_table": null,
+        "source_column": null,
+        "editable": false,
+        "list_available": true
+      }
+    ],
+    "overview_fields": [
+      {
+        "key": "product_line_name",
+        "label": "产品线",
+        "value_type": "text",
+        "group": "项目信息",
+        "description": "请购组织匹配 PMS 产品线显示名称；未配置时显示金蝶组织名称并标注未配置产品线，不按项目档案产品线替代",
+        "source_table": "T_PUR_REQUISITION",
+        "source_column": "FAPPLICATIONORGID",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "project_code",
+        "label": "项目编码",
+        "value_type": "text",
+        "group": "项目信息",
+        "description": "申请明细项目辅助资料 F_TWBJ_ASSISTANT_83G 对应编码",
+        "source_table": "T_BAS_ASSISTANTDATAENTRY",
+        "source_column": "FNUMBER",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "organization_name",
+        "label": "请购组织",
+        "value_type": "text",
+        "group": "项目信息",
+        "description": "当前组合的金蝶请购组织中文名称",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "completion_rate",
+        "label": "申请行入库率",
+        "value_type": "number",
+        "group": "申请行进度",
+        "description": "已完成申请行 / 当前查询条件下全部申请行 × 100；沿用原完成率口径，待核对计分母、不计分子",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "conversion_rate",
+        "label": "申请行转单率",
+        "value_type": "number",
+        "group": "申请行进度",
+        "description": "（待入库申请行 + 已完成申请行）/ 当前查询条件下全部申请行 × 100；仅计完全转单，部分下单和待核对不计分子",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "total_lines",
+        "label": "申请行数",
+        "value_type": "number",
+        "group": "申请行进度",
+        "description": "当前查询条件下的申请明细行数，按项目编码及请购组织分组",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "not_ordered_lines",
+        "label": "未下单",
+        "value_type": "number",
+        "group": "申请行进度",
+        "description": "采购进度为未下单的申请行数",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "ordering_lines",
+        "label": "部分下单",
+        "value_type": "number",
+        "group": "申请行进度",
+        "description": "采购进度为部分下单的申请行数",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "receiving_lines",
+        "label": "待入库",
+        "value_type": "number",
+        "group": "申请行进度",
+        "description": "采购进度为待入库的申请行数",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "complete_lines",
+        "label": "已完成",
+        "value_type": "number",
+        "group": "申请行进度",
+        "description": "采购进度为已完成的申请行数",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "review_lines",
+        "label": "数据待核对",
+        "value_type": "number",
+        "group": "申请行进度",
+        "description": "采购进度为数据待核对的申请行数",
+        "editable": false,
+        "list_available": true
+      }
+    ],
+    "query_fields": [
+      {
+        "field": "product_line_name",
+        "label": "产品线",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "project_code",
+        "label": "项目编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty",
+          "reference"
+        ],
+        "reference": {
+          "source": "project-archive",
+          "keyField": "id",
+          "keyType": "number"
+        }
+      },
+      {
+        "field": "material_code",
+        "label": "物料编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "material_name",
+        "label": "物料名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "specification",
+        "label": "规格型号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "unit_name",
+        "label": "申请单位",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_no",
+        "label": "申请单编号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "line_no",
+        "label": "申请单行号",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "application_date",
+        "label": "申请日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "close_status",
+        "label": "关闭状态",
+        "type": "enum",
+        "operators": [
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty",
+          "in",
+          "notIn",
+          "reference",
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith"
+        ],
+        "options": [
+          {
+            "value": "A",
+            "label": "未关闭"
+          },
+          {
+            "value": "B",
+            "label": "已关闭"
+          }
+        ]
+      },
+      {
+        "field": "requested",
+        "label": "申请数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "approved",
+        "label": "批准数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "ordered",
+        "label": "累计下单数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "last_order_date",
+        "label": "最近订单日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "supplier_name",
+        "label": "供应商",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "order_statuses",
+        "label": "订单数据状态",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "received",
+        "label": "累计入库数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "returned",
+        "label": "累计退料数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "net_received",
+        "label": "累计净入库数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "last_stock_date",
+        "label": "最近入库日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "stock_statuses",
+        "label": "入库数据状态",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "pending_order",
+        "label": "待下单数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "pending_receipt",
+        "label": "待入库数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "progress",
+        "label": "采购进度",
+        "type": "enum",
+        "operators": [
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty",
+          "in",
+          "notIn",
+          "reference",
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith"
+        ],
+        "options": [
+          {
+            "value": "not_ordered",
+            "label": "未下单"
+          },
+          {
+            "value": "ordering",
+            "label": "部分下单"
+          },
+          {
+            "value": "receiving",
+            "label": "待入库"
+          },
+          {
+            "value": "complete",
+            "label": "已完成"
+          },
+          {
+            "value": "review",
+            "label": "数据待核对"
+          }
+        ]
+      }
+    ],
+    "column_filter_fields": [
+      {
+        "field": "product_line_name",
+        "label": "产品线",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "project_code",
+        "label": "项目编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty",
+          "reference"
+        ],
+        "reference": {
+          "source": "project-archive",
+          "keyField": "id",
+          "keyType": "number"
+        }
+      },
+      {
+        "field": "material_code",
+        "label": "物料编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "material_name",
+        "label": "物料名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "specification",
+        "label": "规格型号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "unit_name",
+        "label": "申请单位",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_no",
+        "label": "申请单编号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "line_no",
+        "label": "申请单行号",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "application_date",
+        "label": "申请日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "close_status",
+        "label": "关闭状态",
+        "type": "enum",
+        "operators": [
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty",
+          "in",
+          "notIn",
+          "reference",
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith"
+        ],
+        "options": [
+          {
+            "value": "A",
+            "label": "未关闭"
+          },
+          {
+            "value": "B",
+            "label": "已关闭"
+          }
+        ]
+      },
+      {
+        "field": "requested",
+        "label": "申请数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "approved",
+        "label": "批准数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "ordered",
+        "label": "累计下单数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "last_order_date",
+        "label": "最近订单日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "supplier_name",
+        "label": "供应商",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "order_statuses",
+        "label": "订单数据状态",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "received",
+        "label": "累计入库数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "returned",
+        "label": "累计退料数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "net_received",
+        "label": "累计净入库数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "last_stock_date",
+        "label": "最近入库日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "stock_statuses",
+        "label": "入库数据状态",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "pending_order",
+        "label": "待下单数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "pending_receipt",
+        "label": "待入库数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "progress",
+        "label": "采购进度",
+        "type": "enum",
+        "operators": [
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty",
+          "in",
+          "notIn",
+          "reference",
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith"
+        ],
+        "options": [
+          {
+            "value": "not_ordered",
+            "label": "未下单"
+          },
+          {
+            "value": "ordering",
+            "label": "部分下单"
+          },
+          {
+            "value": "receiving",
+            "label": "待入库"
+          },
+          {
+            "value": "complete",
+            "label": "已完成"
+          },
+          {
+            "value": "review",
+            "label": "数据待核对"
+          }
+        ]
+      }
+    ],
+    "overview_query_fields": [
+      {
+        "field": "product_line_name",
+        "label": "产品线",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "project_code",
+        "label": "项目编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty",
+          "reference"
+        ],
+        "reference": {
+          "source": "project-archive",
+          "keyField": "id",
+          "keyType": "number"
+        }
+      },
+      {
+        "field": "material_code",
+        "label": "物料编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "material_name",
+        "label": "物料名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "specification",
+        "label": "规格型号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "unit_name",
+        "label": "申请单位",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_no",
+        "label": "申请单编号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "line_no",
+        "label": "申请单行号",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "application_date",
+        "label": "申请日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "close_status",
+        "label": "关闭状态",
+        "type": "enum",
+        "operators": [
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty",
+          "in",
+          "notIn",
+          "reference",
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith"
+        ],
+        "options": [
+          {
+            "value": "A",
+            "label": "未关闭"
+          },
+          {
+            "value": "B",
+            "label": "已关闭"
+          }
+        ]
+      },
+      {
+        "field": "requested",
+        "label": "申请数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "approved",
+        "label": "批准数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "ordered",
+        "label": "累计下单数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "last_order_date",
+        "label": "最近订单日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "supplier_name",
+        "label": "供应商",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "order_statuses",
+        "label": "订单数据状态",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "received",
+        "label": "累计入库数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "returned",
+        "label": "累计退料数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "net_received",
+        "label": "累计净入库数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "last_stock_date",
+        "label": "最近入库日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "stock_statuses",
+        "label": "入库数据状态",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "pending_order",
+        "label": "待下单数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "pending_receipt",
+        "label": "待入库数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "progress",
+        "label": "采购进度",
+        "type": "enum",
+        "operators": [
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty",
+          "in",
+          "notIn",
+          "reference",
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith"
+        ],
+        "options": [
+          {
+            "value": "not_ordered",
+            "label": "未下单"
+          },
+          {
+            "value": "ordering",
+            "label": "部分下单"
+          },
+          {
+            "value": "receiving",
+            "label": "待入库"
+          },
+          {
+            "value": "complete",
+            "label": "已完成"
+          },
+          {
+            "value": "review",
+            "label": "数据待核对"
+          }
+        ]
+      },
+      {
+        "field": "organization_name",
+        "label": "请购组织",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "completion_rate",
+        "label": "申请行入库率",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "conversion_rate",
+        "label": "申请行转单率",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "total_lines",
+        "label": "申请行数",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "not_ordered_lines",
+        "label": "未下单",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "ordering_lines",
+        "label": "部分下单",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "receiving_lines",
+        "label": "待入库",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "complete_lines",
+        "label": "已完成",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "review_lines",
+        "label": "数据待核对",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      }
+    ],
+    "overview_column_filter_fields": [
+      {
+        "field": "product_line_name",
+        "label": "产品线",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "project_code",
+        "label": "项目编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty",
+          "reference"
+        ],
+        "reference": {
+          "source": "project-archive",
+          "keyField": "id",
+          "keyType": "number"
+        }
+      },
+      {
+        "field": "organization_name",
+        "label": "请购组织",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "completion_rate",
+        "label": "申请行入库率",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "conversion_rate",
+        "label": "申请行转单率",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "total_lines",
+        "label": "申请行数",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "not_ordered_lines",
+        "label": "未下单",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "ordering_lines",
+        "label": "部分下单",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "receiving_lines",
+        "label": "待入库",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "complete_lines",
+        "label": "已完成",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "review_lines",
+        "label": "数据待核对",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      }
+    ],
+    "query_schema_version": 2,
+    "progress_labels": {
+      "not_ordered": "未下单",
+      "ordering": "部分下单",
+      "receiving": "待入库",
+      "complete": "已完成",
+      "review": "数据待核对"
+    },
+    "document_status_labels": {
+      "A": "创建",
+      "B": "审核中",
+      "C": "已审核",
+      "D": "重新审核",
+      "Z": "暂存"
+    },
+    "organizations": [
+      {
+        "value": 1,
+        "label": "8吋Bench"
+      },
+      {
+        "value": 2,
+        "label": "光伏"
+      }
+    ],
+    "start_date": "2026-01-01"
+  },
+  "inventory": {
+    "fields": [
+      {
+        "key": "product_line_name",
+        "label": "产品线",
+        "value_type": "text",
+        "width": 180,
+        "group": "即时库存",
+        "description": "库存组织 FSTOCKORGID 精确匹配 PMS 产品线显示名称；未配置时保留原组织名称并标注未配置产品线",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "Stock",
+        "label": "仓库",
+        "value_type": "text",
+        "width": 130,
+        "group": "即时库存",
+        "description": "库存仓库对应T_BD_STOCK_L.FNAME",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "MaterialCode",
+        "label": "物料编码",
+        "value_type": "text",
+        "width": 150,
+        "group": "即时库存",
+        "description": "T_BD_MATERIAL.FNUMBER",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "MaterialName",
+        "label": "物料名称",
+        "value_type": "text",
+        "width": 210,
+        "group": "即时库存",
+        "description": "T_BD_MATERIAL_L.FNAME",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "FSPECIFICATION",
+        "label": "规格型号",
+        "value_type": "text",
+        "width": 250,
+        "group": "即时库存",
+        "description": "T_BD_MATERIAL_L.FSPECIFICATION",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "Brand",
+        "label": "品牌",
+        "value_type": "text",
+        "width": 130,
+        "group": "即时库存",
+        "description": "T_BD_MATERIAL.F_QKTD_Text1",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "Material",
+        "label": "材质",
+        "value_type": "text",
+        "width": 130,
+        "group": "即时库存",
+        "description": "T_BD_MATERIAL.F_QKTD_Text",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "SupplierNumber",
+        "label": "供应商编码",
+        "value_type": "text",
+        "width": 180,
+        "group": "即时库存",
+        "description": "T_BD_MATERIAL.F_QKTD_Text2；不是供应商名称",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "FBaseQty",
+        "label": "基本单位数量",
+        "value_type": "number",
+        "width": 140,
+        "group": "即时库存",
+        "description": "CAST(T_STK_INVENTORY.FBaseQty AS decimal(8,2))；视图排除源数量为0，不表示可用库存",
+        "editable": false,
+        "list_available": true
+      },
+      {
+        "key": "Unit",
+        "label": "单位",
+        "value_type": "text",
+        "width": 90,
+        "group": "即时库存",
+        "description": "物料基本单位FBASEUNITID对应中文单位名称",
+        "editable": false,
+        "list_available": true
+      }
+    ],
+    "query_fields": [
+      {
+        "field": "product_line_name",
+        "label": "产品线",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "Stock",
+        "label": "仓库",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "MaterialCode",
+        "label": "物料编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "MaterialName",
+        "label": "物料名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "FSPECIFICATION",
+        "label": "规格型号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "Brand",
+        "label": "品牌",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "Material",
+        "label": "材质",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "SupplierNumber",
+        "label": "供应商编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "FBaseQty",
+        "label": "基本单位数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "Unit",
+        "label": "单位",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      }
+    ],
+    "column_filter_fields": [
+      {
+        "field": "product_line_name",
+        "label": "产品线",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "Stock",
+        "label": "仓库",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "MaterialCode",
+        "label": "物料编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "MaterialName",
+        "label": "物料名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "FSPECIFICATION",
+        "label": "规格型号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "Brand",
+        "label": "品牌",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "Material",
+        "label": "材质",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "SupplierNumber",
+        "label": "供应商编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "FBaseQty",
+        "label": "基本单位数量",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "Unit",
+        "label": "单位",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      }
+    ],
+    "organizations": [
+      {
+        "value": 1,
+        "label": "8吋Bench"
+      },
+      {
+        "value": 2,
+        "label": "光伏"
+      }
+    ],
+    "query_schema_version": 2
+  },
+  "stock": {
+    "fields": [
+      {
+        "key": "product_line_name",
+        "label": "产品线",
+        "type": "text",
+        "width": 180
+      },
+      {
+        "key": "material_code",
+        "label": "物料编码",
+        "type": "text",
+        "width": 140
+      },
+      {
+        "key": "material_name",
+        "label": "物料名称",
+        "type": "text",
+        "width": 100
+      },
+      {
+        "key": "bill_date",
+        "label": "日期",
+        "type": "date",
+        "width": 110
+      },
+      {
+        "key": "bill_name",
+        "label": "单据名称",
+        "type": "text",
+        "width": 130
+      },
+      {
+        "key": "bill_no",
+        "label": "单据编号",
+        "type": "text",
+        "width": 155
+      },
+      {
+        "key": "bill_seq",
+        "label": "行号",
+        "type": "number",
+        "width": 65
+      },
+      {
+        "key": "stock_name",
+        "label": "仓库名称",
+        "type": "text",
+        "width": 115
+      },
+      {
+        "key": "stock_status_name",
+        "label": "库存状态",
+        "type": "text",
+        "width": 95
+      },
+      {
+        "key": "owner_type_name",
+        "label": "货主类型",
+        "type": "text",
+        "width": 100
+      },
+      {
+        "key": "owner_name",
+        "label": "货主",
+        "type": "text",
+        "width": 210
+      },
+      {
+        "key": "unit_name",
+        "label": "库存单位",
+        "type": "text",
+        "width": 80
+      },
+      {
+        "key": "opening_qty",
+        "label": "期初",
+        "type": "decimal",
+        "width": 95
+      },
+      {
+        "key": "income_qty",
+        "label": "收入",
+        "type": "decimal",
+        "width": 95
+      },
+      {
+        "key": "issue_qty",
+        "label": "发出",
+        "type": "decimal",
+        "width": 95
+      },
+      {
+        "key": "balance_qty",
+        "label": "结存",
+        "type": "decimal",
+        "width": 95
+      }
+    ],
+    "query_fields": [
+      {
+        "field": "product_line_name",
+        "label": "产品线",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "material_code",
+        "label": "物料编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "material_name",
+        "label": "物料名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_date",
+        "label": "日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_name",
+        "label": "单据名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_no",
+        "label": "单据编号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_seq",
+        "label": "行号",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "stock_name",
+        "label": "仓库名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "stock_status_name",
+        "label": "库存状态",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "owner_type_name",
+        "label": "货主类型",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "owner_name",
+        "label": "货主",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "unit_name",
+        "label": "库存单位",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "opening_qty",
+        "label": "期初",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "income_qty",
+        "label": "收入",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "issue_qty",
+        "label": "发出",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "balance_qty",
+        "label": "结存",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "specification",
+        "label": "规格型号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      }
+    ],
+    "column_filter_fields": [
+      {
+        "field": "product_line_name",
+        "label": "产品线",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "material_code",
+        "label": "物料编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "material_name",
+        "label": "物料名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_date",
+        "label": "日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_name",
+        "label": "单据名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_no",
+        "label": "单据编号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_seq",
+        "label": "行号",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "stock_name",
+        "label": "仓库名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "stock_status_name",
+        "label": "库存状态",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "owner_type_name",
+        "label": "货主类型",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "owner_name",
+        "label": "货主",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "unit_name",
+        "label": "库存单位",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "opening_qty",
+        "label": "期初",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "income_qty",
+        "label": "收入",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "issue_qty",
+        "label": "发出",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "balance_qty",
+        "label": "结存",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "specification",
+        "label": "规格型号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      }
+    ],
+    "filter_fields": [
+      {
+        "field": "product_line_name",
+        "label": "产品线",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "material_code",
+        "label": "物料编码",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "material_name",
+        "label": "物料名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_date",
+        "label": "日期",
+        "type": "date",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_name",
+        "label": "单据名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_no",
+        "label": "单据编号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "bill_seq",
+        "label": "行号",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "stock_name",
+        "label": "仓库名称",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "stock_status_name",
+        "label": "库存状态",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "owner_type_name",
+        "label": "货主类型",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "owner_name",
+        "label": "货主",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "unit_name",
+        "label": "库存单位",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "opening_qty",
+        "label": "期初",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "income_qty",
+        "label": "收入",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "issue_qty",
+        "label": "发出",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "balance_qty",
+        "label": "结存",
+        "type": "number",
+        "operators": [
+          "equals",
+          "notEquals",
+          "greaterThan",
+          "greaterOrEqual",
+          "lessThan",
+          "lessOrEqual",
+          "between",
+          "isEmpty",
+          "notEmpty"
+        ]
+      },
+      {
+        "field": "specification",
+        "label": "规格型号",
+        "type": "text",
+        "operators": [
+          "contains",
+          "notContains",
+          "startsWith",
+          "endsWith",
+          "equals",
+          "notEquals",
+          "isEmpty",
+          "notEmpty"
+        ]
+      }
+    ],
+    "organizations": [
+      {
+        "value": 1,
+        "label": "8吋Bench"
+      },
+      {
+        "value": 2,
+        "label": "光伏"
+      }
+    ],
+    "sort_fields": [
+      "product_line_name",
+      "material_code",
+      "material_name",
+      "bill_date",
+      "bill_name",
+      "bill_no",
+      "bill_seq",
+      "stock_name",
+      "stock_status_name",
+      "owner_type_name",
+      "owner_name",
+      "unit_name",
+      "opening_qty",
+      "income_qty",
+      "issue_qty",
+      "balance_qty"
+    ],
+    "default_sort": {
+      "sort": "bill_date",
+      "direction": "asc"
+    },
+    "query_schema_version": 2,
+    "summary_scope_note": "完整期间汇总（不随附加条件重算）",
+    "opening_scope_note": "完整查询范围期初"
+  }
+}

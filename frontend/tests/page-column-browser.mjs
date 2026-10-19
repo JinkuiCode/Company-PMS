@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import {choosePageSize} from './page-size-helper.mjs'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -75,7 +76,7 @@ try {
   assert.equal(calls.at(-1).page,'2')
   await expect(list.locator('[col-id="project_code"][role="gridcell"]').first()).toContainText('A-000050')
   await expect(list.locator('.pms-column-filter-trigger.is-filtered')).toHaveCount(0)
-  await list.locator('.page-size-select').selectOption('500')
+  await choosePageSize(list,500)
   await expect.poll(()=>calls.at(-1).page_size).toBe('500')
   assert.equal(calls.at(-1).page,'1')
   await list.getByRole('button',{name:'项目编码列筛选',exact:true}).click()

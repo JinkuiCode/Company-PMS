@@ -2,6 +2,7 @@
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElButton, ElMessage, ElMessageBox } from 'element-plus'
 import { AgGridVue } from 'ag-grid-vue3'
+import PmsProgressIndicator from '@/theme-system/PmsProgressIndicator.vue'
 import { AllCommunityModule, ModuleRegistry, type ColDef, type ColumnState, type GridApi, type GridReadyEvent } from 'ag-grid-community'
 import PmsDataList from '@/components/PmsDataList.vue'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
@@ -119,8 +120,9 @@ function drill(row: PurchaseOverviewRow, progress = '') {
 defineExpose({ detailEntry })
 const Action = defineComponent({ props: ['params'], setup(props) { return () => h(ElButton, { size: 'small', link: true, type: 'primary', disabled: loading.value, onClick: () => drill(props.params.data) }, () => '明细') } })
 const Completion = defineComponent({ props: ['params'], setup(props) { return () => {
-  const value = Number(props.params.value)
-  return h('div', { class: 'overview-completion' }, [h('span', { class: 'overview-track' }, [h('span', { class: { done: value === 100 }, style: { width: `${value}%` } })]), h('span', `${value.toFixed(1)}%`)])
+  const row=props.params.data
+  const completed=props.params.colDef.field==='conversion_rate'?Number(row.receiving_lines)+Number(row.complete_lines):Number(row.complete_lines)
+  return h(PmsProgressIndicator,{label:`${row.project_code} ${props.params.colDef.headerName||'进度'}`,value:props.params.value,completed,total:Number(row.total_lines)})
 } } })
 const Count = defineComponent({ props: ['params'], setup(props) { return () => h('button', { type: 'button', class: ['overview-count', { review: props.params.colDef.field === 'review_lines' }], disabled: loading.value, onClick: () => drill(props.params.data, props.params.colDef.field.replace(/_lines$/, '')) }, String(props.params.value)) } })
 const columnFields = computed(() => reportFields(metadata.value?.overview_column_filter_fields || []).filter(f => f.field !== 'project_name' && f.operators?.join() !== 'reference'))
@@ -224,11 +226,6 @@ onUnmounted(() => { invalidate(); grid = null })
 .overview-shortcuts button[aria-pressed=true]{color:var(--pms-primary);border-bottom-color:var(--pms-primary)}
 .overview-shortcuts button:disabled{opacity:0.5;cursor:not-allowed}
 .overview-shortcuts>span{margin-left:auto;white-space:nowrap;font-size:11px;color:var(--pms-text-muted)}
-.purchase-overview-page :deep(.overview-completion){display:flex;align-items:center;gap:8px;height:100%;font-variant-numeric:tabular-nums;font-size:12px}
-.purchase-overview-page :deep(.overview-completion>span:last-child){min-width:44px;text-align:right}
-.purchase-overview-page :deep(.overview-track){flex:1;height:5px;background:var(--pms-border-soft);border-radius:3px;overflow:hidden}
-.purchase-overview-page :deep(.overview-track>span){display:block;height:100%;background:var(--pms-primary);opacity:0.65;border-radius:3px}
-.purchase-overview-page :deep(.overview-track>span.done){background:var(--pms-success);opacity:1}
 .purchase-overview-page :deep(.overview-count){width:100%;border:0;background:transparent;padding:0;color:var(--pms-text-secondary);font:inherit;font-variant-numeric:tabular-nums;text-align:right;cursor:pointer}
 .purchase-overview-page :deep(.overview-count:hover){color:var(--pms-primary);text-decoration:underline}
 .purchase-overview-page :deep(.overview-count.review){color:var(--pms-danger)}

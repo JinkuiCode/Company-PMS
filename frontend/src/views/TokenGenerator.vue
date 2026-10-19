@@ -20,7 +20,7 @@
           <code>{{ baseUrl }}/sso/login</code>
           <el-button size="small" type="primary" @click="copyText(baseUrl + '/sso/login')">复制</el-button>
         </div>
-        <p style="margin-top:12px; color:#E6A23C;"><b>注意：</b>如果认证接入管理中有「Token 方式」或「密钥」相关配置，请截图发给我，即可确定最终方案</p>
+        <p style="margin-top:12px; color:var(--pms-warning);"><b>注意：</b>如果认证接入管理中有「Token 方式」或「密钥」相关配置，请截图发给我，即可确定最终方案</p>
       </div>
     </el-card>
 
@@ -151,29 +151,29 @@ function openHmacUrl() {
 <style scoped>
 .token-gen { padding: 24px; max-width: 860px; }
 .token-gen h2 { margin: 0 0 4px 0; }
-.desc { color: #909399; margin-bottom: 20px; }
-.guide-card { margin-bottom: 16px; border-left: 4px solid #67C23A; }
+.desc { color: var(--pms-text-muted); margin-bottom: 20px; }
+.guide-card { margin-bottom: 16px; border-left: 4px solid var(--pms-success); }
 .alt-card { margin-bottom: 16px; }
 .test-card { margin-bottom: 16px; }
 .form-card { margin-bottom: 16px; }
 .token-form { max-width: 500px; }
 
 .config-table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-.config-table td { padding: 8px 12px; border: 1px solid #ebeef5; }
-.config-table td:first-child { background: #f5f7fa; font-weight: 500; width: 150px; }
+.config-table td { padding: 8px 12px; border: 1px solid var(--pms-border); }
+.config-table td:first-child { background: var(--pms-surface-muted); font-weight: 500; width: 150px; }
 
 .url-options { margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
-.url-opt { display: flex; align-items: center; gap: 8px; background: #f5f7fa; padding: 8px 12px; border-radius: 4px; }
+.url-opt { display: flex; align-items: center; gap: 8px; background: var(--pms-surface-muted); padding: 8px 12px; border-radius: 4px; }
 .url-opt code { font-size: 13px; word-break: break-all; flex: 1; }
 
 .url-box { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.url-box code { background: #f5f7fa; padding: 8px 12px; border-radius: 4px; word-break: break-all; flex: 1;}
+.url-box code { background: var(--pms-surface-muted); padding: 8px 12px; border-radius: 4px; word-break: break-all; flex: 1;}
 
 .result-box { margin-top: 16px; }
-.test-result { margin-top: 12px; color: #67C23A; }
-.test-result code { background: #f5f7fa; padding: 4px 8px; border-radius: 3px; font-size: 13px; }
+.test-result { margin-top: 12px; color: var(--pms-success); }
+.test-result code { background: var(--pms-surface-muted); padding: 4px 8px; border-radius: 3px; font-size: 13px; }
 
-.hint { color: #909399; font-size: 13px; margin-top: 12px; }
-.card-title { font-weight: 600; color: #303133; }
+.hint { color: var(--pms-text-muted); font-size: 13px; margin-top: 12px; }
+.card-title { font-weight: 600; color: var(--pms-text); }
 .steps p { margin: 6px 0; line-height: 1.8; }
 </style>

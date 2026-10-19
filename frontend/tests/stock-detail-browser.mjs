@@ -1,5 +1,6 @@
 // Isolated real-component acceptance; API fixtures never access ERP.
 import assert from 'node:assert/strict'
+import {choosePageSize} from './page-size-helper.mjs'
 import { createServer } from 'vite'
 import { chromium, expect } from '@playwright/test'
 import { mkdir } from 'node:fs/promises'
@@ -187,7 +188,7 @@ try {
   for (const name of ['失效方案', '运算符失效方案', '仓库文本旧方案']) {
     await selectPlan(name)
     await expect(material).toHaveValue('180102020045')
-    await expect(sizeControl).toHaveValue('50')
+    await expect(sizeControl).toContainText('50 条/页')
     assert.equal(calls, beforeInvalidPlan, 'invalid plans must not mutate or query')
     if (name === '仓库文本旧方案') await expect(page.getByText('仓库只能通过仓库下拉框选择，请移除方案中的仓库附加条件', { exact: true })).toBeVisible()
   }
@@ -198,7 +199,7 @@ try {
   await selectPlan('15条方案')
   await expect(material).toHaveValue('PLAN')
   await expect(query).toBeEnabled()
-  await expect(sizeControl).toHaveValue('50')
+  await expect(sizeControl).toContainText('50 条/页')
   const afterPlan = calls
   releaseSlow()
   await page.waitForTimeout(150)
@@ -209,33 +210,33 @@ try {
   assert.equal(requests.at(-1).material, '180102020045', 'late response cannot replace applied snapshot')
   assert.equal(requests.at(-1).page_size, '50', 'plan size is not used by pagination')
   await query.click()
-  await expect(sizeControl).toHaveValue('15')
+  await expect(sizeControl).toContainText('15 条/页')
   assert.equal(requests.at(-1).material, 'PLAN')
   assert.equal(requests.at(-1).page_size, '15', 'explicit query applies pending plan size')
   failNext = true
-  await sizeControl.selectOption('20')
+  await choosePageSize(sizeControl,20)
   await page.getByRole('alert').filter({ hasText: '物料收发明细加载失败' }).waitFor()
   await expect(page.locator('.pms-report-query-status')).toHaveText('查询失败')
-  await expect(sizeControl).toHaveValue('15')
+  await expect(sizeControl).toContainText('15 条/页')
   await expect(page.locator('.pagination-center .active')).toHaveText('1')
   await material.fill('EDITED')
   await page.getByRole('button', { name: '重试', exact: true }).click()
-  await expect(sizeControl).toHaveValue('20')
+  await expect(sizeControl).toContainText('20 条/页')
   assert.equal(requests.at(-1).material, 'PLAN', 'retry uses original failed page-size query')
   await selectPlan('100条方案')
   failNext = true
   await query.click()
   await expect(page.locator('.pms-report-query-status')).toHaveText('查询失败')
   assert.equal(requests.at(-1).page_size, '100')
-  await expect(sizeControl).toHaveValue('20')
+  await expect(sizeControl).toContainText('20 条/页')
   failNext = true
   await page.getByRole('button', { name: '重试', exact: true }).click()
   await expect(page.locator('.pms-report-query-status')).toHaveText('查询失败')
   assert.equal(requests.at(-1).page_size, '100', 'failed retry retains the original submit')
   await page.getByRole('button', { name: '重试', exact: true }).click()
-  await expect(sizeControl).toHaveValue('100')
-  await sizeControl.selectOption('20')
-  await expect(sizeControl).toHaveValue('20')
+  await expect(sizeControl).toContainText('100 条/页')
+  await choosePageSize(sizeControl,20)
+  await expect(sizeControl).toContainText('20 条/页')
   await expect(page.locator('.pms-report-query-status')).toHaveText('已查询')
   const beforeSubmit = calls
   await query.click()

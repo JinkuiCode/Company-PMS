@@ -316,6 +316,7 @@
 </template>
 
 <script setup lang="ts">
+import {progressAppearance} from '@/theme-system/progress'
 import BusinessExportControl from '@/business-export/BusinessExportControl.vue'
 import PmsDocumentHistory from '@/document-history/PmsDocumentHistory.vue'
 import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
@@ -981,9 +982,7 @@ function buildDrawerGroupsFromRow(row: ProjectRow): ProjectSheetGroup[] {
 }
 
 function progressToneClass(v: number) {
-  if (v < 30) return 'is-danger'
-  if (v < 80) return 'is-warning'
-  return 'is-success'
+  return `is-${progressAppearance(v).stage}`
 }
 
 function progressPolicy(fieldKey: string) {
@@ -2073,15 +2072,15 @@ onBeforeUnmount(() => { progressListState.invalidate() })
 }
 
 :deep(.progress-editable-cell:not(.ag-cell-inline-editing):hover) {
-  background: #f8fbff;
+  background: var(--pms-row-hover);
 }
 
 :deep(.progress-editable-cell.ag-cell-focus:not(.ag-cell-inline-editing)) {
-  box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.22);
+  box-shadow: inset 0 0 0 1px var(--pms-accent-border);
 }
 
 :deep(.progress-workbench-grid .progress-row-active .ag-cell) {
-  background: #f8faff;
+  background: var(--pms-row-selected);
 }
 
 :deep(.progress-list-header-center .ag-header-cell-label),
@@ -2314,7 +2313,7 @@ onBeforeUnmount(() => { progressListState.invalidate() })
   border-radius: 999px;
   background: var(--pms-surface);
   color: var(--pms-primary);
-  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.16);
+  box-shadow: 0 0 0 1px var(--pms-accent-border);
   transition: background-color 0.16s ease;
 }
 

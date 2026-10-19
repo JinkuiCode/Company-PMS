@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.app.json",
+  "compilerOptions": { "allowJs": true, "checkJs": false, "noEmit": true, "tsBuildInfoFile": "../../node_modules/.tmp/theme-controls.tsbuildinfo", "paths": { "@/*": ["../../src/*"] } },
+  "include": ["./**/*.vue", "./**/*.ts", "./*.mjs", "../../src/**/*.d.ts"]
+}

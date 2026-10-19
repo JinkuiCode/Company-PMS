@@ -1,0 +1,12 @@
+import { createApp } from 'vue'
+import ElementPlus from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import '@fontsource-variable/noto-sans-sc/wght.css'
+import 'element-plus/dist/index.css'
+import 'ag-grid-community/styles/ag-grid.css'
+import 'ag-grid-community/styles/ag-theme-quartz.css'
+import '@/styles/pms-theme.css'
+import '@/form-system/form-tokens.css'
+import App from './App.vue'
+import './preview.css'
+createApp(App).use(ElementPlus, { locale: zhCn }).mount('#app')

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import {choosePageSize} from './page-size-helper.mjs'
 import { chromium, expect } from '@playwright/test'
 
 const base = process.env.PMS_TEST_URL || 'http://127.0.0.1:5174'
@@ -55,7 +56,7 @@ try {
     await panel.getByRole('button', { name: '应用', exact: true }).click()
     await input.fill('未提交草稿')
     if (path === '/project/list') {
-      await page.locator('.custom-pagination .page-size-select').selectOption('20')
+      await choosePageSize(page,20)
       await page.locator('.custom-pagination').getByRole('button', { name: '2', exact: true }).click()
       await page.getByRole('button', { name: '打开项目进度列设置', exact: true }).click()
       const picker = page.locator('.column-picker-panel:visible')

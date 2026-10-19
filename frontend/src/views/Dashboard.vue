@@ -99,6 +99,8 @@ import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from
 import { CanvasRenderer } from 'echarts/renderers'
 import { getDashboardStats, type DashboardStats } from '@/api/dashboard'
 import { loadEnumOptions } from '@/composables/useEnumOptions'
+import {progressAppearance} from '@/theme-system/progress'
+import {useThemeTokens} from '@/theme-system/useThemeTokens'
 
 // 按需注册 ECharts 模块
 use([PieChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer])
@@ -127,68 +129,60 @@ const statusMap = reactive<Record<number, { text: string; className: string }>>(
 })
 
 function progressClass(percentage: number): string {
-  if (percentage < 30) return 'is-danger'
-  if (percentage < 80) return 'is-warning'
-  return 'is-success'
+  return `is-${progressAppearance(percentage).stage}`
 }
 
-const chartColors = {
-  primary: '#4f46e5',
-  success: '#0f9f7a',
-  warning: '#d97706',
-  border: '#ffffff',
-  text: '#667085',
-  grid: '#edf1f6',
-}
+const themeTokens=useThemeTokens()
+const chartColors=computed(()=>({primary:themeTokens.value['--pms-primary'],success:themeTokens.value['--pms-success'],warning:themeTokens.value['--pms-warning'],border:themeTokens.value['--pms-surface'],text:themeTokens.value['--pms-text-secondary'],grid:themeTokens.value['--pms-border-soft']}))
 
-const chartTextStyle = {
-  color: chartColors.text,
-  fontFamily: 'Noto Sans SC, sans-serif',
+const chartTextStyle = computed(()=>({
+  color: chartColors.value.text,
+  fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--pms-font').trim(),
   fontSize: 12,
-}
+}))
 
 // 饼图：状态分布
 const statusPieOption = computed(() => ({
-  textStyle: chartTextStyle,
+  textStyle: chartTextStyle.value,
   tooltip: { trigger: 'item' },
-  legend: { bottom: 0, textStyle: chartTextStyle },
+  legend: { bottom: 0, textStyle: chartTextStyle.value },
   series: [{
     type: 'pie',
     radius: ['45%', '70%'],
     center: ['50%', '45%'],
     avoidLabelOverlap: false,
-    itemStyle: { borderRadius: 4, borderColor: chartColors.border, borderWidth: 2 },
+    itemStyle: { borderRadius: 4, borderColor: chartColors.value.border, borderWidth: 2 },
     label: { show: false },
     emphasis: { label: { show: true, fontSize: 16, fontWeight: 'bold' } },
     data: [
-      { value: stats.value.status_distribution.ongoing, name: statusMap[1].text, itemStyle: { color: chartColors.primary } },
-      { value: stats.value.status_distribution.finished, name: statusMap[2].text, itemStyle: { color: chartColors.success } },
-      { value: stats.value.status_distribution.paused, name: statusMap[3].text, itemStyle: { color: chartColors.warning } },
+      { value: stats.value.status_distribution.ongoing, name: statusMap[1].text, itemStyle: { color: chartColors.value.primary } },
+      { value: stats.value.status_distribution.finished, name: statusMap[2].text, itemStyle: { color: chartColors.value.success } },
+      { value: stats.value.status_distribution.paused, name: statusMap[3].text, itemStyle: { color: chartColors.value.warning } },
     ],
   }],
 }))
 
 // 柱状图：部门分布
 const deptBarOption = computed(() => ({
-  textStyle: chartTextStyle,
+  textStyle: chartTextStyle.value,
   tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
   grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
   xAxis: {
     type: 'category',
     data: stats.value.dept_distribution.map(d => d.dept_name),
-    axisLabel: { ...chartTextStyle, rotate: stats.value.dept_distribution.length > 5 ? 30 : 0 },
-    axisLine: { lineStyle: { color: chartColors.grid } },
+    axisLabel: { ...chartTextStyle.value, rotate: stats.value.dept_distribution.length > 5 ? 30 : 0 },
+    axisLine: { lineStyle: { color: chartColors.value.grid } },
   },
   yAxis: {
     type: 'value',
     minInterval: 1,
-    axisLabel: chartTextStyle,
-    splitLine: { lineStyle: { color: chartColors.grid } },
+    axisLabel: chartTextStyle.value,
+    splitLine: { lineStyle: { color: chartColors.value.grid } },
   },
   series: [{
     type: 'bar',
     data: stats.value.dept_distribution.map(d => d.count),
-    itemStyle: { color: chartColors.primary, borderRadius: [4, 4, 0, 0] },
+    itemStyle: { color: chartColors.value.primary, borderRadius: [4, 4, 0, 0] },
     barMaxWidth: 40,
   }],
 }))

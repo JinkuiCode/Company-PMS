@@ -12,9 +12,7 @@
       <button class="page-btn nav-btn" :disabled="modelValue === totalPages" @click="$emit('update:modelValue', modelValue + 1)">›</button>
     </div>
     <div class="pagination-right">
-      <select class="page-size-select" :value="pageSize" @change="$emit('update:pageSize', Number(($event.target as HTMLSelectElement).value))">
-        <option v-for="size in PAGE_SIZE_OPTIONS" :key="size" :value="size">{{ size }} 条/页</option>
-      </select>
+      <PmsSelectControl class="page-size-select" size="compact" :model-value="pageSize" :options="sizeOptions" aria-label="每页条数" @update:model-value="value => emit('update:pageSize', Number(value))" />
     </div>
   </div>
 </template>
@@ -22,6 +20,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { PAGE_SIZE_OPTIONS } from '../config/listUi.ts'
+import {PmsSelectControl} from '@/form-system'
+const sizeOptions=PAGE_SIZE_OPTIONS.map(value=>({value,label:`${value} 条/页`}))
 
 const props = defineProps<{
   total: number
@@ -66,7 +66,7 @@ const visiblePages = computed(() => {
 .pagination-left { display: flex; align-items: center; }
 .pagination-total { font-size: 12px; color: var(--pms-text-secondary); font-weight: 500; }
 .pagination-center { display: flex; align-items: center; gap: 4px; }
-.pagination-right { display: flex; align-items: center; }
+.pagination-right { display: flex; align-items: center; width:100px; --pms-form-control-height-compact:var(--pms-pagination-height); --pms-font-size-base:12px; }
 .page-btn {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: var(--pms-pagination-height); height: var(--pms-pagination-height); padding: 0 6px;
@@ -76,17 +76,14 @@ const visiblePages = computed(() => {
   transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
   line-height: 1;
 }
-.page-btn:hover:not(:disabled):not(.active) { background: var(--pms-surface-muted); border-color: #cbd5e1; color: var(--pms-text); }
+.page-btn:hover:not(:disabled):not(.active) { background: var(--pms-surface-muted); border-color: var(--pms-text-muted); color: var(--pms-text); }
 .page-btn.active { background: var(--pms-primary); color: #fff; border-color: var(--pms-primary); font-weight: 700; }
 .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .page-btn.ellipsis { border: none; background: transparent; color: var(--pms-text-muted); cursor: default; min-width: 24px; }
 .page-btn.nav-btn { font-size: 16px; font-weight: 500; min-width: 28px; }
 .page-size-select {
-  height: var(--pms-pagination-height); padding: 0 24px 0 8px; border: 1px solid var(--pms-border); border-radius: var(--pms-radius-sm);
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8.825L1.175 4 2.238 2.938 6 6.7l3.763-3.763L10.825 4z'/%3E%3C/svg%3E") no-repeat right 8px center;
-  color: var(--pms-text-secondary); font-size: 12px; cursor: pointer; appearance: none;
+  width:100px;font-size:12px;
 }
-.page-size-select:hover { border-color: #cbd5e1; }
 @media (max-width: 600px) {
   .pagination-center { order: 3; width: 100%; justify-content: center; }
 }

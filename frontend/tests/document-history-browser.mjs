@@ -1,5 +1,6 @@
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
+import {choosePageSize} from './page-size-helper.mjs'
 const base = process.env.PMS_GOVERNANCE_URL || 'http://127.0.0.1:5198'
 const browser = await chromium.launch({ channel: 'msedge', headless: true })
 try {
@@ -54,7 +55,7 @@ try {
   fail = false
   await drawer.getByRole('button', { name: '重新加载', exact: true }).click()
   await expect(drawer).toContainText('第二档案记录 第1页')
-  await drawer.locator('.page-size-select').selectOption('15')
+  await choosePageSize(drawer,15)
   await drawer.getByRole('combobox', { name: '筛选操作类型', exact: true }).press('ArrowDown')
   await page.getByRole('option', { name: '编辑', exact: true }).click()
   await expect.poll(() => requests.some(query => query.includes('page_size=15') && query.includes('action=update'))).toBe(true)

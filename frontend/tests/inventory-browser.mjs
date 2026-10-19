@@ -1,5 +1,6 @@
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
+import {choosePageSize} from './page-size-helper.mjs'
 const browser = await chromium.launch({channel: 'msedge', headless: true})
 const page = await browser.newPage({viewport: {width: 1366, height: 768}})
 await page.addInitScript(() => localStorage.setItem('access_token', 'inventory-test'))
@@ -79,7 +80,7 @@ try {
   fail=false
   await page.getByRole('button',{name:'重试',exact:true}).click()
   await expect(page.locator('.pagination-total')).toHaveText('共 126 条')
-  await page.locator('.page-size-select').selectOption('20')
+  await choosePageSize(page,20)
   await expect.poll(()=>last.page_size).toBe('20')
   // Failed navigation must retry its applied request, not the edited draft.
   await search.fill('未提交')
@@ -130,14 +131,14 @@ try {
   await page.getByRole('button',{name:'保存',exact:true}).click()
   await page.getByRole('button',{name:'重置',exact:true}).click()
   await expect(search).toHaveValue('')
-  await page.locator('.page-size-select').selectOption('50')
+  await choosePageSize(page,50)
   await expect.poll(()=>last.page_size).toBe('50')
   const beforeRestore = calls
   await page.locator('.pms-report-plans .el-select__wrapper').click()
   await page.getByRole('option',{name:'验收方案',exact:true}).click()
   await expect(search).toHaveValue('未提交')
   assert.equal(calls,beforeRestore)
-  await expect(page.locator('.page-size-select')).toHaveValue('50')
+  await expect(page.locator('.page-size-select')).toContainText('50 条/页')
   await query.click()
   await expect.poll(()=>JSON.parse(last.filters).length).toBe(1)
   await expect.poll(()=>last.page_size).toBe('20')

@@ -245,7 +245,7 @@ defineExpose({ refresh })
 
 .grid-horizontal-scrollbar:focus-visible {
   border-radius: 999px;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
+  box-shadow: 0 0 0 3px var(--pms-accent-border);
 }
 
 .grid-horizontal-scrollbar-thumb:active {

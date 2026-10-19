@@ -28,7 +28,9 @@ test('pagination renders every shared option', async () => {
   const code = ts.transpileModule(script.content, { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext } }).outputText
     .replace(/from ["']vue["']/g, `from '${import.meta.resolve('vue')}'`)
     .replace(/from ["']\.\.\/config\/listUi(?:\.ts)?["']/g, `from '${new URL('../src/config/listUi.ts', import.meta.url).href}'`)
-  const { default: component } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
+    .replace(/import\s*\{\s*PmsSelectControl\s*\}\s*from\s*['"]@\/form-system['"];?/,`const PmsSelectControl={props:['modelValue','options'],setup(props){return()=>renderH('select',{},props.options.map(item=>renderH('option',{value:item.value,selected:item.value===props.modelValue},item.label)))}}`)
+  // Test the pagination's public chooser props; the browser below exercises the real control.
+  const { default: component } = await import(`data:text/javascript;base64,${Buffer.from(`import {h as renderH} from '${import.meta.resolve('vue')}';\n`+code).toString('base64')}`)
   for (const pageSize of expected) {
     const html = await renderToString(createSSRApp(component, { total: 1001, modelValue: 1, pageSize }))
     const options = [...html.matchAll(/<option value="(\d+)"([^>]*)>/g)]
@@ -46,11 +48,15 @@ test('browser selects all seven sizes and emits numeric pageSize updates', async
         res.setHeader('Content-Type', 'text/html')
         res.end(await server.transformIndexHtml(req.url, `<div id="app"></div><script type="module">
           import { createApp, h, ref } from 'vue'
+          import ElementPlus from 'element-plus'
+          import 'element-plus/dist/index.css'
+          import '/src/styles/pms-theme.css'
+          import '/src/form-system/form-tokens.css'
           import Pagination from '/src/components/CustomPagination.vue'
           const size = ref(50)
           window.updates = []
           createApp({ setup: () => () => h(Pagination, { total: 1001, modelValue: 1, pageSize: size.value,
-            'onUpdate:pageSize': value => { size.value = value; window.updates.push(value) } }) }).mount('#app')
+            'onUpdate:pageSize': value => { size.value = value; window.updates.push(value) } }) }).use(ElementPlus).mount('#app')
         </script>`))
       })
     } }],
@@ -63,13 +69,20 @@ test('browser selects all seven sizes and emits numeric pageSize updates', async
     page.on('pageerror', error => errors.push(error.message))
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/pagination-contract.html`)
     const select = page.locator('.page-size-select')
-    await expect(select).toHaveValue('50')
-    assert.deepEqual(await select.locator('option').evaluateAll(options => options.map(option => Number(option.value))), expected)
+    await expect(select).toContainText('50 条/页')
+    assert.equal(Math.round(await page.locator('.pagination-right > .pms-form-control').evaluate(el=>el.getBoundingClientRect().height)),26)
     for (const size of expected) {
-      await select.selectOption(String(size))
-      await expect(select).toHaveValue(String(size))
+      await select.locator('.el-select__wrapper').click()
+      assert.deepEqual(await page.getByRole('option').allTextContents(),expected.map(value=>`${value} 条/页`))
+      await page.getByRole('option',{name:`${size} 条/页`,exact:true}).click()
+      await expect(select).toContainText(`${size} 条/页`)
     }
     assert.deepEqual(await page.evaluate(() => window.updates), expected)
+    await select.getByRole('combobox',{name:'每页条数',exact:true}).focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('option',{name:'500 条/页',exact:true})).toBeVisible()
+    await page.keyboard.press('ArrowUp');await page.keyboard.press('Enter')
+    await expect(select).toContainText('300 条/页')
     assert.deepEqual(errors, [])
   } finally {
     await browser?.close()

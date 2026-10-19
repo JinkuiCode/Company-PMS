@@ -27,8 +27,8 @@ assert.match(
 )
 assert.match(
   projectList,
-  /function progressToneClass\(v: number\) \{[\s\S]*?v < 30[\s\S]*?'is-danger'[\s\S]*?v < 80[\s\S]*?'is-warning'[\s\S]*?'is-success'/,
-  'List and drawer progress bars should share the red, amber, and green thresholds',
+  /function progressToneClass\(v: number\) \{[\s\S]*?progressAppearance\(v\)\.stage/,
+  'List and drawer progress bars should consume the approved shared progress stages',
 )
 
 assert.match(

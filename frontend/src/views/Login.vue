@@ -108,7 +108,7 @@ async function handleLogin() {
   margin: 0 auto 18px;
   color: var(--pms-primary);
   background: var(--pms-primary-soft);
-  border: 1px solid rgba(79, 70, 229, 0.18);
+  border: 1px solid var(--pms-accent-border);
   border-radius: var(--pms-radius);
   font-size: 14px;
   font-weight: 800;

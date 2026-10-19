@@ -49,6 +49,7 @@
           <span class="header-title">{{ route.meta.title || '项目管理' }}</span>
         </div>
         <div class="header-right">
+          <PmsThemeSwitcher />
           <el-badge :value="releaseStore.unread" :hidden="!releaseStore.unread" :max="99"><el-button class="pms-button-navigation" :icon="Bell" :aria-label="`升级通知${releaseStore.unread ? `，${releaseStore.unread}条未读` : ''}`" @click="openRelease('notices')">升级通知</el-button></el-badge>
           <el-dropdown trigger="click" @command="userCommand"><el-button class="user-name pms-button-navigation" aria-label="用户菜单">{{ authStore.user?.real_name || authStore.user?.username || '当前用户' }}</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="about">关于 PMS</el-dropdown-item><el-dropdown-item command="logout" divided>退出</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
         </div>
@@ -70,6 +71,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { Fold, Expand, Setting, SetUp, User, Avatar, Menu, Folder, List, DataAnalysis, FolderOpened, Collection, Document, Refresh, OfficeBuilding, ChatLineSquare } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'
+import {PmsThemeSwitcher} from '@/theme-system'
 
 const Icons: Record<string, any> = { Setting, SetUp, User, Avatar, Menu, Folder, List, DataAnalysis, FolderOpened, Collection, Document, Refresh, OfficeBuilding, ChatLineSquare }
 
@@ -180,7 +182,7 @@ onBeforeUnmount(() => { releaseStore.reset(); window.removeEventListener('pms:pe
   flex: 0 0 auto;
   color: var(--pms-primary);
   background: var(--pms-primary-soft);
-  border: 1px solid rgba(79, 70, 229, 0.18);
+  border: 1px solid var(--pms-accent-border);
   border-radius: var(--pms-radius-sm);
   font-size: 14px;
   font-weight: 800;

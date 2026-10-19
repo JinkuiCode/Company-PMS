@@ -67,6 +67,7 @@
 </template>
 
 <script setup lang="ts">
+import {progressAppearance} from '@/theme-system/progress'
 import BusinessExportControl from '@/business-export/BusinessExportControl.vue'
 import { businessExportSnapshot } from '@/business-export/snapshot'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
@@ -133,11 +134,9 @@ const totalProgress = computed(() => {
   return Math.round(sum / rowData.value.length)
 })
 
-function progressColor(v: number) { return v < 30 ? '#dc2626' : v < 80 ? '#d97706' : '#0f9f7a' }
+function progressColor(v: number) { return progressAppearance(v,{completed:rowData.value.reduce((sum,row)=>sum+(row.progress||0),0),total:rowData.value.length*100}).token }
 function progressToneClass(v: number) {
-  if (v < 30) return 'is-danger'
-  if (v < 80) return 'is-warning'
-  return 'is-success'
+  return `is-${progressAppearance(v).stage}`
 }
 function escapeHtml(value: unknown) {
   return String(value ?? '')
