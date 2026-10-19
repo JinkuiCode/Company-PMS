@@ -1,0 +1,18 @@
+{
+  "host": "10.10.1.228",
+  "sql_host": "10.10.1.230",
+  "database": "PMS",
+  "schema": "2026-10-16-form-draft-02",
+  "baseline_head": "22d3a93f6cb6f6ef846b1f89457671989587d2b0",
+  "baseline_runtime_commit": "3c01fe057ae8b49009d5059f9d75b478deac84e7",
+  "baseline_version": "v1.2.0",
+  "commit": "f15d4f4527b5f837b622cf0370f6dadf87e562b2",
+  "version": "v1.2.1",
+  "build_id": "pms-v1.2.1-f15d4f45-20261019",
+  "archive_sha256": "06569220feb09791f5e5bd54d9c4b306df9357c4e365a5dcf64aae90ba43eac7",
+  "bundle_sha256": "680b1ecffc8563c909c7d9ac37e595fc18ea66445d0360279442641fa16bfd2f",
+  "python_executable": "C:/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe",
+  "baseline_manifest_sha256": "f2198921e60f793375ff96fb46d2f1454d7b82945fec3fefc6aa05674401c56d",
+  "baseline_start_script_sha256": "084706327c09216a2485b13ae5f1c3f5ff797fe404bdc63956fc8e7342326c88",
+  "baseline_state_sha256": "acd1a222923f9d9e83a902826b9141020f72ce81f959b649e3357972f329cbf0"
+}
