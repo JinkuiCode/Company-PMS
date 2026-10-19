@@ -2,6 +2,8 @@
 
 本索引按当前代码实际入口整理。模块存在、首个页面接入与全系统迁移是三个不同状态；旧页面仍按批准批次接入。完整产品规则见治理定稿规格及 PMS-UI-STANDARD.md。
 
+**2026-10-19状态校正：** 下表的进度工作台、任务页及九个系统列表等本批接入已随v1.2.0正式发布；五处普通管理表单和提报关闭保护亦已发布。后文Mac分批记录保留当时边界，不再代表这些批次尚待部署。当前发布及通知证据见[正式记录](releases/2026-10-18-shared-governance-production.md)。普通用户/OA、真实金蝶写入现场验收仍未完成。
+
 ## 现有模块与入口
 
 | 能力 | 标准入口 | 使用说明／实际接入例 |
@@ -13,12 +15,12 @@
 | 本页列筛选 | query-system/page-column-filter.ts、column-filters.ts | 仅当前页快照，翻页／重查清除，不能影响总数／后台导出。 |
 | 业务引用 | query-system/PmsQueryReference.vue、reference.ts | 共享引用候选、分页、多选及已选摘要。 |
 | 列设置 | components/PmsListColumnPicker.vue | 显示、顺序、冻结、列宽的统一交互。 |
-| 列偏好存储 | list-system/columnPreferences.ts | 档案已正式、进度工作台Mac已接入。账号＋页面键、有效列清理、格式兼容、安全失败。 |
+| 列偏好存储 | list-system/columnPreferences.ts | 档案及进度工作台已正式接入。账号＋页面键、有效列清理、格式兼容、安全失败。 |
 | 统一字段控件 | form-system/index.ts、components/Pms*Control.vue | 文本、长文本、数字、日期、选择、树、开关、勾选等统一状态。 |
 | 表单／行内／表格容器 | PmsFormDrawer.vue、PmsFormField.vue、PmsInlineField.vue、form-system/ag-grid.ts | 三类交互共用令牌，保留各自容器。 |
-| 表单会话 | form-system/useFormSession.ts | 档案新增已正式；进度新增、产品线表单Mac已接入。原值、草稿、验证／保存互斥、关闭确认、失败投影及重试。详情审批保留专用流程。 |
-| 页面数据状态 | composables/usePageLoad.ts | 档案已正式；进度/任务及九个系统列表Mac已接入。待查询、加载、空结果、失败、重试及请求代次，不持有业务行。 |
-| 字段元数据／错误适配 | form-system/fieldMetadata.ts | 档案已正式、进度新增Mac已接入；配置与代码上限取交集，结构化错误按当前可见字段和页面顺序展示。 |
+| 表单会话 | form-system/useFormSession.ts | 档案/进度新增及产品线、部门、用户、角色、枚举普通表单已正式接入，提报仅复用关闭保护。原值、草稿、验证／保存互斥、失败投影及重试；详情审批与领域流程保持。 |
+| 页面数据状态 | composables/usePageLoad.ts | 档案、进度/任务及九个系统列表已正式接入。待查询、加载、空结果、失败、重试及请求代次，不持有业务行。 |
+| 字段元数据／错误适配 | form-system/fieldMetadata.ts | 档案及进度新增已正式接入；配置与代码上限取交集，结构化错误按当前可见字段和页面顺序展示。 |
 | 主从切换 | utils/detailSwitch.ts、composables/confirmDetailSwitch.ts | 最新选择生效、草稿保存／放弃／取消；不由本批会话模块取代。 |
 | 授权与资源登记 | backend/app/services/rbac.py、business_resources.py及各业务范围服务 | 运行时权限和数据范围在后端检查，前端隐藏不能代替授权。 |
 | 字段目录与规则 | backend/app/services/field_catalog.py、field_policy.py | 同一生效元数据驱动可见／可编辑／必输；代码决定配置上限，保留存量必填兼容。 |
@@ -73,3 +75,6 @@
 
 
 2026-10-18最新本机适用性收尾：原60项治理变更已固定a3/v1.2.0候选但未部署；提报表单另经批准只将关闭保护接入useFormSession.requestClose，保留正文/附件分步保存、幂等与重试控制器。取消/放弃/保存及保存后干净基线、附件续传和版本冲突经隔离及模拟浏览器通过，新修复尚未纳入原包。任务编辑保留表格自动保存，报表复用report-adapter/createReportRequest，版本邮件和参数保留专用保护；未引用相同composable不直接认定缺陷。旧MenuList/FieldList当前无router/导入入口，不擅自重启旧模块。详情及剩余真实验收见[本批收尾](releases/2026-10-18-governance-completion-preparation.md)。
+
+
+2026-10-19日志引用补齐（仅Mac）：operation_log_references按实体/字段白名单为提报author_id、handler_id复用人员名称投影。新事件保留姓名快照，旧数字只读补全当前名称；管理员审计与单据记录一致，不重写历史日志或更改权限。73项相关隔离测试及统一日志脚本检查通过，尚未部署或提交。见[本机验收](releases/2026-10-19-feedback-log-person-names-local.md)。
