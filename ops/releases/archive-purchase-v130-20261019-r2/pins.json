@@ -1,0 +1,20 @@
+{
+  "host": "10.10.1.228",
+  "sql_host": "10.10.1.230",
+  "database": "PMS",
+  "schema": "2026-10-16-form-draft-02",
+  "baseline_head": "542409037240428e34661173a07fd1ffda7d04a2",
+  "baseline_runtime_commit": "f15d4f4527b5f837b622cf0370f6dadf87e562b2",
+  "baseline_version": "v1.2.1",
+  "commit": "5c5baea86c6abbc3d0dddc9f3d7bfaea53f11997",
+  "version": "v1.3.0",
+  "build_id": "pms-v1.3.0-5c5baea8-20261019",
+  "archive_sha256": "faf0485c96232918209fece57b1e3074ad906654ae56e41042889966a6de9827",
+  "bundle_sha256": "d6414c73fe3d69db61b59a9770e2377827f56ea8fad078d2e55ac77eceee9fe1",
+  "python_executable": "C:/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe",
+  "baseline_manifest_sha256": "cce6f3fc3fe7abf2d85f5b2b63656fbd6782b62bce44aca38b97aa6627568d69",
+  "baseline_start_script_sha256": "084706327c09216a2485b13ae5f1c3f5ff797fe404bdc63956fc8e7342326c88",
+  "baseline_state_sha256": "5545aeb189d3e2355ed80c29d08ab7f26ae7318cda50c4302aa2058387db09fd",
+  "rehearsal_base_sha256": "b8cbdb2e1a70cc7039f94195d4385781ac37a92a47bd18aeaa3ed8fd786072b6",
+  "formal_window_approval": null
+}
