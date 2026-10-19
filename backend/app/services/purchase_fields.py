@@ -9,7 +9,7 @@ FIELDS = [
     ('bill_no', '申请单编号', 'text', '采购申请', 'T_PUR_REQUISITION', 'FBILLNO', '一行对应一条申请明细，不按物料编码合并'),
     ('line_no', '申请单行号', 'number', '采购申请', 'T_PUR_REQENTRY', 'FSEQ', '单据行号，内部关联使用 FENTRYID'),
     ('application_date', '申请日期', 'date', '采购申请', 'T_PUR_REQUISITION', 'FAPPLICATIONDATE', '使用申请日期，不使用创建日期'),
-    ('document_status', '数据状态', 'text', '采购申请', 'T_PUR_REQUISITION', 'FDOCUMENTSTATUS', '金蝶系统固定状态；已审核 C 才计入有效数量'),
+    ('document_status', '数据状态', 'text', '采购申请', 'T_PUR_REQUISITION', 'FDOCUMENTSTATUS', '固定仅纳入已审核 C 且申请明细业务终止 FMRPTERMINATESTATUS 为正常 A 的申请行；状态仅展示，不提供查询条件'),
     ('close_status', '关闭状态', 'text', '采购申请', 'T_PUR_REQUISITION', 'FCLOSESTATUS', '关闭不会抹去已发生的订单和入库'),
     ('requested', '申请数量', 'number', '采购申请', 'T_PUR_REQENTRY', 'FREQQTY', '保留原申请数量'),
     ('approved', '批准数量', 'number', '采购申请', 'T_PUR_REQENTRY', 'FAPPROVEQTY', '待下单计算基数；使用批准基本数量换算'),
@@ -22,7 +22,7 @@ FIELDS = [
     ('net_received', '累计净入库数量', 'number', '采购入库', None, None, '累计入库数量减累计退料数量'),
     ('last_stock_date', '最近入库日期', 'date', '采购入库', 'T_STK_INSTOCK', 'FDATE', '有效关联入库日期最大值'),
     ('stock_statuses', '入库数据状态', 'text', '采购入库', 'T_STK_INSTOCK', 'FDOCUMENTSTATUS', '已验证来源的关联入库状态去重显示，不取单张代表全部'),
-    ('pending_order', '待下单数量', 'number', '进度', None, None, '批准数量减累计下单数量；未审核申请为空，超量保留负数'),
+    ('pending_order', '待下单数量', 'number', '进度', None, None, '批准数量减累计下单数量；仅统计已审核且业务终止正常的申请行，超量保留负数'),
     ('pending_receipt', '待入库数量', 'number', '进度', None, None, '累计下单数量减累计净入库数量；超量保留负数'),
     ('progress', '采购进度', 'text', '进度', None, None, '未下单、部分下单、待入库、已完成或数据待核对；系统固定计算状态'),
 ]

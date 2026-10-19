@@ -66,10 +66,11 @@ class ReportV2(unittest.TestCase):
         self.connection = Connection(self.db)
 
     def test_enum_multi_and_display_name_filter_before_paging(self):
-        for operator, value, expected in [('in', ['C'], 9), ('notIn', ['C'], 0),
-                                          ('reference', ['C'], 9), ('contains', '审核', 9)]:
+        self.db.execute("UPDATE T_PUR_REQUISITION SET FCLOSESTATUS='A'")
+        for operator, value, expected in [('in', ['A'], 9), ('notIn', ['A'], 0),
+                                          ('reference', ['A'], 9), ('contains', '未关闭', 9)]:
             with self.subTest(operator=operator):
-                query = purchase.PurchaseQuery(filters=condition('document_status', operator, value), page_size=1)
+                query = purchase.PurchaseQuery(filters=condition('close_status', operator, value), page_size=1)
                 result = purchase.list_requests(self.connection, query, ALL_DATA_SCOPE)
                 self.assertEqual(result['total'], expected)
 
@@ -167,9 +168,10 @@ class ReportV2(unittest.TestCase):
         fields = {f['field']: f for f in query_fields('purchase')}
         self.assertIn('reference', fields['project_code']['operators'])
         self.assertNotIn('project_name', fields)
-        self.assertIn('notIn', fields['document_status']['operators'])
+        self.assertNotIn('document_status', fields)
+        self.assertIn('notIn', fields['close_status']['operators'])
         from app.services.purchase_fields import report_fields
-        self.assertEqual(set(fields), {f['key'] for f in report_fields()})
+        self.assertEqual(set(fields), {f['key'] for f in report_fields()} - {'document_status'})
         self.assertIn('completion_rate', {f['field'] for f in query_fields('purchase-overview')})
 
     def test_pms_labels_filter_before_page_and_share_export_and_candidates(self):

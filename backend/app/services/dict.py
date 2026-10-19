@@ -203,6 +203,10 @@ def get_dict_by_code(db: Session, dict_code: str) -> dict | None:
     all_items = db.query(SysDictItem).filter(
         SysDictItem.dict_id == d.id,
     ).order_by(SysDictItem.sort, SysDictItem.id).all()
+    # Presentation priority only; preserve enum identities, enabled status and
+    # the relative configured order of every other option.
+    if dict_code == 'archive_quantity_unit':
+        all_items.sort(key=lambda item: item.item_value != '7')
     active_items = [item for item in all_items if item.status == 1]
     return {
         "dict_code": d.dict_code,

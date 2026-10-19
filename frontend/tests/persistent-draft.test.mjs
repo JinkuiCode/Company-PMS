@@ -8,7 +8,7 @@ function setup(){
  const rows=new Map();let loseSave=false,loseSubmit=false
  const api={
   async get(id){if(!rows.has(id))throw {response:{status:404}};return structuredClone(rows.get(id))},
-  async save(body){const prior=rows.get(body.id);if(prior&&prior.version!==body.expected_version)throw {response:{status:409}};const row={id:body.id,version:(prior?.version||0)+1,status:'active',payload:structuredClone(body.payload)};rows.set(body.id,row);if(loseSave)throw {};return structuredClone(row)},
+  async save(body){const prior=rows.get(body.id);if(prior&&prior.version!==body.expected_version)throw {response:{status:409,data:{detail:{code:'DRAFT_VERSION_CONFLICT'}}}};const row={id:body.id,version:(prior?.version||0)+1,status:'active',payload:structuredClone(body.payload)};rows.set(body.id,row);if(loseSave)throw {};return structuredClone(row)},
   async submit(id){rows.get(id).status='used';rows.get(id).archive_id=42;if(loseSubmit)throw {};return {id:42}},
  }
  return {d:mod.usePersistentDraft(api,()=> '00000000-0000-4000-8000-000000000001'),rows,setLoseSave:v=>loseSave=v,setLoseSubmit:v=>loseSubmit=v}
@@ -42,4 +42,28 @@ test('核对服务器规范化数量字符串，不把同一值误报为多端�
  const {d,rows,setLoseSave}=setup();setLoseSave(true)
  await assert.rejects(d.save({quantity:2}));rows.get(d.id.value).payload.quantity='2'
  await d.reconcile();assert.equal(d.conflict.value,false);assert.equal(d.version.value,1)
+})
+test('编码重号保留身份与版本，允许改号重试，不误报多端冲突',async()=>{
+ let duplicate=false
+ const d=mod.usePersistentDraft({get:async()=>{},submit:async()=>{},save:async body=>{
+  if(duplicate)throw {response:{status:409,data:{detail:{code:'ARCHIVE_UNIQUE_CONFLICT',field_key:'project_code',message:'项目编号已存在，请更换编号'}}}}
+  return {id:body.id,version:(body.expected_version||0)+1,status:'active',payload:body.payload}
+ }},()=> 'unique-test-id')
+ await d.save({project_code:'FIRST'});const id=d.id.value
+ duplicate=true;await assert.rejects(d.save({project_code:'DUPLICATE'}))
+ assert.equal(d.conflict.value,false);assert.equal(d.unknown.value,null)
+ assert.equal(d.id.value,id);assert.equal(d.version.value,1)
+ duplicate=false;await d.save({project_code:'CORRECTED'})
+ assert.equal(d.version.value,2);assert.equal(d.id.value,id)
+})
+test('保存响应丢失后核对服务端去除编号首尾空格，不误报版本冲突',async()=>{
+ let stored
+ const d=mod.usePersistentDraft({get:async()=>stored,submit:async()=>{},save:async body=>{
+  stored={id:body.id,version:1,status:'active',payload:{...body.payload,project_code:body.payload.project_code.trim()}}
+  throw {}
+ }},()=> 'normalized-code-id')
+ await assert.rejects(d.save({project_code:' CODE ',project_name:'项目'}))
+ assert.equal(d.unknown.value,'save')
+ await d.reconcile()
+ assert.equal(d.conflict.value,false);assert.equal(d.unknown.value,null);assert.equal(d.version.value,1)
 })

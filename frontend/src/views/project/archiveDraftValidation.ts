@@ -7,5 +7,8 @@ export function archiveDraftIdentityErrors(values: Record<string, unknown>): Rec
   if (typeof values.product_line_id !== 'number' || !Number.isSafeInteger(values.product_line_id) || values.product_line_id <= 0) {
     errors.product_line_id = '请选择产品线'
   }
+  if (typeof values.archive_category !== 'number' || !Number.isSafeInteger(values.archive_category) || values.archive_category <= 0) {
+    errors.archive_category = '请选择档案类别'
+  }
   return errors
 }

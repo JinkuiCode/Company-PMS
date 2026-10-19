@@ -32,7 +32,7 @@ def filter_fields(report):
         # the request source. Derived quantities and PMS enrichment stay excluded.
         supported = {'project_code', 'material_code', 'material_name', 'specification',
                      'unit_name', 'bill_no', 'line_no', 'application_date',
-                     'document_status', 'close_status', 'requested', 'approved', 'progress'}
+                     'close_status', 'requested', 'approved', 'progress'}
         fields = [f for f in purchase_fields() if f['key'] in supported]
         enums = {'document_status': DOCUMENT_STATUSES, 'close_status': {'A': '未关闭', 'B': '已关闭'},
                  'progress': PROGRESS_LABELS}
@@ -135,7 +135,7 @@ def parse_filters(raw, report, *, additional_fields=()):
 
 
 def query_fields(report):
-    """V2 capabilities are separate from the unchanged legacy field contract."""
+    """V2 capabilities; fixed purchase data status is display-only."""
     from app.services.purchase_fields import overview_fields
     from app.services.inventory_fields import report_fields as inventory_fields
     if report == 'purchase':
@@ -153,6 +153,8 @@ def query_fields(report):
     result = []
     for field in fields:
         key = field['key']
+        if report.startswith('purchase') and key == 'document_status':
+            continue
         kind = field.get('value_type', field.get('type'))
         kind = 'number' if kind == 'decimal' else kind
         kind = 'enum' if key in enums else kind

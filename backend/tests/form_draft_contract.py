@@ -21,13 +21,13 @@ class Drafts(fixture.ArchiveChangeContract):
   self.base='/api/form-drafts/archive-create'
  def save(self,payload=None,id=None,version=None):
   id=id or str(uuid4())
-  body={'id':id,'expected_version':version,'payload':{'project_code':'DRAFT-SAMPLE','project_name':'待填写档案','product_line_id':1,**(payload or {})}}
+  body={'id':id,'expected_version':version,'payload':{'project_code':'DRAFT-SAMPLE','project_name':'待填写档案','product_line_id':1,'archive_category':2,**(payload or {})}}
   response=self.client.post(self.base,json=body)
   self.assertEqual(response.status_code,200,response.text)
   return response.json()
  def test_incomplete_cross_session_private_multiple_and_no_business_side_effect(self):
   a=self.save({'project_name':'未完成','quantity':2})
-  self.save()
+  self.save({'project_code':'DRAFT-SECOND'})
   self.db.expire_all()
   r=self.client.get(f"{self.base}/{a['id']}")
   self.assertEqual(r.json()['payload']['project_name'],'未完成')
@@ -55,7 +55,7 @@ class Drafts(fixture.ArchiveChangeContract):
   repeated=self.save({'project_name':'first'},a['id'],None)
   self.assertEqual(a['version'],repeated['version'])
   b=self.save({'project_name':'latest'},a['id'],a['version'])
-  stale=self.client.post(self.base,json={'id':a['id'],'expected_version':a['version'],'payload':{'project_code':'DRAFT-SAMPLE','project_name':'stale','product_line_id':1}})
+  stale=self.client.post(self.base,json={'id':a['id'],'expected_version':a['version'],'payload':{'project_code':'DRAFT-SAMPLE','project_name':'stale','product_line_id':1,'archive_category':2}})
   self.assertEqual(stale.status_code,409)
   self.assertEqual(self.client.get(f"{self.base}/{a['id']}").json()['payload']['project_name'],'latest')
   r=self.client.request('DELETE',f"{self.base}/{a['id']}",json={'expected_version':b['version']})
@@ -111,14 +111,14 @@ class Drafts(fixture.ArchiveChangeContract):
  def test_draft_requires_identity_and_line_and_rejects_blank_identity(self):
   for payload,missing in [({}, {'project_code','project_name'}),({'project_code':'ONE'}, {'project_name'}),({'project_name':'项目'}, {'project_code'}),({'project_code':'  ','project_name':'项目'}, {'project_code'}),({'project_code':'ONE','project_name':'  '}, {'project_name'}),({'project_code':None,'project_name':'项目'}, {'project_code'})]:
    with self.subTest(payload=payload):
-    response=self.client.post(self.base,json={'id':str(uuid4()),'payload':{'product_line_id':1,**payload}})
+    response=self.client.post(self.base,json={'id':str(uuid4()),'payload':{'product_line_id':1,'archive_category':2,**payload}})
     self.assertEqual(response.status_code,422,response.text)
     fields={i['field_key'] for i in response.json()['detail']['fields']}
     self.assertEqual(fields,missing)
   self.assertEqual(self.db.query(self.Model).count(),0)
   self.assertEqual(self.db.query(SysOperationLog).filter_by(entity_type='pms_form_draft').count(),0)
-  row=self.save({'project_code':'IDENTITY-ONLY','project_name':'只填写两项','product_line_id':1})
-  self.assertEqual(row['payload'],{'project_code':'IDENTITY-ONLY','project_name':'只填写两项','product_line_id':1})
+  row=self.save({'project_code':'IDENTITY-ONLY','project_name':'只填写两项','product_line_id':1,'archive_category':2})
+  self.assertEqual(row['payload'],{'project_code':'IDENTITY-ONLY','project_name':'只填写两项','product_line_id':1,'archive_category':2})
   response=self.client.post(f"{self.base}/{row['id']}/submit",json={'expected_version':row['version']})
   self.assertEqual(response.status_code,422,response.text)
   self.assertEqual(self.client.get(f"{self.base}/{row['id']}").json()['status'],'active')
@@ -136,7 +136,7 @@ class Drafts(fixture.ArchiveChangeContract):
  def test_resave_preserves_historical_hidden_and_readonly_fields_without_accepting_edits(self):
   from app.models.field_policy import SysBusinessFieldPolicy
   for visible in (0,1):
-   row=self.save({'remarks':'历史备注需保留'})
+   row=self.save({'project_code':f'HISTORY-{visible}','remarks':'历史备注需保留'})
    policy=SysBusinessFieldPolicy(module_code='project_archive',field_key='remarks',visible=visible,editable=0,required=0,list_available=0)
    self.db.add(policy);self.db.commit()
    refreshed=self.client.get(f"{self.base}/{row['id']}").json()
@@ -155,7 +155,7 @@ class Drafts(fixture.ArchiveChangeContract):
   self.db.commit();self.actor(self.owner,lines=[1])
   response=self.client.get(self.base+'/product-lines')
   self.assertEqual([i['value'] for i in response.json()['options']],[1])
-  response=self.client.post(self.base,json={'id':str(uuid4()),'payload':{'project_code':'SCOPE','project_name':'范围','product_line_id':2}})
+  response=self.client.post(self.base,json={'id':str(uuid4()),'payload':{'project_code':'SCOPE','project_name':'范围','product_line_id':2,'archive_category':2}})
   self.assertEqual(response.status_code,404)
   self.db.get(SysProductLine,1).is_enabled=0;self.db.commit();self.actor(self.owner,lines=[1,2])
   response=self.client.get(self.base+'/product-lines')

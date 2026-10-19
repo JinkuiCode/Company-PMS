@@ -13,6 +13,9 @@ from app.services.purchase_fields import DOCUMENT_STATUSES
 from app.services.report_filters import Condition, parse_filters, parse_column_filters, sql_conditions, query_fields
 
 REPORT_START_DATE = date(2026, 1, 1)
+# Fixed report membership, shared by selection and direct detail access.
+# Kingdee request-line business termination: A = normal; other/unknown values excluded.
+REQUEST_ELIGIBILITY = "h.FDOCUMENTSTATUS='C' AND e.FMRPTERMINATESTATUS='A'"
 ACCOUNTED_FIELDS = {'progress', 'ordered', 'received', 'returned', 'net_received',
                     'pending_order', 'pending_receipt', 'last_order_date', 'last_stock_date'}
 OVERVIEW_ONLY_FIELDS = {'organization_name', 'completion_rate', 'conversion_rate', 'total_lines', 'not_ordered_lines',
@@ -210,7 +213,7 @@ def _with_state(rows):
 def load_request(connection, request_id, project_codes):
     _prepare_scope(connection, project_codes)
     scope, params = scope_clause('a.FNUMBER', project_codes)
-    rows = _rows(connection, REQUEST_SELECT + ' WHERE e.FENTRYID=%s AND h.FAPPLICATIONDATE>=%s AND ' + scope,
+    rows = _rows(connection, REQUEST_SELECT + ' WHERE ' + REQUEST_ELIGIBILITY + ' AND e.FENTRYID=%s AND h.FAPPLICATIONDATE>=%s AND ' + scope,
                  [request_id, REPORT_START_DATE, *params])
     if len(rows) != 1:
         return None
@@ -499,7 +502,7 @@ def _like(text):
 
 def request_query(query, project_codes):
     scope, params = scope_clause('a.FNUMBER', project_codes)
-    filters = [scope, 'h.FAPPLICATIONDATE >= %s']
+    filters = [scope, 'h.FAPPLICATIONDATE >= %s', REQUEST_ELIGIBILITY]
     params.append(REPORT_START_DATE)
     if query.organization_ids:
         selected = sorted(set(query.organization_ids))

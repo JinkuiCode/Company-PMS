@@ -65,7 +65,7 @@ def get_archive_fields(
     db: Session = Depends(get_db),
     _scope_ctx: dict = Depends(require_permission("project:archive:view")),
 ):
-    return project_service.get_archive_field_metadata(db)
+    return project_service.get_archive_field_metadata(db, _scope_ctx)
 
 
 @router.get("/archives/regions", summary="项目地址省市选项")

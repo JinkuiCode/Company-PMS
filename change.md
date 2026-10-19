@@ -1,5 +1,29 @@
 # PMS 变更记录
 
+## 2026-10-19 档案必输、默认值与产品线联动（本机）
+
+- 原因与批准：用户确认草稿和正式保存均要求档案类别，新建负责人默认本人、单位“台”优先，并按已梳理的8吋Bench、12吋Bench、Single三组映射联动。其他线及未明确归属项保留原选项；统一准备发布。
+- 调整：后端独立注册组织内码与稳定枚举编号的映射，现有字段接口仅附加当前数据范围内的联动元数据；草稿及共享正式写入规则校验新建和相关字段变更，保留无关历史修改兼容。页面复用原控件过滤选项，换产品线仅清空不兼容子项并提示，历史禁用项使用自身名称显示。草稿四项必输及标记一致，正式规则保持；已有负责人新建默认及恢复保留经回归确认。单位只调整读取时的选项顺序，不改编号、状态或数据库排序。
+- 涉及文件：backend/app/services/archive_field_linkage.py、field_policy.py、form_drafts.py、dict.py、project.py、api/projects.py；frontend/src/views/project/ProjectArchive.vue、archiveFieldLinkage.ts、archiveDraftValidation.ts；对应后端/前端契约及浏览器验收；page-guide/registry.ts、原草稿规格及本轮计划。
+- 验证：后端16组相关契约退出0；字段目录与枚举契约退出0；前端必需风格/列表/系统/字段目录/枚举检查、档案筛选、联动及草稿测试、页面说明测试和构建通过。两套隔离浏览器通过，覆盖缺类别不写入、默认/恢复负责人、单位顺序、三组联动及通用项、历史不兼容名称。独立审查两项边界问题已修正并回归，无未解决发现。证据：outputs/archive-field-linkage-20261019/verification.json。未改真实数据、结构、权限，未部署或Git操作。
+
+## 2026-10-19 草稿与正式档案编码唯一性（本机）
+
+- 原因与批准：用户明确选择“正式档案＋所有未提交草稿之间都不能重号”，批准先在Mac实现和验证，不部署正式环境。
+- 调整：新增共享编码服务，复用正式编码去首尾空格、大小写归一及数据库比较语义；保存草稿检查全员全部有效草稿和正式档案，排除自身，跨产品线/权限范围仅返回通用重号提示。正式ORM新增、改号和导入检查有效草稿，原正式档案唯一索引与IntegrityError处理保持。MSSQL事务应用锁和SQLite写事务保护查重至提交，转正式在同事务结束本草稿并创建，失败回滚。改号/删除释放原编码，不自动处理历史重号。
+- 用户体验：复用既有编码字段错误展示，失败保留输入、草稿身份和版本；编码冲突不再误报草稿版本冲突，改号后可重试。真正版本冲突提示滚动到可视区域；丢响应后核对时容忍服务端清理编码首尾空格，保留大小写差异判断。更新项目档案、草稿管理说明及原草稿规格。
+- 涉及文件：backend/app/services/{archive_code_unique,form_drafts}.py、backend/app/models/project.py；backend/tests/{archive_code_lock_contract,form_draft_unique_contract,form_draft_contract}.py；frontend/src/form-system/usePersistentDraft.ts、views/project/ProjectArchive.vue、page-guide/registry.ts、tests/{persistent-draft.test,archive-persistent-drafts-browser}.mjs；本批计划、原草稿规格及本日志。
+- 验证：新增API重号场景4项在旧实现先失败，最终6项通过；4项锁契约包含真实双连接SQLite的草稿/草稿、草稿/档案及回滚释放。15组独立后端检查通过（含本人草稿14、管理8、档案变更/维护/导入/性能、目录/枚举）；前端草稿行为7项、三项必需规范、说明和构建通过。隔离真实Vue页面验证字段重号提示、改号重试、旧版本冲突、关闭/恢复/正式提交失败和丢响应核对，业务接口全部模拟。独立审查的重要问题（编码清理后丢响应核对）已先RED后GREEN并复审关闭。
+- 既有失败与范围：额外3组旧夹具失败已在HEAD独立源码副本复现：生命周期并发缺菜单夹具、离线合并未补当前必输、列查询仍使用已移除字段；未修改这些无关测试或报告全套通过。MSSQL仅验证锁参数、SQL绑定和失败关闭，真实驱动/排序规则/并发须上线前隔离演练。本次未连接正式库、改结构/权限/保护配置、重启日常服务或写金蝶，未部署、提交、合并或推送。证据见outputs/draft-code-unique-20261019/。
+
+## 2026-10-19 采购申请统计范围与查询条件（本机）
+
+- 原因与批准：用户要求采购进度仅统计已审核且业务终止正常的采购申请，并追加取消数据状态查询条件；按已说明的Mac开发与隔离验证范围连续实施。
+- 调整：统一基础取数与直接详情条件为申请头已审核C且申请行业务终止正常A，未审核/已终止/终止状态为空或未知的行不参与总数、分页、总进度及比率分母、原有ERP候选与导出。保留日期、组织和产品线权限、作废判定及下游计量/关联算法。数据状态保留展示，退出查询条件；旧方案复用既有取消字段提示和禁止查询逻辑，用户明确保存后生效。
+- 涉及文件：backend/app/services/{purchase_reader,purchase_fields,report_filters}.py；backend/tests/{purchase_population_contract,purchase_reader_contract,report_query_v2_contract,report_typed_filters_contract}.py；frontend/src/page-guide/registry.ts、frontend/tests/purchase-population-browser.mjs；docs/采购进度查询报表说明.md及本批实施计划。
+- 验证：新增5项实际关系数据契约先RED后GREEN；采购83项、报表73项后端契约通过；字段目录、枚举及前端3项必需规范、目录/枚举契约、页面说明4项、采购页面契约与构建退出0。隔离真实Vue浏览器验证旧方案不静默修改、查询禁用、明确保存后查询、状态仅展示及新说明通过。独立只读审查无Critical/Important/Minor问题。结果与截图见outputs/purchase-population-20261019/。
+- 边界：仅本机源码及隔离测试，未重启常用本机后端、未连接真实金蝶数据库或写入业务数据，未改结构/授权/保护配置，未部署正式环境、发通知、提交、合并或推送。正式运行仍为v1.2.1。
+
 ## 2026-10-16 全局表单规范两项遗留收尾（本机）
 
 - 原因与批准：用户明确同意仅在本机处理查询密度检查及升级通知单个勾选框，不改接口、权限、数据库或真实邮件，不部署、合并或推送。

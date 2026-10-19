@@ -1,7 +1,10 @@
 import {chromium,expect} from '@playwright/test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-const base='http://127.0.0.1:5174',out='../outputs/archive-draft-management-20261016/persistent'
+import {createServer} from 'vite'
+const server=await createServer({server:{host:'127.0.0.1',port:0}})
+await server.listen()
+const base=`http://127.0.0.1:${server.httpServer.address().port}`,out='../outputs/archive-field-linkage-20261019/draft-browser'
 fs.mkdirSync(out,{recursive:true})
 const browser=await chromium.launch({channel:'msedge',headless:true})
 try{
@@ -9,7 +12,7 @@ try{
  page.on('pageerror',e=>{errors.push(e.message); fs.appendFileSync(out+'/page-errors.txt',e.stack+'\n')});page.setDefaultTimeout(7000)
  await page.addInitScript(()=>localStorage.setItem('access_token','isolated-persistent-draft'))
  await page.addStyleTag({content:'*{animation:none!important;transition:none!important}' }).catch(()=>{})
- const rows=new Map();let conflict=false,failSubmit=true,lostSubmit=false,saveCount=0,submits=0,holdRestore=false,releaseRestore
+ const rows=new Map();let conflict=false,duplicate=false,failSubmit=true,lostSubmit=false,saveCount=0,submits=0,holdRestore=false,releaseRestore
  const keys=['archive_category','project_code','project_name','customer','product_line_id','quantity','quantity_unit','manager_id','machine_model','equipment_series','serial_no','remarks','contract_signed_date','contract_ship_date']
  await page.route('**/*',async route=>{
   const u=new URL(route.request().url()),p=u.pathname,m=route.request().method()
@@ -20,12 +23,13 @@ try{
   else if(p==='/api/users/options')body=[{id:1,real_name:'本机验收'}]
   else if(p==='/api/product-lines/options'||p==='/api/product-lines/labels'||p==='/api/form-drafts/archive-create/product-lines')body={options:[{value:7,label:'8吋Bench'}],label_map:{7:'8吋Bench'}}
   else if(p==='/api/projects/archives/fields')body={items:keys.map(field_key=>({field_key,label:field_key==='project_name'?'项目名称':field_key,visible:!field_key.startsWith('contract_'),editable:!field_key.startsWith('contract_'),list_available:true,required:['project_name','quantity'].includes(field_key)}))}
-  else if(p.startsWith('/api/dicts/code/'))body={items:[{value:1,label:'主机'},{value:7,label:'台'}],label_map:{1:'主机',7:'台'}}
+  else if(p.startsWith('/api/dicts/code/'))body={items:[{value:1,label:'主机'},{value:2,label:'辅机'},{value:7,label:'台'}],label_map:{1:'主机',7:'台'}}
   else if(p==='/api/projects/archives/list')body={total:0,items:[]}
   else if(p==='/api/form-drafts/archive-create'&&m==='GET')body={items:[...rows.values()].filter(r=>r.status==='active'),total:[...rows.values()].filter(r=>r.status==='active').length}
   else if(p==='/api/form-drafts/archive-create'&&m==='POST'){
    saveCount++;const b=route.request().postDataJSON()
    if(conflict)return route.fulfill({status:409,json:{detail:{code:'DRAFT_VERSION_CONFLICT',message:'草稿已有更新'}}})
+   if(duplicate)return route.fulfill({status:409,json:{detail:{code:'ARCHIVE_UNIQUE_CONFLICT',field_key:'project_code',message:'项目编号已存在，请更换编号'}}})
    body={id:b.id,version:(rows.get(b.id)?.version||0)+1,status:'active',payload:b.payload,project_code:b.payload.project_code,project_name:b.payload.project_name||'未命名项目档案',updated_at:'2026-10-16T15:10:00+08:00'};rows.set(b.id,body)
   }else if(p.startsWith('/api/form-drafts/archive-create/')){
    const id=p.split('/')[4],row=rows.get(id)
@@ -49,6 +53,8 @@ try{
  await code.fill('   ');await form.getByRole('button',{name:'保存草稿',exact:true}).click()
  await expect(form).toContainText('请填写项目编号');assert.equal(saveCount,0)
  await code.fill('DRAFT-DEMO-01');await name.fill('初始草稿')
+ await form.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(form).toContainText('请选择档案类别');assert.equal(saveCount,0)
+ await form.getByRole('combobox',{name:'档案类别',exact:true}).locator('xpath=ancestor::div[contains(@class,"el-select__wrapper")]').click();await page.getByRole('option',{name:'辅机',exact:true}).click()
  await form.getByRole('button',{name:'保存草稿',exact:true}).click()
  await expect.poll(()=>rows.size).toBe(1);assert.equal(submits,0)
  await name.fill('中途保存')
@@ -66,6 +72,14 @@ try{
  assert.equal(visibleWithinCell,true,'删除按钮不得被单元格裁切')
  await page.screenshot({animations:'disabled',path:out+'/draft-list.jpg'})
  await list.getByRole('button',{name:'继续填写',exact:true}).click();await expect(name).toHaveValue('中途保存')
+ const savedId=[...rows.keys()][0],savedVersion=rows.get(savedId).version
+ duplicate=true;await code.fill('DUPLICATE-CODE');await form.getByRole('button',{name:'保存草稿',exact:true}).click()
+ await expect(form).toContainText('项目编号已存在，请更换编号');await expect(code).toHaveValue('DUPLICATE-CODE')
+ await expect(name).toHaveValue('中途保存');await expect(form.getByText('草稿已有更新',{exact:false})).toHaveCount(0)
+ assert.equal(rows.get(savedId).version,savedVersion);assert.equal(rows.size,1)
+ await page.screenshot({animations:'disabled',path:out+'/duplicate-code.jpg'})
+ duplicate=false;await code.fill('DRAFT-DEMO-01');await form.getByRole('button',{name:'保存草稿',exact:true}).click()
+ await expect.poll(()=>rows.get(savedId).version).toBe(savedVersion+1);assert.equal(rows.size,1)
  await code.fill('LOCAL-CONFLICT');conflict=true
  await form.getByRole('button',{name:'保存草稿',exact:true}).click()
  await expect(form).toContainText('草稿已有更新'); await expect(form.getByRole('alert').filter({hasText:'本次输入已保留'})).toBeInViewport();await expect(code).toHaveValue('LOCAL-CONFLICT')
@@ -95,5 +109,6 @@ try{
  await page.getByRole('dialog',{name:'删除草稿',exact:true}).getByRole('button',{name:'确定',exact:true}).click()
  await expect(list).toContainText('暂无草稿')
  assert.deepEqual(errors,[])
- console.log('PASS incomplete save, close three choices, cross session restore, conflict keeps input/save-as-new, formal failure retains, unknown submit reconciles once, delete confirm; all API synthetic; real writes=0; saves='+saveCount)
-}finally{await browser.close()}
+ fs.writeFileSync(out+'/verification.json',JSON.stringify({passed:true,realWrites:0,duplicatePreservesInput:true,correctedCodeSavesSameDraft:true,versionConflictStillProtected:true,errors},null,2))
+ console.log('PASS incomplete save, duplicate code keeps input and permits corrected retry, close/restore/version conflict, formal failure/unknown reconciliation, delete; all API synthetic; real writes=0; saves='+saveCount)
+}finally{await browser.close();await server.close()}

@@ -364,6 +364,8 @@ def validate_business_field_write(
     merged = {**current_values, **updates}
 
     if module_code == MODULE_PROJECT_ARCHIVE:
+        from app.services.archive_field_linkage import linkage_errors
+        errors.extend(linkage_errors(db, current_values, updates, is_create=is_create))
         if 'quantity' in updates and (is_create or updates['quantity'] != current_values.get('quantity')):
             from app.services.archive_quantity import validate_archive_quantity
             try:

@@ -16,6 +16,7 @@ from app.services.field_policy import get_effective_field_policies, MODULE_PROJE
 from app.services.archive_quantity import validate_archive_quantity
 from app.services.project import _ensure_archive_assignment_allowed, create_archive, ensure_archive_access
 from app.services.operation_log import record_operation_log
+from app.services.archive_code_unique import ensure_code_available, lock_codes
 
 RESOURCE = 'archive-create'
 
@@ -86,7 +87,10 @@ def _clean(db, context, payload, previous=None):
                if not (data.get(key) or '').strip()]
     if data.get('product_line_id') is None:
         missing.append({'field_key':'product_line_id','message':'请选择产品线'})
+    if data.get('archive_category') is None:
+        missing.append({'field_key':'archive_category','message':'请选择档案类别'})
     if missing: raise _invalid(missing)
+    data['project_code'] = data['project_code'].strip()
     if data.get('manager_id') is not None:
         person = db.get(SysUser, data['manager_id'])
         if not person or person.status != 1: raise _invalid([{'field_key':'manager_id','message':'负责人不可用'}])
@@ -99,6 +103,9 @@ def _clean(db, context, payload, previous=None):
         code = policies[key].get('enum_code')
         if code and value is not None:
             validate_enum_value(db, code, value, current_value=previous.get(key))
+    from app.services.archive_field_linkage import linkage_errors
+    errors = linkage_errors(db, previous, data, is_create=not previous)
+    if errors: raise _invalid(errors)
     # A draft may retain a now-disabled enum. Formal creation validates enabled values again.
     return data
 
@@ -201,6 +208,7 @@ def save_draft(db, context, data, request=None):
     if len(encoded.encode('utf-8')) > 65536: raise HTTPException(422,'草稿内容过大')
     row = db.get(PmsFormDraft,str(data.id))
     try:
+        ensure_code_available(db.connection(), payload.get('project_code'), exclude_draft_id=data.id)
         if row:
             row = _row(db,context,data.id)
             if row.status != 'active': raise _conflict()
@@ -240,6 +248,7 @@ def delete_draft(db, context, draft_id, version, request=None):
 def submit_draft(db, context, draft_id, version, request=None):
     _guard(db,context)
     try:
+        lock_codes(db.connection())
         row=_row(db,context,draft_id)
         if row.status == 'used':
             ensure_archive_access(db,row.archive_id,context)

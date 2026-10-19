@@ -90,7 +90,7 @@
         <PmsFormDrawer v-model="dialogVisible" title="新增项目档案" :busy="archiveCreateSaving" :before-close="beforeCloseArchiveCreate">
           <p v-if="archiveDraftProductLines.failed.value" class="pms-list-load-error" role="alert">产品线选项暂不可用，请重试后再保存。<el-button class="pms-button-navigation" size="small" :loading="archiveDraftProductLines.loading.value" @click="archiveDraftProductLines.loadOptions()">重试产品线</el-button></p>
           <p v-if="archiveDraftWarnings.length" role="status" class="archive-governance-route">{{ archiveDraftWarnings.join('；') }}</p>
-          <div v-if="persistentDraft.conflict.value" role="alert" class="pms-list-load-error">草稿已有更新，本次输入已保留。
+          <div v-if="persistentDraft.conflict.value" ref="archiveDraftConflictNotice" role="alert" class="pms-list-load-error">草稿已有更新，本次输入已保留。
             <el-button class="pms-button-navigation" size="small" :disabled="archiveCreateSaving" @click="loadLatestArchiveDraft">加载最新草稿</el-button>
             <el-button type="success" plain size="small" :disabled="archiveCreateSaving" @click="saveArchiveDraftAsNew">另存为新草稿</el-button>
           </div>
@@ -176,6 +176,7 @@ import { usePersistentDraft, type PersistentDraft } from '@/form-system/usePersi
 import { archiveDraftApi } from '@/api/formDraft'
 import ArchiveDraftList from './ArchiveDraftList.vue'
 import { archiveDraftIdentityErrors } from './archiveDraftValidation'
+import { filterArchiveLinkedOptions, reconcileArchiveLinkedFields, type ArchiveFieldLinkage } from './archiveFieldLinkage'
 import { ref, reactive, computed, defineComponent, h, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Delete, Search, Close } from '@element-plus/icons-vue'
@@ -394,6 +395,7 @@ const archiveColumnPolicyKey: Record<string, string> = {
 }
 const baseArchiveColumnKeys = ARCHIVE_COLUMN_GROUP_DEFINITIONS.flatMap(group => group.fields.map(field => field.key))
 const effectiveArchiveFields = ref<EffectiveArchiveField[]>([])
+const archiveFieldLinkage = ref<ArchiveFieldLinkage | null>(null)
 const effectiveArchiveFieldMap = computed(() => new Map(
   effectiveArchiveFields.value.map(field => [field.field_key, field]),
 ))
@@ -640,8 +642,10 @@ async function fetchEffectiveArchiveFields() {
   try {
     const response: any = await request.get('/projects/archives/fields')
     effectiveArchiveFields.value = Array.isArray(response?.items) ? response.items : []
+    archiveFieldLinkage.value = response?.linkage || null
   } catch {
     effectiveArchiveFields.value = []
+    archiveFieldLinkage.value = null
   }
 }
 
@@ -693,9 +697,10 @@ function archiveDrawerSelectOptions(fieldKey: string, values = archiveDrawerForm
   else if (fieldKey === 'product_category') options = archiveProductCategoryOptions.value
   else if (fieldKey === 'manager_id') options = archiveUserOptions.value
   else if (fieldKey === 'equipment_series') { options = archiveEquipmentSeriesOptions.value; enumCode = 'equipment_series' }
+  options = filterArchiveLinkedOptions(archiveFieldLinkage.value, values.product_line_id, fieldKey, options)
   const value = values[fieldKey]
-  if (values === form && value !== null && value !== undefined && value !== '' && !options.some(option => String(option.value) === String(value))) {
-    const label = archiveDraftValueLabels.value[fieldKey] || (enumCode ? dictLabelMaps[enumCode]?.[String(value)] : undefined) || '原选项已不可用'
+  if (value !== null && value !== undefined && value !== '' && !options.some(option => String(option.value) === String(value))) {
+    const label = (values === form ? archiveDraftValueLabels.value[fieldKey] : undefined) || (enumCode ? dictLabelMaps[enumCode]?.[String(value)] : undefined) || '原选项已不可用'
     options = [...options, { value, label, disabled: true }]
   }
   return options
@@ -712,11 +717,13 @@ function changeArchiveProvince(values: Record<string, any>) {
 
 function changeArchiveCreateSelect(fieldKey: string) {
   clearArchiveServerError(archiveCreateServerErrors, fieldKey)
+  if (fieldKey === 'product_line_id') reconcileArchiveLine(form)
   if (fieldKey === 'address_province') changeArchiveProvince(form)
   if (fieldKey === 'address_city') form.address_detail = ''
 }
 
 function changeArchiveDrawerSelect(fieldKey: string) {
+  if (fieldKey === 'product_line_id') reconcileArchiveLine(archiveDrawerForm)
   if (fieldKey === 'address_province') {
     changeArchiveProvince(archiveDrawerForm)
     return
@@ -726,6 +733,11 @@ function changeArchiveDrawerSelect(fieldKey: string) {
     return
   }
   commitArchiveFieldEdit()
+}
+
+function reconcileArchiveLine(values: Record<string, any>) {
+  const cleared = reconcileArchiveLinkedFields(archiveFieldLinkage.value, values)
+  if (cleared.length) ElMessage.warning('已清除与新产品线不匹配的选项，请重新选择机型或设备系列')
 }
 
 function archiveAddressFieldVisible(fieldKey: string, values: Record<string, any>) {
@@ -901,7 +913,7 @@ const form = reactive<Record<string, any>>({
 const archiveCreateValidationIntent = ref<'draft' | 'formal'>('draft')
 function archiveCreateIntentRequired(fieldKey: string) {
   return archiveCreateValidationIntent.value === 'draft'
-    ? ['project_code', 'project_name', 'product_line_id'].includes(fieldKey)
+    ? ['project_code', 'project_name', 'product_line_id', 'archive_category'].includes(fieldKey)
     : archiveFieldRequired(fieldKey, undefined, form)
 }
 async function setArchiveCreateValidationIntent(intent: 'draft' | 'formal') {
@@ -917,6 +929,12 @@ const archiveCreateSession = useFormSession({
 })
 const archiveCreateSaving = computed(() => archiveCreateSession.busy.value || archiveCreateOpening.value || archiveDraftChecking.value)
 const persistentDraft = usePersistentDraft(archiveDraftApi)
+const archiveDraftConflictNotice = ref<HTMLElement | null>(null)
+watch(() => persistentDraft.conflict.value, async conflict => {
+  if (!conflict) return
+  await nextTick()
+  archiveDraftConflictNotice.value?.scrollIntoView({ block: 'nearest' })
+})
 const archiveDraftListVisible = ref(false), archiveDraftChecking = ref(false)
 const archiveDraftWarnings = ref<string[]>([])
 const archiveDraftValueLabels = ref<Record<string,string>>({})
@@ -1359,7 +1377,10 @@ async function saveArchiveDraft() {
       return false
     },
     save: snapshot => persistentDraft.save(buildArchiveCreatePayload(snapshot)),
-    onError: error => focusArchivePolicyValidation(error),
+    onError: async error => {
+      if (await focusArchiveUniqueConflict(error, formRef, archiveCreateServerErrors)) return
+      await focusArchivePolicyValidation(error)
+    },
   })
   if (result.status === 'success') { ElMessage.success('草稿已保存'); return true }
   return false
@@ -1613,7 +1634,8 @@ function commitArchiveFieldEdit() {
   const fieldKey = archiveEditingField.value
   if (!fieldKey) return
   const keys = fieldKey === 'address_province' ? [fieldKey, 'address_city', 'address_detail']
-    : fieldKey === 'address_city' ? [fieldKey, 'address_detail'] : [fieldKey]
+    : fieldKey === 'address_city' ? [fieldKey, 'address_detail']
+      : fieldKey === 'product_line_id' ? [fieldKey, 'machine_model', 'equipment_series'] : [fieldKey]
   const nextChanges = { ...archivePendingChanges.value }
   for (const key of keys) {
     const field = archiveDrawerFieldByKey(key)
@@ -1651,6 +1673,7 @@ function updateArchiveDetailField(key: string, value: any) {
   if (!field || !archiveDrawerFieldEditable(field)) return
   archiveDrawerForm[key] = value
   clearArchiveServerError(archiveDrawerServerErrors, key)
+  if (key === 'product_line_id') reconcileArchiveLine(archiveDrawerForm)
   if (key === 'address_province') changeArchiveProvince(archiveDrawerForm)
   if (key === 'address_city') archiveDrawerForm.address_detail = ''
   const changes: Record<string, ArchivePendingChange> = {}

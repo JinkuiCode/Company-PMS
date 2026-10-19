@@ -318,8 +318,10 @@ def get_project_sheet_field_metadata(db: Session) -> dict[str, Any]:
     return {"groups": groups, "fields": visible_fields, "policies": effective["items"]}
 
 
-def get_archive_field_metadata(db: Session) -> dict[str, Any]:
-    return get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)
+def get_archive_field_metadata(db: Session, scope_context: dict | None = None) -> dict[str, Any]:
+    from app.services.archive_field_linkage import linkage_metadata
+    return {**get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE),
+            'linkage': linkage_metadata(db, scope_context)}
 
 
 def _build_project_sheet_values(

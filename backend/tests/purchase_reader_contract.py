@@ -43,7 +43,8 @@ GRANTS = [ProjectOrganizationGrant('P-1', 100)]
 
 
 def fixture_columns(fields):
-    return ', '.join(name + (' DEFAULT 100' if name in ('FAPPLICATIONORGID', 'FPURCHASEORGID', 'FSTOCKORGID') else '')
+    return ', '.join(name + (' DEFAULT 100' if name in ('FAPPLICATIONORGID', 'FPURCHASEORGID', 'FSTOCKORGID')
+                            else " DEFAULT 'A'" if name == 'FMRPTERMINATESTATUS' else '')
                      for name in fields.split())
 
 

@@ -57,7 +57,7 @@ class TypedFilters(unittest.TestCase):
             dict(field='bill_no', operator='contains', value=attack),
             dict(field='approved', operator='between', value='1.125', valueEnd='5'),
             dict(field='application_date', operator='equals', value='2026-06-01'),
-            dict(field='document_status', operator='equals', value='C')]))
+            dict(field='close_status', operator='equals', value='A')]))
         sql, params = request_query(q, ALL_DATA_SCOPE)
         self.assertNotIn(attack, sql)
         self.assertIn("%x~%' OR 1=1 --~_~[%", params)
@@ -83,8 +83,9 @@ class TypedFilters(unittest.TestCase):
             self.assertIn('contains', fields['bill_no']['operators'])
         fields = {f['field']: f for f in purchase['filter_fields']}
         self.assertEqual(fields['approved']['type'], 'number')
-        self.assertEqual(fields['document_status']['type'], 'enum')
-        self.assertIn({'value': 'C', 'label': '已审核'}, fields['document_status']['options'])
+        self.assertNotIn('document_status', fields)
+        self.assertEqual(fields['close_status']['type'], 'enum')
+        self.assertIn({'value': 'A', 'label': '未关闭'}, fields['close_status']['options'])
         self.assertNotIn('project_name', fields)
         self.assertEqual(fields['progress']['type'], 'enum')
         self.assertEqual(fields['progress']['operators'], ['equals', 'notEquals'])

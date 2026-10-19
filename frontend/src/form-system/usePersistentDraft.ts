@@ -19,7 +19,8 @@ const uncertain = (e: any) => !e?.response || e.response.status >= 500
 const equal = (a: Record<string,unknown>, b: Record<string,unknown>) => {
   const keys = Object.keys(a).sort()
   return keys.join() === Object.keys(b).sort().join() && keys.every(key => key === 'quantity' && a[key] != null && b[key] != null
-    ? Number(a[key]) === Number(b[key]) : JSON.stringify(a[key]) === JSON.stringify(b[key]))
+    ? Number(a[key]) === Number(b[key]) : key === 'project_code' && typeof a[key] === 'string' && typeof b[key] === 'string'
+      ? a[key].trim() === b[key].trim() : JSON.stringify(a[key]) === JSON.stringify(b[key]))
 }
 
 /** Persistence only; the form session owns validation, input and interaction locks. */
@@ -44,7 +45,7 @@ export function usePersistentDraft(api: DraftTransport, newId = createDraftId) {
       attach(row)
       return row
     } catch (error: any) {
-      conflict.value = error?.response?.status === 409
+      conflict.value = error?.response?.status === 409 && error?.response?.data?.detail?.code === 'DRAFT_VERSION_CONFLICT'
       if (uncertain(error)) unknown.value = 'save'
       throw error
     }

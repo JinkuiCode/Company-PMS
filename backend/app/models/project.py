@@ -1,10 +1,11 @@
 import datetime
 
-from sqlalchemy import Boolean, Integer, Date, DateTime, ForeignKey, func, DECIMAL, Index, event, text
+from sqlalchemy import Boolean, Integer, Date, DateTime, ForeignKey, func, DECIMAL, Index, event, text, inspect
 from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.services.archive_code_unique import ensure_code_available
 
 
 class PmsProjectArchive(Base):
@@ -139,6 +140,9 @@ def _populate_archive_identity_keys(_mapper, _connection, target: PmsProjectArch
     target.project_code_key = target.project_code.casefold()
     target.project_name_key = target.project_name
     target.serial_no_key = target.serial_no.casefold() if target.serial_no else None
+    state = inspect(target)
+    if state.pending or state.attrs.project_code.history.has_changes():
+        ensure_code_available(_connection, target.project_code, check_archives=False)
 
 
 class PmsProjectSheetDetail(Base):
