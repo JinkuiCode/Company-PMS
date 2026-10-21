@@ -66,3 +66,21 @@ test('旧选择字段别名只读兼容，写入保留双字段供旧程序读�
  values.set(store.key(),JSON.stringify({...written,schema_version:99}))
  assert.equal(store.write(read.value,schema).status,'unsupported')
 })
+
+test('controlled opt-in layout version survives local round-trip and drops unrelated metadata',()=>{
+ const {store,values}=setup(),opt={...schema,layoutVersion:1}
+ const input={layout_version:1,selected_column_keys:['name'],columnState:[],unknown:'never store'}
+ assert.equal(store.write(input,opt).status,'saved')
+ assert.equal(store.read(opt).value.layout_version,1)
+ assert.equal(JSON.parse(values.get(store.key())).unknown,undefined)
+ assert.equal(mod.normalizeColumnPreference(input,schema).layout_version,undefined,'old callers do not opt in')
+})
+test('invalid or future opt-in layout version cannot overwrite the original local string',()=>{
+ const {store,values}=setup(),opt={...schema,layoutVersion:1}
+ for(const version of [2,'1',0,null]){
+  const raw=JSON.stringify({layout_version:version,selected_column_keys:['name'],columnState:[]});values.set(store.key(),raw)
+  assert.ok(['invalid','unsupported'].includes(store.read(opt).status))
+  assert.notEqual(store.write({layout_version:1,selected_column_keys:[],columnState:[]},opt).status,'saved')
+  assert.equal(values.get(store.key()),raw)
+ }
+})

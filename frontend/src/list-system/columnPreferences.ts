@@ -3,19 +3,29 @@ import type { ColumnState } from 'ag-grid-community'
 export interface PmsColumnPreference {
   selected_column_keys: string[]
   columnState: ColumnState[]
+  layout_version?: number
 }
 export interface PmsColumnSchema {
   allowed: ReadonlySet<string>
   defaults: readonly string[]
   fixed: ReadonlySet<string>
+  layoutVersion?: number
 }
 type ReadResult = { status: 'ready'; value: PmsColumnPreference }
   | { status: 'empty' | 'anonymous' | 'invalid' | 'unsupported' | 'unavailable' }
 
-export function normalizeColumnPreference(value: { selected_column_keys?: unknown; columnState?: unknown }, schema: PmsColumnSchema): PmsColumnPreference {
+function layoutStatus(value: { layout_version?: unknown }, schema: PmsColumnSchema): 'invalid' | 'unsupported' | null {
+  if (schema.layoutVersion === undefined || value.layout_version === undefined) return null
+  if (!Number.isSafeInteger(value.layout_version) || (value.layout_version as number) < 1) return 'invalid'
+  return (value.layout_version as number) > schema.layoutVersion ? 'unsupported' : null
+}
+
+export function normalizeColumnPreference(value: { selected_column_keys?: unknown; columnState?: unknown; layout_version?: unknown }, schema: PmsColumnSchema): PmsColumnPreference {
+  if (layoutStatus(value, schema)) throw new Error('列布局版本无效，请重新配置')
   const selected = Array.isArray(value.selected_column_keys) ? value.selected_column_keys : schema.defaults
   const seen = new Set<string>()
   return {
+    ...(schema.layoutVersion !== undefined && value.layout_version !== undefined ? { layout_version: value.layout_version as number } : {}),
     selected_column_keys: [...new Set(selected.filter((key): key is string => typeof key === 'string' && schema.allowed.has(key)))],
     columnState: (Array.isArray(value.columnState) ? value.columnState : []).filter(state => {
       if (!state || typeof state !== 'object' || typeof state.colId !== 'string' || seen.has(state.colId)) return false
@@ -51,6 +61,8 @@ export function createColumnPreferences(options: {
       const version = value.schema_version ?? 0
       if (version !== 0 && version !== 1) return { status: 'unsupported' }
       if (version === 1 && (value.owner_id !== options.ownerId() || value.page_key !== options.pageKey)) return { status: 'unsupported' }
+      const status = layoutStatus(value, schema)
+      if (status) return { status }
       return { status: 'ready', value: normalizeColumnPreference({
         ...value,
         selected_column_keys: value.selected_column_keys ?? (options.legacySelectionKey ? value[options.legacySelectionKey] : undefined),

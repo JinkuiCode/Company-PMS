@@ -55,6 +55,7 @@
         :rowData="visibleArchiveRows"
         :loading="archiveListLoading"
         :columnDefs="columnDefs"
+        :maintainColumnOrder="true"
         :defaultColDef="defaultColDef"
         :localeText="localeText"
         :theme="'legacy'"
@@ -226,6 +227,7 @@ import { loadEnumOptions } from '@/composables/useEnumOptions'
 import { useProductLineOptions } from '@/composables/useProductLineOptions'
 import { usePageLoad } from '@/composables/usePageLoad'
 import { createColumnPreferences, normalizeColumnPreference } from '@/list-system/columnPreferences'
+import { ARCHIVE_PRODUCT_LINE_LAYOUT_VERSION, archiveProductLineDefaultColumns, migrateArchiveProductLineLayout } from './archive-product-line-layout'
 import { chineseLocaleText } from '@/utils/agGridLocale'
 import { useAuthStore } from '@/stores/auth'
 import { getArchiveRegions, type ArchiveRegion } from '@/api/project'
@@ -258,6 +260,7 @@ function openSyncLog(id: number) { syncLogArchiveId.value = id; syncLogVisible.v
 const hasPermission = authStore.hasPermission
 
 type ArchiveColumnPreferenceState = {
+  layout_version?: number
   selected_column_keys: string[]
   columnState: ColumnState[]
 }
@@ -318,6 +321,8 @@ const ARCHIVE_COLUMN_GROUP_DEFINITIONS = [
     key: 'business',
     label: '业务信息',
     fields: [
+      { key: 'project_code', label: '项目编号', value_type: 'text', list_available: true, quick_addable: false },
+      { key: 'project_name', label: '项目名称', value_type: 'text', list_available: true, quick_addable: false },
       { key: 'customer', label: '客户', value_type: 'text', list_available: true, quick_addable: false },
       { key: 'product_category', label: '产品类别', value_type: 'select', list_available: true, quick_addable: false },
       { key: 'is_enabled', label: '启用状态', value_type: 'select', list_available: true, quick_addable: false },
@@ -448,17 +453,18 @@ const archiveColumnGroups = computed(() => ARCHIVE_COLUMN_GROUP_DEFINITIONS.map(
   ...group,
   fields: group.fields.filter(field => archiveColumnListAvailable(field.key)),
 })).filter(group => group.fields.length > 0))
-const defaultArchiveColumnKeys = computed(() => baseArchiveColumnKeys.filter(key => !archiveExpansionKeys.has(key)).filter(archiveColumnListAvailable))
+const defaultArchiveColumnKeys = computed(() => ['product_line_id', ...baseArchiveColumnKeys.filter(key => key !== 'product_line_id' && !archiveExpansionKeys.has(key))].filter(archiveColumnListAvailable))
 const availableArchiveColumnKeys = computed(() => new Set(baseArchiveColumnKeys.filter(archiveColumnListAvailable)))
 const fixedArchiveColumnKeys = new Set(['archive_selection', 'archive_actions'])
 const selectedArchiveColumnKeys = ref<string[]>([...defaultArchiveColumnKeys.value])
 const archiveColumnPreferenceOwnerId = ref<number | null>(null)
+const archiveLayoutVersion = ref<number | undefined>()
 const archiveColumnPreferences = createColumnPreferences({
   pageKey: 'project-archive', ownerId: () => archiveColumnPreferenceOwnerId.value,
   storage: () => localStorage, legacyPrefix: ARCHIVE_COLUMN_STORAGE_KEY,
 })
 function archiveColumnSchema() {
-  return { allowed: availableArchiveColumnKeys.value, defaults: defaultArchiveColumnKeys.value, fixed: new Set([...fixedArchiveColumnKeys, 'project_code', 'project_name']) }
+  return { allowed: availableArchiveColumnKeys.value, defaults: defaultArchiveColumnKeys.value, fixed: new Set([...fixedArchiveColumnKeys, 'project_code', 'project_name']), layoutVersion: ARCHIVE_PRODUCT_LINE_LAYOUT_VERSION }
 }
 let archiveColumnWarningShown = false
 function warnArchiveColumnStorage() {
@@ -494,9 +500,28 @@ function normalizeArchiveColumnKeys(keys: unknown) {
   return keys.filter((key): key is string => typeof key === 'string' && availableArchiveColumnKeys.value.has(key))
 }
 
+let archiveColumnMigrationPending = false
+function adaptArchiveColumnPreferences(value: ArchiveColumnPreferenceState) {
+  const normalized = normalizeColumnPreference(value, archiveColumnSchema())
+  // Legacy code/name visibility lived in columnState, not only selected keys.
+  for (const key of ['project_code', 'project_name']) {
+    const state = normalized.columnState.find(column => column.colId === key)
+    if (state?.hide === true) normalized.selected_column_keys = normalized.selected_column_keys.filter(selected => selected !== key)
+    else if (state?.hide === false && !normalized.selected_column_keys.includes(key) && archiveColumnListAvailable(key)) normalized.selected_column_keys.push(key)
+  }
+  const current = gridApi?.getColumnState() || archiveBusinessColumnDefs.value.map(column => ({
+    colId: column.colId!, width: column.width, pinned: column.initialPinned ?? column.pinned,
+  }))
+  return migrateArchiveProductLineLayout(normalized, current, archiveColumnListAvailable('product_line_id'))
+}
+
 function readArchiveColumnPreferences(): ArchiveColumnPreferenceState | null {
   const result = archiveColumnPreferences.read(archiveColumnSchema())
-  if (result.status === 'ready') return result.value as ArchiveColumnPreferenceState
+  if (result.status === 'ready') {
+    const adapted = adaptArchiveColumnPreferences(result.value)
+    if (adapted.layout_version !== result.value.layout_version) archiveColumnMigrationPending = true
+    return adapted
+  }
   if (result.status === 'anonymous') return null
   if (result.status !== 'empty') { warnArchiveColumnStorage(); return null }
   try {
@@ -505,7 +530,9 @@ function readArchiveColumnPreferences(): ArchiveColumnPreferenceState | null {
     const legacyState = JSON.parse(legacyRaw)
     if (!Array.isArray(legacyState)) return null
     const visibleKeys = defaultArchiveColumnKeys.value.filter(key => !legacyState.some(state => state?.colId === key && state.hide === true))
-    return normalizeColumnPreference({ selected_column_keys: visibleKeys, columnState: legacyState }, archiveColumnSchema()) as ArchiveColumnPreferenceState
+    const adapted = adaptArchiveColumnPreferences({ selected_column_keys: visibleKeys, columnState: legacyState })
+    if (adapted.layout_version !== undefined) archiveColumnMigrationPending = true
+    return adapted
   } catch {
     warnArchiveColumnStorage()
     return null
@@ -515,6 +542,7 @@ function readArchiveColumnPreferences(): ArchiveColumnPreferenceState | null {
 function persistArchiveColumnPreferences() {
   if (!archiveColumnPreferencesReady.value || !archiveColumnPreferenceWritesEnabled.value) return
   const state: ArchiveColumnPreferenceState = {
+    layout_version: archiveLayoutVersion.value,
     selected_column_keys: [...selectedArchiveColumnKeys.value],
     columnState: gridApi?.getColumnState?.() || [],
   }
@@ -524,21 +552,29 @@ function persistArchiveColumnPreferences() {
 function saveArchiveColumnPreferences(state: ArchiveColumnPreferenceState) {
   const result = archiveColumnPreferences.write(state, archiveColumnSchema())
   if (result.status === 'saved') {
+    archiveColumnMigrationPending = false
     try { localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY) } catch { warnArchiveColumnStorage() }
   } else if (result.status !== 'anonymous') warnArchiveColumnStorage()
 }
 
-function restoreSelectedArchiveColumnKeys(override?: ArchiveColumnPreferenceState) {
-  const saved = override ?? readArchiveColumnPreferences()
+let archiveInitialColumnSnapshot: ArchiveColumnPreferenceState | null = null
+function initializeArchiveColumnPreferences() {
+  archiveInitialColumnSnapshot = readArchiveColumnPreferences()
+  restoreSelectedArchiveColumnKeys(archiveInitialColumnSnapshot)
+}
+
+function restoreSelectedArchiveColumnKeys(override?: ArchiveColumnPreferenceState | null) {
+  const saved = override === undefined ? readArchiveColumnPreferences() : override
+  archiveLayoutVersion.value = saved?.layout_version ?? (archiveColumnListAvailable('product_line_id') ? ARCHIVE_PRODUCT_LINE_LAYOUT_VERSION : undefined)
   selectedArchiveColumnKeys.value = saved
     ? normalizeArchiveColumnKeys(saved.selected_column_keys)
     : [...defaultArchiveColumnKeys.value]
 }
 
-function restoreArchiveColumnState(override?: ArchiveColumnPreferenceState) {
+function restoreArchiveColumnState(override?: ArchiveColumnPreferenceState | null) {
   if (!archiveColumnPreferencesReady.value || !gridApi || archiveColumnStateRestored.value) return
   archiveColumnStateRestored.value = true
-  const saved = override ?? readArchiveColumnPreferences()
+  const saved = override === undefined ? readArchiveColumnPreferences() : override
   if (!saved?.columnState.length) return
   restoringArchiveColumnState.value = true
   try {
@@ -569,15 +605,17 @@ function restoreArchiveColumnState(override?: ArchiveColumnPreferenceState) {
 let archiveInitialSortApplied = false
 function completeArchiveColumnPreferenceRestore() {
   if (!archiveColumnPreferencesReady.value || !gridApi) return
-  restoreArchiveColumnState()
+  restoreArchiveColumnState(archiveInitialColumnSnapshot)
   if (!archiveInitialSortApplied) {
     archiveInitialSortApplied = true
-    gridApi.applyColumnState({
+    // Existing saved sorts (including an explicitly cleared sort) stay intact.
+    if (!archiveInitialColumnSnapshot?.columnState.length) gridApi.applyColumnState({
       state: [{ colId: 'project_code', sort: 'desc', sortIndex: 0 }],
       defaultState: { sort: null, sortIndex: null },
     })
   }
   archiveColumnPreferenceWritesEnabled.value = true
+  if (archiveColumnMigrationPending) persistArchiveColumnPreferences()
 }
 
 function handleArchiveColumnSelection(keys: string[]) {
@@ -605,6 +643,7 @@ function restoreArchiveColumnDefaults() {
   if (result.status !== 'cleared') { warnArchiveColumnStorage(); return }
   try { localStorage.removeItem(LEGACY_ARCHIVE_LAYOUT_KEY) } catch { warnArchiveColumnStorage() }
   selectedArchiveColumnKeys.value = [...defaultArchiveColumnKeys.value]
+  archiveLayoutVersion.value = archiveColumnListAvailable('product_line_id') ? ARCHIVE_PRODUCT_LINE_LAYOUT_VERSION : undefined
   nextTick(() => {
     gridApi?.resetColumnState?.()
     gridApi?.applyColumnState?.({
@@ -896,18 +935,22 @@ function archiveValidationFields(conditions: typeof customFilters.value) {
     ? {...f, options:[...(f.options || []),...historicalNames]} : f)
 }
 function archivePlanSnapshot() {
-  return cloneQuery({pageSize:pageSize.value,columns:{selected_column_keys:[...selectedArchiveColumnKeys.value],columnState:gridApi?.getColumnState()||[]}})
+  return cloneQuery({pageSize:pageSize.value,columns:{layout_version:archiveLayoutVersion.value,selected_column_keys:[...selectedArchiveColumnKeys.value],columnState:gridApi?.getColumnState()||[]}})
 }
 
 async function submitArchiveQuery(conditions:QueryCondition[], preferences:any) {
+  let chosen: ArchiveColumnPreferenceState | undefined
+  if (preferences.columns?.selected_column_keys && preferences.columns?.columnState) {
+    try { chosen = adaptArchiveColumnPreferences(preferences.columns) }
+    catch { warnArchiveColumnStorage(); return }
+  }
   archiveAppliedFilters.value = cloneQuery(conditions)
   archiveColumnFilters.value = []
   if (PAGE_SIZE_OPTIONS.includes(preferences.pageSize)) pageSize.value = preferences.pageSize
-  if (preferences.columns?.selected_column_keys && preferences.columns?.columnState) {
+  if (chosen) {
     const writable = archiveColumnPreferenceWritesEnabled.value
     archiveColumnPreferenceWritesEnabled.value = false
     try {
-      const chosen = normalizeColumnPreference(preferences.columns, archiveColumnSchema()) as ArchiveColumnPreferenceState
       saveArchiveColumnPreferences(chosen)
       restoreSelectedArchiveColumnKeys(chosen); archiveColumnStateRestored.value = false
       await nextTick(); restoreArchiveColumnState(chosen)
@@ -1146,7 +1189,7 @@ function archiveColumnVisibility(key: string): Pick<ColDef, 'colId' | 'hide'> {
   }
 }
 
-const archiveBusinessColumnDefs = computed<ColDef[]>(() => [
+const archiveBusinessColumnDefs = computed<ColDef[]>(() => archiveProductLineDefaultColumns([
   ...archiveExpansionFields.map(field => ({
     ...archiveColumnVisibility(field.key), field: field.key, headerName: field.label, width: 140, minWidth: 110,
     valueFormatter: (params: any) => offlineEnumCodes[field.key] ? enumLabel(offlineEnumCodes[field.key]!,params.value) : field.key === 'product_line_id' ? enumLabel('product_line', params.value)
@@ -1156,10 +1199,10 @@ const archiveBusinessColumnDefs = computed<ColDef[]>(() => [
   ...(hasPermission('project:archive:delete') || hasPermission('project:archive:toggle') || hasPermission('project:archive:assign-line')
     ? [{ colId: 'archive_selection', headerClass: 'archive-list-header-center', headerCheckboxSelection: true, checkboxSelection: true, width: 44, pinned: 'left', lockPosition: 'left', lockPinned: true, lockVisible: true, suppressMovable: true, filter: false, sortable: false, resizable: false } as ColDef]
     : []),
-  { colId: 'project_code', field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left', hide: !archiveColumnListAvailable('project_code') },
+  { ...archiveColumnVisibility('project_code'), field: 'project_code', headerName: '项目编号', width: 130, minWidth: 110, pinned: 'left' },
   {
     colId: 'project_name', field: 'project_name', headerName: '项目名称', width: 190, minWidth: 160,
-    hide: !archiveColumnListAvailable('project_name'),
+    hide: !archiveColumnListAvailable('project_name') || !selectedArchiveColumnKeys.value.includes('project_name'),
     valueFormatter: (params: any) => params.value || '待补全名称',
   },
   { ...archiveColumnVisibility('customer'), field: 'customer', headerName: '客户', width: 150, minWidth: 120 },
@@ -1217,7 +1260,7 @@ const archiveBusinessColumnDefs = computed<ColDef[]>(() => [
     cellClass: 'pms-actions-cell', headerClass: 'pms-actions-header archive-list-header-center',
     cellRenderer: ArchiveActionsRenderer,
   },
-])
+], archiveColumnListAvailable('product_line_id')))
 
 const columnDefs = computed(() => decorateQueryColumns(archiveBusinessColumnDefs.value.map(column =>
   fixedArchiveColumnKeys.has(column.colId || '') ? column : { ...column, initialWidth: column.width, width: undefined },
@@ -2161,7 +2204,7 @@ onMounted(async () => {
     fetchArchiveRegions(),
     resolveArchiveColumnPreferenceOwner(),
   ])
-  restoreSelectedArchiveColumnKeys()
+  initializeArchiveColumnPreferences()
   archiveColumnPreferencesReady.value = true
   await nextTick()
   completeArchiveColumnPreferenceRestore()
