@@ -17,6 +17,9 @@ export type EnumDefinition = {
 
 const cache = reactive<Record<string, EnumDefinition>>({})
 const pending = new Map<string, Promise<EnumDefinition>>()
+// Retain the latest promise after settlement so superseded callers follow its
+// success or failure rather than restoring an older response.
+const latest = new Map<string, Promise<EnumDefinition>>()
 
 function normalizeDefinition(code: string, value: Partial<EnumDefinition> | null | undefined): EnumDefinition {
   const allItems = Array.isArray(value?.all_items) ? value!.all_items! : (value?.items || [])
@@ -30,17 +33,25 @@ function normalizeDefinition(code: string, value: Partial<EnumDefinition> | null
 }
 
 export async function loadEnumOptions(code: string, force = false): Promise<EnumDefinition> {
-  if (!force && cache[code]) return cache[code]
   if (!force && pending.has(code)) return pending.get(code)!
-
-  const promise = request.get(`/dicts/code/${code}`)
+  if (!force && cache[code]) return cache[code]
+  // A failed refresh must not make an older enabled option selectable again.
+  delete cache[code]
+  const promise: Promise<EnumDefinition> = request.get(`/dicts/code/${code}`)
     .then(response => {
+      if (latest.get(code) !== promise) return latest.get(code)!
       const definition = normalizeDefinition(code, response as Partial<EnumDefinition>)
       cache[code] = definition
       return definition
+    }, error => {
+      if (latest.get(code) !== promise) return latest.get(code)!
+      throw error
     })
-    .finally(() => pending.delete(code))
+    .finally(() => {
+      if (pending.get(code) === promise) pending.delete(code)
+    })
 
+  latest.set(code, promise)
   pending.set(code, promise)
   return promise
 }

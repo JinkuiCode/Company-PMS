@@ -39,6 +39,7 @@ from app.services.field_policy import (
     MODULE_PROJECT_ARCHIVE,
     MODULE_PROJECT_PROGRESS,
     get_effective_field_policies,
+    get_business_field_registry,
     validate_business_field_write,
 )
 
@@ -1046,6 +1047,22 @@ ARCHIVE_UNIQUE_FIELDS = {
 }
 
 
+
+def _validate_archive_enum(db, field_key, code, value, *, current_value=None):
+    """Keep the generic enum protocol intact; archives identify their field."""
+    try:
+        return validate_enum_value(db, code, value, current_value=current_value)
+    except HTTPException as exc:
+        if exc.status_code != 422:
+            raise
+        label = next((field['label'] for field in get_business_field_registry(MODULE_PROJECT_ARCHIVE)
+                      if field['field_key'] == field_key), '字段')
+        raise HTTPException(422, detail={
+            'code': 'ARCHIVE_ENUM_UNAVAILABLE', 'field_key': field_key,
+            'message': f'{label}选项不存在或已禁用，请重新选择',
+        }) from None
+
+
 def _normalize_archive_values(values: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(values)
     for field_key in ("project_code", "project_name", "customer", "serial_no", "address_province", "address_city", "address_detail", "project_contact", "contact_phone"):
@@ -1207,10 +1224,10 @@ def create_archive(
     from app.services.offline_archive_fields import OFFLINE_FIELDS
     for key,meta in OFFLINE_FIELDS.items():
         if meta["enum_code"]:
-            validate_enum_value(db,meta["enum_code"],values.get(key))
+            _validate_archive_enum(db, key, meta["enum_code"], values.get(key))
     validate_enum_value(db, "archive_status", values.get("status"))
     validate_enum_value(db, "product_category", values.get("product_category"))
-    validate_enum_value(db, "equipment_series", values.get("equipment_series"))
+    _validate_archive_enum(db, "equipment_series", "equipment_series", values.get("equipment_series"))
     _require_archive_product_line(db, scope_context, values.get("product_line_id"))
     from app.services.archive_regions import validate_archive_address
     validate_archive_address(values)
@@ -1294,7 +1311,7 @@ def apply_archive_updates(
         raise HTTPException(422, "产品类别已停用，请使用产品线和档案类别")
     for key,meta in OFFLINE_FIELDS.items():
         if meta["enum_code"] and key in update_data:
-            validate_enum_value(db, meta["enum_code"], update_data[key], current_value=getattr(archive,key))
+            _validate_archive_enum(db, key, meta["enum_code"], update_data[key], current_value=getattr(archive,key))
     sync_queued = archive.erp_sync_policy == "auto" and any(
         key in update_data and update_data[key] != getattr(archive, key)
         for key in ("project_code", "project_name")
@@ -1315,9 +1332,9 @@ def apply_archive_updates(
                 current_value=archive.product_category,
             )
         if "equipment_series" in update_data:
-            validate_enum_value(
+            _validate_archive_enum(
                 db,
-                "equipment_series",
+                "equipment_series", "equipment_series",
                 update_data["equipment_series"],
                 current_value=archive.equipment_series,
             )

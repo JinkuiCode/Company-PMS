@@ -97,14 +97,17 @@
           <p v-if="persistentDraft.unknown.value" role="alert" class="pms-list-load-error">保存结果尚未确认，请先核对，避免重复新增。
             <el-button class="pms-button-navigation" size="small" :loading="archiveDraftChecking" @click="reconcileArchiveDraft">核对保存结果</el-button>
           </p>
+          <p v-if="archiveEnumsFailed" class="pms-list-load-error" role="alert">选项读取失败，已保留输入，请重试后再保存。<el-button class="pms-button-navigation" size="small" @click="refreshArchiveEnums()">重试选项</el-button></p>
           <ArchiveRecordForm ref="formRef" class="archive-create-form" :model="form" :groups="archiveCreateGroups" :rules="rules"
             :required="field => archiveCreateIntentRequired(field.key)" :validate-on-rule-change="false"
             :editable="field => !archiveCreateSaving && !persistentDraft.unknown.value && !archiveCloseChoiceVisible && archiveFieldEditable(field.key)"
             :options="key => archiveDrawerSelectOptions(key, form)" :errors="archiveCreateServerErrors" id-prefix="archive-create"
+            @pointerdown.capture="refreshArchiveEnumFromEvent" @focusin.capture="refreshArchiveEnumFromEvent" @keydown.capture="refreshArchiveEnumFromEvent"
             @field-change="updateArchiveCreateField">
             <p v-if="productLines.labelsFailed.value" class="pms-list-load-error" role="alert">产品线名称加载失败 <el-button class="pms-button-navigation" size="small" aria-label="重试产品线名称" :loading="productLines.labelsLoading.value" @click="productLines.loadLabels()">重试</el-button></p>
           </ArchiveRecordForm>
           <template #footer>
+            <span v-if="archiveEnumsLoading" class="archive-governance-route" role="status">选项正在加载</span>
             <el-button type="warning" plain :disabled="archiveCreateSaving" @click="beforeCloseArchiveCreate(() => { dialogVisible = false })">取消</el-button>
             <el-button type="success" plain :disabled="archiveCreateSaving || Boolean(persistentDraft.unknown.value) || persistentDraft.conflict.value" @click="saveArchiveDraft">保存草稿</el-button>
             <el-button v-if="hasPermission('project:archive:add')" type="success" :disabled="Boolean(persistentDraft.unknown.value) || persistentDraft.conflict.value" :loading="archiveCreateSaving" @click="handleSubmit">正式保存</el-button>
@@ -118,6 +121,7 @@
     <el-dialog v-model="archiveCloseChoiceVisible" title="未保存修改" width="460px" :close-on-click-modal="false" @closed="resolveArchiveCloseChoice('continue')">
       <p>保存草稿后，可从“我的草稿”继续填写。放弃本次修改会保留此前保存的草稿。</p>
       <template #footer>
+        <span v-if="archiveEnumsLoading" class="archive-governance-route" role="status">选项正在加载</span>
         <el-button type="warning" plain @click="resolveArchiveCloseChoice('discard')">放弃本次修改</el-button>
         <el-button class="pms-button-navigation" @click="resolveArchiveCloseChoice('continue')">继续编辑</el-button>
         <el-button type="success" @click="resolveArchiveCloseChoice('save')">保存草稿并关闭</el-button>
@@ -129,9 +133,11 @@
       <p class="archive-governance-route">{{ archiveMaintenanceMode ? '填写维护原因并确认差异后直接生效' : selectedArchive.can_edit ? selectedArchive.change_mode === 'direct' ? '部门负责人修改，保存后直接生效' : '项目负责人修改，提交后等待部门负责人审批' : selectedArchive.edit_reason || '当前档案仅供查看' }}</p>
       <p v-if="productLines.labelsFailed.value" class="pms-list-load-error" role="alert">产品线名称加载失败 <el-button class="pms-button-navigation" size="small" aria-label="重试产品线名称" :loading="productLines.labelsLoading.value" @click="productLines.loadLabels()">重试</el-button></p>
       <p v-else-if="productLines.failed.value && (archiveMaintenanceMode || selectedArchive.can_edit)" class="archive-governance-route" role="status">产品线选项暂不可用，当前值仅供查看。<el-button class="pms-button-navigation" size="small" aria-label="重试产品线选项" :loading="productLines.loading.value" @click="productLines.loadOptions()">重试</el-button></p>
+      <p v-if="archiveEnumsFailed" class="pms-list-load-error" role="alert">选项读取失败，已保留输入，请重试后再保存。<el-button class="pms-button-navigation" size="small" @click="refreshArchiveEnums()">重试选项</el-button></p>
       <ArchiveRecordForm :key="`${selectedArchive.id}-${archiveMaintenanceMode}`" ref="archiveDrawerFormRef" :model="archiveDrawerForm" :groups="archiveDrawerGroups" :rules="archiveDrawerRules"
         :required="archiveDrawerFieldRequired" :editable="archiveDrawerFieldEditable" :options="key => archiveDrawerSelectOptions(key)"
         :format="formatArchiveDrawerValue" :errors="archiveDrawerServerErrors" id-prefix="archive-drawer"
+        @pointerdown.capture="refreshArchiveEnumFromEvent" @focusin.capture="refreshArchiveEnumFromEvent" @keydown.capture="refreshArchiveEnumFromEvent"
         @field-change="updateArchiveDetailField">
         <OfflineArchiveSource :archive-id="selectedArchive.id" />
       </ArchiveRecordForm>
@@ -628,6 +634,45 @@ const dictOptions = reactive<Record<string, any[]>>({
   equipment_series: [],
 })
 const dictLabelMaps = reactive<Record<string, Record<string, string>>>({})
+const archiveEnumState = reactive<Record<string, 'loading' | 'ready' | 'failed'>>({})
+const archiveEnumTickets: Record<string, number> = {}
+const archiveEnumsLoading = computed(() => Object.values(archiveEnumState).includes('loading'))
+const archiveEnumsFailed = computed(() => Object.values(archiveEnumState).includes('failed'))
+const archiveSelectableEnumCodes = [...new Set(['equipment_series', ...Object.values(offlineEnumCodes)])]
+function archiveEnumCode(key: string) {
+  return offlineEnumCodes[key] || (key === 'equipment_series' ? key : '')
+}
+async function refreshArchiveEnums(codes = archiveSelectableEnumCodes) {
+  const results = await Promise.allSettled([...new Set(codes)].map(code => fetchDictOptions(code, true)))
+  return results.every(result => result.status === 'fulfilled')
+}
+function archiveEnumsReady(keys?: string[]) {
+  const codes = keys ? keys.map(archiveEnumCode).filter(Boolean) : archiveSelectableEnumCodes
+  if (codes.every(code => archiveEnumState[code] === 'ready')) return true
+  ElMessage.warning(archiveEnumsLoading.value ? '选项正在加载，请稍候再保存' : '选项读取失败，请重试后再保存；本次输入已保留')
+  return false
+}
+function refreshArchiveEnumFromEvent(event: Event) {
+  if (!(event.target instanceof HTMLElement)) return
+  if (event instanceof KeyboardEvent && !['ArrowDown', 'Enter', ' '].includes(event.key)) return
+  const field = event.target.closest('.pms-form-field')
+  const id = field?.querySelector('label')?.htmlFor || ''
+  const prefix = id.startsWith('archive-create-') ? 'archive-create-' : id.startsWith('archive-drawer-') ? 'archive-drawer-' : ''
+  if (!prefix) return
+  const key = id.slice(prefix.length), code = archiveEnumCode(key)
+  if (!code || archiveEnumState[code] === 'loading' || archiveCreateSaving.value || archiveDrawerSaving.value) return
+  if (prefix === 'archive-create-' ? !archiveFieldEditable(key) : !archiveDrawerFieldEditable(archiveDrawerFieldByKey(key)!)) return
+  // Opening with the pointer or keyboard refreshes once, not on each key used
+  // to navigate an already open list. The field wrapper/label is our own API.
+  if (field?.querySelector('[role="combobox"]')?.getAttribute('aria-expanded') === 'true') return
+  void fetchDictOptions(code, true).catch(() => undefined)
+}
+function archiveEnumChangeAllowed(key: string, value: unknown) {
+  const code = archiveEnumCode(key)
+  return !code || value === null || value === undefined || value === '' || (archiveEnumState[code] === 'ready'
+    && (dictOptions[code] || []).some(option => String(option.value) === String(value) && !option.disabled))
+}
+
 
 function enumLabel(code: string, value: unknown) {
   if (code === 'product_line') return productLines.label(value)
@@ -697,6 +742,7 @@ function archiveDrawerSelectOptions(fieldKey: string, values = archiveDrawerForm
   else if (fieldKey === 'product_category') options = archiveProductCategoryOptions.value
   else if (fieldKey === 'manager_id') options = archiveUserOptions.value
   else if (fieldKey === 'equipment_series') { options = archiveEquipmentSeriesOptions.value; enumCode = 'equipment_series' }
+  if (enumCode && archiveEnumState[enumCode] !== 'ready') options = options.map(option => ({ ...option, disabled: true }))
   options = filterArchiveLinkedOptions(archiveFieldLinkage.value, values.product_line_id, fieldKey, options)
   const value = values[fieldKey]
   if (value !== null && value !== undefined && value !== '' && !options.some(option => String(option.value) === String(value))) {
@@ -882,14 +928,21 @@ watch(archiveColumnFilters, () => nextTick(() => {
 }), { deep: true })
 
 async function fetchDictOptions(code: string, force = false) {
+  const ticket = (archiveEnumTickets[code] || 0) + 1
+  archiveEnumTickets[code] = ticket
+  archiveEnumState[code] = 'loading'
   try {
     const definition = await loadEnumOptions(code, force)
+    if (archiveEnumTickets[code] !== ticket) return
     dictOptions[code] = definition.items
     dictLabelMaps[code] = definition.label_map
+    archiveEnumState[code] = 'ready'
     await nextTick()
     agGridRef.value?.api?.refreshCells({ columns: [code], force: true })
-    if (code === 'product_line') agGridRef.value?.api?.refreshCells({ columns: ['product_line_id'], force: true })
-  } catch (error) { if (force) throw error }
+  } catch (error) {
+    if (archiveEnumTickets[code] === ticket) { dictOptions[code] = []; archiveEnumState[code] = 'failed' }
+    if (force) throw error
+  }
 }
 
 function scheduleArchiveScrollbarMetrics() {
@@ -1298,6 +1351,7 @@ async function openCreateDialog() {
   form.product_line_id = archiveDraftProductLines.options.value.length === 1 ? archiveDraftProductLines.options.value[0]!.value : null
   archiveCreateSession.capture()
   dialogVisible.value = true
+  await refreshArchiveEnums()
 }
 
 async function mayCloseArchiveCreate() {
@@ -1366,6 +1420,7 @@ async function saveArchiveDraft() {
   if (!hasPermission('project:archive:add') || persistentDraft.unknown.value) return false
   const result = await archiveCreateSession.submit({
     validate: async () => {
+      if (!archiveEnumsReady()) return false
       await setArchiveCreateValidationIntent('draft')
       const valid = Boolean(await formRef.value?.validate().catch(() => false))
       const errors = archiveDraftIdentityErrors(form)
@@ -1378,6 +1433,7 @@ async function saveArchiveDraft() {
     },
     save: snapshot => persistentDraft.save(buildArchiveCreatePayload(snapshot)),
     onError: async error => {
+      if (await focusArchiveEnumUnavailable(error, formRef, archiveCreateServerErrors)) return
       if (await focusArchiveUniqueConflict(error, formRef, archiveCreateServerErrors)) return
       await focusArchivePolicyValidation(error)
     },
@@ -1664,13 +1720,14 @@ function buildArchiveDrawerPayload() {
 }
 
 function updateArchiveCreateField(key: string, value: any) {
+  if (!archiveEnumChangeAllowed(key, value)) return
   form[key] = value
   changeArchiveCreateSelect(key)
 }
 
 function updateArchiveDetailField(key: string, value: any) {
   const field = archiveDrawerFieldByKey(key)
-  if (!field || !archiveDrawerFieldEditable(field)) return
+  if (!field || !archiveDrawerFieldEditable(field) || !archiveEnumChangeAllowed(key, value)) return
   archiveDrawerForm[key] = value
   clearArchiveServerError(archiveDrawerServerErrors, key)
   if (key === 'product_line_id') reconcileArchiveLine(archiveDrawerForm)
@@ -1753,7 +1810,16 @@ async function submitArchiveChangeRequest() {
     }
     finish?.(true)
     ElMessage.success(maintenance ? syncQueued ? '维护已生效，后台将按原策略同步金蝶' : '维护已生效' : '变更已提交审批，正式档案保持原值')
-  } catch { /* The shared request handler reports the error; retain the draft and submission id. */ }
+  } catch (error: any) {
+    if (error?.response?.data?.detail?.code === 'ARCHIVE_ENUM_UNAVAILABLE') {
+      // Settle the save guard independently of the dialog's close animation.
+      archiveChangeResolve = undefined
+      finish?.(false)
+      archiveChangeConfirmOpen.value = false
+      await focusArchiveEnumUnavailable(error, archiveDrawerFormRef, archiveDrawerServerErrors)
+    }
+    // Retain business input and submission identity; never retry a write here.
+  }
   finally { archiveChangeSubmitting.value = false; archiveDrawerSaving.value = false }
 }
 
@@ -1781,6 +1847,19 @@ function archiveUniqueConflict(error: any) {
     field_key: String(detail.field_key),
     message: String(detail.message || '字段值已存在'),
   }
+}
+
+async function focusArchiveEnumUnavailable(
+  error: any, targetForm: typeof formRef | typeof archiveDrawerFormRef, targetErrors: Record<string, string>,
+) {
+  const detail = error?.response?.data?.detail
+  if (detail?.code !== 'ARCHIVE_ENUM_UNAVAILABLE' || !archiveEnumCode(detail.field_key)) return false
+  const key = String(detail.field_key)
+  targetErrors[key] = String(detail.message || '此选项已不可用，请重新选择')
+  await refreshArchiveEnums([archiveEnumCode(key)])
+  await nextTick()
+  targetForm.value?.scrollToField(key)
+  return true
 }
 
 async function focusArchiveUniqueConflict(
@@ -1814,6 +1893,7 @@ async function handleSubmit() {
   let firstInvalidField: string | undefined
   const result = await archiveCreateSession.submit({
     validate: async () => {
+      if (!archiveEnumsReady()) return false
       await setArchiveCreateValidationIntent('formal')
       try { return Boolean(await formRef.value?.validate()) }
       catch (fields) {
@@ -1827,6 +1907,7 @@ async function handleSubmit() {
       return persistentDraft.submit()
     },
     onError: async error => {
+      if (await focusArchiveEnumUnavailable(error, formRef, archiveCreateServerErrors)) return
       if (await focusArchiveUniqueConflict(error, formRef, archiveCreateServerErrors)) return
       await focusArchivePolicyValidation(error)
     },
@@ -1903,6 +1984,7 @@ async function saveArchiveDrawer() {
 
   const archiveId = selectedArchive.value.id
   const payload = buildArchiveDrawerPayload()
+  if (!archiveEnumsReady(Object.keys(payload))) return
   archiveDrawerSaving.value = true
   let syncQueued = false
   try {
@@ -1924,6 +2006,10 @@ async function saveArchiveDrawer() {
       syncQueued = result.sync_queued === true
     }
   } catch (error) {
+    if (await focusArchiveEnumUnavailable(error, archiveDrawerFormRef, archiveDrawerServerErrors)) {
+      archiveDrawerSaving.value = false
+      return
+    }
     if (await focusArchiveUniqueConflict(error, archiveDrawerFormRef, archiveDrawerServerErrors)) {
       archiveDrawerSaving.value = false
       return

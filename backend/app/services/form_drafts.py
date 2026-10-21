@@ -14,7 +14,7 @@ from app.services.business_data_scope import has_all_business_data
 from app.services.product_line_scope import require_line_access
 from app.services.field_policy import get_effective_field_policies, MODULE_PROJECT_ARCHIVE
 from app.services.archive_quantity import validate_archive_quantity
-from app.services.project import _ensure_archive_assignment_allowed, create_archive, ensure_archive_access
+from app.services.project import _ensure_archive_assignment_allowed, create_archive, ensure_archive_access, _validate_archive_enum
 from app.services.operation_log import record_operation_log
 from app.services.archive_code_unique import ensure_code_available, lock_codes
 
@@ -98,11 +98,10 @@ def _clean(db, context, payload, previous=None):
     previous = previous or {}
     if data.get('product_line_id') is not None and data.get('product_line_id') != previous.get('product_line_id'):
         require_line_access(db, context, data['product_line_id'], selectable=True)
-    from app.services.enum_registry import validate_enum_value
     for key, value in data.items():
         code = policies[key].get('enum_code')
         if code and value is not None:
-            validate_enum_value(db, code, value, current_value=previous.get(key))
+            _validate_archive_enum(db, key, code, value, current_value=previous.get(key))
     from app.services.archive_field_linkage import linkage_errors
     errors = linkage_errors(db, previous, data, is_create=not previous)
     if errors: raise _invalid(errors)
