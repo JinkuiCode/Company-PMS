@@ -59,11 +59,39 @@ export function validateDefinitions(definitions:QueryDefinition[],fields:QueryFi
   return errors
 }
 export function readSchemes(storage:Storage,key:string):QueryScheme[] {
-  const value=JSON.parse(storage.getItem(key)||'[]')
-  if(!Array.isArray(value)||value.some(p=>p?.version!==2||typeof p.name!=='string'||!Array.isArray(p.definitions))||value.filter(p=>p.isDefault).length>1)throw Error('查询方案格式无效，请重新配置')
+  let value:unknown
+  try{value=JSON.parse(storage.getItem(key)||'[]')}catch{throw Error('查询方案读取失败或格式无效，原数据保留，请检查浏览器存储')}
+  const record=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)
+  if(!Array.isArray(value)||value.some(p=>!record(p)||p.version!==2||typeof p.name!=='string'||!p.name.trim()||typeof p.isDefault!=='boolean'||!Array.isArray(p.definitions)||p.definitions.some(d=>!record(d)||typeof d.field!=='string'||typeof d.shown!=='boolean'||typeof d.operator!=='string')||p.preferences!==undefined&&!record(p.preferences))||value.filter(p=>p.isDefault).length>1||new Set(value.map(p=>p.name)).size!==value.length)throw Error('查询方案格式无效，原数据保留，请检查后重新配置')
   return cloneQuery(value)
 }
-export function saveScheme(storage:Storage,key:string,schemes:QueryScheme[],input:Omit<QueryScheme,'version'|'preferences'>&{preferences?:object},fields:QueryField[],originalName='') {
+export function loadPersonalSchemes(storage:Storage,key:string,legacy?:()=>{schemes:QueryScheme[];warnings:string[]}) {
+  const schemes=readSchemes(storage,key)
+  if(!legacy)return {schemes,warnings:[] as string[],writable:true}
+  const markerKey=key.replace('pms:query-workspace:v2:','pms:query-workspace:legacy-import:v1:')
+  const marker=storage.getItem(markerKey)
+  if(marker) {
+    const saved=JSON.parse(marker)
+    if(saved?.version!==1||!Array.isArray(saved.warnings)||saved.warnings.some((v:unknown)=>typeof v!=='string'))throw Error('旧方案导入记录无效，原数据保留，请重新检查')
+    return {schemes,warnings:saved.warnings as string[],writable:true}
+  }
+  const imported=legacy(),merged=[...schemes,...imported.schemes.filter(p=>!schemes.some(s=>s.name===p.name))]
+  try {
+    // The completion marker must never precede the modern scheme array.
+    storage.setItem(key,JSON.stringify(merged))
+    storage.setItem(markerKey,JSON.stringify({version:1,warnings:imported.warnings}))
+    return {schemes:cloneQuery(merged),warnings:imported.warnings,writable:true}
+  } catch {
+    return {schemes:cloneQuery(merged),warnings:[...imported.warnings,'旧方案导入尚未完成，暂不能保存或删除；原数据保留，请重开方案设置后重试'],writable:false}
+  }
+}
+function checkSchemeSnapshot(schemes:QueryScheme[],name:string,expected:QueryScheme|null|undefined) {
+  const ordered=(value:unknown):unknown=>Array.isArray(value)?value.map(ordered):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,v])=>[key,ordered(v)])):value
+  if(expected!==undefined&&JSON.stringify(ordered(schemes.find(p=>p.name===name)??null))!==JSON.stringify(ordered(expected)))throw Error('此方案已在其他页面更新或删除，请重新打开方案设置后再修改')
+}
+export function saveScheme(storage:Storage,key:string,_schemes:QueryScheme[],input:Omit<QueryScheme,'version'|'preferences'>&{preferences?:object},fields:QueryField[],originalName='',expected?:QueryScheme|null) {
+  const schemes=readSchemes(storage,key)
+  checkSchemeSnapshot(schemes,originalName,expected)
   const name=input.name.trim()
   if(!name||name.length>60)throw Error('请填写方案名称（最多60字）')
   if(schemes.some(p=>p.name===name&&p.name!==originalName))throw Error('存在同名方案，请修改名称')
@@ -71,7 +99,16 @@ export function saveScheme(storage:Storage,key:string,schemes:QueryScheme[],inpu
   if(Object.keys(errors).length)throw Error(Object.values(errors).join('；'))
   const next=schemes.filter(p=>p.name!==originalName).map(p=>({...p,isDefault:input.isDefault?false:p.isDefault}))
   next.push(cloneQuery({version:2,name,definitions:input.definitions,isDefault:input.isDefault,preferences:input.preferences||{}}))
-  storage.setItem(key,JSON.stringify(next))
+  try{storage.setItem(key,JSON.stringify(next))}catch{throw Error('方案保存失败，浏览器存储不可用或空间不足；原记录和草稿保留')}
+  return next
+}
+export function deleteScheme(storage:Storage,key:string,name:string,expected:QueryScheme) {
+  if(!name)throw Error('系统默认方案不能删除')
+  const schemes=readSchemes(storage,key)
+  checkSchemeSnapshot(schemes,name,expected)
+  if(!schemes.some(p=>p.name===name))throw Error('方案已删除，请重新打开方案设置')
+  const next=schemes.filter(p=>p.name!==name)
+  try{storage.setItem(key,JSON.stringify(next))}catch{throw Error('方案删除失败，浏览器存储不可用或空间不足；原记录保留')}
   return next
 }
 export function selectScheme(schemes:QueryScheme[],name:string,defaults:QueryDefinition[]) {
