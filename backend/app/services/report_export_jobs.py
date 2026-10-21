@@ -66,6 +66,12 @@ def create_job(db, ctx, report, parameters, columns, request=None):
         resolve_project_references(db, ctx, query)
         from app.services.purchase_query_labels import resolve_query_labels
         resolve_query_labels(db, ctx, query)
+    if getattr(query, 'material_codes', []) or any(getattr(c, 'kind', None) == 'material-reference' for c in query.conditions()):
+        from app.services.purchase_connection import purchase_connection
+        from app.api.inventory_reports import authorized_organizations
+        from app.services.report_material_reference import validate_reference_query
+        with purchase_connection() as connection:
+            validate_reference_query(connection, query, authorized_organizations(db, ctx))
     allowed = {field['key'] for field in fields_for(report, overview=isinstance(query, PurchaseOverviewQuery))}
     if not columns or len(columns) != len(set(columns)) or not set(columns) <= allowed:
         raise HTTPException(422, '导出字段无效，请刷新报表后重试')

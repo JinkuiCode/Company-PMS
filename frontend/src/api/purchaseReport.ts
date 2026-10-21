@@ -1,4 +1,6 @@
 import request from '@/utils/request'
+import { guardMaterialReferenceUrl } from '@/query-system/material-reference'
+import { ElMessage } from 'element-plus'
 
 export interface PurchaseField {
   key: string; label: string; value_type: string; group: string; description: string
@@ -34,7 +36,8 @@ export const getPurchaseMetadata = () => request.get<unknown, PurchaseMetadata>(
 export const getPurchaseOptions = (field: 'project' | 'supplier', keyword: string, organization_ids: number[] = [], project_code = '') => request.get<unknown, { items: { value: string; label: string }[]; has_more: boolean }>('/reports/purchase/options', { params: { field, keyword, organization_ids, project_code }, paramsSerializer: { indexes: null }, timeout: 30000 })
 export const getPurchaseReference = (field: 'project' | 'supplier', params: Record<string, unknown>) => request.get<unknown, { items: { value: string; label: string; code?: string; name?: string }[]; total?: number; has_more?: boolean }>('/reports/purchase/options', { params: { ...params, field }, paramsSerializer: { indexes: null }, timeout: 30000 })
 export const getPurchaseProjectReference = (params: Record<string, unknown>) => request.get<unknown, { items: { value: number; label: string; code: string; product_line_name?: string }[]; total: number; has_more: boolean }>('/reports/purchase/reference-options', { params: { ...params, field: params.batch_field === 'name' ? 'project_name' : 'project_code', exact_values: params.batch_values ? JSON.stringify(params.batch_values) : undefined, batch_field: undefined, batch_values: undefined }, paramsSerializer: { indexes: null }, timeout: 30000 })
-export const getPurchaseRows = (params: { organization_ids: number[] }, signal: AbortSignal) => request.get<unknown, { items: PurchaseRow[]; total: number; queried_at: string }>('/reports/purchase', { params, paramsSerializer: { indexes: null }, signal, timeout: 60000 })
+export const getPurchaseRows = (params: { organization_ids: number[] }, signal: AbortSignal) => request.get<unknown, { items: PurchaseRow[]; total: number; queried_at: string }>('/reports/purchase', { params: guardMaterialReferenceUrl('/reports/purchase', params, false, ElMessage.error), paramsSerializer: { indexes: null }, signal, timeout: 60000 })
+export const getPurchaseMaterialReference = (params: Record<string, unknown>) => request.get<unknown, { items: { value: string; code: string; label: string; name?: string }[]; total: number; has_more: boolean }>('/reports/purchase/material-reference-options', { params: guardMaterialReferenceUrl('/reports/purchase/material-reference-options', params, true, ElMessage.error), paramsSerializer: { indexes: null }, timeout: 30000 })
 export interface PurchaseQueryDraft {
   keyword: string; project_code: string; supplier: string; progress: string; organization_ids: number[]
   dates: string[]; conditions: import('@/query-system/core').QueryCondition[]
@@ -53,6 +56,6 @@ export interface PurchaseDetailEntry {
 }
 export const getPurchaseOverview = (params: { organization_ids: number[] }, signal: AbortSignal) => request.get<unknown, {
   items: PurchaseOverviewRow[]; total: number; total_lines: number; complete_lines: number; review_lines: number; queried_at: string
-}>('/reports/purchase/overview', { params, paramsSerializer: { indexes: null }, signal, timeout: 60000 })
+}>('/reports/purchase/overview', { params: guardMaterialReferenceUrl('/reports/purchase/overview', params, false, ElMessage.error), paramsSerializer: { indexes: null }, signal, timeout: 60000 })
 export const getPurchaseDetail = (id: string, signal: AbortSignal) => request.get<unknown, PurchaseDetail>(`/reports/purchase/${id}`, { signal, timeout: 60000 })
 export const getPurchaseColumnCandidates = (overview: boolean, params: Record<string, unknown>) => request.get<unknown, { items: import('@/query-system/column-filters').ColumnCandidate[]; has_more: boolean }>(overview ? '/reports/purchase/overview/column-options' : '/reports/purchase/column-options', { params, paramsSerializer: { indexes: null }, timeout: 60000 })

@@ -165,6 +165,9 @@ def query_fields(report):
         if report.startswith('purchase') and key in {'project_code', 'project_name'}:
             spec['reference'] = dict(source='project-archive', keyField='id', keyType='number')
             spec['operators'] += ['reference']
+        if (report in {'purchase', 'stock-detail'} and key == 'material_code') or (report == 'inventory' and key == 'MaterialCode'):
+            spec['reference'] = dict(source='kingdee-material', keyField='code', keyType='string')
+            spec['operators'] += ['reference']
         result.append(spec)
     return result
 
@@ -187,6 +190,12 @@ def _parse_v2(item, report, *, additional_fields=()):
         raise ValueError('Empty operator does not accept a value')
     kind, value, end = spec['type'], item.get('value'), item.get('valueEnd')
     if operator == 'reference' and 'reference' in spec:
+        if spec['reference']['source'] == 'kingdee-material':
+            from app.services.report_material_reference import normalize_codes
+            try:
+                return Condition(field, operator, 'material-reference', normalize_codes(value), schemaVersion=2)
+            except HTTPException:
+                raise ValueError('物料引用编码无效') from None
         if (not isinstance(value, list) or not 1 <= len(value) <= 1000 or
                 any(type(v) is not int or not 0 < v <= 9007199254740991 for v in value)):
             raise ValueError('Invalid project archive identities')
@@ -297,6 +306,11 @@ def sql_conditions(conditions, *, alias='filter_source', project_references=None
     for condition in conditions:
         # Conditions come exclusively from the fixed report allowlist above.
         column = f'{alias}.[{condition.field}]'
+        if condition.kind == 'material-reference':
+            sql, bound = compile_predicate(build_query_clause(literal_column(column), 'text',
+                dict(schemaVersion=2, operator='in', value=condition.value), membership=True))
+            parts.append(sql); params.extend(bound)
+            continue
         if condition.mode == 'values':
             sql, bound = compile_predicate(column_clause(literal_column(column), condition))
             parts.append('(' + sql + ')')
@@ -349,6 +363,10 @@ def sql_conditions(conditions, *, alias='filter_source', project_references=None
 def matches_filters(row, conditions):
     for condition in conditions:
         value, target, op = row.get(condition.field), condition.value, condition.operator
+        if condition.kind == 'material-reference':
+            if not isinstance(value,str) or value.strip().lower() not in target:
+                return False
+            continue
         empty = value is None or (condition.kind in ('text', 'enum') and
                                   (not value.strip() if condition.schemaVersion == 2 else value == ''))
         if condition.mode == 'values' and empty:

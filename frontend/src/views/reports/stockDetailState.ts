@@ -1,4 +1,5 @@
 import type { ReportCondition } from '../../report-query/state'
+import { normalizeMaterialCodes } from '../../query-system/material-reference.ts'
 
 const quantityFormat = new Intl.NumberFormat('zh-CN', {
   minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false,
@@ -11,7 +12,8 @@ export function formatStockQuantity(value: unknown): string {
 }
 
 export interface StockDetailFilters {
-  material: string
+  material?: string | null
+  material_codes?: string[]
   material_field?: 'material_code' | 'material_name' | 'specification'
   material_operator?: 'contains' | 'equals' | 'startsWith' | 'endsWith'
   dates: string[]
@@ -21,7 +23,8 @@ export interface StockDetailFilters {
   conditions?: ReportCondition[]
 }
 export interface StockDetailParameters {
-  material: string
+  material?: string
+  material_codes?: string[]
   material_field?: 'material_code' | 'material_name' | 'specification'
   material_operator?: 'contains' | 'equals' | 'startsWith' | 'endsWith'
   start_date: string
@@ -52,7 +55,8 @@ function isDate(value: unknown): value is string {
 }
 export function buildStockDetailQuery(filters: StockDetailFilters, page: number, pageSize: number): StockDetailParameters {
   const material = typeof filters.material === 'string' ? filters.material.trim() : ''
-  if (!material || material.length > 100) throw new Error('请填写物料后再查询')
+  const codes = filters.material_codes?.length ? normalizeMaterialCodes(filters.material_codes) : []
+  if (Boolean(material) === Boolean(codes.length) || material.length > 100) throw new Error('请填写文字物料或选择物料引用，主范围只能选一种')
   const dates = filters.dates
   if (!Array.isArray(dates) || dates.length !== 2 || !dates.every(isDate)) throw new Error('请选择完整、有效的起止日期')
   if (dates[0]! > dates[1]!) throw new Error('起始日期不得晚于截止日期')
@@ -62,7 +66,7 @@ export function buildStockDetailQuery(filters: StockDetailFilters, page: number,
     if (id != null && (!Number.isSafeInteger(id) || id <= 0)) throw new Error('请重新选择组织或仓库')
   }
   if (!Number.isSafeInteger(page) || page < 1 || page > 1000000 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 500) throw new Error('分页参数无效')
-  return { material, material_field: filters.material_field, material_operator: filters.material_operator, start_date: dates[0]!, end_date: dates[1]!,
+  return { ...(codes.length ? { material_codes: codes } : { material, material_field: filters.material_field, material_operator: filters.material_operator }), start_date: dates[0]!, end_date: dates[1]!,
     organization_ids: organizations, stock_id: filters.stock_id ?? undefined,
     page, page_size: pageSize,
     filters: filters.conditions?.length ? JSON.stringify(filters.conditions.map(({ field, operator, value, valueEnd }) => ({ field, operator, value, valueEnd }))) : undefined }
@@ -99,11 +103,11 @@ export function createStockDetailRequest(
     const current = ++revision
     controller?.abort()
     controller = new AbortController()
-    const snapshot = { ...parameters, organization_ids: [...parameters.organization_ids] }
+    const snapshot = structuredClone(parameters)
     failed = null
     update({ loading: true, error: '' })
     try {
-      const result = await load({ ...snapshot, organization_ids: [...snapshot.organization_ids] }, controller.signal)
+      const result = await load(structuredClone(snapshot), controller.signal)
       if (current === revision) {
         update({ ...result, summary: result.summary ?? null, queried_at: result.queried_at || '', applied: snapshot })
         return true

@@ -10,6 +10,8 @@ import PmsDataList from '@/components/PmsDataList.vue'
 import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { cloneQuery, validateConditions, type QueryCondition } from '@/query-system/core'
 import { activeReportConditions, reportFields, reportDefaults, reportScope, reportReference, purchaseReferenceScope, reportPreferences, serializeReportConditions, purchaseConditions, selectReportProgress, withReportProgress, linkReportScope, saveReportPreferences, legacyReportSchemes, purchaseDetailEntry, createReportColumnSort } from '@/query-system/report-adapter'
+import { materialReference } from '@/query-system/material-reference'
+import { getPurchaseMaterialReference } from '@/api/purchaseReport'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import { usePageColumnFilter } from '@/query-system/page-column-filter'
@@ -40,6 +42,7 @@ const projectReference = () => ({ ...reportReference('项目档案', 'id', 'numb
 const filterFields = computed(() => reportFields((metadata.value?.query_fields || metadata.value?.filter_fields || []).filter(field => field.field !== 'project_name'), [
   { field: 'organization_ids', label: '产品线', type: 'enum', options: metadata.value?.organizations || [], operators: ['equals', 'in', 'reference'] },
   { field: 'project_code', label: '项目编码', type: 'text', reference: projectReference() },
+  { field: 'material_code', label: '物料编码', type: 'text', reference: materialReference('purchase', getPurchaseMaterialReference, () => conditions.value) },
   { field: 'supplier_name', label: '供应商', type: 'text' },
 ]))
 const queryDefaults = reportDefaults(['bill_no', 'organization_ids', 'project_code', 'application_date', 'supplier_name'])

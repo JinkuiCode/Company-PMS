@@ -4,6 +4,7 @@ import type { ColumnFilter, ColumnCandidate } from './column-filters.ts'
 import type { QueryScheme } from './workspace.ts'
 import type { PurchaseQueryDraft, PurchaseDetailEntry } from '../api/purchaseReport.ts'
 import { PAGE_SIZE_OPTIONS } from '../config/listUi.ts'
+import { normalizeMaterialCodes } from './material-reference.ts'
 
 export type ReportKind = 'purchase' | 'inventory' | 'stock-detail'
 export type ReportQueryField = QueryField & { operators?: QueryOperator[] }
@@ -73,7 +74,8 @@ export function reportDefaults(fields: string[], date?: { field: string; start: 
 }
 export const STOCK_MATERIAL_FIELDS = ['material_code', 'material_name', 'specification']
 export function stockMaterialCondition(source: QueryCondition[]) {
-  return activeReportConditions(source).find(c => STOCK_MATERIAL_FIELDS.includes(c.field)
+  return activeReportConditions(source).find(c => c.field === 'material_code' && c.operator === 'reference' && Array.isArray(c.value) && c.value.length)
+    || activeReportConditions(source).find(c => STOCK_MATERIAL_FIELDS.includes(c.field)
     && ['contains', 'equals', 'startsWith', 'endsWith'].includes(c.operator)
     && typeof c.value === 'string' && !!c.value.trim())
 }
@@ -116,10 +118,16 @@ export function reportScope(kind: ReportKind, source: QueryCondition[]) {
   if (kind === 'stock-detail') {
     const material = stockMaterialCondition(source)
     if (material) {
-      if ((material.value as string).length > 100) throw Error('物料条件最多100个字符')
-      params.material = (material.value as string).trim(); params.material_field = material.field; params.material_operator = material.operator
+      if (material.operator === 'reference') {
+        params.material_codes = normalizeMaterialCodes(material.value)
+        const index = conditions.findIndex(c => c.id === material.id)
+        if (index >= 0) conditions.splice(index, 1)
+      } else {
+        if ((material.value as string).length > 100) throw Error('物料条件最多100个字符')
+        params.material = (material.value as string).trim(); params.material_field = material.field; params.material_operator = material.operator
+      }
     }
-    if (!params.material) throw Error('请填写物料后再查询')
+    if (!params.material && !(params.material_codes as string[] | undefined)?.length) throw Error('请填写物料后再查询')
     if (!(params.organization_ids as number[] | undefined)?.length) throw Error('请选择至少一个库存组织后再查询')
     if (!params.start_date || !params.end_date) throw Error('请选择完整、有效的起止日期')
   }

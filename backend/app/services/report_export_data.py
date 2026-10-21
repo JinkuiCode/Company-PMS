@@ -48,6 +48,8 @@ def inventory_batches(connection, query, organizations):
     organizations = effective_organizations(query, organizations)
     if organizations == []:
         return
+    from app.services.report_material_reference import validate_reference_query
+    validate_reference_query(connection, query, organizations)
     selection, params = inventory_selection(query, organizations)
     cursor = connection.cursor()
     try:
@@ -154,6 +156,10 @@ def write_report(db, job, ctx, path, checkpoint):
             resolve_project_references(db, ctx, query)
             from app.services.purchase_query_labels import resolve_query_labels
             resolve_query_labels(db, ctx, query)
+            from app.api.inventory_reports import authorized_organizations
+            from app.services.report_material_reference import validate_reference_query
+            if any(getattr(c, 'kind', None) == 'material-reference' for c in query.conditions()):
+                validate_reference_query(connection, query, authorized_organizations(db, ctx))
             for batch in overview_batches(connection, query, project_scope(db, ctx)):
                 checkpoint(count)
                 enrich_product_lines(db, connection, batch)
@@ -171,6 +177,10 @@ def write_report(db, job, ctx, path, checkpoint):
             resolve_project_references(db, ctx, query)
             from app.services.purchase_query_labels import resolve_query_labels
             resolve_query_labels(db, ctx, query)
+            from app.api.inventory_reports import authorized_organizations
+            from app.services.report_material_reference import validate_reference_query
+            if any(getattr(c, 'kind', None) == 'material-reference' for c in query.conditions()):
+                validate_reference_query(connection, query, authorized_organizations(db, ctx))
             orders, receipts = detail_sheets(book)
             for batch in purchase_batches(connection, query, project_scope(db, ctx)):
                 checkpoint(count)

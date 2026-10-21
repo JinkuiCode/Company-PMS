@@ -16,6 +16,7 @@ from app.services.stock_detail_fetch import read_dataset
 from app.services.stock_detail_engine import quantity_summary
 from app.services.stock_detail_reader import StockDetailQuery, assemble_page, effective_organizations, list_candidates, list_reference_candidates
 from app.services.report_filters import filter_fields, query_fields, matches_filters, STOCK_FILTER_SEMANTICS
+from app.services.report_material_reference import validate_reference_query
 
 router = APIRouter(prefix='/api/reports/stock-detail', tags=['物料收发明细'])
 
@@ -65,6 +66,8 @@ def listing(query: Annotated[StockDetailQuery, Query()], db: Session = Depends(g
             ctx=Depends(require_permission('report:stock-detail:list'))):
     enforce_permission(ctx, 'report:stock-detail:view')
     organizations = effective_organizations(query, authorized_organizations(db, ctx))
+    if organizations == []:
+        validate_reference_query(None, query, organizations)
     dataset = dict(rows=[], openings={}, labels={})
     if organizations != []:
         with stock_detail_connection() as connection:
@@ -95,6 +98,8 @@ def options(field: Literal['material', 'stock'], keyword: str = Query('', max_le
     enforce_permission(ctx, 'report:stock-detail:view')
     if organization_id is not None and organization_ids:
         raise HTTPException(422, '请勿同时指定单组织和多组织条件')
+    if field == 'material' and organization_id is None and not organization_ids:
+        raise HTTPException(422, '请先选择产品线，再选择物料')
     organizations = effective_organizations(SimpleNamespace(organization_id=organization_id,
         organization_ids=organization_ids), authorized_organizations(db, ctx))
     if organizations == []:
@@ -106,7 +111,7 @@ def options(field: Literal['material', 'stock'], keyword: str = Query('', max_le
     with stock_detail_connection() as connection:
         cursor = connection.cursor()
         try:
-            if page is not None or ids or batch_values:
+            if field == 'material' or page is not None or ids or batch_values:
                 return list_reference_candidates(cursor, field, keyword, organizations,
                     page=page or 1, page_size=page_size, ids=ids, batch_field=batch_field, batch_values=batch_values)
             return list_candidates(cursor, field, keyword, organizations)

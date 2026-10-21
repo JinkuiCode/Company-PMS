@@ -15,7 +15,8 @@ class StockDetailQuery(BaseModel):
     filters: str = Field(default='[]', max_length=12000)
     column_filters: str = Field(default='[]', max_length=12000)
 
-    material: str = Field(min_length=1, max_length=100)
+    material: str | None = Field(default=None, max_length=100)
+    material_codes: list[str] = Field(default_factory=list, max_length=1000)
     material_field: Literal['material_code', 'material_name', 'specification'] = 'material_code'
     material_operator: Literal['contains', 'equals', 'startsWith', 'endsWith'] = 'contains'
     start_date: date
@@ -38,14 +39,31 @@ class StockDetailQuery(BaseModel):
     @field_validator('material')
     @classmethod
     def require_material(cls, value):
+        if value is None:
+            return value
         value = value.strip()
         if not value:
             raise ValueError('请填写物料后再查询')
         return value
 
+    @field_validator('material_codes', mode='before')
+    @classmethod
+    def require_codes(cls, value):
+        if value == []:
+            return []
+        from app.services.report_material_reference import normalize_codes
+        try:
+            return normalize_codes(value)
+        except HTTPException as error:
+            raise ValueError(error.detail) from None
+
     @model_validator(mode='after')
     def date_order(self):
-        self.conditions()
+        conditions = self.conditions()
+        if bool(self.material) == bool(self.material_codes):
+            raise ValueError('请填写文字物料或选择物料引用，主范围只能选一种')
+        if any(c.kind == 'material-reference' for c in conditions):
+            raise ValueError('收发物料引用须通过material_codes主范围提交，不能重复放入附加条件')
         if self.organization_id is None and not self.organization_ids:
             raise ValueError('请选择至少一个库存组织后再查询')
         if self.organization_id is not None and self.organization_ids:
@@ -116,6 +134,10 @@ def list_candidates(cursor, kind, keyword, organizations):
 def list_reference_candidates(cursor, kind, keyword, organizations, *, page=1, page_size=50,
                               ids=(), batch_field='code', batch_values=()):
     """Paged master identities for reference dialogs; preserve legacy lookup."""
+    if kind == 'material':
+        from app.services.report_material_reference import list_material_candidates
+        return list_material_candidates(cursor, keyword, organizations, page=page, page_size=page_size,
+            ids=ids, batch_field=batch_field, batch_values=batch_values)
     from app.services.query_conditions import scalar
     from app.services.purchase_reader import _like
     if kind not in {'stock', 'material'} or batch_field not in {'code', 'name'}:

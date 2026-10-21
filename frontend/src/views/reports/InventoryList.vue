@@ -11,6 +11,8 @@ import PmsQueryWorkspace from '@/query-system/PmsQueryWorkspace.vue'
 import { createReportSession } from '@/report-query/state'
 import { cloneQuery, validateConditions, type QueryCondition, type QueryField } from '@/query-system/core'
 import { activeReportConditions, reportFields, reportDefaults, reportScope, reportPreferences, saveReportPreferences, serializeReportConditions, linkReportScope, legacyReportSchemes, createReportColumnSort } from '@/query-system/report-adapter'
+import { materialReference } from '@/query-system/material-reference'
+import { getInventoryMaterialReference } from '@/api/inventoryReport'
 import { decorateQueryColumns } from '@/query-system/column-grid'
 import type { ColumnFilter, ColumnQueryContext } from '@/query-system/column-filters'
 import { usePageColumnFilter } from '@/query-system/page-column-filter'
@@ -52,6 +54,7 @@ const filterFields = computed(() => reportFields((metadata.value?.query_fields |
   field: field.key, label: field.label, type: field.value_type === 'number' ? 'number' : 'text',
 }))).filter(field => !removedIdentity.includes(field.field)), [
   { field: 'organization_id', label: '产品线', type: 'enum', options: metadata.value?.organizations || [], operators: ['equals', 'reference'] },
+  { field: 'MaterialCode', label: '物料编码', type: 'text', reference: materialReference('inventory', getInventoryMaterialReference, () => conditions.value) },
   { field: 'Stock', label: '仓库', type: 'text' },
 ]))
 const queryDefaults = reportDefaults(['MaterialCode', 'organization_id', 'Stock'])
