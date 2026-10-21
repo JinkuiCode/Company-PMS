@@ -16,6 +16,7 @@ import { usePageColumnFilter } from '@/query-system/page-column-filter'
 import PmsListColumnPicker from '@/components/PmsListColumnPicker.vue'
 import PmsPageGuide from '@/page-guide/PmsPageGuide.vue'
 import { migrateReportIdentity, reportIdentityVersion } from './report-identity-layout'
+import { migratePurchaseMaterialLayout, purchaseMaterialLayoutVersion } from './purchase-material-layout'
 import CustomPagination from '@/components/CustomPagination.vue'
 import { DEFAULT_PAGE_SIZE, PMS_SINGLE_ACTION_COLUMN as PMS_ACTION_COLUMN, PMS_GRID_OPTIONS } from '@/config/listUi'
 import { chineseLocaleText } from '@/utils/agGridLocale'
@@ -68,36 +69,38 @@ const fields = computed(() => {
   const available = (metadata.value?.fields || []).filter(field => field.key !== 'project_name')
   return [...projectPrefix.flatMap(key => available.filter(field => field.key === key)), ...available.filter(field => !projectPrefix.includes(field.key))]
 })
-const defaultKeys = [...projectPrefix, 'material_name', 'unit_name', 'bill_no', 'line_no', 'application_date', 'document_status', 'requested', 'approved', 'last_order_date', 'ordered', 'supplier_name', 'last_stock_date', 'net_received', 'pending_order', 'pending_receipt', 'progress']
+const defaultKeys = [...projectPrefix, 'material_code', 'material_name', 'unit_name', 'bill_no', 'line_no', 'application_date', 'document_status', 'requested', 'approved', 'last_order_date', 'ordered', 'supplier_name', 'last_stock_date', 'net_received', 'pending_order', 'pending_receipt', 'progress']
 const groups = computed(() => [...new Set(fields.value.map(field => field.group))].map(group => ({
   key: group, label: group, fields: fields.value.filter(field => field.group === group).map(field => ({ ...field, quick_addable: true })),
 })))
+const layoutKeys = computed(() => [...groups.value.flatMap(group => group.fields.map(field => field.key)), 'purchase_actions'])
 const storageKey = computed(() => `pms:purchase-report:v1:${auth.user?.id || 'anonymous'}`)
 let savedColumns: ColumnState[] = [], restoring = false
+const currentLayout = () => grid?.getColumnState() || savedColumns
 function readPreferences() {
   try {
     const raw = JSON.parse(localStorage.getItem(storageKey.value) || '{}')
-    const saved = migrateReportIdentity(raw)
+    const saved = migratePurchaseMaterialLayout(migrateReportIdentity(raw), layoutKeys.value, currentLayout())
     const keys = new Set(fields.value.map(field => field.key))
     visible.value = Array.isArray(saved.visible) ? saved.visible.filter((key: string) => keys.has(key)) : [...defaultKeys]
     savedColumns = Array.isArray(saved.columns) ? saved.columns.filter((column: ColumnState) => keys.has(column.colId) || column.colId === 'purchase_actions') : []
     const sorting = savedColumns.find(column => column.sort && sortFields[column.colId])
     if (saved.sort && Object.values(sortFields).includes(saved.sort.sort)) Object.assign(sort, saved.sort)
     else if (sorting) Object.assign(sort, { sort: sortFields[sorting.colId], direction: sorting.sort })
-    if (raw.reportIdentityVersion !== 1) savePreferences()
+    if (raw.reportIdentityVersion !== 1 || (saved.purchaseMaterialLayoutVersion === 1 && raw.purchaseMaterialLayoutVersion !== 1)) savePreferences()
   } catch { visible.value = [...defaultKeys]; savedColumns = [] }
 }
 function savePreferences() {
   if (restoring || !reportIdentityVersion(fields.value)) return
-  try { saveReportPreferences(localStorage, storageKey.value, { visible: visible.value, columns: grid?.getColumnState() || savedColumns, sort: { ...sort }, reportIdentityVersion: 1 }) }
+  try { saveReportPreferences(localStorage, storageKey.value, { visible: visible.value, columns: grid?.getColumnState() || savedColumns, sort: { ...sort }, reportIdentityVersion: 1, purchaseMaterialLayoutVersion: purchaseMaterialLayoutVersion(layoutKeys.value) }) }
   catch { ElMessage.warning('本机设置保存失败，请检查浏览器存储空间') }
   void nextTick(() => listRef.value?.refreshScrollbar())
 }
-const planSnapshot = () => ({ reportIdentityVersion: reportIdentityVersion(fields.value), pageSize: pendingPageSize.value ?? pageSize.value, columns: grid?.getColumnState() || savedColumns, visible: [...visible.value], scope: cloneQuery(projectScope.value || null), sort: { ...sort } })
+const planSnapshot = () => ({ reportIdentityVersion: reportIdentityVersion(fields.value), purchaseMaterialLayoutVersion: purchaseMaterialLayoutVersion(layoutKeys.value), pageSize: pendingPageSize.value ?? pageSize.value, columns: grid?.getColumnState() || savedColumns, visible: [...visible.value], scope: cloneQuery(projectScope.value || null), sort: { ...sort } })
 function clearColumnFilters() { pageColumns.clear(); invalidate() }
 async function submitWorkspace(_value: QueryCondition[], preferences: object = {}) {
   if (invalid.value) { ElMessage.warning(invalid.value); return }
-  const plan = reportPreferences(migrateReportIdentity(preferences), fields.value.map(f => f.key))
+  const plan = reportPreferences(migratePurchaseMaterialLayout(migrateReportIdentity(preferences), layoutKeys.value, currentLayout()), fields.value.map(f => f.key))
   if (plan.scope !== undefined) projectScope.value = plan.scope || undefined
   restoring = true
   if (plan.pageSize != null && plan.pageSize !== pageSize.value) pendingPageSize.value = plan.pageSize
