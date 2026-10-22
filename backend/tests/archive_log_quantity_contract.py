@@ -32,7 +32,7 @@ class LogPresentation(unittest.TestCase):
    self.assertEqual(items[0]['after_display'],'杨志刚（owner）')
    self.assertNotEqual(items[0].get('after_name_source'),'current')
  def test_log_order_follows_new_form_in_both_views_and_system_fields_last(self):
-  keys=['archive_category','project_code','project_name','customer','business_product_line_id','quantity','quantity_unit','manager_id','machine_model','equipment_series','serial_no','contract_ship_date','project_contact','remarks','erp_sync_status']
+  keys=['archive_category','project_code','project_name','customer','sales_company','business_product_line_id','quantity','quantity_unit','manager_id','machine_model','equipment_series','serial_no','contract_ship_date','project_contact','remarks','erp_sync_status']
   row=self.log(after={k:(17 if k=='manager_id' else 1 if k=='business_product_line_id' else 'sample') for k in reversed(keys)})
   from app.services.document_history import _project_items
   audit=self.views(row)[0]

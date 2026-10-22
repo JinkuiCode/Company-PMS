@@ -106,11 +106,19 @@ def upgrade_parameter_secret_only(*, rollback=False) -> None:
 
 def upgrade_database(*, business_export_only: bool = False, parameter_secret_only: bool = False,
                      parameter_secret_rollback: bool = False, feedback_only: bool = False, archive_governance_only: bool = False,
-                     governance_only: bool = False, form_drafts_only: bool = False, draft_management_only: bool = False) -> None:
-    if sum((business_export_only, parameter_secret_only, parameter_secret_rollback, feedback_only, archive_governance_only, governance_only, form_drafts_only, draft_management_only)) > 1:
+                     governance_only: bool = False, form_drafts_only: bool = False, draft_management_only: bool = False, archive_policy_only: bool = False) -> None:
+    if sum((business_export_only, parameter_secret_only, parameter_secret_rollback, feedback_only, archive_governance_only, governance_only, form_drafts_only, draft_management_only, archive_policy_only)) > 1:
         raise RuntimeError("限定升级与回滚模式不能同时使用")
     validate_runtime_config(settings)
+    if archive_policy_only:
+        from app.services.archive_policy_revision_migration import REVISION, upgrade_archive_policy
+        if CURRENT_DATABASE_REVISION != REVISION:raise RuntimeError('限定升级模式与当前程序版本不匹配')
+        upgrade_archive_policy(engine)
+        check_database_ready(engine)
+        return
     if draft_management_only:
+        from app.services.form_draft_management_migration import REVISION
+        if CURRENT_DATABASE_REVISION != REVISION:raise RuntimeError('当前程序需要档案策略限定升级，请勿使用历史限定升级模式')
         from app.services.form_draft_management_migration import upgrade_draft_management
         upgrade_draft_management(engine)
         check_database_ready(engine)
@@ -139,6 +147,8 @@ def upgrade_database(*, business_export_only: bool = False, parameter_secret_onl
         check_database_ready(engine)
         return
     if feedback_only:
+        from app.services.feedback_migration import REVISION
+        if CURRENT_DATABASE_REVISION != REVISION:raise RuntimeError('限定升级模式与当前程序版本不匹配')
         from app.services.feedback_migration import upgrade_feedback
         upgrade_feedback(engine)
         check_database_ready(engine)
@@ -160,6 +170,8 @@ def upgrade_database(*, business_export_only: bool = False, parameter_secret_onl
         if revision == CURRENT_DATABASE_REVISION:
             check_database_ready(engine)
             return
+        if revision == '2026-10-16-form-draft-02':
+            raise RuntimeError('现有form-draft-02库必须使用--archive-policy-only有界升级')
     mark_database_upgrading(engine)
     from sqlalchemy import inspect
     with engine.begin() as connection:
@@ -172,6 +184,8 @@ def upgrade_database(*, business_export_only: bool = False, parameter_secret_onl
     finalize_governance_setup(engine)
     with engine.begin() as connection:
         upgrade_parameter_secret_storage(connection, allow_add=False)
+    from app.services.archive_policy_revision_migration import finalize_archive_policy_setup
+    finalize_archive_policy_setup(engine)
     mark_database_ready(engine)
     check_database_ready(engine)
 
@@ -179,6 +193,7 @@ def upgrade_database(*, business_export_only: bool = False, parameter_secret_onl
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--archive-policy-only', action='store_true', help='仅从form-draft-02更新档案必输策略及原台单位显示名，不改授权或业务档案')
     modes.add_argument('--form-drafts-only', action='store_true', help='仅从governance-01新增本人表单草稿存储，不改权限或业务数据')
     modes.add_argument('--draft-management-only', action='store_true', help='仅从governance-01或form-draft-01升级草稿管理，新增权限不授予角色')
     modes.add_argument('--governance-only', action='store_true', help='从档案治理02升级日志关联、快照及无默认授权的维护权限')
@@ -190,5 +205,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     upgrade_database(business_export_only=args.business_export_only, parameter_secret_only=args.parameter_secret_only,
                      parameter_secret_rollback=args.parameter_secret_rollback, feedback_only=args.feedback_only, archive_governance_only=args.archive_governance_only,
-                     governance_only=args.governance_only, form_drafts_only=args.form_drafts_only, draft_management_only=args.draft_management_only)
+                     governance_only=args.governance_only, form_drafts_only=args.form_drafts_only, draft_management_only=args.draft_management_only, archive_policy_only=args.archive_policy_only)
     print("数据库升级完成")

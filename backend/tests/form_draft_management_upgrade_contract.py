@@ -27,7 +27,8 @@ class ManagementUpgrade(unittest.TestCase):
  def test_governance_chain_repeat_and_no_grants(self):
   self.upgrade(self.engine);self.upgrade(self.engine)
   from app.services.database_revision import check_database_ready
-  check_database_ready(self.engine)
+  from app.services.database_revision import DatabaseUpgradeRequired
+  with self.assertRaises(DatabaseUpgradeRequired):check_database_ready(self.engine)
   with self.engine.connect() as c:
    self.assertEqual(c.exec_driver_sql('SELECT COUNT(*) FROM sys_role_menu').scalar(),0)
    self.assertEqual(c.exec_driver_sql("SELECT COUNT(*) FROM sys_menu WHERE permission_code='project:archive:draft:manage'").scalar(),1)
@@ -84,7 +85,9 @@ class ManagementUpgrade(unittest.TestCase):
    source=Path(folder)/'source.db'
    with self.engine.connect() as connection,closing(sqlite3.connect(source)) as target:
     connection.connection.driver_connection.backup(target)
-   result=rehearse(source,Path(folder)/'proof')
+   # Freeze the historical helper at its own target; current CLI must reject it.
+   with patch('app.services.database_revision.CURRENT_DATABASE_REVISION','2026-10-16-form-draft-02'):
+    result=rehearse(source,Path(folder)/'proof')
    self.assertTrue(result['source_unchanged']);self.assertTrue(result['restore_copy_verified'])
    self.assertEqual(result['revision'],'2026-10-16-form-draft-02')
    self.assertEqual(result['drafts_preserved'],1)
@@ -102,12 +105,14 @@ class ManagementUpgrade(unittest.TestCase):
    before=fingerprint(source)
    result=subprocess.run([sys.executable,'-B','backend/scripts/rehearse_draft_management.py','--source',str(source),'--output',str(Path(folder)/'proof')],
        env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
-   self.assertEqual(result.returncode,0,result.stdout);self.assertEqual(fingerprint(source),before)
+   self.assertNotEqual(result.returncode,0,result.stdout);self.assertEqual(fingerprint(source),before)
    # The explicit CLI is the only real-upgrade path; here it targets disposable data.
    result=subprocess.run([sys.executable,'-B','backend/scripts/upgrade_database.py','--draft-management-only'],
        env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
-   self.assertEqual(result.returncode,0,result.stdout)
+   self.assertNotEqual(result.returncode,0,result.stdout)
+   self.assertIn('历史限定升级模式',result.stdout)
+   self.assertEqual(fingerprint(source),before)
    with closing(sqlite3.connect(source)) as connection:
-    self.assertEqual(connection.execute('SELECT revision FROM pms_database_revision').fetchone()[0],'2026-10-16-form-draft-02')
+    self.assertEqual(connection.execute('SELECT revision FROM pms_database_revision').fetchone()[0],'2026-10-15-governance-01')
 
 if __name__=='__main__':unittest.main()

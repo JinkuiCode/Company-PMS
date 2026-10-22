@@ -3,7 +3,7 @@ from sqlalchemy import Engine, inspect, select
 from app.models.database_revision import PmsDatabaseRevision
 
 
-CURRENT_DATABASE_REVISION = "2026-10-16-form-draft-02"
+CURRENT_DATABASE_REVISION = "2026-10-21-archive-policy-01"
 UPGRADE_IN_PROGRESS = "upgrading"
 
 
@@ -28,6 +28,9 @@ def check_database_ready(engine: Engine) -> None:
             verify_governance_structure(connection)
             from app.services.form_draft_management_migration import verify_draft_management_structure
             verify_draft_management_structure(connection)
+            from app.services.archive_policy_revision_migration import REVISION, verify_archive_policy
+            if CURRENT_DATABASE_REVISION == REVISION:
+                verify_archive_policy(connection, strict_values=False)
     except RuntimeError as exc:
         raise DatabaseUpgradeRequired(str(exc)) from exc
 

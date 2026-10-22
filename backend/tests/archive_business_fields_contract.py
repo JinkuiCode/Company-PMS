@@ -109,22 +109,18 @@ class ArchiveBusinessFields(unittest.TestCase):
             self.assertTrue(result.get('sync_queued', False))
             self.assertEqual(self.db.query(ErpSyncTask).count(), count + 1)
 
-    def test_required_dates_new_records_only_and_reset_preserves_cutoff(self):
+    def test_dates_are_optional_for_all_records_and_reset_preserves_original_cutoff(self):
         old = PmsProjectArchive(project_code='OLD', project_name='历史', manager_id=self.user.id, business_product_line_id=1, governance_legacy=True, created_at=datetime.now()-timedelta(days=1))
         self.db.add(old)
         self.db.commit()
         self.upgrade()
-        with self.assertRaises(HTTPException) as caught:
-            self.create()
-        self.assertEqual(caught.exception.status_code, 422)
-        self.assertEqual({x['field_key'] for x in caught.exception.detail['fields']}, set(DATES))
-        self.assertEqual(self.db.query(ErpSyncTask).count(), 0)
+        empty_id = self.create()
+        self.assertIsNone(self.db.get(PmsProjectArchive, empty_id).contract_ship_date)
         self.update(self.db, old.id, ArchiveUpdate(customer='历史允许维护'), self.user.id)
-        created = self.create(**DATES)
-        with self.assertRaises(HTTPException):
-            self.update(self.db, created, ArchiveUpdate(contract_ship_date=None), self.user.id)
+        created = self.create(project_code='NEW-WITH-DATES', **DATES)
+        self.update(self.db, created, ArchiveUpdate(contract_ship_date=None), self.user.id)
         self.db.expire_all()
-        self.assertIsNotNone(self.db.get(PmsProjectArchive, created).contract_ship_date)
+        self.assertIsNone(self.db.get(PmsProjectArchive, created).contract_ship_date)
         from app.services.field_policy import reset_field_policies
         cutoff = self.db.query(SysBusinessFieldPolicy).filter_by(field_key='contract_ship_date').one().required_effective_at
         reset_field_policies(self.db, 'project_archive', operator_id=self.user.id)

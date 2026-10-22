@@ -1,0 +1,2005 @@
+{
+  "metadata": {
+    "module_code": "project_archive",
+    "groups": [
+      {
+        "key": "basic",
+        "label": "基础信息"
+      },
+      {
+        "key": "contract",
+        "label": "合同与交付"
+      },
+      {
+        "key": "contact",
+        "label": "收货信息"
+      },
+      {
+        "key": "erp",
+        "label": "ERP 同步"
+      },
+      {
+        "key": "system",
+        "label": "系统信息"
+      }
+    ],
+    "items": [
+      {
+        "key": "archive_category",
+        "field_key": "archive_category",
+        "label": "档案类别",
+        "group": "basic",
+        "value_type": "select",
+        "source_type": "detail",
+        "enum_code": "archive_category",
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": true,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": true,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": true,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "customer_full_name",
+        "field_key": "customer_full_name",
+        "label": "客户完整名称",
+        "group": "basic",
+        "value_type": "text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": true,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": false,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "machine_model",
+        "field_key": "machine_model",
+        "label": "机型",
+        "group": "basic",
+        "value_type": "select",
+        "source_type": "detail",
+        "enum_code": "archive_machine_model",
+        "required_when": {
+          "field": "archive_category",
+          "values": [
+            1
+          ]
+        },
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": true,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "quantity",
+        "field_key": "quantity",
+        "label": "数量",
+        "group": "basic",
+        "value_type": "number",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": {
+          "field": "archive_category",
+          "values": [
+            1
+          ]
+        },
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": true,
+        "updated_at": null,
+        "default_value": 1,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "quantity_unit",
+        "field_key": "quantity_unit",
+        "label": "单位",
+        "group": "basic",
+        "value_type": "select",
+        "source_type": "detail",
+        "enum_code": "archive_quantity_unit",
+        "required_when": {
+          "field": "archive_category",
+          "values": [
+            1
+          ]
+        },
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": true,
+        "updated_at": null,
+        "default_value": 7,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "sales_company",
+        "field_key": "sales_company",
+        "label": "销售公司",
+        "group": "basic",
+        "value_type": "select",
+        "source_type": "detail",
+        "enum_code": "archive_sales_company",
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "legacy_archive_status",
+        "field_key": "legacy_archive_status",
+        "label": "原台账状态",
+        "group": "basic",
+        "value_type": "select",
+        "source_type": "detail",
+        "enum_code": "archive_legacy_archive_status",
+        "required_when": null,
+        "form_hidden": true,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "legacy_code_date",
+        "field_key": "legacy_code_date",
+        "label": "编码日期",
+        "group": "basic",
+        "value_type": "date",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": true,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "legacy_updated_date",
+        "field_key": "legacy_updated_date",
+        "label": "原台账更新日期",
+        "group": "basic",
+        "value_type": "date",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": true,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "delivery_note",
+        "field_key": "delivery_note",
+        "label": "交期说明",
+        "group": "basic",
+        "value_type": "long_text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": true,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "remarks",
+        "field_key": "remarks",
+        "label": "备注",
+        "group": "basic",
+        "value_type": "long_text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": true,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "project_code",
+        "field_key": "project_code",
+        "label": "项目编号",
+        "group": "basic",
+        "value_type": "text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": true,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": true,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "project_name",
+        "field_key": "project_name",
+        "label": "项目名称",
+        "group": "basic",
+        "value_type": "text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": true,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": true,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "customer",
+        "field_key": "customer",
+        "label": "客户",
+        "group": "basic",
+        "value_type": "text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": {
+          "field": "archive_category",
+          "values": [
+            1
+          ]
+        },
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": true,
+        "list_available": true,
+        "required_effective_at": "2025-01-01T00:00:00",
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "product_category",
+        "field_key": "product_category",
+        "label": "产品类别（已停用）",
+        "group": "basic",
+        "value_type": "text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": false,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": false,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": false,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": true,
+        "module_code": "project_archive",
+        "visible": false,
+        "editable": false,
+        "required": false,
+        "list_available": false,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "product_line_id",
+        "field_key": "product_line_id",
+        "label": "产品线",
+        "group": "basic",
+        "value_type": "select",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": true,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": true,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "manager_id",
+        "field_key": "manager_id",
+        "label": "负责人",
+        "group": "basic",
+        "value_type": "user",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": true,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": true,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": true,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "equipment_series",
+        "field_key": "equipment_series",
+        "label": "设备系列",
+        "group": "basic",
+        "value_type": "select",
+        "source_type": "detail",
+        "enum_code": "equipment_series",
+        "required_when": {
+          "field": "archive_category",
+          "values": [
+            1
+          ]
+        },
+        "form_hidden": false,
+        "form_visible_when": {
+          "field": "archive_category",
+          "values": [
+            1
+          ]
+        },
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": true,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "serial_no",
+        "field_key": "serial_no",
+        "label": "序列号",
+        "group": "basic",
+        "value_type": "text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": {
+          "field": "archive_category",
+          "values": [
+            1
+          ]
+        },
+        "form_hidden": false,
+        "form_visible_when": {
+          "field": "archive_category",
+          "values": [
+            1
+          ]
+        },
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": true,
+        "updated_at": null,
+        "group_label": "基础信息"
+      },
+      {
+        "key": "contract_signed_date",
+        "field_key": "contract_signed_date",
+        "label": "合同签订日期",
+        "group": "contract",
+        "value_type": "date",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "合同与交付"
+      },
+      {
+        "key": "contract_ship_date",
+        "field_key": "contract_ship_date",
+        "label": "合同出货日期",
+        "group": "contract",
+        "value_type": "date",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": true,
+        "editable_locked": true,
+        "required_locked": true,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "合同与交付"
+      },
+      {
+        "key": "actual_ship_date",
+        "field_key": "actual_ship_date",
+        "label": "实际出货日期",
+        "group": "contract",
+        "value_type": "date",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "合同与交付"
+      },
+      {
+        "key": "warranty_end_date",
+        "field_key": "warranty_end_date",
+        "label": "质保截止日期",
+        "group": "contract",
+        "value_type": "date",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "合同与交付"
+      },
+      {
+        "key": "address_province",
+        "field_key": "address_province",
+        "label": "项目地址省份",
+        "group": "contact",
+        "value_type": "text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "收货信息"
+      },
+      {
+        "key": "address_city",
+        "field_key": "address_city",
+        "label": "项目地址城市",
+        "group": "contact",
+        "value_type": "text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "收货信息"
+      },
+      {
+        "key": "address_detail",
+        "field_key": "address_detail",
+        "label": "项目详细地址",
+        "group": "contact",
+        "value_type": "long_text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "收货信息"
+      },
+      {
+        "key": "project_contact",
+        "field_key": "project_contact",
+        "label": "收货联系人",
+        "group": "contact",
+        "value_type": "text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "收货信息"
+      },
+      {
+        "key": "contact_phone",
+        "field_key": "contact_phone",
+        "label": "联系人手机",
+        "group": "contact",
+        "value_type": "text",
+        "source_type": "detail",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": true,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": true,
+        "required_cap": true,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": false,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": true,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "收货信息"
+      },
+      {
+        "key": "erp_sync_policy",
+        "field_key": "erp_sync_policy",
+        "label": "同步方式",
+        "group": "erp",
+        "value_type": "text",
+        "source_type": "system",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": false,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "ERP 同步"
+      },
+      {
+        "key": "data_origin",
+        "field_key": "data_origin",
+        "label": "档案来源",
+        "group": "system",
+        "value_type": "text",
+        "source_type": "system",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": false,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "系统信息"
+      },
+      {
+        "key": "erp_sync_status",
+        "field_key": "erp_sync_status",
+        "label": "同步状态",
+        "group": "erp",
+        "value_type": "text",
+        "source_type": "system",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": false,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "ERP 同步"
+      },
+      {
+        "key": "erp_sync_time",
+        "field_key": "erp_sync_time",
+        "label": "最后同步时间",
+        "group": "erp",
+        "value_type": "datetime",
+        "source_type": "system",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": false,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "ERP 同步"
+      },
+      {
+        "key": "erp_sync_by_name",
+        "field_key": "erp_sync_by_name",
+        "label": "最后同步人",
+        "group": "erp",
+        "value_type": "text",
+        "source_type": "system",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": false,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "ERP 同步"
+      },
+      {
+        "key": "created_by_name",
+        "field_key": "created_by_name",
+        "label": "创建人",
+        "group": "system",
+        "value_type": "text",
+        "source_type": "system",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": false,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "系统信息"
+      },
+      {
+        "key": "updated_by_name",
+        "field_key": "updated_by_name",
+        "label": "最后编辑人",
+        "group": "system",
+        "value_type": "text",
+        "source_type": "system",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": false,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "系统信息"
+      },
+      {
+        "key": "created_at",
+        "field_key": "created_at",
+        "label": "创建时间",
+        "group": "system",
+        "value_type": "datetime",
+        "source_type": "system",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": false,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "系统信息"
+      },
+      {
+        "key": "updated_at",
+        "field_key": "updated_at",
+        "label": "最后编辑时间",
+        "group": "system",
+        "value_type": "datetime",
+        "source_type": "system",
+        "enum_code": null,
+        "required_when": null,
+        "form_hidden": false,
+        "form_visible_when": null,
+        "default_visible": true,
+        "default_editable": false,
+        "default_required": false,
+        "default_list_available": true,
+        "visible_cap": true,
+        "editable_cap": false,
+        "required_cap": false,
+        "list_available_cap": true,
+        "visible_locked": false,
+        "editable_locked": true,
+        "required_locked": false,
+        "list_available_locked": false,
+        "module_code": "project_archive",
+        "visible": true,
+        "editable": false,
+        "required": false,
+        "list_available": true,
+        "required_effective_at": null,
+        "governance_required": false,
+        "updated_at": null,
+        "group_label": "系统信息"
+      }
+    ],
+    "linkage": {
+      "line_profiles": {
+        "1": "bench8",
+        "3": "bench12",
+        "4": "single"
+      },
+      "profiles": {
+        "bench8": {
+          "machine_model": [
+            5,
+            6,
+            7,
+            8,
+            10,
+            11,
+            12
+          ],
+          "equipment_series": [
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ]
+        },
+        "bench12": {
+          "machine_model": [
+            2,
+            3,
+            4
+          ],
+          "equipment_series": [
+            12,
+            13
+          ]
+        },
+        "single": {
+          "machine_model": [
+            1,
+            9,
+            13,
+            15
+          ],
+          "equipment_series": [
+            14,
+            15
+          ]
+        }
+      }
+    }
+  },
+  "lines": [
+    {
+      "value": 1,
+      "label": "8吋Bench"
+    },
+    {
+      "value": 2,
+      "label": "光伏"
+    },
+    {
+      "value": 3,
+      "label": "12吋Bench"
+    },
+    {
+      "value": 4,
+      "label": "Single"
+    },
+    {
+      "value": 5,
+      "label": "HSPM"
+    },
+    {
+      "value": 6,
+      "label": "电镀"
+    },
+    {
+      "value": 7,
+      "label": "亚电股份"
+    }
+  ],
+  "enums": {
+    "archive_category": {
+      "dict_code": "archive_category",
+      "dict_name": "档案类别",
+      "items": [
+        {
+          "value": "1",
+          "label": "主机"
+        },
+        {
+          "value": "2",
+          "label": "辅机"
+        },
+        {
+          "value": "3",
+          "label": "C类"
+        },
+        {
+          "value": "4",
+          "label": "D类"
+        },
+        {
+          "value": "5",
+          "label": "AS类"
+        },
+        {
+          "value": "6",
+          "label": "BS类"
+        },
+        {
+          "value": "7",
+          "label": "免费"
+        },
+        {
+          "value": "8",
+          "label": "待分类"
+        }
+      ],
+      "all_items": [
+        {
+          "value": "1",
+          "label": "主机",
+          "status": 1
+        },
+        {
+          "value": "2",
+          "label": "辅机",
+          "status": 1
+        },
+        {
+          "value": "3",
+          "label": "C类",
+          "status": 1
+        },
+        {
+          "value": "4",
+          "label": "D类",
+          "status": 1
+        },
+        {
+          "value": "5",
+          "label": "AS类",
+          "status": 1
+        },
+        {
+          "value": "6",
+          "label": "BS类",
+          "status": 1
+        },
+        {
+          "value": "7",
+          "label": "免费",
+          "status": 1
+        },
+        {
+          "value": "8",
+          "label": "待分类",
+          "status": 1
+        }
+      ],
+      "label_map": {
+        "1": "主机",
+        "2": "辅机",
+        "3": "C类",
+        "4": "D类",
+        "5": "AS类",
+        "6": "BS类",
+        "7": "免费",
+        "8": "待分类"
+      }
+    },
+    "archive_machine_model": {
+      "dict_code": "archive_machine_model",
+      "dict_name": "机型",
+      "items": [
+        {
+          "value": "1",
+          "label": "12吋 Single"
+        },
+        {
+          "value": "2",
+          "label": "12吋 Cassette Less"
+        },
+        {
+          "value": "3",
+          "label": "12吋Bench cassette less normal"
+        },
+        {
+          "value": "4",
+          "label": "12吋 Cassette Type"
+        },
+        {
+          "value": "5",
+          "label": "4/6吋兼容 Cassette Type"
+        },
+        {
+          "value": "6",
+          "label": "6吋 Cassette Type"
+        },
+        {
+          "value": "7",
+          "label": "6/8吋兼容 Cassette Type"
+        },
+        {
+          "value": "8",
+          "label": "6.3/8吋兼容CassetteType"
+        },
+        {
+          "value": "9",
+          "label": "6/8吋 Single"
+        },
+        {
+          "value": "10",
+          "label": "8吋 Cassette Less"
+        },
+        {
+          "value": "11",
+          "label": "8吋 Cassette Type"
+        },
+        {
+          "value": "12",
+          "label": "8\" Cssstte Less"
+        },
+        {
+          "value": "13",
+          "label": "8吋 Single"
+        },
+        {
+          "value": "14",
+          "label": "HOT SPM"
+        },
+        {
+          "value": "15",
+          "label": "Single"
+        },
+        {
+          "value": "16",
+          "label": "辅机"
+        }
+      ],
+      "all_items": [
+        {
+          "value": "1",
+          "label": "12吋 Single",
+          "status": 1
+        },
+        {
+          "value": "2",
+          "label": "12吋 Cassette Less",
+          "status": 1
+        },
+        {
+          "value": "3",
+          "label": "12吋Bench cassette less normal",
+          "status": 1
+        },
+        {
+          "value": "4",
+          "label": "12吋 Cassette Type",
+          "status": 1
+        },
+        {
+          "value": "5",
+          "label": "4/6吋兼容 Cassette Type",
+          "status": 1
+        },
+        {
+          "value": "6",
+          "label": "6吋 Cassette Type",
+          "status": 1
+        },
+        {
+          "value": "7",
+          "label": "6/8吋兼容 Cassette Type",
+          "status": 1
+        },
+        {
+          "value": "8",
+          "label": "6.3/8吋兼容CassetteType",
+          "status": 1
+        },
+        {
+          "value": "9",
+          "label": "6/8吋 Single",
+          "status": 1
+        },
+        {
+          "value": "10",
+          "label": "8吋 Cassette Less",
+          "status": 1
+        },
+        {
+          "value": "11",
+          "label": "8吋 Cassette Type",
+          "status": 1
+        },
+        {
+          "value": "12",
+          "label": "8\" Cssstte Less",
+          "status": 1
+        },
+        {
+          "value": "13",
+          "label": "8吋 Single",
+          "status": 1
+        },
+        {
+          "value": "14",
+          "label": "HOT SPM",
+          "status": 1
+        },
+        {
+          "value": "15",
+          "label": "Single",
+          "status": 1
+        },
+        {
+          "value": "16",
+          "label": "辅机",
+          "status": 1
+        }
+      ],
+      "label_map": {
+        "1": "12吋 Single",
+        "2": "12吋 Cassette Less",
+        "3": "12吋Bench cassette less normal",
+        "4": "12吋 Cassette Type",
+        "5": "4/6吋兼容 Cassette Type",
+        "6": "6吋 Cassette Type",
+        "7": "6/8吋兼容 Cassette Type",
+        "8": "6.3/8吋兼容CassetteType",
+        "9": "6/8吋 Single",
+        "10": "8吋 Cassette Less",
+        "11": "8吋 Cassette Type",
+        "12": "8\" Cssstte Less",
+        "13": "8吋 Single",
+        "14": "HOT SPM",
+        "15": "Single",
+        "16": "辅机"
+      }
+    },
+    "archive_quantity_unit": {
+      "dict_code": "archive_quantity_unit",
+      "dict_name": "单位",
+      "items": [
+        {
+          "value": "7",
+          "label": "pcs"
+        },
+        {
+          "value": "1",
+          "label": "个"
+        },
+        {
+          "value": "2",
+          "label": "米"
+        },
+        {
+          "value": "3",
+          "label": "㎡"
+        },
+        {
+          "value": "4",
+          "label": "包"
+        },
+        {
+          "value": "5",
+          "label": "卷"
+        },
+        {
+          "value": "6",
+          "label": "只"
+        },
+        {
+          "value": "8",
+          "label": "块"
+        },
+        {
+          "value": "9",
+          "label": "套"
+        },
+        {
+          "value": "10",
+          "label": "对"
+        },
+        {
+          "value": "11",
+          "label": "批"
+        },
+        {
+          "value": "12",
+          "label": "根"
+        },
+        {
+          "value": "13",
+          "label": "次"
+        },
+        {
+          "value": "14",
+          "label": "段"
+        },
+        {
+          "value": "15",
+          "label": "片"
+        },
+        {
+          "value": "16",
+          "label": "给"
+        },
+        {
+          "value": "17",
+          "label": "颗"
+        }
+      ],
+      "all_items": [
+        {
+          "value": "7",
+          "label": "pcs",
+          "status": 1
+        },
+        {
+          "value": "1",
+          "label": "个",
+          "status": 1
+        },
+        {
+          "value": "2",
+          "label": "米",
+          "status": 1
+        },
+        {
+          "value": "3",
+          "label": "㎡",
+          "status": 1
+        },
+        {
+          "value": "4",
+          "label": "包",
+          "status": 1
+        },
+        {
+          "value": "5",
+          "label": "卷",
+          "status": 1
+        },
+        {
+          "value": "6",
+          "label": "只",
+          "status": 1
+        },
+        {
+          "value": "8",
+          "label": "块",
+          "status": 1
+        },
+        {
+          "value": "9",
+          "label": "套",
+          "status": 1
+        },
+        {
+          "value": "10",
+          "label": "对",
+          "status": 1
+        },
+        {
+          "value": "11",
+          "label": "批",
+          "status": 1
+        },
+        {
+          "value": "12",
+          "label": "根",
+          "status": 1
+        },
+        {
+          "value": "13",
+          "label": "次",
+          "status": 1
+        },
+        {
+          "value": "14",
+          "label": "段",
+          "status": 1
+        },
+        {
+          "value": "15",
+          "label": "片",
+          "status": 1
+        },
+        {
+          "value": "16",
+          "label": "给",
+          "status": 1
+        },
+        {
+          "value": "17",
+          "label": "颗",
+          "status": 1
+        }
+      ],
+      "label_map": {
+        "7": "pcs",
+        "1": "个",
+        "2": "米",
+        "3": "㎡",
+        "4": "包",
+        "5": "卷",
+        "6": "只",
+        "8": "块",
+        "9": "套",
+        "10": "对",
+        "11": "批",
+        "12": "根",
+        "13": "次",
+        "14": "段",
+        "15": "片",
+        "16": "给",
+        "17": "颗"
+      }
+    },
+    "equipment_series": {
+      "dict_code": "equipment_series",
+      "dict_name": "设备系列",
+      "items": [
+        {
+          "value": "1",
+          "label": "链式"
+        },
+        {
+          "value": "2",
+          "label": "槽式"
+        },
+        {
+          "value": "3",
+          "label": "测试"
+        },
+        {
+          "value": "4",
+          "label": "服务"
+        },
+        {
+          "value": "5",
+          "label": "软件"
+        },
+        {
+          "value": "6",
+          "label": "DF-1500B"
+        },
+        {
+          "value": "7",
+          "label": "DF-1500TB"
+        },
+        {
+          "value": "8",
+          "label": "DF-2000B"
+        },
+        {
+          "value": "9",
+          "label": "DF-2000LB"
+        },
+        {
+          "value": "10",
+          "label": "DF-2000NB"
+        },
+        {
+          "value": "11",
+          "label": "DF-2000TB"
+        },
+        {
+          "value": "12",
+          "label": "DF-3000B"
+        },
+        {
+          "value": "13",
+          "label": "DF-3000LB"
+        },
+        {
+          "value": "14",
+          "label": "FY-2000S"
+        },
+        {
+          "value": "15",
+          "label": "FY-3000S"
+        },
+        {
+          "value": "16",
+          "label": "SZ-0100A"
+        },
+        {
+          "value": "17",
+          "label": "SZ-0200B"
+        },
+        {
+          "value": "18",
+          "label": "TW-0100A"
+        }
+      ],
+      "all_items": [
+        {
+          "value": "1",
+          "label": "链式",
+          "status": 1
+        },
+        {
+          "value": "2",
+          "label": "槽式",
+          "status": 1
+        },
+        {
+          "value": "3",
+          "label": "测试",
+          "status": 1
+        },
+        {
+          "value": "4",
+          "label": "服务",
+          "status": 1
+        },
+        {
+          "value": "5",
+          "label": "软件",
+          "status": 1
+        },
+        {
+          "value": "6",
+          "label": "DF-1500B",
+          "status": 1
+        },
+        {
+          "value": "7",
+          "label": "DF-1500TB",
+          "status": 1
+        },
+        {
+          "value": "8",
+          "label": "DF-2000B",
+          "status": 1
+        },
+        {
+          "value": "9",
+          "label": "DF-2000LB",
+          "status": 1
+        },
+        {
+          "value": "10",
+          "label": "DF-2000NB",
+          "status": 1
+        },
+        {
+          "value": "11",
+          "label": "DF-2000TB",
+          "status": 1
+        },
+        {
+          "value": "12",
+          "label": "DF-3000B",
+          "status": 1
+        },
+        {
+          "value": "13",
+          "label": "DF-3000LB",
+          "status": 1
+        },
+        {
+          "value": "14",
+          "label": "FY-2000S",
+          "status": 1
+        },
+        {
+          "value": "15",
+          "label": "FY-3000S",
+          "status": 1
+        },
+        {
+          "value": "16",
+          "label": "SZ-0100A",
+          "status": 1
+        },
+        {
+          "value": "17",
+          "label": "SZ-0200B",
+          "status": 1
+        },
+        {
+          "value": "18",
+          "label": "TW-0100A",
+          "status": 1
+        }
+      ],
+      "label_map": {
+        "1": "链式",
+        "2": "槽式",
+        "3": "测试",
+        "4": "服务",
+        "5": "软件",
+        "6": "DF-1500B",
+        "7": "DF-1500TB",
+        "8": "DF-2000B",
+        "9": "DF-2000LB",
+        "10": "DF-2000NB",
+        "11": "DF-2000TB",
+        "12": "DF-3000B",
+        "13": "DF-3000LB",
+        "14": "FY-2000S",
+        "15": "FY-3000S",
+        "16": "SZ-0100A",
+        "17": "SZ-0200B",
+        "18": "TW-0100A"
+      }
+    }
+  }
+}

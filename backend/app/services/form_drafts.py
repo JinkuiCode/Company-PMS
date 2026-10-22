@@ -200,8 +200,11 @@ def save_draft(db, context, data, request=None):
     if existing:
         policies=_policies(db)
         # Re-saving the visible editable projection must not erase protected history.
+        from app.services.field_policy import archive_form_field_visible
+        merged = {**json.loads(existing.payload_json), **payload}
         retained={key:value for key,value in json.loads(existing.payload_json).items()
-                  if key not in policies or not policies[key]['visible'] or not policies[key]['editable']}
+                  if key not in policies or not policies[key]['visible'] or not policies[key]['editable']
+                  or not archive_form_field_visible(policies[key], merged)}
         payload={**retained,**payload}
     encoded = json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(',',':'))
     if len(encoded.encode('utf-8')) > 65536: raise HTTPException(422,'草稿内容过大')
@@ -254,6 +257,9 @@ def submit_draft(db, context, draft_id, version, request=None):
             return {'id':row.archive_id,'msg':'该草稿已保存为正式档案','replayed':True}
         _claim(db,row,version,status='used')
         payload=_clean(db,context,json.loads(row.payload_json))
+        # Restoring old omissions is not a new-form initialization.
+        for key in ('quantity', 'quantity_unit', 'manager_id'):
+            payload.setdefault(key, None)
         try: data=ArchiveCreate.model_validate(payload)
         except ValidationError as exc:
             raise _schema_errors(exc) from None

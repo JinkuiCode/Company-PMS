@@ -17,8 +17,10 @@ from app.services.project_sheet_fields import PROJECT_SHEET_FIELDS, PROJECT_SHEE
 MODULE_PROJECT_ARCHIVE = "project_archive"
 MODULE_PROJECT_PROGRESS = "project_progress"
 SUPPORTED_MODULES = {MODULE_PROJECT_ARCHIVE, MODULE_PROJECT_PROGRESS}
-ARCHIVE_GOVERNANCE_REQUIRED_FIELDS = ('archive_category', 'machine_model', 'quantity', 'quantity_unit', 'manager_id')
-ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS = ('equipment_series', 'serial_no')
+ARCHIVE_GOVERNANCE_REQUIRED_FIELDS = ('archive_category', 'manager_id')
+ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS = ('machine_model', 'quantity', 'quantity_unit', 'equipment_series', 'serial_no')
+ARCHIVE_FORM_HIDDEN_FIELDS = ('customer_full_name', 'legacy_archive_status', 'legacy_code_date', 'legacy_updated_date', 'delivery_note', 'remarks')
+ARCHIVE_FORM_MAIN_FIELDS = ('equipment_series', 'serial_no')
 ARCHIVE_MAIN_CATEGORY_VALUE = 1
 
 
@@ -39,6 +41,8 @@ def _registry_field(
     list_available_locked: bool = False,
     enum_code: str | None = None,
     required_when: dict | None = None,
+    form_hidden: bool = False,
+    form_visible_when: dict | None = None,
 ) -> dict[str, Any]:
     return {
         "key": key,
@@ -49,6 +53,8 @@ def _registry_field(
         "source_type": source_type,
         "enum_code": enum_code,
         "required_when": required_when,
+        "form_hidden": form_hidden,
+        "form_visible_when": form_visible_when,
         "default_visible": visible,
         "default_editable": editable,
         "default_required": required,
@@ -77,22 +83,26 @@ from app.services.offline_archive_fields import OFFLINE_FIELDS
 ARCHIVE_FIELDS = [
     *[_registry_field(k, v['label'], 'basic', value_type=('select' if v['enum_code'] else 'date' if v['sql_type']=='DATE' else 'number' if k=='quantity' else 'long_text' if k in {'remarks','delivery_note'} else 'text'), enum_code=v['enum_code'],
         editable=k!='customer_full_name', required=k in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS,
-        required_locked=k in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS,
-        visible_locked=k in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS,
-        editable_locked=k in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS) for k,v in OFFLINE_FIELDS.items()],
+        required_locked=k in (*ARCHIVE_GOVERNANCE_REQUIRED_FIELDS, *ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS),
+        required_when={'field':'archive_category','values':[ARCHIVE_MAIN_CATEGORY_VALUE]} if k in ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS else None,
+        form_hidden=k in ARCHIVE_FORM_HIDDEN_FIELDS,
+        visible_locked=k in (*ARCHIVE_GOVERNANCE_REQUIRED_FIELDS, *ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS),
+        editable_locked=k in (*ARCHIVE_GOVERNANCE_REQUIRED_FIELDS, *ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS)) for k,v in OFFLINE_FIELDS.items()],
     _registry_field("project_code", "项目编号", "basic", required=True, visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("project_name", "项目名称", "basic", required=True, visible_locked=True, editable_locked=True, required_locked=True),
-    _registry_field("customer", "客户", "basic"),
+    _registry_field("customer", "客户", "basic", required_when={'field':'archive_category','values':[ARCHIVE_MAIN_CATEGORY_VALUE]}),
     _registry_field("product_category", "产品类别（已停用）", "basic", visible=False, editable=False, list_available=False, visible_locked=True, required_locked=True),
     _registry_field("product_line_id", "产品线", "basic", value_type="select", required=True,
                     visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("manager_id", "负责人", "basic", value_type="user", required=True, required_locked=True, visible_locked=True, editable_locked=True),
     _registry_field("equipment_series", "设备系列", "basic", value_type="select", enum_code="equipment_series", visible_locked=True, editable_locked=True,
-                    required_when={'field':'archive_category','values':[ARCHIVE_MAIN_CATEGORY_VALUE]}),
+                    required_when={'field':'archive_category','values':[ARCHIVE_MAIN_CATEGORY_VALUE]},
+                    form_visible_when={'field':'archive_category','values':[ARCHIVE_MAIN_CATEGORY_VALUE]}),
     _registry_field("serial_no", "序列号", "basic", visible_locked=True, editable_locked=True,
-                    required_when={'field':'archive_category','values':[ARCHIVE_MAIN_CATEGORY_VALUE]}),
-    _registry_field("contract_signed_date", "合同签订日期", "contract", value_type="date", required=True, visible_locked=True, editable_locked=True, required_locked=True),
-    _registry_field("contract_ship_date", "合同出货日期", "contract", value_type="date", required=True, visible_locked=True, editable_locked=True, required_locked=True),
+                    required_when={'field':'archive_category','values':[ARCHIVE_MAIN_CATEGORY_VALUE]},
+                    form_visible_when={'field':'archive_category','values':[ARCHIVE_MAIN_CATEGORY_VALUE]}),
+    _registry_field("contract_signed_date", "合同签订日期", "contract", value_type="date", required=False, visible_locked=True, editable_locked=True, required_locked=True),
+    _registry_field("contract_ship_date", "合同出货日期", "contract", value_type="date", required=False, visible_locked=True, editable_locked=True, required_locked=True),
     _registry_field("actual_ship_date", "实际出货日期", "contract", value_type="date"),
     _registry_field("warranty_end_date", "质保截止日期", "contract", value_type="date"),
     _registry_field("address_province", "项目地址省份", "contact"),
@@ -200,6 +210,11 @@ def get_effective_field_policies(db: Session, module_code: str) -> dict[str, Any
                 *ARCHIVE_GOVERNANCE_REQUIRED_FIELDS, *ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS),
             "updated_at": row.updated_at if row else None,
         }
+        if module_code == MODULE_PROJECT_ARCHIVE:
+            if base['key'] == 'quantity':
+                item['default_value'] = 1
+            elif base['key'] == 'quantity_unit':
+                item['default_value'] = archive_default_unit(db)
         items.append(item)
 
     group_labels = {group["key"]: group["label"] for group in GROUPS_BY_MODULE[module_code]}
@@ -208,6 +223,24 @@ def get_effective_field_policies(db: Session, module_code: str) -> dict[str, Any
         "groups": GROUPS_BY_MODULE[module_code],
         "items": [{**item, "group_label": group_labels.get(item["group"], item["group"])} for item in items],
     }
+
+
+def archive_default_unit(db: Session) -> int | None:
+    """Stable dictionary identity; no name-only guess, disabled value or duplicate pcs default."""
+    from app.models.dict import SysDict, SysDictItem
+    rows = db.query(SysDictItem).join(SysDict, SysDict.id == SysDictItem.dict_id).filter(
+        SysDict.dict_code == 'archive_quantity_unit', SysDict.status == 1,
+        func.lower(SysDictItem.item_label) == 'pcs').all()
+    if len(rows) != 1 or rows[0].status != 1 or rows[0].item_value != '7':
+        return None
+    return int(rows[0].item_value)
+
+
+def archive_form_field_visible(policy: dict, values: dict) -> bool:
+    if policy.get('form_hidden'):
+        return False
+    when = policy.get('form_visible_when')
+    return not when or values.get(when['field']) in when['values']
 
 
 def _raise_invalid(field_key: str, message: str) -> None:
@@ -317,7 +350,7 @@ def reset_field_policies(
         # Keep the original introduction cutoff for immutable contract requirements.
         if module_code == MODULE_PROJECT_ARCHIVE and row.field_key in {"contract_signed_date", "contract_ship_date", *ARCHIVE_GOVERNANCE_REQUIRED_FIELDS, *ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS}:
             row.visible = row.editable = row.list_available = True
-            row.required = row.field_key not in ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS
+            row.required = row.field_key in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS
             after[row.field_key] = serialize_model(row)
         else:
             db.delete(row)
@@ -401,7 +434,10 @@ def validate_business_field_write(
     for policy in effective["items"]:
         if not policy["required"]:
             continue
-        if module_code == MODULE_PROJECT_ARCHIVE and policy['field_key'] in ARCHIVE_GOVERNANCE_REQUIRED_FIELDS:
+        when = policy.get("required_when")
+        if when and merged.get(when["field"]) not in when["values"]:
+            continue
+        if module_code == MODULE_PROJECT_ARCHIVE and policy['field_key'] in (*ARCHIVE_GOVERNANCE_REQUIRED_FIELDS, *ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS):
             continue
         effective_at = policy.get("required_effective_at")
         # 代码级结构必填继续由 Pydantic/数据库负责；这里仅执行后来启用的业务必填。

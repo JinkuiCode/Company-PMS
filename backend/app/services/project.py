@@ -1214,10 +1214,14 @@ def create_archive(
 ):
     """创建项目档案"""
     values = _normalize_archive_values(data.model_dump())
-    if 'manager_id' not in data.model_fields_set:
-        manager_policy = next(item for item in get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)['items'] if item['field_key'] == 'manager_id')
-        if manager_policy['editable']:
-            values['manager_id'] = user_id
+    policies = get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)
+    for policy in policies['items']:
+        key = policy['field_key']
+        if key not in data.model_fields_set and policy['visible'] and policy['editable']:
+            if key == 'manager_id':
+                values[key] = user_id
+            elif 'default_value' in policy:
+                values[key] = policy['default_value']
     _ensure_archive_unique_values(db, values)
     if values.get("product_category") is not None:
         raise HTTPException(422, "产品类别已停用，请使用产品线和档案类别")
@@ -1244,6 +1248,7 @@ def create_archive(
         updates=values,
         entity_created_at=None,
         is_create=True,
+        effective_policies=policies,
     )
     try:
         storage_values = dict(values)

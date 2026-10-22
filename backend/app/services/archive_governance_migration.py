@@ -6,7 +6,9 @@ from app.models.archive_change import ArchiveChange
 from app.models.database_revision import PmsDatabaseRevision
 from app.models.field_policy import SysBusinessFieldPolicy
 from app.models.dict import SysDict, SysDictItem
-from app.services.field_policy import ARCHIVE_GOVERNANCE_REQUIRED_FIELDS, ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS
+# Historical seven-field input is immutable; later runtime policies must not rewrite this migration.
+ARCHIVE_GOVERNANCE_REQUIRED_FIELDS = ('archive_category', 'machine_model', 'quantity', 'quantity_unit', 'manager_id')
+ARCHIVE_GOVERNANCE_CONDITIONAL_FIELDS = ('equipment_series', 'serial_no')
 
 PREVIOUS='2026-10-12-feedback-02'
 FIRST_REVISION='2026-10-14-archive-governance-01'

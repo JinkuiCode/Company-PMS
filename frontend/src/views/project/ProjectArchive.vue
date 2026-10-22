@@ -174,7 +174,7 @@ import OfflineArchiveTools from './OfflineArchiveTools.vue'
 import ArchiveRecordForm from './ArchiveRecordForm.vue'
 import { newSubmissionId } from '@/utils/submissionId'
 import ArchiveChangeList from './ArchiveChangeList.vue'
-import { orderArchiveGroups, governanceFieldVisible, governanceFieldRequired } from './archiveGovernance'
+import { orderArchiveGroups, governanceFieldVisible, governanceFieldRequired, archiveNewFormDefaults, archiveCreateFieldIncluded, reconcileArchiveFormLine } from './archiveGovernance'
 import { offlineArchiveFields, offlineEnumCodes, normalizeOfflineValue, archiveQuantityError } from './offlineArchiveFields'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
@@ -183,7 +183,7 @@ import { usePersistentDraft, type PersistentDraft } from '@/form-system/usePersi
 import { archiveDraftApi } from '@/api/formDraft'
 import ArchiveDraftList from './ArchiveDraftList.vue'
 import { archiveDraftIdentityErrors } from './archiveDraftValidation'
-import { filterArchiveLinkedOptions, reconcileArchiveLinkedFields, type ArchiveFieldLinkage } from './archiveFieldLinkage'
+import { filterArchiveLinkedOptions, type ArchiveFieldLinkage } from './archiveFieldLinkage'
 import { ref, reactive, computed, defineComponent, h, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Delete, Search, Close } from '@element-plus/icons-vue'
@@ -274,6 +274,9 @@ type EffectiveArchiveField = {
   required_effective_at?: string | null
   required_when?: { field: string; values: Array<string | number> } | null
   governance_required?: boolean
+  form_hidden?: boolean
+  form_visible_when?: { field: string; values: Array<string | number> } | null
+  default_value?: unknown
   list_available: boolean
 }
 
@@ -413,9 +416,7 @@ const effectiveArchiveFieldMap = computed(() => new Map(
 const legacyArchiveRequiredFields = new Set([
   'project_code',
   'project_name',
-  'archive_category', 'machine_model', 'quantity', 'quantity_unit', 'manager_id', 'product_line_id',
-  'contract_signed_date',
-  'contract_ship_date',
+  'archive_category', 'manager_id', 'product_line_id',
 ])
 
 function archiveFieldPolicy(fieldKey: string) {
@@ -821,8 +822,25 @@ function changeArchiveDrawerSelect(fieldKey: string) {
 }
 
 function reconcileArchiveLine(values: Record<string, any>) {
-  const cleared = reconcileArchiveLinkedFields(archiveFieldLinkage.value, values)
-  if (cleared.length) ElMessage.warning('已清除与新产品线不匹配的选项，请重新选择机型或设备系列')
+  const result = reconcileArchiveFormLine(archiveFieldLinkage.value, values, archiveFieldPolicy('equipment_series'))
+  const correction = values === form ? archiveCreateSeriesCorrection : archiveDrawerSeriesCorrection
+  if (result.seriesCorrection) {
+    correction.value = true
+    ElMessage.warning(archiveFieldVisible('equipment_series') && archiveFieldEditable('equipment_series')
+      ? '原设备系列不适用于新产品线，请重新选择或清空'
+      : '设备系列与新产品线不兼容，当前无权修正，请联系有权限人员处理')
+  }
+  if (result.cleared.length) ElMessage.warning('已清除与新产品线不匹配的选项，请重新选择机型或设备系列')
+}
+function validateArchiveSeriesCorrection(values: Record<string, any>, errors: Record<string, string>) {
+  const correction = values === form ? archiveCreateSeriesCorrection : archiveDrawerSeriesCorrection
+  if (!correction.value || filterArchiveLinkedOptions(archiveFieldLinkage.value, values.product_line_id,
+    'equipment_series', [{value: values.equipment_series}]).length) return true
+  const allowed = archiveFieldVisible('equipment_series') && archiveFieldEditable('equipment_series')
+  const key = allowed ? 'equipment_series' : 'product_line_id'
+  errors[key] = allowed ? '原设备系列不适用于新产品线，请重新选择或清空' : '设备系列与新产品线不兼容，当前无权修正，请联系有权限人员处理'
+  ElMessage.warning(errors[key])
+  return false
 }
 
 function archiveAddressFieldVisible(fieldKey: string, values: Record<string, any>) {
@@ -1025,6 +1043,12 @@ const archiveCreateSession = useFormSession({
 })
 const archiveCreateSaving = computed(() => archiveCreateSession.busy.value || archiveCreateOpening.value || archiveDraftChecking.value)
 const persistentDraft = usePersistentDraft(archiveDraftApi)
+const archiveDraftSerialCorrection = ref(false)
+const archiveRestoredDraft = ref(false)
+const archiveRegionalCopy = ref(false)
+const archiveCreateEditedKeys = new Set<string>()
+const archiveCreateSeriesCorrection = ref(false)
+const archiveDrawerSeriesCorrection = ref(false)
 const archiveDraftConflictNotice = ref<HTMLElement | null>(null)
 watch(() => persistentDraft.conflict.value, async conflict => {
   if (!conflict) return
@@ -1085,20 +1109,18 @@ const archiveDrawerGroups = computed(() => archiveOrderedGroups.map(group => ({
   ...group,
   fields: group.fields.filter((field) => {
     if (field.key === 'erp_error_msg') return Boolean(selectedArchive.value?.erp_error_msg)
-    return archiveFieldVisible(field.key) && governanceFieldVisible(field.key, archiveDrawerForm) && archiveAddressFieldVisible(field.key, archiveDrawerForm)
+    return archiveFieldVisible(field.key) && (governanceFieldVisible(field.key, archiveDrawerForm, false, archiveFieldPolicy(field.key)) || (field.key === 'equipment_series' && archiveDrawerSeriesCorrection.value && archiveDrawerFieldEditable(field))) && archiveAddressFieldVisible(field.key, archiveDrawerForm)
   }),
 })).filter(group => group.fields.length > 0))
 
 const archiveCreateGroups = computed(() => archiveOrderedGroups.map(group => ({
   ...group, fields: group.fields.filter(field => field.source_type === 'archive'
-    && archiveFieldVisible(field.key) && governanceFieldVisible(field.key, form, true) && archiveAddressFieldVisible(field.key, form)),
+    && archiveFieldVisible(field.key) && (governanceFieldVisible(field.key, form, true, archiveFieldPolicy(field.key)) || (field.key === 'serial_no' && archiveDraftSerialCorrection.value && archiveFieldEditable(field.key)) || (field.key === 'equipment_series' && archiveCreateSeriesCorrection.value && archiveFieldEditable(field.key))) && archiveAddressFieldVisible(field.key, form)),
 })).filter(group => group.fields.length > 0))
 
 const legacyArchiveRules: FormRules = {
   project_code: [{ required: true, message: '请输入项目编号' }],
   project_name: [{ required: true, message: '请输入项目名称' }],
-  contract_signed_date: [{ required: true, message: '请选择合同签订日期' }],
-  contract_ship_date: [{ required: true, message: '请选择合同出货日期' }],
 }
 
 function archiveAddressComplete(values: Record<string, any>) {
@@ -1376,6 +1398,11 @@ async function openCreateDialog() {
   archiveCreateOpening.value = false
   if (persistentDraft.unknown.value) { ElMessage.warning('请先核对上次保存结果'); return }
   persistentDraft.startNew()
+  archiveRestoredDraft.value = false
+  archiveRegionalCopy.value = false
+  archiveCreateEditedKeys.clear()
+  archiveDraftSerialCorrection.value = false
+  archiveCreateSeriesCorrection.value = false
   archiveCreateValidationIntent.value = 'draft'
   archiveDraftWarnings.value = []; archiveDraftValueLabels.value = {}
   formRef.value?.resetFields()
@@ -1392,6 +1419,7 @@ async function openCreateDialog() {
     ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, field.key === 'product_line_id' || field.value_type === 'number' || (field.value_type === 'select' && !field.key.startsWith('address_')) ? null : ''])),
   })
   form.product_line_id = archiveDraftProductLines.options.value.length === 1 ? archiveDraftProductLines.options.value[0]!.value : null
+  Object.assign(form, archiveNewFormDefaults(effectiveArchiveFields.value))
   archiveCreateSession.capture()
   dialogVisible.value = true
   await refreshArchiveEnums()
@@ -1430,6 +1458,11 @@ async function applyArchiveDraft(row: PersistentDraft) {
   Object.assign(form, defaults, row.payload, {id: 0})
   // Draft read responses are projected by current visibility; noneditable values only display.
   persistentDraft.attach(row)
+  archiveRestoredDraft.value = true
+  archiveRegionalCopy.value = false
+  archiveCreateEditedKeys.clear()
+  archiveDraftSerialCorrection.value = false
+  archiveCreateSeriesCorrection.value = false
   archiveDraftWarnings.value = row.warnings || []; archiveDraftValueLabels.value = row.value_labels || {}
   clearArchiveServerErrors(archiveCreateServerErrors)
   archiveCreateSession.capture()
@@ -1457,6 +1490,7 @@ async function loadLatestArchiveDraft() {
 async function saveArchiveDraftAsNew() {
   if (archiveCreateSaving.value || persistentDraft.unknown.value) return
   persistentDraft.startNew()
+  archiveRegionalCopy.value = true
   await saveArchiveDraft()
 }
 async function saveArchiveDraft() {
@@ -1465,6 +1499,7 @@ async function saveArchiveDraft() {
     validate: async () => {
       if (!archiveEnumsReady()) return false
       await setArchiveCreateValidationIntent('draft')
+      if (!validateArchiveSeriesCorrection(form, archiveCreateServerErrors)) return false
       const valid = Boolean(await formRef.value?.validate().catch(() => false))
       const errors = archiveDraftIdentityErrors(form)
       const firstField = Object.keys(errors)[0]
@@ -1481,7 +1516,7 @@ async function saveArchiveDraft() {
       await focusArchivePolicyValidation(error)
     },
   })
-  if (result.status === 'success') { ElMessage.success('草稿已保存'); return true }
+  if (result.status === 'success') { archiveDraftSerialCorrection.value = false; archiveCreateSeriesCorrection.value = false; archiveRegionalCopy.value = false; archiveCreateEditedKeys.clear(); ElMessage.success('草稿已保存'); return true }
   return false
 }
 async function reconcileArchiveDraft() {
@@ -1517,7 +1552,9 @@ function buildArchiveCreatePayload(values: Record<string, any> = form) {
     ...Object.fromEntries(archiveExpansionFields.map(field => [field.key, normalizeOfflineValue(field.key, values[field.key])])),
   }
   Object.entries(fields).forEach(([fieldKey, value]) => {
-    if (!archiveFieldVisible(fieldKey) || !archiveFieldEditable(fieldKey)) return
+    if (!archiveFieldVisible(fieldKey) || !archiveFieldEditable(fieldKey)
+      || !(archiveCreateFieldIncluded(fieldKey, values, archiveFieldPolicy(fieldKey), archiveDraftSerialCorrection.value, archiveRegionalCopy.value, archiveCreateEditedKeys.has(fieldKey))
+        || (fieldKey === 'equipment_series' && archiveCreateSeriesCorrection.value))) return
     payload[fieldKey] = value
   })
   return payload
@@ -1560,6 +1597,7 @@ function resetArchiveDrawer(row: any) {
   archiveDrawerLifecycleConflict.value = false
   const values = archiveDrawerValues(row)
   Object.keys(archiveDrawerForm).forEach(key => delete archiveDrawerForm[key])
+  archiveDrawerSeriesCorrection.value = false
   Object.assign(archiveDrawerForm, values)
   archiveOriginalValues.value = { ...values }
   archivePendingChanges.value = {}
@@ -1764,7 +1802,9 @@ function buildArchiveDrawerPayload() {
 
 function updateArchiveCreateField(key: string, value: any) {
   if (!archiveEnumChangeAllowed(key, value)) return
-  form[key] = value
+  archiveCreateEditedKeys.add(key)
+  // Element Plus selectors emit undefined when cleared; preserve explicit empty intent.
+  form[key] = value === undefined ? null : value
   changeArchiveCreateSelect(key)
 }
 
@@ -1912,6 +1952,8 @@ async function focusArchiveUniqueConflict(
 ) {
   const conflict = archiveUniqueConflict(error)
   if (!conflict) return false
+  if (conflict.field_key === 'serial_no' && targetForm === formRef && (persistentDraft.version.value || archiveRestoredDraft.value)
+    && archiveFieldVisible('serial_no') && archiveFieldEditable('serial_no')) archiveDraftSerialCorrection.value = true
   targetErrors[conflict.field_key] = conflict.message
   await nextTick()
   targetForm.value?.scrollToField(conflict.field_key)
@@ -1938,6 +1980,7 @@ async function handleSubmit() {
     validate: async () => {
       if (!archiveEnumsReady()) return false
       await setArchiveCreateValidationIntent('formal')
+      if (!validateArchiveSeriesCorrection(form, archiveCreateServerErrors)) return false
       try { return Boolean(await formRef.value?.validate()) }
       catch (fields) {
         const errors = fields && typeof fields === 'object' ? fields as Record<string, unknown> : {}
@@ -2022,6 +2065,7 @@ async function saveArchiveDrawer() {
   commitArchiveFieldEdit()
   if (!archivePendingChangeCount.value) return
 
+  if (!validateArchiveSeriesCorrection(archiveDrawerForm, archiveDrawerServerErrors)) return
   const valid = await archiveDrawerFormRef.value?.validate().catch(() => false)
   if (!valid) return
 
@@ -2068,6 +2112,7 @@ async function saveArchiveDrawer() {
 
   archivePendingChanges.value = {}
   archiveEditingField.value = null
+  archiveDrawerSeriesCorrection.value = false
 
   let refreshSucceeded = true
   try {

@@ -125,7 +125,8 @@ class GovernanceUpgrade(unittest.TestCase):
         with self.engine.begin() as c: PmsFormDraft.__table__.drop(c)
         upgrade_draft_management(self.engine)
         with patch.object(upgrade, 'engine', self.engine), patch.object(upgrade, 'validate_runtime_config'), patch.object(upgrade, 'init_db') as initializer:
-            upgrade.upgrade_database()
+            with self.assertRaisesRegex(RuntimeError,'archive-policy-only'):
+                upgrade.upgrade_database()
             initializer.assert_not_called()
         with self.engine.connect() as c:
             self.assertEqual(c.execute(text("SELECT COUNT(*) FROM sys_menu WHERE permission_code='project:archive:maintain'")).scalar(), 0)
