@@ -11,6 +11,7 @@ from app.services.inventory_reader import (InventoryQuery, report_fields, list_i
 from app.services.purchase_connection import purchase_connection
 from app.services.business_data_scope import has_all_business_data, ALL_DATA_SCOPE
 from app.services.report_filters import query_fields
+from app.services.report_material_reference import list_material_candidates, material_organizations, validate_reference_query
 
 router = APIRouter(prefix='/api/reports/inventory', tags=['即时库存查询'])
 
@@ -47,9 +48,11 @@ def metadata(db: Session=Depends(get_db),ctx=Depends(require_permission('report:
 def query_rows(query,db,ctx):
     organizations=effective_organizations(query,authorized_organizations(db,ctx))
     if organizations == []:
+        validate_reference_query(None, query, organizations)
         return {'items':[],'total':0}
     resolve_product_lines(db, query)
     with inventory_connection() as connection:
+        validate_reference_query(connection, query, organizations)
         return list_inventory(connection,query,organizations)
 
 
@@ -70,6 +73,24 @@ def options(field: Literal['Stock'],keyword: str=Query('',max_length=100),
         return {'items':[],'has_more':False}
     with inventory_connection() as connection:
         return list_options(connection,field,keyword,organizations)
+
+
+@router.get('/material-reference-options')
+def material_reference_options(keyword: str=Query('',max_length=100),
+        organization_id: int | None=Query(None,gt=0),
+        page: int=Query(1,ge=1,le=1000000), page_size: int=Query(50,ge=1,le=500),
+        ids: list[str]=Query(default=[],max_length=1000), batch_field: Literal['code','name']='code',
+        batch_values: list[str]=Query(default=[],max_length=1000),
+        db: Session=Depends(get_db),ctx=Depends(require_permission('report:inventory:view'))):
+    organizations=material_organizations([organization_id] if organization_id else [],authorized_organizations(db,ctx))
+    if organizations == []:
+        return list_material_candidates(None,keyword,organizations,page=page,page_size=page_size,ids=ids,batch_field=batch_field,batch_values=batch_values)
+    with inventory_connection() as connection:
+        cursor=connection.cursor()
+        try:
+            return list_material_candidates(cursor,keyword,organizations,page=page,page_size=page_size,ids=ids,batch_field=batch_field,batch_values=batch_values)
+        finally:
+            cursor.close()
 
 
 @router.get('/export')
@@ -95,4 +116,5 @@ def column_options(field: str = Query(max_length=100), keyword: str = Query('', 
         return dict(items=[], total=0, page=page, page_size=page_size, has_more=False)
     resolve_product_lines(db, query)
     with inventory_connection() as connection:
+        validate_reference_query(connection, query, organizations)
         return inventory_candidates(connection, query, organizations, field, keyword, page, page_size)

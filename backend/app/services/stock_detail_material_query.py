@@ -5,6 +5,10 @@ from app.services.report_filters import compile_predicate
 
 
 def material_predicate(query):
+    if getattr(query, 'material_codes', []):
+        from app.services.report_material_reference import normalize_codes
+        return compile_predicate(build_query_clause(literal_column('M.FNUMBER'), 'text',
+            dict(schemaVersion=2, operator='in', value=normalize_codes(query.material_codes)), membership=True))
     field = query.material_field
     columns = {'material_code': 'M.FNUMBER',
         'material_name': '(SELECT MAX(ML.FNAME) FROM dbo.T_BD_MATERIAL_L ML WHERE ML.FMATERIALID=M.FMATERIALID AND ML.FLOCALEID=2052)',

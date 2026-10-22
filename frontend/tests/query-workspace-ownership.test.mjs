@@ -16,9 +16,9 @@ const compiled = ts.transpileModule(script.content, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText
 
-function fixture(t) {
+export function fixture(t) {
   const data = new Map(), writes = []
-  const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => { writes.push(key); data.set(key, value) } }
+  const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => { writes.push(key); if(storage.fail)throw Error('storage unavailable');data.set(key, value) } }
   for (const [user, list, value] of [[1, 'archive', 'A'], [2, 'archive', 'B'], [1, 'projects', 'P']]) {
     workspace.saveScheme(storage, workspace.schemeStorageKey(user, list), [], {
       name: `${value}-scheme`, definitions: [{ ...defaults[0], value }], isDefault: true, preferences: { owner: value },
@@ -27,12 +27,14 @@ function fixture(t) {
   writes.length = 0
   const auth = vue.reactive({ user: { id: 1 } })
   const props = vue.reactive({ listKey: 'archive', fields, defaults, ready: true })
+  const confirmations=[],confirmResults=[];let leaveGuard
   const sandbox = { exports: {}, localStorage: storage, require: name => {
     if (name === 'vue') return vue
+    if (name === 'vue-router') return {onBeforeRouteLeave:guard=>{leaveGuard=guard}}
     if (name === './core') return core
     if (name === './workspace') return workspace
     if (name === '@/stores/auth') return { useAuthStore: () => auth }
-    if (name === 'element-plus') return { ElMessage: { warning() {}, success() {} } }
+    if (name === 'element-plus') return { ElMessage: { warning() {}, success() {} },ElMessageBox:{confirm:(...args)=>{confirmations.push(args);const result=confirmResults.shift();return typeof result==='function'?result():result===false?Promise.reject('cancel'):Promise.resolve()}} }
     return {}
   } }
   vm.runInNewContext(compiled, sandbox)
@@ -66,7 +68,7 @@ function fixture(t) {
     assert.equal(state.editDefinitions.value.length, 0)
     assert.equal(Object.keys(state.configErrors.value).length, 0)
   }
-  return { auth, props, state, data, writes, events, openDraft, assertCleared }
+  return { auth, props, state, data, writes, events, openDraft, assertCleared,storage,confirmations,confirmResults,get leaveGuard(){return leaveGuard} }
 }
 
 test('user change closes and discards the previous user settings draft', async t => {

@@ -22,6 +22,7 @@ from app.services.purchase_fields import report_fields, overview_fields, DOCUMEN
 from app.services.report_filters import filter_fields, query_fields
 from app.services.query_conditions import build_query_clause, scalar
 from app.services.purchase_query_labels import resolve_query_labels
+from app.services.report_material_reference import list_material_candidates, material_organizations, validate_reference_query
 
 router = APIRouter(prefix='/api/reports/purchase', tags=['采购进度查询'])
 
@@ -125,6 +126,7 @@ def overview(query: Annotated[PurchaseOverviewQuery, Query()], db: Session = Dep
     resolve_project_references(db, ctx, query)
     resolve_query_labels(db, ctx, query)
     with report_connection() as connection:
+        validate_reference_query(connection, query, authorized_organizations(db, ctx))
         result = list_overview(connection, query, project_scope(db, ctx))
         enrich_product_lines(db, connection, result['items'])
         ids = sorted({row['organization_id'] for row in result['items']})
@@ -144,6 +146,7 @@ def listing(query: Annotated[PurchaseQuery, Query()], db: Session = Depends(get_
     resolve_query_labels(db, ctx, query)
     codes = project_scope(db, ctx)
     with report_connection() as connection:
+        validate_reference_query(connection, query, authorized_organizations(db, ctx))
         result = list_requests(connection, query, codes)
         enrich_product_lines(db, connection, result['items'])
     result['items'] = [public_row(row) for row in result['items']]
@@ -188,6 +191,7 @@ def _column_options(model, field, keyword, page, page_size, parameters, column_f
     if grants == []:
         return dict(items=[], total=0, page=page, page_size=page_size, has_more=False)
     with report_connection() as connection:
+        validate_reference_query(connection, query, authorized_organizations(db, ctx))
         return purchase_candidates(connection, query, grants, field, keyword, page, page_size)
 
 
@@ -205,6 +209,24 @@ def overview_column_options(field: str = Query(max_length=100), keyword: str = Q
                             parameters: str = Query('{}', max_length=36000), column_filters: str | None = Query(None, max_length=12000),
                             db: Session = Depends(get_db), ctx=Depends(require_permission('report:purchase:view'))):
     return _column_options(PurchaseOverviewQuery, field, keyword, page, page_size, parameters, column_filters, db, ctx)
+
+
+@router.get('/material-reference-options')
+def material_reference_options(keyword: str = Query('', max_length=100),
+        organization_ids: list[Annotated[int, Field(gt=0)]] = Query(default=[], max_length=200),
+        page: int = Query(1, ge=1, le=1000000), page_size: int = Query(50, ge=1, le=500),
+        ids: list[str] = Query(default=[], max_length=1000), batch_field: Literal['code','name'] = 'code',
+        batch_values: list[str] = Query(default=[], max_length=1000),
+        db: Session = Depends(get_db), ctx=Depends(require_permission('report:purchase:view'))):
+    organizations = material_organizations(organization_ids, authorized_organizations(db, ctx))
+    if organizations == []:
+        return list_material_candidates(None, keyword, organizations, page=page, page_size=page_size, ids=ids, batch_field=batch_field, batch_values=batch_values)
+    with report_connection() as connection:
+        cursor = connection.cursor()
+        try:
+            return list_material_candidates(cursor, keyword, organizations, page=page, page_size=page_size, ids=ids, batch_field=batch_field, batch_values=batch_values)
+        finally:
+            cursor.close()
 
 
 @router.get('/reference-options')

@@ -44,6 +44,9 @@ def read_dataset(connection, query, authorized):
         cursor.execute('SET TRANSACTION ISOLATION LEVEL SNAPSHOT', ())
         # pymssql starts a new transaction after rollback; restart under the new isolation.
         connection.rollback()
+        if getattr(query, 'material_codes', []):
+            from app.services.report_material_reference import require_material_codes
+            require_material_codes(cursor, query.material_codes, organizations)
         cursor.execute('SELECT FBILLFORMID,FCLASSNAME,FRPTTYPE FROM dbo.T_BAS_UPDATESTOCKRPTSET', ())
         forms = validate_registry(cursor.fetchall())
         if set(forms) - BILL_NAMES.keys():
