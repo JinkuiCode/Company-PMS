@@ -27,6 +27,8 @@ def _prepare(db, archive_id, data, actor, scope):
     user = db.get(SysUser, actor)
     if not user or user.status != 1 or (scope or {}).get('user_id') != actor:
         raise HTTPException(403, '维护操作用户已失效或不匹配')
+    from app.services.project import lock_archive_identity_update
+    lock_archive_identity_update(db, data.updates)
     archive = _claim_enabled_archive_for_write(db, archive_id, scope,
         action_label='维护', reject_pending=True)
     _check_version(archive, data.expected_version)

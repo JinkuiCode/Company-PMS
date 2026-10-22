@@ -48,6 +48,8 @@ class ArchiveChangeContract(unittest.TestCase):
         self.db.add_all([self.owner,self.head,self.other]);self.db.flush()
         self.dept.leader_id=self.head.id
         self.db.add(SysProductLine(id=1,source_key='kingdee',organization_id=100,organization_code='001',organization_name='组织甲',display_name='产品线甲',name_key='line-one'))
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(self.db.connection())
         self.archive=PmsProjectArchive(project_code='APPROVAL-001',project_name='正式名称',manager_id=self.owner.id,business_product_line_id=1,archive_category=1,machine_model=1,quantity=1,quantity_unit=7,equipment_series=1,serial_no='SN-001',created_at=datetime.now()-timedelta(days=400),erp_sync_policy='auto',is_enabled=1)
         self.db.add(self.archive);self.db.flush()
         self.linked=PmsProject(archive_id=self.archive.id,project_code=self.archive.project_code,project_name=self.archive.project_name,dept_id=self.dept.id,pm_id=self.owner.id)

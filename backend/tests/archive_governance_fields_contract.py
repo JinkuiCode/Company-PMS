@@ -89,6 +89,8 @@ class GovernanceFields(unittest.TestCase):
     def test_server_created_archive_uses_the_same_clock_as_required_cutoff(self):
         from app.services.archive_governance_migration import install_archive_governance
         install_archive_governance(self.db);self.db.commit()
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(self.db.connection())
         archive=PmsProjectArchive(project_code='AFTER-UPGRADE',project_name='新建',manager_id=self.user.id)
         self.db.add(archive);self.db.commit();self.db.refresh(archive)
         with self.assertRaises(HTTPException):

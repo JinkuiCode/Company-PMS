@@ -28,6 +28,9 @@ def bind_existing_targets(db,payload):
 
 def build_import_plan(db,data):
     from app.services.offline_archive_import import digest
+    from app.services.archive_code_unique import lock_codes
+    from app.services.archive_serial_unique import identity_batch_conflicts
+    lock_codes(db.connection(), field_key='serial_no')
     archives=db.query(PmsProjectArchive).populate_existing().all()
     bycode={identity(a.project_code):a for a in archives}
     serials={identity(a.serial_no):a.id for a in archives if identity(a.serial_no)}
@@ -57,6 +60,9 @@ def build_import_plan(db,data):
             if owner is not None and (obj is None or owner!=obj.id):error('序列号与本批或现有档案重复','serial_no')
             serials[serial]=obj.id if obj else source
         plan.append((row,obj,updates))
+    for slot,field in identity_batch_conflicts(db.connection(),[{'project_code':row['values']['project_code'] if obj is None else None, 'serial_no':updates.get('serial_no'), 'archive_id':obj.id if obj else None} for row,obj,updates in plan]):
+        row=plan[slot][0]
+        errors.append({'source_id':row['source_id'],'project_code':row['values']['project_code'],'field':field,'message':('序列号' if field=='serial_no' else '项目编号')+'已存在或已被占用'})
     if set(targets)-source_ids:errors.append({'message':'目标快照包含不属于本批次的来源ID'})
     if targets and not data.get('reconcile_existing'):errors.append({'message':'仅同号补充模式可以携带目标快照'})
     return plan,errors

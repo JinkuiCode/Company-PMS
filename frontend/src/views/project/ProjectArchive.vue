@@ -182,7 +182,7 @@ import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { usePersistentDraft, type PersistentDraft } from '@/form-system/usePersistentDraft'
 import { archiveDraftApi } from '@/api/formDraft'
 import ArchiveDraftList from './ArchiveDraftList.vue'
-import { archiveDraftIdentityErrors } from './archiveDraftValidation'
+import { archiveDraftIdentityErrors, archiveIdentityFailure } from './archiveDraftValidation'
 import { filterArchiveLinkedOptions, type ArchiveFieldLinkage } from './archiveFieldLinkage'
 import { ref, reactive, computed, defineComponent, h, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
@@ -1923,14 +1923,6 @@ function clearArchiveServerError(target: Record<string, string>, fieldKey: strin
   delete target[fieldKey]
 }
 
-function archiveUniqueConflict(error: any) {
-  const detail = error?.response?.data?.detail
-  if (!['ARCHIVE_UNIQUE_CONFLICT', 'ARCHIVE_FIELD_REQUIRED'].includes(detail?.code) || !detail?.field_key) return null
-  return {
-    field_key: String(detail.field_key),
-    message: String(detail.message || '字段值已存在'),
-  }
-}
 
 async function focusArchiveEnumUnavailable(
   error: any, targetForm: typeof formRef | typeof archiveDrawerFormRef, targetErrors: Record<string, string>,
@@ -1950,9 +1942,9 @@ async function focusArchiveUniqueConflict(
   targetForm: typeof formRef | typeof archiveDrawerFormRef,
   targetErrors: Record<string, string>,
 ) {
-  const conflict = archiveUniqueConflict(error)
+  const conflict = archiveIdentityFailure(error)
   if (!conflict) return false
-  if (conflict.field_key === 'serial_no' && targetForm === formRef && (persistentDraft.version.value || archiveRestoredDraft.value)
+  if (conflict.allowCorrection && conflict.field_key === 'serial_no' && targetForm === formRef && (persistentDraft.version.value || archiveRestoredDraft.value)
     && archiveFieldVisible('serial_no') && archiveFieldEditable('serial_no')) archiveDraftSerialCorrection.value = true
   targetErrors[conflict.field_key] = conflict.message
   await nextTick()

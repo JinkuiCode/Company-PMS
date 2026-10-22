@@ -12,3 +12,10 @@ export function archiveDraftIdentityErrors(values: Record<string, unknown>): Rec
   }
   return errors
 }
+
+/** Parse only the shared archive identity error contract, never business payload. */
+export function archiveIdentityFailure(error: unknown): { field_key: string; message: string; allowCorrection: boolean } | null {
+  const detail = (error as { response?: { data?: { detail?: Record<string, unknown> } } })?.response?.data?.detail
+  if (!detail || !['ARCHIVE_UNIQUE_CONFLICT', 'ARCHIVE_FIELD_REQUIRED', 'ARCHIVE_CODE_BUSY', 'ARCHIVE_SERIAL_BUSY', 'ARCHIVE_SERIAL_UNAVAILABLE'].includes(String(detail.code)) || !detail.field_key) return null
+  return {field_key: String(detail.field_key), message: String(detail.message || '字段值无法保存，请核对后重试'), allowCorrection: detail.code === 'ARCHIVE_UNIQUE_CONFLICT'}
+}

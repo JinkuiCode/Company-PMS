@@ -91,6 +91,8 @@ def list_drafts(db,context,*,page=1,page_size=50,project_code=None,project_name=
 
 def delete_draft(db,context,draft_id,version,request=None):
     try:
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(db.connection(), field_key='serial_no')
         row=require_draft(db,context,draft_id)
         before={'owner_id':row.owner_id,'status':row.status,'version':row.version}
         changed=db.execute(update(PmsFormDraft).where(PmsFormDraft.id==row.id,PmsFormDraft.owner_id==row.owner_id,

@@ -58,6 +58,8 @@ class UniqueDrafts(Drafts):
         self.save({'project_code':'DRAFT-NEW'})
         response=self.client.post('/api/projects/archives',json=self.complete_payload())
         self.assert_code_conflict(response)
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(self.db.connection())
         with self.assertRaises(Exception) as error:
             self.db.add(PmsProjectArchive(project_code='draft-new',project_name='导入路径',erp_sync_policy='manual'))
             self.db.flush()
@@ -68,6 +70,8 @@ class UniqueDrafts(Drafts):
     def test_formal_rename_rejects_draft_code_but_other_edits_continue(self):
         self.save({'project_code':'RESERVED'})
         original=self.archive.project_code
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(self.db.connection())
         self.archive.project_code='reserved'
         with self.assertRaises(Exception) as error:self.db.flush()
         self.assertEqual(getattr(error.exception,'status_code',None),409)

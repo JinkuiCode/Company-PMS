@@ -172,6 +172,8 @@ def test_referenced_configurable_value_cannot_be_deleted():
     try:
         definition = seed_enum(db, "archive_machine_model", [("1", "Bench", 1)])
         item = db.query(SysDictItem).filter(SysDictItem.dict_id == definition.id).one()
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(db.connection())
         db.add(PmsProjectArchive(
             project_code="ENUM-REF-001",
             project_name="枚举引用项目",

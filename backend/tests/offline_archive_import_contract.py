@@ -34,6 +34,8 @@ class ImportContract(unittest.TestCase):
             self.assertIsNone(a.business_product_line_id)
     def test_collision_blocks_entire_batch(self):
         from app.services.offline_archive_import import apply_import
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(self.db.connection())
         self.db.add(PmsProjectArchive(project_code="a-2",project_name="已存在"));self.db.commit()
         with self.assertRaises(HTTPException):apply_import(self.db,self.payload,self.uid,self.scope)
         self.assertEqual(self.db.query(PmsProjectArchive).count(),1)
@@ -87,6 +89,8 @@ class ImportContract(unittest.TestCase):
     def test_same_source_cannot_be_imported_after_code_edit(self):
         from app.services.offline_archive_import import apply_import,preview_import
         apply_import(self.db,self.payload,self.uid,self.scope)
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(self.db.connection())
         for a in self.db.query(PmsProjectArchive):a.project_code += "-edited"
         self.db.commit()
         self.payload["rows"][0]["values"]["customer"]="Changed"

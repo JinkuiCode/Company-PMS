@@ -191,6 +191,8 @@ def test_project_create_enforces_dynamic_required_fields_and_rolls_back():
         initialize_enum_definitions(db)
         dept = SysDept(dept_name="字段规则测试部门", status=1)
         user = SysUser(username="field-policy-user", real_name="字段规则用户", password_hash="x", status=1)
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(db.connection())
         archive = PmsProjectArchive(project_code="FP-ARCHIVE", project_name="字段规则档案", status=1)
         db.add_all([dept, user, archive])
         db.commit()

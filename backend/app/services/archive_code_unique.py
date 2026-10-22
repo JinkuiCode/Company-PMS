@@ -10,7 +10,9 @@ from app.models.form_draft import PmsFormDraft
 
 # A lightweight Core projection avoids a circular import from the archive mapper.
 ARCHIVES = table('pms_project_archive', column('id'), column('project_code_key', NVARCHAR(32)))
+# Backward-compatible resource shared by all archive identity mutations.
 LOCK_NAME = 'pms:archive-create:project-code'
+_HELD = 'pms_archive_identity_transaction'
 
 
 def _busy():
@@ -18,8 +20,27 @@ def _busy():
         'message':'项目编号正在保存，请稍后重试；本次输入已保留'})
 
 
-def lock_codes(connection):
+def _identity_busy(field_key):
+    if field_key != 'serial_no': return _busy()
+    return HTTPException(409, {'code':'ARCHIVE_SERIAL_BUSY','field_key':'serial_no',
+        'message':'序列号正在保存，请稍后重试；本次输入已保留'})
+
+
+def identity_lock_held(connection):
+    transaction = connection.get_transaction()
+    return bool(transaction is not None and transaction.is_active
+                and connection.info.get(_HELD) is transaction)
+
+
+def require_identity_lock(connection):
+    if not identity_lock_held(connection):
+        raise HTTPException(503, {'code':'ARCHIVE_IDENTITY_LOCK_REQUIRED',
+            'message':'档案保存入口暂不可用，请联系管理员；本次输入已保留'})
+
+
+def lock_codes(connection, *, field_key='project_code'):
     """Keep the lock through the caller's commit/rollback, not merely this check."""
+    if identity_lock_held(connection): return
     if connection.dialect.name == 'mssql':
         result = connection.execute(text('''
             DECLARE @result int;
@@ -28,20 +49,25 @@ def lock_codes(connection):
             SELECT @result;
         '''), {'name':LOCK_NAME}).scalar()
         if result is None or result < 0:
-            raise _busy()
+            raise _identity_busy(field_key)
     elif connection.dialect.name == 'sqlite':
         # SQLAlchemy autobegin may precede sqlite3's actual transaction. Start a
         # write transaction before reading either namespace; an existing write
         # transaction already owns SQLite's cross-process writer lock.
-        if not connection.connection.driver_connection.in_transaction:
-            try:
+        try:
+            if not connection.connection.driver_connection.in_transaction:
                 connection.exec_driver_sql('BEGIN IMMEDIATE')
-            except OperationalError as exc:
-                if 'locked' in str(exc.orig).lower() or 'busy' in str(exc.orig).lower():
-                    raise _busy() from None
-                raise
+            else:
+                # A driver transaction may only be a deferred reader. Acquire
+                # the writer lock without changing a row before namespace reads.
+                connection.exec_driver_sql('UPDATE pms_project_archive SET id=id WHERE 0')
+        except OperationalError as exc:
+            if 'locked' in str(exc.orig).lower() or 'busy' in str(exc.orig).lower():
+                raise _identity_busy(field_key) from None
+            raise
     else:
         raise RuntimeError('Unsupported project-code database')
+    connection.info[_HELD] = connection.get_transaction()
 
 
 def ensure_code_available(connection, code, *, exclude_draft_id=None, exclude_archive_id=None, check_archives=True):

@@ -91,6 +91,8 @@ def insert_initial_archives(db: Any, ready: Iterable[Mapping[str, Any]], *, oper
     enforce_permission(scope, 'project:archive:import')
     require_import_scope(scope)
 
+    from app.services.archive_code_unique import lock_codes
+    lock_codes(db.connection())
     count = 0
     for row in ready:
         archive = PmsProjectArchive(

@@ -213,6 +213,8 @@ def test_archive_delete_guards_and_enabled_lifecycle():
             pending: bool = False,
             erp_synced: int = 0,
         ) -> PmsProjectArchive:
+            from app.services.archive_code_unique import lock_codes
+            lock_codes(db.connection())
             archive = PmsProjectArchive(
                 project_code=code,
                 project_name=f"项目档案 {code}",
@@ -424,6 +426,8 @@ def test_archive_lifecycle_is_enforced_by_project_delete_batch_and_erp():
             pending: bool = False,
             product_category: int | None = None,
         ) -> PmsProjectArchive:
+            from app.services.archive_code_unique import lock_codes
+            lock_codes(db.connection())
             archive = PmsProjectArchive(
                 project_code=code,
                 project_name=f"项目档案 {code}",
@@ -667,6 +671,8 @@ def test_batch_archive_routes_enforce_permissions_and_static_order():
             permission_code="project:archive:toggle",
             status=1,
         )
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(db.connection())
         archive = PmsProjectArchive(
             project_code="ENF-ROUTE",
             project_name="路由权限档案",

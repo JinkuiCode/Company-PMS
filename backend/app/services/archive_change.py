@@ -102,8 +102,11 @@ def _ensure_no_active(db, archive_id):
         raise HTTPException(409, detail={'code':'ARCHIVE_CHANGE_PENDING','message':'该档案已有待处理变更申请'})
 
 
-def _locked_archive(db, archive_id, scope, *, reject_pending=True):
+def _locked_archive(db, archive_id, scope, *, reject_pending=True, identity=True):
     from app.services.project import _claim_enabled_archive_for_write
+    if identity:
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(db.connection(), field_key='serial_no')
     return _claim_enabled_archive_for_write(db,archive_id,scope,action_label='修改档案',reject_pending=reject_pending)
 
 
@@ -133,7 +136,9 @@ def preview_archive_change(db, archive_id, data, actor, *, scope_context):
 def direct_archive_update(db,archive_id,data,actor,*,request=None,scope_context=None):
     from app.services.project import apply_archive_updates
     try:
-        archive = _locked_archive(db,archive_id,scope_context)
+        from app.services.project import lock_archive_identity_update
+        lock_archive_identity_update(db, data)
+        archive = _locked_archive(db,archive_id,scope_context,identity=False)
         _,_,head = _check_editor(db,archive,actor,scope_context)
         _check_version(archive,data.expected_version)
         _ensure_no_active(db,archive.id)
@@ -224,7 +229,12 @@ def decide_archive_change(db,change_id,data,actor,*,request=None,scope_context=N
                 from app.services.project import _archive_operation_pending_conflict
                 raise _archive_operation_pending_conflict()
             _check_version(archive,row.base_version)
-            apply_archive_updates(db,archive.id,ArchiveUpdate(**json.loads(row.updates_json)),actor,request=request,scope_context=scope_context,archive=archive,commit=False)
+            from app.services.archive_serial_unique import read_serial_payload
+            updates = read_serial_payload(row.updates_json)
+            # End only this reservation inside the SAME locked transaction. Any
+            # validation/flush/log failure rolls it back along with formal writes.
+            row.status=target;row.active_archive_id=None;db.flush()
+            apply_archive_updates(db,archive.id,ArchiveUpdate(**updates),actor,request=request,scope_context=scope_context,archive=archive,commit=False)
         row.status=target;row.active_archive_id=None;row.version+=1;row.opinion=data.opinion.strip();row.decided_at=datetime.now()
         record_operation_log(db,module='项目档案变更',action='approve' if target==3 else 'reject',entity_type='pms_archive_change',entity_id=row.id,
             entity_name=archive.project_code,operator_id=actor,request=request,summary=f'{"通过" if target==3 else "退回"}档案变更：{archive.project_code}',before_data=before,after_data=serialize_model(row))

@@ -61,6 +61,8 @@ class CodeLock(unittest.TestCase):
     def test_mssql_application_lock_is_transaction_owned_and_fail_closed(self):
         for result in (0,1,-1,-2,-3,-999,None):
             connection=Mock(dialect=SimpleNamespace(name='mssql'))
+            connection.info={}
+            connection.get_transaction.return_value=SimpleNamespace(is_active=True)
             connection.execute.return_value.scalar.return_value=result
             if result is None or result<0:
                 with self.assertRaises(HTTPException) as failure:lock_codes(connection)

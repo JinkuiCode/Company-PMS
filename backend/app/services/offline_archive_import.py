@@ -141,11 +141,14 @@ def apply_import(db,payload,user_id,scope,request=None,*,source_file_hash=None):
 def rollback_import(db,batch_id,user_id,scope,request=None):
     require_import_scope(scope)
     try:
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(db.connection(), field_key='serial_no')
         batch=db.query(ArchiveImportBatch).filter_by(id=batch_id).with_for_update().first()
         if not batch or batch.status!="applied":raise HTTPException(409,"批次不存在或已回退")
         records=db.query(ArchiveImportRow).filter_by(batch_id=batch.id).all()
         objects=claim_archive_lifecycle_rows(get_scoped_archive_query(db,scope),[r.archive_id for r in records],archive_not_pending_condition())
         byid={a.id:a for a in objects}
+        from app.models.archive_change import ArchiveChange
         blocked=[]
         for row in records:
             a=byid.get(row.archive_id)
@@ -154,6 +157,7 @@ def rollback_import(db,batch_id,user_id,scope,request=None):
             referenced=(db.query(PmsProject.id).filter_by(archive_id=a.id).first() or
                 db.query(ErpSyncTask.id).filter_by(archive_id=a.id).first() or
                 db.query(ErpSyncLog.id).filter_by(source_id=a.id).first())
+            referenced = referenced or db.query(ArchiveChange.id).filter(ArchiveChange.archive_id==a.id).first()
             if row.operation=="created" and (a.erp_synced or referenced):blocked.append(row.source_id)
             if row.operation=="updated" and (not row.before_values or set(row.before_values)-FILLABLE_FIELDS):blocked.append(row.source_id)
             if db.query(ErpSyncTask.id).filter(ErpSyncTask.archive_id==a.id,ErpSyncTask.status.in_(["queued","running","review"])).first():blocked.append(row.source_id)
@@ -165,6 +169,8 @@ def rollback_import(db,batch_id,user_id,scope,request=None):
                 _log(db,"delete",a,user_id,request,before=serialize_model(a));db.delete(a);deleted+=1
             elif row.operation=="updated":
                 before=serialize_model(a)
+                from app.services.project import _ensure_archive_unique_values
+                _ensure_archive_unique_values(db,row.before_values,exclude_archive_id=a.id)
                 for key,value in row.before_values.items():setattr(a,key,value)
                 a.updated_by=user_id;a.updated_at=datetime.now();db.flush()
                 _log(db,"update",a,user_id,request,before=before);restored+=1

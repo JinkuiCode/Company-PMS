@@ -1,3 +1,9 @@
+# 2026-10-22 档案序列号跨档案、草稿及审批预留（A2，本地）
+- 原因：未提交草稿和待审批目标号未进入正式序列号占用核查，存在跨入口重号风险。
+- 调整：新增统一序列号命名空间；沿用原code事务锁，覆盖新建/改号/草稿/审批/维护/导入与回退，审批JSON持久占号并原子释放；模型遗漏锁失败关闭；普通历史维护不隐式改身份值。页面区分重号、并发忙和暂不可核查，保留输入与原字段权限。
+- 文件：`backend/app/services/archive_serial_unique.py`、`archive_code_unique.py`、`project.py`、草稿/管理/变更/维护/导入相关服务及`backend/app/models/project.py`；`ProjectArchive.vue`、`archiveDraftValidation.ts`；相关契约及`docs/releases/2026-10-22-archive-serial-local.md`。
+- 验证：后端32项命令、前端18项命令及生产构建11组合成页面流程通过；双连接SQLite、MSSQL编译/绑定替身、事务故障与历史兼容验证，独立复审问题已修。未打开现有库/正式/ERP，未新增数据库结构或revision，未部署/合并/推送；真实MSSQL仍待另批验证。
+
 # PMS 变更记录
 
 ## 2026-10-22 档案录入规则与有界升级程序（A1，仅本地）

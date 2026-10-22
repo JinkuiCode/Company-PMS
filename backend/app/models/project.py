@@ -5,7 +5,8 @@ from sqlalchemy.dialects.mssql import NVARCHAR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-from app.services.archive_code_unique import ensure_code_available
+from app.services.archive_code_unique import ensure_code_available, require_identity_lock
+from app.services.archive_serial_unique import ensure_serial_available, serial_key
 
 
 class PmsProjectArchive(Base):
@@ -133,16 +134,27 @@ def _clean_identity(value: str | None) -> str:
 @event.listens_for(PmsProjectArchive, "before_insert")
 @event.listens_for(PmsProjectArchive, "before_update")
 def _populate_archive_identity_keys(_mapper, _connection, target: PmsProjectArchive) -> None:
-    target.project_code = _clean_identity(target.project_code)
-    target.project_name = _clean_identity(target.project_name) or None
-    target.serial_no = _clean_identity(target.serial_no) or None
-    target.customer = _clean_identity(target.customer) or None
-    target.project_code_key = target.project_code.casefold()
-    target.project_name_key = target.project_name
-    target.serial_no_key = target.serial_no.casefold() if target.serial_no else None
     state = inspect(target)
-    if state.pending or state.attrs.project_code.history.has_changes():
+    code_changed = state.pending or state.attrs.project_code.history.has_changes() or state.attrs.project_code_key.history.has_changes()
+    serial_changed = state.pending or state.attrs.serial_no.history.has_changes() or state.attrs.serial_no_key.history.has_changes()
+    # Ordinary edits must not silently normalize untouched historical identities.
+    if code_changed:
+        target.project_code = _clean_identity(target.project_code)
+        target.project_code_key = target.project_code.casefold()
+    if serial_changed:
+        target.serial_no = _clean_identity(target.serial_no) or None
+        target.serial_no_key = target.serial_no.casefold() if target.serial_no else None
+    target.project_name = _clean_identity(target.project_name) or None
+    target.project_name_key = target.project_name
+    target.customer = _clean_identity(target.customer) or None
+    if code_changed or serial_changed:
+        # Never acquire a namespace lock after a caller may have locked rows.
+        require_identity_lock(_connection)
+    if code_changed:
         ensure_code_available(_connection, target.project_code, check_archives=False)
+    old = state.attrs.serial_no.history.deleted
+    if serial_changed and (state.pending or not old or serial_key(old[0]) != serial_key(target.serial_no)):
+        ensure_serial_available(_connection, target.serial_no, exclude_archive_id=None if state.pending else target.id)
 
 
 class PmsProjectSheetDetail(Base):

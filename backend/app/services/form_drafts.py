@@ -17,6 +17,7 @@ from app.services.archive_quantity import validate_archive_quantity
 from app.services.project import _ensure_archive_assignment_allowed, create_archive, ensure_archive_access, _validate_archive_enum
 from app.services.operation_log import record_operation_log
 from app.services.archive_code_unique import ensure_code_available, lock_codes
+from app.services.archive_serial_unique import ensure_serial_available
 
 RESOURCE = 'archive-create'
 
@@ -194,28 +195,35 @@ def get_draft(db, context, draft_id):
 
 def save_draft(db, context, data, request=None):
     _guard(db, context)
-    existing = db.get(PmsFormDraft,str(data.id))
-    if existing: existing = _row(db,context,data.id)
-    payload = _clean(db,context,data.payload,json.loads(existing.payload_json) if existing else None)
-    if existing:
-        policies=_policies(db)
-        # Re-saving the visible editable projection must not erase protected history.
-        from app.services.field_policy import archive_form_field_visible
-        merged = {**json.loads(existing.payload_json), **payload}
-        retained={key:value for key,value in json.loads(existing.payload_json).items()
-                  if key not in policies or not policies[key]['visible'] or not policies[key]['editable']
-                  or not archive_form_field_visible(policies[key], merged)}
-        payload={**retained,**payload}
-    encoded = json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(',',':'))
-    if len(encoded.encode('utf-8')) > 65536: raise HTTPException(422,'草稿内容过大')
-    row = db.get(PmsFormDraft,str(data.id))
+    try:
+        lock_codes(db.connection(), field_key='serial_no')
+        existing = db.get(PmsFormDraft,str(data.id))
+        if existing: existing = _row(db,context,data.id)
+        payload = _clean(db,context,data.payload,json.loads(existing.payload_json) if existing else None)
+        if existing:
+            policies=_policies(db)
+            # Re-saving the visible editable projection must not erase protected history.
+            from app.services.field_policy import archive_form_field_visible
+            merged = {**json.loads(existing.payload_json), **payload}
+            retained={key:value for key,value in json.loads(existing.payload_json).items()
+                      if key not in policies or not policies[key]['visible'] or not policies[key]['editable']
+                      or not archive_form_field_visible(policies[key], merged)}
+            payload={**retained,**payload}
+        encoded = json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+        if len(encoded.encode('utf-8')) > 65536: raise HTTPException(422,'草稿内容过大')
+        row = db.get(PmsFormDraft,str(data.id))
+    except Exception:
+        db.rollback();raise
     try:
         ensure_code_available(db.connection(), payload.get('project_code'), exclude_draft_id=data.id)
+        ensure_serial_available(db.connection(), payload.get('serial_no'), exclude_draft_id=data.id)
         if row:
             row = _row(db,context,data.id)
             if row.status != 'active': raise _conflict()
             if data.expected_version is None:
-                if row.version == 1 and row.payload_json == encoded: return _view(db,row,content=True)
+                if row.version == 1 and row.payload_json == encoded:
+                    db.rollback()
+                    return _view(db,row,content=True)
                 raise _conflict()
             _claim(db,row,data.expected_version,payload_json=encoded,product_line_id=payload.get('product_line_id'))
         else:
@@ -240,6 +248,7 @@ def save_draft(db, context, data, request=None):
 def delete_draft(db, context, draft_id, version, request=None):
     _guard(db,context)
     try:
+        lock_codes(db.connection(), field_key='serial_no')
         row=_row(db,context,draft_id)
         _claim(db,row,version,status='deleted')
         _audit(db,context,row,'draft_delete',request);db.commit()
@@ -254,7 +263,9 @@ def submit_draft(db, context, draft_id, version, request=None):
         row=_row(db,context,draft_id)
         if row.status == 'used':
             ensure_archive_access(db,row.archive_id,context)
-            return {'id':row.archive_id,'msg':'该草稿已保存为正式档案','replayed':True}
+            archive_id=row.archive_id
+            db.rollback()
+            return {'id':archive_id,'msg':'该草稿已保存为正式档案','replayed':True}
         _claim(db,row,version,status='used')
         payload=_clean(db,context,json.loads(row.payload_json))
         # Restoring old omissions is not a new-form initialization.

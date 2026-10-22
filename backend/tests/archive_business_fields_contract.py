@@ -110,6 +110,8 @@ class ArchiveBusinessFields(unittest.TestCase):
             self.assertEqual(self.db.query(ErpSyncTask).count(), count + 1)
 
     def test_dates_are_optional_for_all_records_and_reset_preserves_original_cutoff(self):
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(self.db.connection())
         old = PmsProjectArchive(project_code='OLD', project_name='历史', manager_id=self.user.id, business_product_line_id=1, governance_legacy=True, created_at=datetime.now()-timedelta(days=1))
         self.db.add(old)
         self.db.commit()

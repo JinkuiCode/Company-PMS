@@ -1089,27 +1089,23 @@ def _require_archive_name(project_name: str | None) -> None:
         })
 
 
-def _ensure_archive_unique_values(
-    db: Session,
-    values: dict[str, Any],
-    *,
-    exclude_archive_id: int | None = None,
-) -> None:
-    for field_key, (column_name, label, case_insensitive) in ARCHIVE_UNIQUE_FIELDS.items():
-        if field_key not in values or values[field_key] in (None, ""):
-            continue
-        normalized = str(values[field_key]).casefold() if case_insensitive else str(values[field_key])
-        query = db.query(PmsProjectArchive.id).filter(
-            getattr(PmsProjectArchive, column_name) == normalized
-        )
-        if exclude_archive_id is not None:
-            query = query.filter(PmsProjectArchive.id != exclude_archive_id)
-        if query.first():
-            raise HTTPException(status_code=409, detail={
-                "code": "ARCHIVE_UNIQUE_CONFLICT",
-                "field_key": field_key,
-                "message": f"{label}已存在",
-            })
+def _ensure_archive_unique_values(db: Session, values: dict[str, Any], *, exclude_archive_id=None):
+    from app.services.archive_code_unique import ensure_code_available
+    from app.services.archive_serial_unique import ensure_serial_available
+    if 'project_code' in values:
+        ensure_code_available(db.connection(), values['project_code'], exclude_archive_id=exclude_archive_id)
+    if 'serial_no' in values:
+        current = db.get(PmsProjectArchive, exclude_archive_id) if exclude_archive_id is not None else None
+        from app.services.archive_serial_unique import serial_key
+        # Unchanged historical formal values remain maintainable.
+        if current is None or serial_key(values['serial_no']) != serial_key(current.serial_no):
+            ensure_serial_available(db.connection(), values['serial_no'], exclude_archive_id=exclude_archive_id)
+
+
+def lock_archive_identity_update(db, data):
+    if {'project_code','serial_no','archive_category'} & data.model_fields_set:
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(db.connection(), field_key='serial_no' if 'serial_no' in data.model_fields_set else 'project_code')
 
 
 def get_archive_list(db: Session, page: int = 1, page_size: int = 15,
@@ -1213,43 +1209,48 @@ def create_archive(
     *, commit: bool = True,
 ):
     """创建项目档案"""
-    values = _normalize_archive_values(data.model_dump())
-    policies = get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)
-    for policy in policies['items']:
-        key = policy['field_key']
-        if key not in data.model_fields_set and policy['visible'] and policy['editable']:
-            if key == 'manager_id':
-                values[key] = user_id
-            elif 'default_value' in policy:
-                values[key] = policy['default_value']
-    _ensure_archive_unique_values(db, values)
-    if values.get("product_category") is not None:
-        raise HTTPException(422, "产品类别已停用，请使用产品线和档案类别")
-    from app.services.offline_archive_fields import OFFLINE_FIELDS
-    for key,meta in OFFLINE_FIELDS.items():
-        if meta["enum_code"]:
-            _validate_archive_enum(db, key, meta["enum_code"], values.get(key))
-    validate_enum_value(db, "archive_status", values.get("status"))
-    validate_enum_value(db, "product_category", values.get("product_category"))
-    _validate_archive_enum(db, "equipment_series", "equipment_series", values.get("equipment_series"))
-    _require_archive_product_line(db, scope_context, values.get("product_line_id"))
-    from app.services.archive_regions import validate_archive_address
-    validate_archive_address(values)
-    _ensure_archive_assignment_allowed(
-        db,
-        manager_id=values.get("manager_id"),
-        product_category=values.get("product_category"),
-        scope_context=scope_context,
-    )
-    validate_business_field_write(
-        db,
-        MODULE_PROJECT_ARCHIVE,
-        current_values={},
-        updates=values,
-        entity_created_at=None,
-        is_create=True,
-        effective_policies=policies,
-    )
+    try:
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(db.connection(), field_key='serial_no')
+        values = _normalize_archive_values(data.model_dump())
+        policies = get_effective_field_policies(db, MODULE_PROJECT_ARCHIVE)
+        for policy in policies['items']:
+            key = policy['field_key']
+            if key not in data.model_fields_set and policy['visible'] and policy['editable']:
+                if key == 'manager_id':
+                    values[key] = user_id
+                elif 'default_value' in policy:
+                    values[key] = policy['default_value']
+        _ensure_archive_unique_values(db, values)
+        if values.get("product_category") is not None:
+            raise HTTPException(422, "产品类别已停用，请使用产品线和档案类别")
+        from app.services.offline_archive_fields import OFFLINE_FIELDS
+        for key,meta in OFFLINE_FIELDS.items():
+            if meta["enum_code"]:
+                _validate_archive_enum(db, key, meta["enum_code"], values.get(key))
+        validate_enum_value(db, "archive_status", values.get("status"))
+        validate_enum_value(db, "product_category", values.get("product_category"))
+        _validate_archive_enum(db, "equipment_series", "equipment_series", values.get("equipment_series"))
+        _require_archive_product_line(db, scope_context, values.get("product_line_id"))
+        from app.services.archive_regions import validate_archive_address
+        validate_archive_address(values)
+        _ensure_archive_assignment_allowed(
+            db,
+            manager_id=values.get("manager_id"),
+            product_category=values.get("product_category"),
+            scope_context=scope_context,
+        )
+        validate_business_field_write(
+            db,
+            MODULE_PROJECT_ARCHIVE,
+            current_values={},
+            updates=values,
+            entity_created_at=None,
+            is_create=True,
+            effective_policies=policies,
+        )
+    except Exception:
+        db.rollback();raise
     try:
         storage_values = dict(values)
         storage_values['business_product_line_id'] = storage_values.pop('product_line_id')
@@ -1274,7 +1275,14 @@ def create_archive(
             db.commit()
     except IntegrityError as exc:
         db.rollback()
-        _ensure_archive_unique_values(db, values)
+        try:
+            lock_codes(db.connection(), field_key='serial_no')
+            _ensure_archive_unique_values(db, values)
+        finally:
+            db.rollback()
+        if 'serial' in str(exc.orig).lower():
+            from app.services.archive_serial_unique import serial_conflict
+            raise serial_conflict() from exc
         raise HTTPException(status_code=409, detail={
             "code": "ARCHIVE_UNIQUE_CONFLICT",
             "field_key": "project_code",
@@ -1300,6 +1308,11 @@ def apply_archive_updates(
     audit_extra: dict | None = None, queue_permission: str | None = None,
 ):
     """Shared validation and application; the governance caller owns its transaction."""
+    # Callers passing an already locked row must acquire identity first.
+    if archive is None: lock_archive_identity_update(db, data)
+    elif {'project_code','serial_no','archive_category'} & data.model_fields_set:
+        from app.services.archive_code_unique import require_identity_lock
+        require_identity_lock(db.connection())
     archive = archive or _claim_enabled_archive_for_write(
         db,
         archive_id,
@@ -1327,6 +1340,9 @@ def apply_archive_updates(
         if archive.data_origin != "offline_initial" or "project_name" in update_data:
             _require_archive_name(update_data.get("project_name", archive.project_name))
         _ensure_archive_unique_values(db, update_data, exclude_archive_id=archive.id)
+        if update_data.get('archive_category') == 1 and archive.archive_category != 1:
+            from app.services.archive_serial_unique import ensure_serial_available
+            ensure_serial_available(db.connection(), update_data.get('serial_no',archive.serial_no), exclude_archive_id=archive.id)
         if "status" in update_data:
             validate_enum_value(db, "archive_status", update_data["status"], current_value=archive.status)
         if "product_category" in update_data:
@@ -1420,7 +1436,14 @@ def apply_archive_updates(
             db.commit()
     except IntegrityError as exc:
         db.rollback()
-        _ensure_archive_unique_values(db, update_data, exclude_archive_id=archive_id)
+        try:
+            lock_archive_identity_update(db, data)
+            _ensure_archive_unique_values(db, update_data, exclude_archive_id=archive_id)
+        finally:
+            db.rollback()
+        if 'serial' in str(exc.orig).lower():
+            from app.services.archive_serial_unique import serial_conflict
+            raise serial_conflict() from exc
         raise HTTPException(status_code=409, detail={
             "code": "ARCHIVE_UNIQUE_CONFLICT",
             "field_key": "project_code",
