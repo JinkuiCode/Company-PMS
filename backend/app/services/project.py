@@ -1,5 +1,6 @@
 """项目管理业务逻辑"""
 import json
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -1296,6 +1297,39 @@ def create_archive(
     return {"msg": "创建成功", "id": archive.id}
 
 
+# Internal provenance only. There is no HTTP/schema switch for address bypass.
+_LEGACY_MANAGER_ADDRESS_AUTHORITY = object()
+
+
+@dataclass(frozen=True)
+class _LegacyManagerAddressContext:
+    authority: object
+    archive_id: int
+    old_manager_id: int | None
+    new_manager_id: int | None
+    address: tuple
+
+
+def _legacy_manager_address_context(archive, original_updates):
+    if (set(original_updates) != {'manager_id'}
+            or original_updates['manager_id'] == archive.manager_id
+            or archive.data_origin != 'kingdee_initial' or archive.governance_legacy is not True):
+        return None
+    return _LegacyManagerAddressContext(_LEGACY_MANAGER_ADDRESS_AUTHORITY,archive.id,
+        archive.manager_id,original_updates['manager_id'],
+        tuple(getattr(archive,key) for key in ('address_province','address_city','address_detail')))
+
+
+def _preserves_legacy_manager_address(context, archive, updates):
+    return (isinstance(context,_LegacyManagerAddressContext)
+            and context.authority is _LEGACY_MANAGER_ADDRESS_AUTHORITY
+            and context.archive_id == archive.id and context.old_manager_id == archive.manager_id
+            and set(updates) == {'manager_id'} and updates['manager_id'] == context.new_manager_id
+            and updates['manager_id'] != archive.manager_id
+            and archive.data_origin == 'kingdee_initial' and archive.governance_legacy is True
+            and context.address == tuple(getattr(archive,key) for key in ('address_province','address_city','address_detail')))
+
+
 def apply_archive_updates(
     db: Session,
     archive_id: int,
@@ -1306,6 +1340,7 @@ def apply_archive_updates(
     *, archive: PmsProjectArchive | None = None, dry_run: bool = False, commit: bool = True,
     audit_action: str = 'update', audit_summary: str | None = None,
     audit_extra: dict | None = None, queue_permission: str | None = None,
+    _maintenance_address_context: _LegacyManagerAddressContext | None = None,
 ):
     """Shared validation and application; the governance caller owns its transaction."""
     # Callers passing an already locked row must acquire identity first.
@@ -1370,10 +1405,10 @@ def apply_archive_updates(
             _require_archive_product_line(db, scope_context, update_data["product_line_id"])
         from app.services.archive_regions import validate_archive_address
         # Preserve an untouched free-form address from the approved historical workbook.
-        if archive.data_origin != "offline_initial" or any(
+        if not _preserves_legacy_manager_address(_maintenance_address_context, archive, update_data) and (archive.data_origin != "offline_initial" or any(
             key in update_data and update_data[key] != getattr(archive, key)
             for key in ("address_province", "address_city", "address_detail")
-        ):
+        )):
             validate_archive_address({**serialize_model(archive), **update_data})
         _ensure_archive_assignment_allowed(
             db,

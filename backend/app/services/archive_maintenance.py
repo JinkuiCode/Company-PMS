@@ -33,8 +33,13 @@ def _prepare(db, archive_id, data, actor, scope):
         action_label='维护', reject_pending=True)
     _check_version(archive, data.expected_version)
     _ensure_no_active(db, archive.id)
+    from app.services.project import _legacy_manager_address_context
+    # Qualify ORIGINAL business keys before discarding unchanged values.
+    address_context = _legacy_manager_address_context(archive,
+        data.updates.model_dump(exclude_unset=True, exclude={'expected_version'}))
     updates = apply_archive_updates(db, archive.id, data.updates, actor,
-        archive=archive, scope_context=scope, dry_run=True)
+        archive=archive, scope_context=scope, dry_run=True,
+        _maintenance_address_context=address_context)
     current = archive_business_values(archive)
     updates = {key: value for key, value in updates.items() if current.get(key) != value}
     if not updates:
@@ -47,12 +52,12 @@ def _prepare(db, archive_id, data, actor, scope):
                 'message': '新负责人须有有效所属部门，且该部门已配置有效部门负责人'})
     differences = build_operation_log_diff_items(diff_data(current, {**current, **updates}),
         entity_type='pms_project_archive', entity_id=str(archive.id), db=db)
-    return archive, updates, differences
+    return archive, updates, differences, address_context
 
 
 def preview_archive_maintenance(db, archive_id, data, actor, *, scope_context):
     try:
-        _, _, differences = _prepare(db, archive_id, data, actor, scope_context)
+        _, _, differences, _ = _prepare(db, archive_id, data, actor, scope_context)
         return {'mode': 'maintenance', 'expected_version': data.expected_version, 'differences': differences}
     finally:
         db.rollback()
@@ -62,13 +67,14 @@ def maintain_archive(db, archive_id, data, actor, *, scope_context, request=None
     from app.schemas.project import ArchiveUpdate
     from app.services.project import apply_archive_updates
     try:
-        archive, updates, _ = _prepare(db, archive_id, data, actor, scope_context)
+        archive, updates, _, address_context = _prepare(db, archive_id, data, actor, scope_context)
         result = apply_archive_updates(db, archive_id, ArchiveUpdate(**updates), actor,
             archive=archive, scope_context=scope_context, request=request, commit=False,
             audit_action='maintain', audit_summary=f'档案维护：{data.reason}',
             audit_extra={'maintenance': {'reason': data.reason,
                 'authorization_permissions': list(MAINTENANCE_PERMISSIONS)}},
-            queue_permission='project:archive:maintain')
+            queue_permission='project:archive:maintain',
+            _maintenance_address_context=address_context)
         db.commit()
         return {**result, 'mode': 'maintenance'}
     except Exception:
