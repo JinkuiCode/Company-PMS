@@ -439,6 +439,8 @@ class ReferenceOptionsV2(unittest.TestCase):
         self.db = self.source.db
         line = self.source.line()
         self.ctx = dict(user_id=7, data_scope=1, product_line_ids=[line.id], permissions=['report:purchase:view'])
+        from app.services.archive_code_unique import lock_codes
+        lock_codes(self.db.connection())
         self.db.add_all([PmsProjectArchive(project_code='001', project_name='Same', manager_id=7, business_product_line_id=line.id),
                          PmsProjectArchive(project_code='002', project_name='Same', manager_id=7, business_product_line_id=line.id),
                          PmsProjectArchive(project_code='003', project_name='Same', manager_id=8, business_product_line_id=line.id)])

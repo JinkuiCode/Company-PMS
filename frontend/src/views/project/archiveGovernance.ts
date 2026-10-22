@@ -56,3 +56,21 @@ export function reconcileArchiveFormLine(metadata:ArchiveFieldLinkage|null,value
   if(seriesCorrection)values.equipment_series=original
   return {seriesCorrection,cleared:cleared.filter(key=>!seriesCorrection||key!=='equipment_series')}
 }
+
+/** Presentation-only parity with the bounded owner-maintenance service.
+ * The server still checks permission, provenance, version and every field.
+ * This does not mark a record historical for required-field compatibility.
+ */
+export function preservesLegacyManagerAddress(
+  maintenance: boolean, original: Record<string, any> | null | undefined,
+  values: Record<string, any>, updates: Record<string, unknown>,
+): boolean {
+  if (!maintenance || !original || original.can_maintain !== true || original.is_enabled !== 1
+    || original.data_origin !== 'kingdee_initial' || original.governance_legacy !== true) return false
+  const keys = Object.keys(updates)
+  if (keys.length !== 1 || keys[0] !== 'manager_id' || !Number.isInteger(updates.manager_id)
+    || Number(updates.manager_id) <= 0 || updates.manager_id === original.manager_id
+    || updates.manager_id !== values.manager_id) return false
+  return ['address_province', 'address_city', 'address_detail']
+    .every(key => (values[key] ?? '') === (original[key] ?? ''))
+}

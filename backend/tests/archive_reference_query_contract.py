@@ -13,6 +13,8 @@ from app.services.list_query import apply_archive_list_query
 Base.metadata.create_all(engine)
 def c(field,operator,value):return dict(field=field,operator=operator,value=value,valueEnd=None,schemaVersion=2)
 with SessionLocal() as db:
+    from app.services.archive_code_unique import lock_codes
+    lock_codes(db.connection())
     db.add_all([project.PmsProjectArchive(id=i,project_code=code,project_name=name,business_product_line_id=line,is_enabled=enabled,archive_category=1)
         for i,code,name,line,enabled in [(1,'A','同名',1,1),(2,'B','同名',1,0),(3,'C','另名',2,1)]])
     definition=dictionaries.SysDict(dict_code='equipment_series',dict_name='设备系列')

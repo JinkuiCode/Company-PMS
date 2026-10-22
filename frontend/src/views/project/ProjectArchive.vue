@@ -174,7 +174,7 @@ import OfflineArchiveTools from './OfflineArchiveTools.vue'
 import ArchiveRecordForm from './ArchiveRecordForm.vue'
 import { newSubmissionId } from '@/utils/submissionId'
 import ArchiveChangeList from './ArchiveChangeList.vue'
-import { orderArchiveGroups, governanceFieldVisible, governanceFieldRequired, archiveNewFormDefaults, archiveCreateFieldIncluded, reconcileArchiveFormLine } from './archiveGovernance'
+import { orderArchiveGroups, governanceFieldVisible, governanceFieldRequired, archiveNewFormDefaults, archiveCreateFieldIncluded, reconcileArchiveFormLine, preservesLegacyManagerAddress } from './archiveGovernance'
 import { offlineArchiveFields, offlineEnumCodes, normalizeOfflineValue, archiveQuantityError } from './offlineArchiveFields'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
@@ -1146,7 +1146,7 @@ function buildArchiveRules(values: Record<string, any>, createdAt?: string, hist
     if (!archiveFieldVisible(key) || !archiveFieldEditable(key)) continue
     const existing = nextRules[key]
     nextRules[key] = [...(Array.isArray(existing) ? existing : existing ? [existing] : []), {
-      validator: (_rule, _value, callback) => callback((archiveAddressComplete(values) || (historical && ['address_province', 'address_city', 'address_detail'].every(key => (values[key] ?? '') === (selectedArchive.value?.[key] ?? '')))) ? undefined : new Error('请完整填写省份、城市和详细地址')),
+      validator: (_rule, _value, callback) => callback((archiveAddressComplete(values) || (values === archiveDrawerForm && preservesLegacyManagerAddress(archiveMaintenanceMode.value, selectedArchive.value, values, buildArchiveDrawerPayload())) || (historical && ['address_province', 'address_city', 'address_detail'].every(key => (values[key] ?? '') === (selectedArchive.value?.[key] ?? '')))) ? undefined : new Error('请完整填写省份、城市和详细地址')),
       trigger: ['blur', 'change'],
     }]
   }
