@@ -126,6 +126,11 @@ def identity_batch_conflicts(connection, proposals):
             if field=='serial_no':
                 for other_offset in range(offset,len(rows),150):
                     other=union_all(*[select(literal(slot).label('slot'),literal(value,type_=NVARCHAR(64)).label('key')) for slot,value,_ in rows[other_offset:other_offset+150]]).subquery()
-                    q=select(c.c.slot,other.c.slot).where(c.c.slot<other.c.slot,c.c.key.collate(collation)==other.c.key)
+                    left=c
+                    if other_offset==offset:
+                        # Reuse bound inputs once when comparing a chunk with itself.
+                        candidates=other.element.cte()
+                        left,other=candidates.alias(),candidates.alias()
+                    q=select(left.c.slot,other.c.slot).where(left.c.slot<other.c.slot,left.c.key.collate(collation)==other.c.key)
                     for left,right in connection.execute(q):conflicts.update({(left,field),(right,field)})
     return sorted(conflicts)

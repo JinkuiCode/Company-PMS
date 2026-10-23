@@ -2601,3 +2601,11 @@
 - 文件：新增backend/app/services/report_material_reference.py、frontend/src/query-system/material-reference.ts；修改三报表API、report_filters、导出提交/执行、收发请求/取数/范围服务及四报表视图、API和stockDetailState等18个既有业务文件。新增三项后端契约、隔离FastAPI夹具和三项前端测试；修正原report-draft-submit夹具的E1依赖；docs/releases/2026-10-21-material-reference-local.md及本日志。公共说明注册表未抢写，提供精确组合条目。
 - 验证：服务/API/请求与前端真实RED→GREEN；独立复审两项P1、两项P2均失败复现后修复，名称跨分块歧义再次RED→GREEN，复核无遗留。后端新增9/6/11项、前端物料8项通过；四项必需前端规范、查询/报表/库存/收发/导出/目录/主题回归和生产构建共39条命令退出0。最终dist以5192/8192连接真实FastAPI包装、合成ERP和私有临时SQLite，8组浏览器验收及四类临时工作簿下载核对通过，无页面错误/未知请求/意外5xx；E1原6组、C1原7组另存回归通过，原冻结证据保持。
 - 边界：只交付本地前后端配套候选；真实MSSQL共享策略、排序规则、索引及耗时尚未集成验证，不把合成SQL对照当作现场结果。无现有数据库/受保护配置读取，无结构/角色/权限/认证/ERP写入/真实导出/邮件变化；不部署、不合并master、不推送。5174/8000及档案线5191/8191未操作，active-source不变，临时5192/8192已关闭。候选尚未组合档案线成果，不可直接覆盖开发或正式运行源。
+
+
+### 2026-10-23 — 批量序列号查重同块SQL简化（本地候选）
+- 原因与批准：总控人类 call_4fc89729a1974c7bb57d81641cb20599 第一问批准拆分及独立本地修复；基线 7a8ed2cdf98dddba713ebf5a8f655099940d2b97，代码责任交接 PMS-COORD-FIXED-SOURCE-OWNERSHIP-TRANSFER-20261023-01。原生首次150候选用例超过门槛后，只修同块重复候选输入，不将推测表述为现场根因。
+- 调整：identity_batch_conflicts 同一150候选块的批内序列号比较改为一份双列CTE与两个别名。150候选的离线MSSQL SQL绑定750降为300、UNION ALL 298降为149；跨块、正式三列逐行自身排除、150/300边界、原生排序规则、全部占用及同事务锁保持。
+- 文件：backend/app/services/archive_serial_unique.py；新增 backend/tests/archive_serial_batch_performance_contract.py；docs/releases/2026-10-23-archive-serial-performance-local.md；本日志。
+- 验证：原函数定向RED仅SQL预算失败（750!=300）；最终定向7项、命名空间6项、MSSQL离线/伪连接2项、序列号导入1项、离线导入16项、原性能契约36项、完整序列号14项，共82个测试执行项退出0。覆盖150/151/300/301/400/401/1000、占用300/301/400/401、原生相等关系、槽位、失败关闭、锁及实际build_import_plan填空和来源映射。旧合并夹具缺锁错误在原7a8代表用例同样复现，未为通过旧测试改变业务；正确工作目录修复序列号测试的路径问题。固定字节独立复审及交付结果见本区本地说明与私有证据。
+- 边界：仅私有临时合成SQLite和离线MSSQL编译；无真实SQL Server/ERP/配置读取、原生探针或发布工具改动，无依赖/结构/索引/版本/权限/业务规则变化。数据补全继续暂停；不部署、不合并master、不推送。原生3秒门槛仍需维护线按具体批准验证。
