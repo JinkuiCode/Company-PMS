@@ -61,7 +61,9 @@ class QueryProbe:
         started = perf_counter()
         sqlite = statement.compile(dialect=self.connection.dialect, compile_kwargs={'render_postcompile': True})
         record = {'pair': list(getattr(statement, 'selected_columns', {}).keys()) == ['slot', 'slot_1'],
+                  'formal': list(getattr(statement, 'selected_columns', {}).keys()) == ['slot'] and 'JOIN pms_project_archive ON' in str(compiled),
                   'mssql_sql': str(compiled), 'sqlite_sql': str(sqlite), 'parameters': compiled.params,
+                  'parameter_types': {name: str(compiled.binds[name].type) for name in compiled.params},
                   'mssql_compile_seconds': mssql_seconds, 'sqlite_compile_seconds': perf_counter() - started,
                   'execute_seconds': 0.0, 'fetch_seconds': 0.0}
         self.records.append(record)
@@ -69,7 +71,7 @@ class QueryProbe:
             return Result(native.Scalar('SERIAL_TEST'), record)
         started = perf_counter()
         try:
-            result = self.connection.execute(statement, parameters or {})
+            result = native.execute_on_sqlite(self.connection, statement, parameters) if self.fake_mssql else self.connection.execute(statement, parameters or {})
         finally:
             record['execute_seconds'] = perf_counter() - started
         return Result(result, record)
@@ -218,6 +220,44 @@ class BatchPerformance(unittest.TestCase):
                                  {('left', 'serial_no'), ('right', 'serial_no')})
                 self.assertEqual(db.get(PmsProjectArchive, archive_id).serial_no, 'owned')
                 require_identity_lock(connection)
+
+    def test_mssql_formal_rowsets_are_compact_typed_and_preserve_sqlite_results(self):
+        for size in (1, 150, 151, 300, 301, 400, 401, 1000):
+            with self.subTest(size=size), self.fixture.engine.connect() as connection:
+                lock_codes(connection)
+                own = self.fixture.formal(connection, 'OWN', 'A_B')
+                other = self.fixture.formal(connection, 'OTHER', 'C_D')
+                self.fixture.formal(connection, 'THIRD', 'E_F')
+                connection.execute(update(PmsProjectArchive).where(PmsProjectArchive.id == other).values(is_enabled=0))
+                proposals = [{}] + [
+                    {'project_code': f'P-{i}', 'serial_no': f'SN-{i}',
+                     'archive_id': own if i % 2 else None} for i in range(size)] + [{}]
+                proposals[1] = {'project_code': 'OWN', 'serial_no': 'ab', 'archive_id': own}
+                expected = []
+                if size > 1:
+                    proposals[2] = {'project_code': 'OTHER', 'serial_no': 'cd', 'archive_id': own}
+                    expected += [(2, 'project_code'), (2, 'serial_no')]
+                if size > 2:
+                    proposals[size] = {'project_code': 'THIRD', 'serial_no': 'ef', 'archive_id': None}
+                    expected += [(size, 'project_code'), (size, 'serial_no')]
+                if size > 3:
+                    proposals[3] = {'project_code': "测'--", 'serial_no': "Ω_Ａ'--", 'archive_id': None}
+                conflicts, records = self.measured(connection, proposals, f'formal-{size}', fake_mssql=True)
+                self.assertEqual(conflicts, sorted(expected))
+                formal = [r for r in records if r['formal']]
+                self.assertEqual(len(formal), 2 * ((size + 149) // 150))
+                chunks = (size + 149) // 150
+                for index, record in enumerate(formal):
+                    self.assertIn('FROM (VALUES ', record['mssql_sql'])
+                    self.assertEqual(len(record['parameters']), 3 * min(150, size - (index % chunks) * 150))
+                    self.assertNotIn("测'--", record['mssql_sql'])
+                    self.assertNotIn("ω_ａ'--", record['mssql_sql'])
+                    self.assertNotIn('UNION ALL', record['mssql_sql'])
+                    self.assertLessEqual(len(record['parameters']), 450)
+                    self.assertIn('archive_id IS NULL OR pms_project_archive.id !=', record['mssql_sql'])
+                    types = list(record['parameter_types'].values())
+                    self.assertEqual(types, ['INTEGER', 'NVARCHAR(64)', 'INTEGER'] * (len(types) // 3))
+                connection.rollback()
 
 
 if __name__ == '__main__':

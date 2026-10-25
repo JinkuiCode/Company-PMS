@@ -2609,3 +2609,10 @@
 - 文件：backend/app/services/archive_serial_unique.py；新增 backend/tests/archive_serial_batch_performance_contract.py；docs/releases/2026-10-23-archive-serial-performance-local.md；本日志。
 - 验证：原函数定向RED仅SQL预算失败（750!=300）；最终定向7项、命名空间6项、MSSQL离线/伪连接2项、序列号导入1项、离线导入16项、原性能契约36项、完整序列号14项，共82个测试执行项退出0。覆盖150/151/300/301/400/401/1000、占用300/301/400/401、原生相等关系、槽位、失败关闭、锁及实际build_import_plan填空和来源映射。旧合并夹具缺锁错误在原7a8代表用例同样复现，未为通过旧测试改变业务；正确工作目录修复序列号测试的路径问题。固定字节独立复审及交付结果见本区本地说明与私有证据。
 - 边界：仅私有临时合成SQLite和离线MSSQL编译；无真实SQL Server/ERP/配置读取、原生探针或发布工具改动，无依赖/结构/索引/版本/权限/业务规则变化。数据补全继续暂停；不部署、不合并master、不推送。原生3秒门槛仍需维护线按具体批准验证。
+
+### 2026-10-25 — C3B正式档案查重行集简化（本地候选）
+- 原因与批准：沿用拆分性能修复批准及call_15d4c42d8f604864ba6d71a0886f61d4“只暂停数据补全，已批准的性能修复继续”；总控事件PMS-COORD-C3B-PERFORMANCE-OWNER-20261025-01。C3B首150/0内部3.151976秒未过3秒，两正式JOIN客户端execute合计3.003186秒；本地qmark精确匹配现场SQL。
+- 调整：仅identity_batch_conflicts的MSSQL正式JOIN用命名三列VALUES替代UNION输入，显式Integer/NVARCHAR64/Integer与typed NULL绑定保持450参数，SQL字节8585/8582降至1932/1929、UNION149降至0。SQLite、占用/跨块/self-CTE、列排序规则、自身排除、150/300边界和外层锁不变。既有MSSQL测试代理仅适配SQLite VALUES列别名语法，不修改生产SQL。
+- 文件：backend/app/services/archive_serial_unique.py；backend/tests/archive_serial_batch_performance_contract.py、archive_serial_mssql_contract.py；docs/releases/2026-10-25-archive-formal-batch-performance-local.md；本日志。
+- 验证：1个新增测试的8个size子例真实RED→GREEN；完整定向8项、MSSQL代理2项退出0。12组未变SQLite矩阵SQL/绑定逐项一致，复用原73项有效证据，合计83执行项适用通过。两正式新SQL参数值不变，其余4条SQL全字节一致；固定三文件独立只读复审C0/I0/M0。旧合并夹具缺锁问题沿用原基线证据，不扩改业务。
+- 边界：没有真实SQL/ERP/配置访问、探针/发布工具/依赖/结构/索引/revision/API/权限或业务规则变化；不部署、不合并、不推送，数据补全继续暂停。SQL缩短不证明原生三秒通过；新候选交总控/维护复核和原生复验。

@@ -6,7 +6,7 @@ existing archive identity transaction lock until commit/rollback.
 import json
 import re
 from fastapi import HTTPException
-from sqlalchemy import Integer, column, literal, or_, select, table, text, union_all, and_
+from sqlalchemy import Integer, column, literal, or_, select, table, text, union_all, and_, values
 from sqlalchemy.dialects.mssql import NVARCHAR
 from app.models.form_draft import PmsFormDraft
 from app.services.archive_code_unique import require_identity_lock
@@ -113,8 +113,12 @@ def identity_batch_conflicts(connection, proposals):
         collation=_collation(connection) if field=='serial_no' else None
         for offset in range(0,len(rows),150):
             c=union_all(*[select(literal(slot).label('slot'),literal(key,type_=NVARCHAR(64)).label('key'),literal(aid,type_=Integer()).label('archive_id')) for slot,key,aid in rows[offset:offset+150]]).subquery()
-            comparison=getattr(formal.c,field+'_key')==c.c.key
-            q=select(c.c.slot).select_from(c.join(formal,and_(comparison,or_(c.c.archive_id.is_(None),formal.c.id!=c.c.archive_id))))
+            formal_candidates=c
+            if connection.dialect.name=='mssql':
+                # Avoid a large UNION tree in the formal-table lookup.
+                formal_candidates=values(column('slot',Integer()),column('key',NVARCHAR(64)),column('archive_id',Integer()),name='formal_candidates').data([(slot,key,literal(aid,type_=Integer())) for slot,key,aid in rows[offset:offset+150]])
+            comparison=getattr(formal.c,field+'_key')==formal_candidates.c.key
+            q=select(formal_candidates.c.slot).select_from(formal_candidates.join(formal,and_(comparison,or_(formal_candidates.c.archive_id.is_(None),formal.c.id!=formal_candidates.c.archive_id))))
             conflicts.update((slot,field) for slot in connection.execute(q).scalars())
             for start in range(0,len(draft_keys[field]),300):
                 occupied=union_all(*[select(literal(key,type_=NVARCHAR(64)).label('key')) for key in draft_keys[field][start:start+300]]).subquery()

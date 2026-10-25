@@ -11,6 +11,20 @@ from app.services.archive_code_unique import lock_codes, require_identity_lock, 
 from app.services.archive_serial_unique import ensure_serial_available, identity_batch_conflicts
 from fastapi import HTTPException
 
+def execute_on_sqlite(connection, statement, parameters=None):
+    compiled = statement.compile(dialect=connection.dialect)
+    sql = str(compiled)
+    alias = 'AS formal_candidates (slot, "key", archive_id)'
+    if alias not in sql:
+        return connection.execute(statement, parameters or {})
+    # SQLite supports VALUES in FROM but names its columns column1/2/3.
+    sql = sql.replace(alias, 'AS formal_candidates')
+    for name, index in [('slot', 1), ('"key"', 2), ('archive_id', 3)]:
+        sql = sql.replace('formal_candidates.' + name, 'formal_candidates.column' + str(index))
+    params = parameters or compiled.params
+    return connection.exec_driver_sql(sql, tuple(params[name] for name in compiled.positiontup))
+
+
 class Scalar:
     def __init__(self,value):self.value=value
     def scalar(self):return self.value
@@ -24,7 +38,7 @@ class Proxy:
         self.statements.append((str(compiled),parameters or compiled.params))
         if 'sp_getapplock' in str(statement):return Scalar(self.lock_result)
         if 'collation_name' in str(statement):return Scalar(self.collation)
-        return self.c.execute(statement,parameters or {})
+        return execute_on_sqlite(self.c,statement,parameters)
 
 class Mssql(unittest.TestCase):
     def test_native_statements_are_bound_and_lock_is_same_transaction_resource(self):
