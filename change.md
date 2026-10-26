@@ -2616,3 +2616,11 @@
 - 文件：backend/app/services/archive_serial_unique.py；backend/tests/archive_serial_batch_performance_contract.py、archive_serial_mssql_contract.py；docs/releases/2026-10-25-archive-formal-batch-performance-local.md；本日志。
 - 验证：1个新增测试的8个size子例真实RED→GREEN；完整定向8项、MSSQL代理2项退出0。12组未变SQLite矩阵SQL/绑定逐项一致，复用原73项有效证据，合计83执行项适用通过。两正式新SQL参数值不变，其余4条SQL全字节一致；固定三文件独立只读复审C0/I0/M0。旧合并夹具缺锁问题沿用原基线证据，不扩改业务。
 - 边界：没有真实SQL/ERP/配置访问、探针/发布工具/依赖/结构/索引/revision/API/权限或业务规则变化；不部署、不合并、不推送，数据补全继续暂停。SQL缩短不证明原生三秒通过；新候选交总控/维护复核和原生复验。
+
+
+### 2026-10-26 — 批量查重缺失ID的NULL绑定修复（本地候选）
+- 原因与批准：沿用性能拆分及继续批准，PMS-COORD-PERFORMANCE-151-OWNER-20261026-01；用户新增要求区分性能偏差和上线硬阻塞。09178现场150内部2.949322秒、151内部3.996595秒；逐条复现16条SQL，跨块452绑定包含未参与比较的150个None，两正式450也各150个None。
+- 调整：仅MSSQL缺失archive_id改CAST(NULL AS INTEGER)，非空ID仍Integer绑定；当前块共享表达式给UNION和正式VALUES，消除驱动None参数。保留SQLite、150/300块、原始槽位、自身排除、原生collation、所有占用/坏状态和外层持锁。
+- 文件：backend/app/services/archive_serial_unique.py；backend/tests/archive_serial_batch_performance_contract.py；docs/releases/2026-10-26-archive-null-bind-performance-local.md；本日志。
+- 验证：新增151+占用0/301两个子例真实RED→GREEN，最终9定向+MSSQL2项exit0；12组未变SQLite SQL/绑定一致，复用原73项，合计84执行项适用通过。非空MSSQL值及顺序保持，None总数150/151分别300/452降至0；固定字节独立只读复审C0/I0/M0。
+- 分类与边界：三秒可追溯到2026-10-22维护探针技术断言，未发现业务SLA依据或生产自动拒绝逻辑，不作为自动上线否决；四秒仅合成查重，完整导入/1000规模/生产并发锁影响未测，不能断言安全或危险。独立备份恢复继续由维护并行处理。本机未连接真实SQL/ERP或读配置、未改探针/工具/依赖/表/索引/revision/API/权限，未合并/推送/部署，数据补全/进度保持暂停。SQLDescribeParam是已核对pyodbc5.2源码机制，不是现场耗时分项证明。

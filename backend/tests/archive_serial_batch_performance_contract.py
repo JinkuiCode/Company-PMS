@@ -249,14 +249,45 @@ class BatchPerformance(unittest.TestCase):
                 chunks = (size + 149) // 150
                 for index, record in enumerate(formal):
                     self.assertIn('FROM (VALUES ', record['mssql_sql'])
-                    self.assertEqual(len(record['parameters']), 3 * min(150, size - (index % chunks) * 150))
+                    start = 1 + (index % chunks) * 150
+                    chunk = proposals[start:min(start + 150, size + 1)]
+                    expected_types = [kind for row in chunk for kind in
+                                      (['INTEGER', 'NVARCHAR(64)'] + (['INTEGER'] if row['archive_id'] is not None else []))]
+                    self.assertEqual(len(record['parameters']), len(expected_types))
+                    self.assertNotIn(None, record['parameters'].values())
+                    if any(row['archive_id'] is None for row in chunk):
+                        self.assertIn('CAST(NULL AS INTEGER)', record['mssql_sql'])
                     self.assertNotIn("测'--", record['mssql_sql'])
                     self.assertNotIn("ω_ａ'--", record['mssql_sql'])
                     self.assertNotIn('UNION ALL', record['mssql_sql'])
                     self.assertLessEqual(len(record['parameters']), 450)
                     self.assertIn('archive_id IS NULL OR pms_project_archive.id !=', record['mssql_sql'])
                     types = list(record['parameter_types'].values())
-                    self.assertEqual(types, ['INTEGER', 'NVARCHAR(64)', 'INTEGER'] * (len(types) // 3))
+                    self.assertEqual(types, expected_types)
+                connection.rollback()
+
+    def test_mssql_candidates_do_not_bind_missing_archive_ids(self):
+        for occupied in (0, 301):
+            with self.subTest(occupied=occupied), self.fixture.engine.connect() as connection:
+                lock_codes(connection)
+                proposals = [{}] + [{'project_code': f'P-{i}', 'serial_no': f'SN-{i}'}
+                                    for i in range(151)] + [{}]
+                proposals[1]['serial_no'], proposals[151]['serial_no'] = 'A_B', 'ab'
+                expected = [(1, 'serial_no'), (151, 'serial_no')]
+                for i in range(occupied):
+                    self.fixture.occupy(connection, 'draft', f'held-{i}', f'private-{i}')
+                if occupied:
+                    proposals[2]['serial_no'] = 'held-300'
+                    expected.append((2, 'serial_no'))
+                conflicts, records = self.measured(connection, proposals, f'null-free-151-{occupied}', fake_mssql=True)
+                self.assertEqual(conflicts, sorted(expected))
+                candidates = [r for r in records if r['formal'] or r['pair'] or ' AS archive_id' in r['mssql_sql']]
+                self.assertTrue(candidates)
+                for record in candidates:
+                    self.assertNotIn(None, record['parameters'].values(), 'missing archive IDs must remain typed SQL NULL, not driver-bound None')
+                self.assertEqual([len(r['parameters']) for r in records if r['formal']], [300, 2, 300, 2])
+                self.assertEqual([len(r['parameters']) for r in records if r['pair']], [300, 302, 2])
+                self.assertTrue(any('CAST(NULL AS INTEGER)' in r['mssql_sql'] for r in candidates))
                 connection.rollback()
 
 

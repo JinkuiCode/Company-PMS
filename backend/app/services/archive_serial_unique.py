@@ -6,7 +6,7 @@ existing archive identity transaction lock until commit/rollback.
 import json
 import re
 from fastapi import HTTPException
-from sqlalchemy import Integer, column, literal, or_, select, table, text, union_all, and_, values
+from sqlalchemy import Integer, column, literal, or_, select, table, text, union_all, and_, values, cast, null
 from sqlalchemy.dialects.mssql import NVARCHAR
 from app.models.form_draft import PmsFormDraft
 from app.services.archive_code_unique import require_identity_lock
@@ -112,11 +112,13 @@ def identity_batch_conflicts(connection, proposals):
         if not rows:continue
         collation=_collation(connection) if field=='serial_no' else None
         for offset in range(0,len(rows),150):
-            c=union_all(*[select(literal(slot).label('slot'),literal(key,type_=NVARCHAR(64)).label('key'),literal(aid,type_=Integer()).label('archive_id')) for slot,key,aid in rows[offset:offset+150]]).subquery()
+            # SQL NULL avoids per-parameter metadata work for missing IDs.
+            batch=[(slot,key,cast(null(),Integer()) if connection.dialect.name=='mssql' and aid is None else literal(aid,type_=Integer())) for slot,key,aid in rows[offset:offset+150]]
+            c=union_all(*[select(literal(slot).label('slot'),literal(key,type_=NVARCHAR(64)).label('key'),aid.label('archive_id')) for slot,key,aid in batch]).subquery()
             formal_candidates=c
             if connection.dialect.name=='mssql':
                 # Avoid a large UNION tree in the formal-table lookup.
-                formal_candidates=values(column('slot',Integer()),column('key',NVARCHAR(64)),column('archive_id',Integer()),name='formal_candidates').data([(slot,key,literal(aid,type_=Integer())) for slot,key,aid in rows[offset:offset+150]])
+                formal_candidates=values(column('slot',Integer()),column('key',NVARCHAR(64)),column('archive_id',Integer()),name='formal_candidates').data(batch)
             comparison=getattr(formal.c,field+'_key')==formal_candidates.c.key
             q=select(formal_candidates.c.slot).select_from(formal_candidates.join(formal,and_(comparison,or_(formal_candidates.c.archive_id.is_(None),formal.c.id!=formal_candidates.c.archive_id))))
             conflicts.update((slot,field) for slot in connection.execute(q).scalars())
