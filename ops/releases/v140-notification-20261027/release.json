@@ -1,0 +1,59 @@
+{
+  "version": "v1.4.0",
+  "title": "档案与查询功能更新",
+  "summary": "完善档案维护规则、查询方案和多物料报表。",
+  "build_id": "combined-eae4b05e-20261026",
+  "commit": "eae4b05e3eb56a6be1621c3e2e718f530fc3edd9",
+  "database_revision": "2026-10-21-archive-policy-01",
+  "built_at": "2026-10-26T00:30:09.618305+00:00",
+  "changes": [
+    {
+      "kind": "修复",
+      "title": "档案枚举候选保持有效",
+      "description": "候选刷新与保存拒绝定位，保留输入。",
+      "guide": "archive"
+    },
+    {
+      "kind": "调整",
+      "title": "档案列表优先展示产品线",
+      "description": "默认首列产品线，兼容个人列设置。",
+      "guide": "archive"
+    },
+    {
+      "kind": "调整",
+      "title": "统一档案字段规则",
+      "description": "调整必输、默认值、历史隐藏及页面说明，单位显示pcs。",
+      "guide": "archive"
+    },
+    {
+      "kind": "修复",
+      "title": "统一编码与序列号防重",
+      "description": "草稿、正式档案和待审批变更按各自占用规则校验。",
+      "guide": "archive"
+    },
+    {
+      "kind": "调整",
+      "title": "历史档案负责人维护",
+      "description": "按现有权限、原因和日志维护可信历史档案负责人。",
+      "guide": "archive"
+    },
+    {
+      "kind": "调整",
+      "title": "采购明细布局",
+      "description": "物料编码优先展示，保留当前查询范围。",
+      "guide": "purchase"
+    },
+    {
+      "kind": "新增",
+      "title": "维护本人查询方案",
+      "description": "编辑和删除本人方案，默认及删除回退按当前规则。",
+      "guide": "purchase"
+    },
+    {
+      "kind": "新增",
+      "title": "报表多物料引用",
+      "description": "采购、库存及收发支持多物料，导出沿用相同完整范围。",
+      "guide": "stock"
+    }
+  ]
+}

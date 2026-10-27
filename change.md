@@ -1,4 +1,75 @@
+## 2026-10-25 直接人类消息授权引用兼容修复
+
+- 原因：历史工具将授权来源错误限制为 call_ 弹窗编号，并强制本批范围与执行使用两个不同弹窗；实际人类已直接批准接续，格式限制可能制造重复确认。
+- 调整：正式与原生准备包沿既有共享模块接受严格 human-message:聊天UUID:消息UUID 格式，明确其仅为语法、来源和范围须从原聊天核验后才绑定。同一条覆盖两项的已核验人类消息可兼作范围与执行引用，旧 call_ 规则保留。候选/文件/时段/期限/单次锁、已消费拒绝及正式证书校验均不变；没有新增授权框架。
+- 涉及文件：本批 Workflow/NativeSql/Plan/Bundle/Session/Assembly/Observer/WindowsRuntime/Bridge、原生 bounded_sql/rehearsal/batch_entry，以及两个定向测试和工具 README。
+- 验证：原限制已先失败复现；新正式6项/原生3项通过，独立相关负向与贯通共34项通过，C0/I0。自动审核首次拦截后补足原码仅检查格式和真实人类来源证据，同一动作重新审核获准，无绕过；受影响工具另名固定，旧包保留。
+- 边界：没有创建实际执行授权/时段、连接SQL、改生产数据或降低正式 TLS；本条不表示真实数据库/部署已完成。证据在私有 resume-20261025/。
+
+## 2026-10-23 新候选原生验证材料准备（未执行）
+
+- 原因：将已获批性能修复接入下一次有限原生验证，补足上次失败后的计时与对象归属证据。
+- 调整：在独立本机副本 `ops/rehearsals/combined-3b657774-native-20261023/` 复用原 16 项运行材料，真实装载新 backend/source 字节；保留所有 R3 对象和原包，使用指定的 C3B 新名字。函数内部完整精度总耗时与客户端 execute/错误区间分别记录，不包含编译或 fetch 的区间不冒称服务器耗时；新建/恢复库与每个新登录在下一变更前保存 GUID/文件指纹或 SID。未增加物理连接、代理句柄或新平台。
+- 验证：23 项定向检查、独立假 SQL 失败情形通过，最终复审 C0/I0；旧 R3 源码、材料及回执摘要一致。原三秒、七规模、锁/占用/恢复、连接/容量/负载与期限规则未放宽。
+- 边界：批准/slot 为 null，无实际授权或 nonce，实际入口和 connect 均拒绝未绑定状态及旧消耗引用；无真实 SQL、Windows、ERP、邮件、正式部署或 Git 操作。原机制仅可在明确失败且 SID 一致时禁用本批新临时身份，未知不禁用，绝不触及 R3 账号。具体下一实际范围与固定交付摘要在私有 performance-integration-20261023/。
+
+## 2026-10-23 完整发布入口与性能候选本地接入
+
+- 原因与范围：继续既有整批验证和工具准备、已批准的本地组合及必要修复；修正原生 R3 暴露的批量查重问题，并补齐实际发布入口，未扩大到正式执行。
+- 调整：功能分支快进到已独审的 `3b657774`，保留本区 47 行未提交记录及所有原工具/失败包。业务仅接入同块查重最小优化，不放宽锁、占用或三秒门槛；真实 source/backend 包、程序树、运行与 Python 清单均重新固定，前端字节不变。
+- 工具：增加有限一次性计划/隐藏身份/三连接/父子进程接线，PMS 永久进程保留父侧；SQL 执行、取数、关闭共享期限；嵌套 RPC 期间仍由父侧消费 SQL 阶段。未知读取、取消、关闭和线程退出不会误报成功，不自动重跑或还原正式数据库。停旧前安全预绑定候选引擎，完整工具 pin 与实际载入字节同源核对。
+- 涉及文件：`ops/releases/combined-7a8ed2cd-20261022/` 及对应测试/README；业务增量沿已固定的服务、定向测试和说明，未改数据库结构、角色权限或保护配置。
+- 验证：入口 16 项及失败反例最终独审 C0/I0；新绑定两项先 RED 后 GREEN。新候选七组相关检查共 145 项退出 0，另复验实际临时 SQLite 受控寿命/四后台暂停/数据库字节不变，定向查重 7 项通过；沿未变字节复用前端、ERP及组件证据。详细摘要和适用性在私有 `performance-integration-20261023/`，不把合成验证写成原生 SQL 或正式验收。
+- 边界：仅本地功能分支接入，无 master/GitHub/正式部署；旧 R3 已消费且保留测试对象。下一实际 SQL 与正式维护仍须具体批准，新性能三秒、坏 JSON/重放和 PMS 副本兼容尚未通过。
+
+## 2026-10-23 Local release monitoring and owner-session integration
+
+- Reason: finish approved native observation and lifecycle components without treating fixtures as site acceptance.
+- Changes: add native_monitor, site_observer, release_session and release_assembly with tests; guard every SQL/cursor ownership, lease the complete snapshot transaction, keep three existing handles and prohibit close/reuse while cancellation is unresolved. Unknown enabled Agent jobs stop the gate. Consumed R2/R3 references cannot authorize a formal window.
+- Review fixes: permit safe same-cursor reuse during the real installed SQLAlchemy initialization; refresh controlled health proof synchronously and reject changed worker/file/identity states rather than publishing a clean replacement. No new business-process thread.
+- Files: ops/releases/combined-7a8ed2cd-20261022 modules, associated tests and README. Business backend is unchanged; old fixed bundles retained.
+- Verification: 10 current commands exit0, 249 local synthetic unit/integration cases and one fresh candidate SQLite lifespan; 18 unchanged component cases reused only after source-hash comparison. Finite independent review C0/I0. Logs and fixed bytes are in private release-native-components-20261023/.
+- Limits: no native Windows/SQL2017 driver acceptance, deployment, grants or Git. Outer process supervision, hidden native identity/connection factory and final site binding remain incomplete; formal_entry_ready=false.
+
+## 2026-10-23 R3 单次 SQL 演练结果记录
+
+- 原因：按批准的 R3 固定工具完成一次原生 SQL 验证，失败即停止并保留现场。
+- 实际完成：固定材料与零 SQL 资源检查通过；连接加密确认；新建两个合成测试库和两个受限测试身份；合成库 COPY_ONLY/CHECKSUM 备份、VERIFYONLY、恢复、旧新程序版本拒绝及 A1 的 13 项检查通过；namespace 前 25 项并发/事务/排序规则检查通过。
+- 未通过：150 条批量查重在 `identity_batch_conflicts` 内超过 3 秒门槛，失败用例总耗时 5.267 秒，未保留内部精确耗时或逐查询分解，不能声称具体数据库热点已证实。未放宽门槛、重连、重跑或修改业务候选。
+- 涉及记录：`.runtime/combined-7a8ed2cd-20261022/preflight-r3-preparation/actual-result-summary.json` 及 14 项脱敏回执；独立连续性台账。
+- 验证及边界：本次连接/进程/Job 关闭证据均为 true。两测试库、两测试身份和合成备份按失败保留；正式 PMS 备份、兼容副本和成功清理未进入。正式业务库/程序/配置/权限及 Git 未调整。
+
+## 2026-10-23 R2 actual result and R3 local preparation
+
+- Approval: actual R2 under human call_a8d321f2a0914dc59e47908ba60cd023; local necessary corrections under the existing approved tool-preparation scope and coordinator finite-review instruction.
+- Actual result: first connect0.080379565s, encryptedTRUE/1433/ODBC17.03.0001, old PMS revision and190MiB layout, exact B directory/volume proof passed. Unused xp_fixeddrives shape gate stopped the batch before any DB/login/backup. All owned connections, worker and Job closure proved. R2 is consumed, preserved and not retried.
+- Changes: new ops/rehearsals/combined-7a8ed2cd-encrypted-20261023-r3 avoids both unused diagnostic queries for B, keeps all mandatory volume/capacity/load/permission/collision gates, records bounded metadata shapes, strictly rejects invalid counters and consumed R2 execution approval. No driver exception is ignored to continue required queries.
+- Verification:102 local isolated tests plus11 independent required-gate counterexamples passed, final reviewC0/I0. R2 source SHA256 values unchanged. Fixed16-material package and exact scope in private preflight-r3-preparation. No R3 native run, server transfer or actual permission inferred; no production/Git/ERP/mail change.
+
+## 2026-10-23 SQL2017预检与配套发布组件修订（本机）
+
+- 原因与批准：沿原整批验证及工具准备 `call_5bb4608eaf81439db0afc4bf97e9e1bd`、独立加密验证修订 `call_386065407e394fa793ac9d024db03581`；修复实际R1在只读目录元数据门禁停止后暴露的兼容及工具组合问题。业务候选7a8ed2cd保持；R2实际重验批准另行核对，尚待总控错峰时段。
+- 调整：在新的R2工具目录增加SQL2017目录类型及精确实例读取、同父目录真实卷证据、未知子结果停止、唯一执行批准及B备份位置策略；保留R1工具与失败记录。配套发布组件增加实际MSSQL系统表约束读取、受控时间序列化、实例/人员SID/会话与同次备份绑定、预计增量及逐语句截止；快照元数据权限不足拒绝。Windows启动环境改为白名单；有限发布控制器统一绑定材料/截止/程序与数据库配对，保留真实后台和写入口观测，失败会话提前停止，逐文件验证实际HTTP响应。详见本批组件README，现场观察者和原生绑定仍待完成。
+- 涉及文件：`ops/rehearsals/combined-7a8ed2cd-encrypted-20261022-r2/`、`ops/releases/combined-7a8ed2cd-20261022/`及对应测试。本批没有改业务源码、角色、数据库或受保护配置。
+- 验证：R2的97项本机检查和Windows零SQL进程资源门禁通过；当前配套发布组件111项隔离单元及1项当前候选新建临时SQLite生命周期通过。数据库会话失败、后台仍运行、截止及材料不一致等反例均先复现再修复。最终版本独立复审C0/I0；原生SQL整批、现场发布绑定及正式部署尚未通过，未作Git提交/合并/推送或发送通知。
+
+
+## 2026-10-22 加密独立SQL验证工具修订
+
+- 原因与批准：用户直接批准 `call_386065407e394fa793ac9d024db03581`。仅本批独立工具使用 Encrypt=yes / TrustServerCertificate=yes，传输加密但不校验服务器身份；正式PMS及共用SQL配置不变，业务候选7a8ed2cd不变。
+- 调整：在新的 `ops/rehearsals/combined-7a8ed2cd-encrypted-20261022/` 保留独立策略、目录、批准和单次执行锁；首连使用17秒子进程截止及最多3秒结束等待，成功连接经过父进程确认后直接继续原预检和SQL批次。凭据仅隐藏输入与匿名管道传递。首连归属后再写记录，异常仍可关闭；用无名Windows Job约束自建worker及其后代，增加清理截止、最终回执排空及不涉及SQL的原生资源自测门禁。
+- 涉及文件：上述新目录的 `batch_entry.py`、`resource_check.py`、`owned_process.py`、`bounded_sql.py`、`rehearsal.py`、`site_preflight.py`、`stage.py`、`windows_host.py`、原探针副本及对应测试。旧工具和旧失败目录均保留，原工具源码摘要逐项不变。
+- 验证：61项定向、安全及全新临时SQLite探针测试通过；真实子进程卡首连和卡确认均被截止退出。独立复审C0/I0，首连归属、后代收束和最终关闭回执问题已修复。Windows原生资源门禁已通过：worker退出、后代归属和Job活动进程归零均获证明，实耗0.207444秒、0 SQL；整批SQL验收仍未开始，这里不将Mac测试或资源门禁视作原生SQL业务通过。固定材料16项12,622,600字节，pins SHA256 f7e05ba74c21f1bd5c8f0d4e2f8742fe6e9348020f3998db305d6c4174317403。现场整批首连已成功：0.087273秒、加密TRUE、端口1433、ODBC17.03.0001；随后在备份目录元数据门禁停止，未建库、建身份或备份，连接和Job清理通过。停止原因原样保留，不自动重连；整批未通过。未作Git提交/合并/推送、正式部署、ERP或邮件操作。
+
 # 2026-10-22 档案与查询候选本地组合验收
+## 2026-10-22 有界SQL验证与配套发布工具准备（尚未正式发布）
+
+- 原因与批准：按总控原人类 `call_5bb4608eaf81439db0afc4bf97e9e1bd` 整批验证及工具准备、后续 `call_00ad15674aef4b85a6b7e07da7eb86c6` 单次0 SQL诊断批准，保持业务候选7a8ed2cd不变，新增专用隔离运维组件；不含正式部署或Git写操作。
+- 调整：增加严格目标/TLS/连接/负载/空间/超时与对象归属门禁、限库精确授权、合成事务/迁移/备份恢复验证入口及脱敏回执；固定材料逐字节落地。补充一次连接诊断的父子身份绑定、时限、防重放和SQLSTATE/数字码白名单，不保存用户名、密码、连接串或原始异常。
+- 配套准备：增加新旧程序文件备份/校验/显式回退及回退中断恢复；旧DB与旧程序、新DB与新程序严格配对。从同一固定source补齐backend/main.py；新旧前端资源三代并存及仅root字节替换准备；受控启动暂停四类worker、明确路径白名单阻止业务修改与所有导出，保留登录/退出及安全审计例外；切换顺序契约失败即停、不自动回退或重跑。当前顺序契约不等于已完成Windows原生生产适配。
+- 涉及：`ops/rehearsals/combined-7a8ed2cd-20261022/`、`ops/releases/combined-7a8ed2cd-20261022/`及对应隔离行为测试。本批未改业务源码、库结构、角色权限、受保护配置、运行服务或原候选包。
+- 验证：本批工具79项单元及当前候选全新临时SQLite真实生命周期1项通过；复审发现GET提报导出旁路后先复现再修复，最终无遗留Critical/Important。规定业务90项及17组流程因业务候选/输入未变复用，不重复宣称为本次原生通过。实际首次连接失败；独立0 SQL诊断返回08001/-2146893019证书信任错误，未取得可用连接/未执行SQL/未建库授权或备份恢复，进程退出已记录。SQL实测、备份副本兼容及生产适配绑定仍未完成；没有关闭证书校验、正式部署、Git提交/合并/推送或发信。证据在本工作区私有`.runtime/combined-7a8ed2cd-20261022/`。
+
 - 原因与批准：按总控call_7b0850325cd942929bd33702bd73c33a统一档案A0/P28/A1/A2/P29与查询E1/C1/C2，避免独立候选相互覆盖；仅新隔离工作区、本地验证和锁定。
 - 调整：功能分支组合并完整保留两线记录；按精确条目统一页面说明。仅给两处旧查询测试种子补A2外层身份锁。实际页面发现P29前端仍拦历史仅负责人维护，加入与原后端边界相同的地址展示兼容，不扩大必填历史兼容或权限；增加真实组合前后端/当前RBAC/新私有SQLite及合成ERP验收。
 - 文件：`frontend/src/page-guide/registry.ts`、`ProjectArchive.vue`、`archiveGovernance.ts`及专项/联合浏览器测试；`backend/tests/report_query_v2_contract.py`、`archive_reference_query_contract.py`、合成组合fixture与适配器契约；`docs/releases/2026-10-22-archive-query-combination-local.md`。
@@ -2610,12 +2681,68 @@
 - 验证：原函数定向RED仅SQL预算失败（750!=300）；最终定向7项、命名空间6项、MSSQL离线/伪连接2项、序列号导入1项、离线导入16项、原性能契约36项、完整序列号14项，共82个测试执行项退出0。覆盖150/151/300/301/400/401/1000、占用300/301/400/401、原生相等关系、槽位、失败关闭、锁及实际build_import_plan填空和来源映射。旧合并夹具缺锁错误在原7a8代表用例同样复现，未为通过旧测试改变业务；正确工作目录修复序列号测试的路径问题。固定字节独立复审及交付结果见本区本地说明与私有证据。
 - 边界：仅私有临时合成SQLite和离线MSSQL编译；无真实SQL Server/ERP/配置读取、原生探针或发布工具改动，无依赖/结构/索引/版本/权限/业务规则变化。数据补全继续暂停；不部署、不合并master、不推送。原生3秒门槛仍需维护线按具体批准验证。
 
+### 2026-10-25 原生演练材料落地与执行绑定
+
+- 原因：恢复既有获批批次，避免重放已消费的R3时段；业务候选仍为3b657774。
+- 调整：仅私有运行副本绑定已核验的人类批准、新SQL独占时段及本次即时执行确认；固定16项材料传入228受限目录，正式配置和业务数据不变。
+- 涉及文件：私有native-runtime-materials/rehearsal.py元数据、pins.json、execution-approval.json、slot-window-audit.json及原生回执；不改原准备模板。
+- 验证：16项SHA/字节数一致；Windows stage退出0；原生零SQL资源检查退出0，worker、子进程及Job清理成立。一次入口已到隐藏身份提示；此记录不代表SQL连接、隔离批次或正式部署通过。
+
+### 2026-10-25 C3B 原生隔离执行结果
+
+- 原因：按本次即时批准验证3b657774实际SQL2017行为。
+- 调整：仅本批隔离库和受限身份执行旧库初始化、合成备份恢复、A1升级与namespace测试；未升级正式库、未替换程序。失败按原范围保留对象与备份，不自动重试或清理。
+- 涉及文件：私有native-actual-result/原始回执、summary.json、query-shape-analysis.json；业务源码未修改。
+- 验证：首连0.108627541秒且加密；A1 13项、namespace前25项通过，150条内部3.151976088秒超过3秒，批次EXIT1。连接、worker、Job已关闭；正式健康ok。正式源备份恢复兼容及正式部署未执行。
+
 ### 2026-10-25 — C3B正式档案查重行集简化（本地候选）
 - 原因与批准：沿用拆分性能修复批准及call_15d4c42d8f604864ba6d71a0886f61d4“只暂停数据补全，已批准的性能修复继续”；总控事件PMS-COORD-C3B-PERFORMANCE-OWNER-20261025-01。C3B首150/0内部3.151976秒未过3秒，两正式JOIN客户端execute合计3.003186秒；本地qmark精确匹配现场SQL。
 - 调整：仅identity_batch_conflicts的MSSQL正式JOIN用命名三列VALUES替代UNION输入，显式Integer/NVARCHAR64/Integer与typed NULL绑定保持450参数，SQL字节8585/8582降至1932/1929、UNION149降至0。SQLite、占用/跨块/self-CTE、列排序规则、自身排除、150/300边界和外层锁不变。既有MSSQL测试代理仅适配SQLite VALUES列别名语法，不修改生产SQL。
 - 文件：backend/app/services/archive_serial_unique.py；backend/tests/archive_serial_batch_performance_contract.py、archive_serial_mssql_contract.py；docs/releases/2026-10-25-archive-formal-batch-performance-local.md；本日志。
 - 验证：1个新增测试的8个size子例真实RED→GREEN；完整定向8项、MSSQL代理2项退出0。12组未变SQLite矩阵SQL/绑定逐项一致，复用原73项有效证据，合计83执行项适用通过。两正式新SQL参数值不变，其余4条SQL全字节一致；固定三文件独立只读复审C0/I0/M0。旧合并夹具缺锁问题沿用原基线证据，不扩改业务。
 - 边界：没有真实SQL/ERP/配置访问、探针/发布工具/依赖/结构/索引/revision/API/权限或业务规则变化；不部署、不合并、不推送，数据补全继续暂停。SQL缩短不证明原生三秒通过；新候选交总控/维护复核和原生复验。
+
+### 2026-10-25 — 集成验证身份复用与有限静态工具
+- 原因与批准：call_25d5e1d7762d4b15b7a4f425f6363994批准整批工具开发及一次复验。
+- 调整：09178同源重新绑定；隐藏验证维护身份后切换原受限测试身份，校验SID、映射和权限，不重置旧密码。public目录改用sys.all_objects，保留128行门禁，拒绝仅记录查询摘要。旧批准禁止重放，新R1未绑定许可。有限G0/G1 SYSTEM步骤接入Controller，worker先入Job、保持ACL和120秒截止、一次重载、自然退旧worker及父独立验收；XML修复保持SID与COM参数5。
+- 文件：ops/releases/combined-7a8ed2cd-20261022内system_static、windows_runtime、runtime_bridge、release_entry、release_plan、native_sql、相关测试及README；私有reuse_identity/site_preflight副本、清单和回执。
+- 验证：目录与身份28项、最终工具375项通过，独立复审C0/I0。Windows14段仅解析、2份XML仅校验通过，无任务创建。实际首连0.043498秒后目录门禁停止，性能和备份恢复未开始；自有连接、进程及Job关闭，正式健康ok。修订后未再连SQL。
+- 边界：正式程序、结构、数据、权限、配置和金蝶未改；无SYSTEM实际任务、静态切换、Git提交合并推送或邮件。
+
+### 2026-10-25 — R1复验绑定及公共权限预检必要修复
+- 原因与批准：总控原人类call_c0f81e03f1774289839c90344811b174批准现在启动一次复验；按固定范围创建R1私有运行副本和新独占绑定，保留旧材料，不重问启动。
+- 调整：18项运行材料只绑定新批准、时段及范围摘要。实际停止后，在独立本机副本修正public必需权限：CONNECT SQL仍由登录自身严格验证，public仅要求VIEW ANY DATABASE，额外全局权限及端点漂移仍拒绝。已有目录查询增加系统类型等解析列和失败前白名单记录，复用相同SQL摘要；TYPE继续拒绝，没有据6行猜测放行。角色记录放入既有metrics，不扩回执字段白名单。
+- 文件：私有reuse-r1-fixed运行绑定及回执、public-permission-repair-preparation内reuse_identity.py和相关测试；本日志。
+- 验证：R1材料与零SQL资源检查通过；实际首连0.027110秒，连接后1.580025秒在公共权限核对停止，自有连接/进程/Job关闭，正式/api/health为ok，性能及备份恢复未开始。错误默认规则与额外权限测试RED→GREEN；真实Controller到Receipt接线先RED后修复，最终35项退出0、复审C0/I0。原始7份回执保留，具体公共权限值仍缺现场证据。
+- 边界：停止后没有再次连接SQL；正式程序、结构、数据、授权和配置未改，无SYSTEM任务、Git提交合并推送、ERP或邮件。只读权限快照为待决方案，不能视为实际执行批准。
+
+### 2026-10-25 - 单次权限快照工具固定（仅本机准备）
+- 原因与批准：沿用已批准的维护工具准备及必要修复范围；R1首次公共权限门禁失败后，先准备完整、有限、可审的只读取证入口。实际R1已消费关闭，本次没有新现场许可。
+- 调整：复用现有有界入口、Receipt和自有进程清理；固定单连接、33次SELECT及3次USE，完整记录两个原测试身份与两个原测试库的授权、映射和归属，公共权限遇未知项仅取证、不自动接受。追加仅按v1.4.0读取发布表版本一列，不预留版本、不触发通知。父子整体截止输入后120秒含首连17秒，迟到消息拒绝、进度不延长窗口；读取/USE失败保留已有回执并关闭连接。
+- 文件：私有permission-snapshot-preparation/materials内permission_snapshot.py、batch_entry.py、rehearsal.py、bounded_sql.py等10项固定工具；5项测试文件、pins.json、verification.json及执行范围。
+- 验证：19项本机测试退出0，覆盖真实worker与Receipt、单连接关闭、固定SQL目录映射、未知权限继续取证、目标/列形态拒绝、截止与阶段材料门禁；源码与最终清单独立复审C0/I0，两项Important已关闭。未授权pins为ff2e04ef，业务候选09178b16保持不变。
+- 边界：APPROVAL/SLOT为空，旧执行引用被拒绝；未上传或启动新现场工具、未连SQL、未读凭据或正式配置、未改正式程序/库/权限/金蝶/Git/通知。未加入额外TLS或注册表诊断。
+
+### 2026-10-25 - 维护连接复用策略本机修订及单次快照绑定
+- 原因与批准：总控直接人类call_210723及本聊天call_4183bc/call_cf752批准两项，call_3ccf56批准既有共享中的固定工具传输。复用已成功连接路径，纠正新工具将严格证书校验作为既有上线门槛的假设。
+- 调整：native_connection_bundle、native_sql和release_plan固定请求Encrypt=yes/TrustServerCertificate=yes，实际encrypt_option仍须TRUE；目标、实例、家族、身份、单次锁、时限和回退检查保持。两套非正式许可拒绝集合补齐当前只读/本机批准及已消费R1两引用，不允许拿它们升级正式库。同步5项测试夹具和README。仅私有快照副本绑定本次新时段和已核验人类引用，经原共享落地受限目录，无凭据传输。
+- 涉及文件：ops/releases/combined-7a8ed2cd-20261022/native_connection_bundle.py、native_sql.py、release_plan.py、release_workflow.py，test_native_connection_bundle.py、test_native_sql.py、test_release_plan.py、test_release_session.py、test_direct_human_reference.py及README；私有permission-snapshot-fixed和connection-reuse-preparation内清单、测试和回执。
+- 验证：先验证旧门禁拒绝新策略，再最小实现；独审指出R1旧许可遗漏后真实RED再修复。最终375项退出0、复审C0/I0，49份源码与50文件固定包核对一致。实际快照33次读取/3次USE完成，首连0.026938秒、输入后至关闭0.863499秒；连接、进程和Job关闭均成立，两身份四组直接授权与原模型一致。单次快照回执不等于性能/备份恢复或正式验收通过。
+- 边界：未改正式运行连接、配置、证书、程序、业务库结构或权限；不验证证书身份的风险已明确。四项未解析名称的系统SELECT没有自动接受，本轮未修改公共权限门禁。没有新性能/备份恢复、SYSTEM任务、Git提交合并推送或邮件。
+
+### 2026-10-25 - 完整原生批次的有限系统目录与绝对截止接线
+- 原因与批准：本执行聊天call_4bc69616b6ee433da315e4661ad077c5批准整批准备到就绪后一次实际启动，沿用scope fa303ee7和plan22569dad；不单开权限诊断，不重建通道。
+- 调整：仅新私有工具副本增加固定四对象master元数据读取和精确证据门禁；父绝对截止移用已有模式并设输入后7200秒及授权较早值，阶段余量不足拒绝、progress/迟到结果不能延长。同步7个工具文件的接线/路径/旧许可拒绝和新时段绑定，不改业务包或native_probe。原18文件经长期共享落地新私有目录。
+- 文件：私有full-validation-tools-preparation/materials中的reuse_identity、batch_entry、rehearsal、bounded_sql、site_preflight、windows_host、stage；两新增行为测试、旧目录响应夹具、pins/verification/review；full-validation-fixed内绑定及实际回执。本批业务源码、结构、权限和依赖不变。
+- 验证：新增行为真实RED到GREEN，独审I1旧host路径遗漏真实RED后修正；最终53项本机检查退出0、独审C0/I0，18文件与业务字节核对一致。Windows stage与零SQL自有worker/descendant/Job检查通过；本次首连0.0269115秒，输入后0.7256926秒停止并证明连接/进程/Job关闭。四对象由内建函数解析为pdw系统目录名，但目录关联仍NULL，按已确认门禁停止，没有自动放行。
+- 边界：没有进入性能/业务/源备份/恢复/写入，无新COMPAT；原失败现场保留、不重试。正式程序/库/权限/配置、ERP、Git和邮件不动。已解析对象证据固定供后续相关范围复用，不把文档核对写成真实业务验收或出厂默认证明。
+
+### 2026-10-25 - 四个系统目录空值的有限兼容修订（仅本机及原共享暂存）
+- 原因与批准：本聊天call_4b5b7bfbe7fb4cec9742e80bfeb5b6d3批准有限替代证据分支及一次完整复验，允许时间不足时顺延尚未使用的一次。SQL2017原回执的四项内建名称可解析而目录全NULL，原全非空假设不兼容；没有重新赋权。
+- 调整：原严格分支保持；仅精确四ID/名称/sys/SELECT-G/minor0与整组五目录字段全NULL通过替代分支，不改写原NULL，不接受混合/矛盾/未知/额外权限。原SQL构建、库GUID及登录SID前置门禁保持。同步新私有目录四处绑定、上次完整失败两引用拒绝；复审指出新批仍用旧scope摘要，已补真实拒绝测试并绑定新摘要。业务候选、SQL查询、原长阶段及清理规则不变。
+- 文件：私有finite-null-delta-preparation/materials内reuse_identity.py、batch_entry.py、bounded_sql.py、site_preflight.py、stage.py、windows_host.py；有限分支/授权摘要和复用测试、pins/verification/review/fixed-package；同批scope、直接人类引用、原共享暂存校验和本日志。
+- 验证：真实四行夹具先被旧门禁拒绝，修订后通过且原值不变；未知/混合/矛盾/权限扩大、旧批准与旧scope拒绝，构建/GUID/SID在替代分支前漂移拒绝。最终62项本机相关测试退出0、定向复审C0/I0；18项材料与pins一致，经既有共享独立子目录暂存逐项校验。未重跑无关ERP/前端/正式375整套。
+- 边界：17:30前余量不足，今天未启动新SQL或隐藏输入，唯一实际执行未消费；实际时段及APPROVAL/SLOT未绑定。未传入服务器私有目录，未改正式程序/库/权限/配置、ERP、Git或邮件；性能及本次源备份恢复兼容仍未验证。下个公司可访问监督时段沿用同一范围批准，不自动重试失败批。
 
 
 ### 2026-10-26 — 批量查重缺失ID的NULL绑定修复（本地候选）
@@ -2624,3 +2751,126 @@
 - 文件：backend/app/services/archive_serial_unique.py；backend/tests/archive_serial_batch_performance_contract.py；docs/releases/2026-10-26-archive-null-bind-performance-local.md；本日志。
 - 验证：新增151+占用0/301两个子例真实RED→GREEN，最终9定向+MSSQL2项exit0；12组未变SQLite SQL/绑定一致，复用原73项，合计84执行项适用通过。非空MSSQL值及顺序保持，None总数150/151分别300/452降至0；固定字节独立只读复审C0/I0/M0。
 - 分类与边界：三秒可追溯到2026-10-22维护探针技术断言，未发现业务SLA依据或生产自动拒绝逻辑，不作为自动上线否决；四秒仅合成查重，完整导入/1000规模/生产并发锁影响未测，不能断言安全或危险。独立备份恢复继续由维护并行处理。本机未连接真实SQL/ERP或读配置、未改探针/工具/依赖/表/索引/revision/API/权限，未合并/推送/部署，数据补全/进度保持暂停。SQLDescribeParam是已核对pyodbc5.2源码机制，不是现场耗时分项证明。
+
+### 2026-10-26 - 原生性能实测与独立备份恢复接续准备
+- 批准与原因：沿用call_4b5b7bfbe7fb4cec9742e80bfeb5b6d3顺延的唯一验证，按当天独占时段执行；随后直接核验总控人类消息01a17591-b9b8-7a83-9ab9-d635ee0f7977，明确单纯3秒超标不再阻断独立备份恢复，正确性/安全仍硬停。3秒最初为AI工程预设，原停止性能扩张被工具扩大为整批异常，已纠正。
+- 实际验证：有限目录/权限/资源预检、新旧4配对、3有效身份检查通过；150内部2.949322秒，151内部3.996595秒，旧规则触发停止。输入后28.506546秒至自有关闭，原始12回执保留；连接/进程/Job均关闭，SYN最终fixture状态未知标记保留，正式修改0，源备份/COMPAT未开始。不重放旧批。
+- 本机调整：原分支快进接入已审eae4b05，完整保留本线日志和未提交工具，只重组新source/backend及配套运行清单，前端/ERP证据复用。现有工具新增source-copy-only预检/固定阶段，仅刷新PMS必要资源、唯一COMPAT与原两copy登录身份，不读取/依赖SYN夹具、不重做public/SYN审计；probe仅COMPAT。3秒仅明确warning，错误结果/权限锁事务/资源/恢复异常仍抛出。原容量、3连接、5/600/7200截止、失败保留与仅成功清理新COMPAT不变。
+- 文件：私有resume-20261026/source-copy-preparation内rehearsal/site_preflight/reuse_identity/batch_entry/native_probe/bounded_sql/windows_host/stage及定向测试/固定清单；null-bind-integration候选与program-binding；正式窗口/指标溯源材料；本日志。
+- 验证：目标行为RED→GREEN，20项相关本机检查退出0，source审查及最终18材料清单独审C0/I0；当前source/backend/工作区源码一致为8839字节/c7f77fc4，新源真实绑定。独立备份恢复接续尚未实际启动，APPROVAL/SLOT未绑定；不把本机检查写成现场提速或恢复通过。
+- 边界：未正式部署/升级正式库、未改业务数据/角色/配置、未合并master/推送GitHub、未操作金蝶或发信。新的独立剩余步骤按已核验人类指令接续，不重复同范围批准。
+
+### 2026-10-26 - 恢复副本升级接续与历史草稿门禁纠正
+
+- 原因：物理备份恢复已通过，旧验证器额外要求存量重号为零，偏离2026-10-19已批准的历史草稿保留/下次保存拒绝规则。
+- 调整：维护工具精确识别已知历史编码冲突并验证未来保存拒绝；锁定现有COMPAT的ID/GUID/时间/文件及版本，只接续尚未执行的A1、新旧程序配对与成功清理。正式草稿只读核对、不再删除，不重复备份恢复或性能。
+- 涉及：私有 compat-remaining-preparation 的 native_probe、reuse_identity、site_preflight、rehearsal、固定入口/路径及定向测试；正式工具候选eae4b05e绑定的测试计数样本同步为20。
+- 验证：27项适用维护测试通过，1项正式会话拒绝旧批准引用的测试通过；备份COPY_ONLY/CHECKSUM、VERIFYONLY和恢复原始9份回执已核验。副本A1尚未执行，不宣称实际升级兼容通过。
+
+### 2026-10-26 - Retained-copy GUID canonicalization and fixed release materials
+
+- Cause: the remaining entry stopped before A1 at exact ownership comparison. The original fingerprint canonicalizes GUID using str(UUID()); the new retained path omitted it. Old onsite receipts lack actual compared values, so casing is not yet proven as the sole onsite difference.
+- Change: reuse the existing canonical form, record raw/normalized expected/actual differences, retain strict ID/GUID/time/file/state/revision/session/SID checks. Preserve the failed run; prepare a fresh unassigned R1 directory, no actual retry.
+- Files: private compat-remaining-r1-preparation/reuse_identity, site_preflight, fixed paths/pins and tests; formal release50tool candidate binding and README; release readiness index. No business-code changes beyond already approved eae4 integration.
+- Validation: uppercase-GUID RED reproduced same gate,28targeted tests GREEN, independent incremental review C0/I0/M0. Program213files and formal50files match fixed hashes. Onsite6raw receipts verified: source writes0, A1 not entered, uncertain=false, owned process/Job/native cleanup all proven. B backup/restore9receipts remain accepted and retained.
+
+### 2026-10-26 - Actual COMPAT A1 and program pairing acceptance
+
+- Scope: one direct-approved R1 remaining run, same owned restored copy, no source backup/restore/performance/ERP repeat.
+- Result: actual A1 upgrade and repeat, retained historical draft next-save409, new program acceptance and old program rejection passed (5cases).3659archives and the exact L_B-202608 historical draft are preserved under whitelist snapshots; formal exact-ID status read confirms deleted/version2, with no source delete issued. GUID raw uppercase normalizes to the pinned identity, no remaining identity-field differences.
+- Remaining: success cleanup stopped at a native Error; final disposable database existence is unknown and no removal success is claimed. Original failure retained, no retry. Native connections, owned process and Job closure proven; source business writes0.
+- Evidence: private compat-remaining-r1-fixed/actual-result,9raw receipts hash/size verified; summary.json records the passed boundaries and outstanding cleanup. Formal readiness index updated; no formal deployment/Git/notification.
+
+## 2026-10-26 - Formal minimum-route tools and protected preparation
+
+- Reason: reuse passed physical restore/A1 proofs without duplicate test databases, and finish a single-owner formal release.
+- Changed: finite fresh-backup/prior-proof separation with original B family/size/time checks, source pin enforcement, SYSTEM G2 last-predecessor verification, prepared-backup reuse checks, bounded one-input identity binding and controlled operator recovery/old-launch leaves.
+- Files: ops/releases/combined-7a8ed2cd-20261022/{prior_recovery,recovery_instructions,release_entry,release_plan,native_sql,site_observer,system_static,windows_runtime,release_controller,launch_formal,old_launcher,old_controlled_runtime,prepare_formal_files,closure_stage}.py and targeted tests.
+- Verification: applicable targeted unit groups and incremental independent reviews passed; code-only closure self-checks3, actual file-binding pure construction passed. Actual55-material staging and old program/static backup verified on228; final7-code closure verified. SQL and runtime cutover had not started at this preparation record; no deployment success claimed.
+- Transfer: automatic review rejected metadata copying; replaced it with code-only transfer and source-server in-memory reads. No credentials or protected configuration values were copied by that closure.
+
+### 2026-10-26 — Windows发布计划读取兼容修复
+
+- 原因：实际Python3.13在同一文件的lstat/fstat仅st_ctime_ns不同，原工具误判文件变化；发生在停服、升级、切换之前。
+- 调整：release_plan.read_file仅跨API不比较ctime；同API前后仍比较完整stamp，身份、大小、mtime、摘要、重解析及链接检查保持。调用方release_entry和system_static继续共用此处。
+- 文件：ops/releases/combined-7a8ed2cd-20261022/release_plan.py、test_release_plan.py。
+- 验证：先复现原拒绝，再26项计划、16项入口、26项静态测试通过，定向独审C0/I0/M0。Windows实际原计划文件有界读取通过，0SQL连接、未改正式程序；完整原生入口预检仍继续。
+
+### 2026-10-26 — 发布采集兼容与脱敏故障定位
+
+- 原因：Windows内置COM任务无Execute属性，原共享HOST_SCRIPT在StrictMode下报PropertyNotFound；后续正式会话又在session.prepare失败，但旧入口未保留根因。
+- 调整：仅按属性是否存在读取任务Execute/Arguments，保留PMS启动任务筛选和原安全边界；发布失败保留有界内部错误码、SQLSTATE及文件名/函数/行号，不记录驱动原文、凭据、连接串或局部变量。
+- 文件：ops/releases/combined-7a8ed2cd-20261022/site_observer.py、release_entry.py、test_release_entry.py；私有Windows合成回归和permit_smoke。
+- 验证：实际Windows任务RED→GREEN，原启动/Job/身份/授权派发/接收/关闭链路合成身份验证通过，0SQL/0PMS动作；37observer、19bridge、16entry通过，新增脱敏和循环异常测试RED→GREEN后18entry通过。用户手工只读结果CPU空闲96、age3275ms、文件61、PMS空闲约4238GB，未证明当前session.prepare根因已修复。正式仍v1.3.0，未停服/A1/部署，不写成上线完成。
+
+
+## 2026-10-26 发布前作业识别与PMS任务维护修复
+
+- 原因：发布检查把所有启用SQL作业等同于当前写入，PMS自身三个任务也需在获批维护期间保存、暂停和恢复。
+- 调整：仅本次已核实五个作业按完整定义、步骤和调度摘要、数量及无运行或待运行状态放行，其他来源检查保持；保存PMS-Startup、PMS-Health、PMS-Log-Rotation定义及原状态，维护前暂停，成功恢复运行或切换前失败时恢复。兼容Windows省略默认Enabled字段，其余定义严格比较。
+- 文件：ops/releases/combined-7a8ed2cd-20261022/site_observer.py、release_plan.py、release_entry.py、test_site_observer.py、test_task_maintenance.py。
+- 验证：本机114项定向检查通过；服务器固定材料、程序及静态入口和三项任务只读核验通过，无SQL连接、未变更任务。正式升级与页面验收仍待执行，不作为已上线记录。
+
+
+## 2026-10-26 Release RPC phase deadline and safe diagnostics
+
+- Cause: a read RPC computed a fresh operation deadline beyond the remaining shared phase deadline and was rejected before execution; parent cleanup hid the finite RPC error.
+- Change: preserve each worker phase deadline, cap requests by its remaining budget, and retain only the finite parent RPC code/phase. Existing timeouts, permission checks and failure cleanup are unchanged.
+- Files: ops/releases/combined-7a8ed2cd-20261022/release_channels.py, runtime_bridge.py, release_entry.py, release_supervisor.py and their three focused tests.
+- Verification: RED reproduced in the real RPC parser, then 216 targeted tests passed (exit 0). Native Windows repair verification is pending. Prior production attempt stopped before old-service stop/upgrade/install; original PID 3380 and old program were verified healthy, and all three scheduled tasks restored. This is not a successful v1.4.0 release.
+
+- Native validation addendum: Windows 79 focused tests passed. The existing owned-worker entry then completed two real read-only runtime checks with synthetic identity, exit 0; SQL connections and runtime mutations both 0, process/Job/pipes closed. Fixed plan 68ffb8427fbcffbaaa422e96826522f878cf03b4b870369138d8e6103656d47e; deadline explicitly revised by direct user to 2026-10-26 20:00. Actual production entry is at hidden identity input, not yet a completed release.
+
+## 2026-10-26 原生文件校验阶段归类修复
+
+- 原因：原生只读检查未切入已有runtime阶段，连续材料校验和重复绑定核对共享SQL后20秒read时限；实际在prepare-materials停止，尚未停服、备份或升级。Windows单次完整材料检查实测9.981秒。
+- 调整：所有固定原生操作统一进入已有120秒runtime阶段，重复同阶段不刷新；每个操作自身5/15/45/60/120秒限额保持，SQL5秒、重SQL600秒及20:00总截止保持。父进程的有限超时代码带阶段和序号，不输出凭据或错误原文。
+- 文件：ops/releases/combined-7a8ed2cd-20261022/runtime_bridge.py、release_supervisor.py及对应两项测试。
+- 验证：针对连续只读检查的RED复现后，234项定向测试通过，退出0。真实Windows完整材料和旧程序配对只读验证进行中；上次失败后原PID3380及程序健康、三个PMS任务原状态已恢复。正式v1.4.0尚未发布。
+
+
+## 2026-10-27 发布前路径返回兼容修复
+
+- 原因：SQL Server 中文环境返回两个被 ODBC 解码为相同名称的文件检查列，导致昨晚在备份前拒绝；新版未安装。
+- 调整：统一使用固定英文列名读取原三个文件状态，继续严格检查文件不存在且父目录可用；同一身份连接中的路径检查提前至停服前。更新当日同五个作业的固定摘要和维护时段，仍拒绝变化及运行中的作业。
+- 文件：ops/releases/combined-7a8ed2cd-20261022/native_sql.py、release_entry.py、site_observer.py及对应三项测试。
+- 验证：先复现重复列名及停服前校验缺失，再通过103项原生SQL/发布入口/历史恢复测试及69项观察器/计划/任务测试，退出0。真实Windows只读查询确认英文列结构正常；正式升级、备份和验收尚未完成。
+
+
+## 2026-10-27 简化正式升级接续入口
+
+- 原因：已完成G0静态切换，但父进程把切换及收尾共用120秒时限，后续检查超时；数据库尚未升级。用户通过 call_b4a007189f2340258c3d033ce70651b7 批准分步接续。
+- 调整：复用现有标准升级脚本、SQL身份校验、事务、三个允许变更表差异核对、配套文件安装及静态切换工具；取消父子RPC嵌套，保留原生静态任务120秒上限，将收尾单独执行；复用本次已验证备份和已完成G0，不重跑演练。
+- 文件：本机私有 .runtime/formal-simple-20261027/simple_release.py、simple_release_r1.py 及对应两项定向测试；服务器同批受限维护目录内固定副本。
+- 验证：首版6项Mac/Windows定向检查及Windows零SQL入口检查通过；实际接续在新记录目录所有者检查处停止，未执行数据库升级，3连接已关闭。修订版将相同目录校验前移至隐藏身份输入前，复制既有受限目录的精确权限，保留失败目录；8项Mac检查通过，Windows原生预检继续。此条不表示正式发布完成。
+
+- 接续补充：目录修订后Windows 8项检查及零SQL原生预检通过。下一次接续已通过备份复核，在升级前全表只读快照遭HY008取消，未执行升级，连接已关闭；本机重现监控线程因同一连接的快照锁被占用而主动取消。仅在本批入口使用继承原监控的限定适配：已有监控证据仍有效时等待快照释放，证据超时仍停止并取消；不延长证据有效期、SQL超时、负载阈值或总窗口，不增连接。定向RED→GREEN及8项接续检查通过，Windows验证继续。
+
+### 2026-10-27 目标表核对接续修订（正式执行待完成）
+
+- 原因：R2在升级前全库摘要返回值检查停止；连接已关闭，数据库未升级。用户 `call_057055b6580540c4baf2771dae8fad89` 批准取消无关业务表内容扫描，改为核对三张目标表后接续一次。
+- 调整：新增独立 `targeted_a1.py` 和 R3 接续入口，逐字段验证字段规则、单位与版本变化；保留目标结构、权限元数据、触发器拒绝、写入限制、事务及备份检查。证据明确标记只核对目标表，不声称完成全库内容一致性验证。
+- 涉及文件：本项目 `.runtime/formal-simple-20261027/targeted_a1.py`、`simple_release_r3.py` 及两个定向测试；原固定候选、原工具和失败记录均保留。
+- 验证：Mac 15项定向检查通过；Windows入口检查与正式结果另记，尚未发布成功。
+
+- R3现场：目标三表快照通过；正式迁移的结构读取使用SQLAlchemy外键CTE，被原SELECT前缀识别误拦，发生在 `_install` 首次写入之前，连接已关闭。
+- R4修正：新增 `catalog_read_guard.py`，仅按固定SHA识别ODBC参数化的外键目录SELECT，不放行任意WITH、DDL或其他表写入；保留原三表写入边界。新增对应测试及R4入口，并在接续前比对R3三表快照。Mac和Windows19项定向检查及Windows零数据库入口预检通过。用户 `call_9b142ddce00e492492a3fdc244748b90` 批准这一次实际接续，尚不记录升级成功。
+
+- R4现场仍在首次写入前被相同只读查询拦截：SQL Server 2017 初始化后的方言给绑定参数添加 NVARCHAR 转换，原测试未模拟该初始化。R5仅改为该精确参数化查询的固定摘要，新增初始化状态回归；Mac、Windows各19项及服务器零数据库连接预检通过。用户 call_f9b47a35486b44e99699c98226559b67 批准一次实际接续，旧失败材料保留，正式发布仍待完成。
+
+
+## 2026-10-27 v1.4.0 正式升级、页面验收与限定清理完成
+
+- 原因：用户要求完成本批新版正式上线；此前工具误拦和时限失败均保留，未视为发布成功。
+- 实施：R5精确目录读取匹配后，标准A1升级和目标三表预期差异验证通过；安装固定eae4b05/v1.4.0，完成G1静态切换与适用页面验收，正常进程7204启动。主工具在正常启动后的结果回收卡住；用户另准清理至09:35，精确关闭6072并确认其TCP连接消失，三项原维护任务定义和状态恢复，新版服务不重启。
+- 文件/现场：私有simple_release_r5.py、catalog_read_guard_r5.py、targeted_a1.py及测试；实际部署固定候选与release.json；私有closeout_r5.py、closeout_tasks_r5.py；docs/releases/2026-10-27-v140-production-completion.md。
+- 验证：Mac/Windows各19项检查及入口预检通过；A1三表差异、固定安装、G1资源摘要、实际受控页面与正常模式来源/物料读取通过；收尾退出0、三任务Ready/Enabled、健康status=ok。原主工具未生成最终成功回执，使用另行批准的真实收尾回执，不补造原结果。
+- 边界：未新增正式测试业务数据、未发起金蝶测试写入，未发布升级通知/邮件，未Git提交/合并/推送；历史备份及失败现场保留。证据详见发布完成记录。
+
+## 2026-10-27 v1.4.0通知与Git收尾
+
+- 原因与批准：用户要求完成通知和邮件、推送GitHub，并明确批准master快进合并。
+- 调整：发布当前八项v1.4.0站内通知与一次有界邮件，整理正式清单和完成记录；沿用现有身份、权限、邮件配置和服务。
+- 文件：release-notes.json、ops/releases/v140-notification-20261027/{publish.py,test_publish.py,release.json}、docs/releases/2026-10-27-v140-production-completion.md、本日志。
+- 验证：9项隔离检查及Windows只读预检通过；18份通知、18封SMTP接受，失败和未知0，助手exit0；实际通知与关联页面说明v1.4.0已核对。原回执保留服务器，未复制被自动审核阻止的原文件。
+- 收尾：仅纳入本批六项及已上线提交，其他任务资料保留；Git最终状态单独留存。本次不重启PMS、不重复升级，运行构建仍eae4b05。
