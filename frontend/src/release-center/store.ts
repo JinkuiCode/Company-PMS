@@ -5,7 +5,7 @@ export interface RuntimeInfo { product: string; version: string; environment: st
   technical?: { commit: string | null; build_id: string | null; database_revision: string };
   page_updates: Record<string, { version: string; published_at?: string }> }
 export const useReleaseStore = defineStore('release-center', () => {
-  const runtime = ref<RuntimeInfo | null>(null), unread = ref(0)
+  const runtime = ref<RuntimeInfo | null>(null), unread = ref(0), known = ref(false), failed = ref(false)
   let serial = 0
   async function refresh() {
     const current = ++serial
@@ -16,8 +16,9 @@ export const useReleaseStore = defineStore('release-center', () => {
     if (current !== serial) return
     if (results[0].status === 'fulfilled') runtime.value = results[0].value
     else runtime.value = null
-    if (results[1].status === 'fulfilled') unread.value = results[1].value.unread
+    if (results[1].status === 'fulfilled') { unread.value = results[1].value.unread; known.value = true; failed.value = false }
+    else failed.value = true
   }
-  function reset() { ++serial; runtime.value = null; unread.value = 0 }
-  return { runtime, unread, refresh, reset }
+  function reset() { ++serial; runtime.value = null; unread.value = 0; known.value = false; failed.value = false }
+  return { runtime, unread, known, failed, refresh, reset }
 })

@@ -115,7 +115,7 @@
           </template>
         </PmsFormDrawer>
       </PmsDataList>
-      <ArchiveChangeList v-else @back="archiveView = 'archives'" @changed="fetchList" />
+      <ArchiveChangeList v-else :request-id="notificationRequestId" :focus-version="notificationFocusVersion" @back="archiveView = 'archives'" @changed="fetchList" />
     </div>
 
     <ArchiveDraftList v-model="archiveDraftListVisible" :resuming="archiveCreateOpening" @resume="resumeArchiveDraft" />
@@ -178,7 +178,7 @@ import { orderArchiveGroups, governanceFieldVisible, governanceFieldRequired, ar
 import { offlineArchiveFields, offlineEnumCodes, normalizeOfflineValue, archiveQuantityError } from './offlineArchiveFields'
 import { createDetailSwitch } from '@/utils/detailSwitch'
 import { confirmDetailSwitch } from '@/composables/confirmDetailSwitch'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { usePersistentDraft, type PersistentDraft } from '@/form-system/usePersistentDraft'
 import { archiveDraftApi } from '@/api/formDraft'
 import ArchiveDraftList from './ArchiveDraftList.vue'
@@ -239,6 +239,9 @@ import { archiveReference } from '@/query-system/archive-reference'
 const localeText = chineseLocaleText
 const authStore = useAuthStore()
 const archiveRouter = useRouter()
+const archiveRoute = useRoute()
+const notificationFocusVersion = ref(0)
+const notificationRequestId = computed(() => { const raw = archiveRoute.query.change_id; const id = typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : 0; return Number.isSafeInteger(id) && id > 0 ? id : undefined })
 const productLines = useProductLineOptions()
 const archiveDraftProductLines = useProductLineOptions(archiveDraftApi.productLines)
 const syncLogVisible = ref(false)
@@ -1876,6 +1879,7 @@ async function submitArchiveChangeRequest() {
         reason: archiveChangeReason.value.trim(), submission_id: archiveChangeSubmissionId,
       })
     }
+    if (!maintenance) window.dispatchEvent(new Event('pms:archive-change'))
     if (selectedArchive.value?.id === archiveId && archiveDrawerRevision === revision) {
       archivePendingChanges.value = {}
       archiveEditingField.value = null
@@ -2255,6 +2259,14 @@ const archiveSyncPoll = setInterval(() => {
   if (rowData.value.some(row => ['queued', 'pending'].includes(row.erp_sync_status))) void fetchList()
 }, 15000)
 onUnmounted(() => clearInterval(archiveSyncPoll))
+async function reopenNotificationRequest(event: Event) {
+  if ((event as CustomEvent).detail !== notificationRequestId.value) return
+  await showArchiveChanges()
+  if (archiveView.value === 'changes') notificationFocusVersion.value++
+}
+onMounted(() => window.addEventListener('pms:open-archive-change', reopenNotificationRequest))
+onUnmounted(() => window.removeEventListener('pms:open-archive-change', reopenNotificationRequest))
+watch(notificationRequestId, id => { if (id) void showArchiveChanges() }, { immediate: true })
 </script>
 
 <style scoped>

@@ -262,6 +262,9 @@ class ArchiveChangeContract(unittest.TestCase):
             self.assertCountEqual(results,[200,409])
             with Session(engine) as db:
                 self.assertEqual(db.query(self.Change).filter_by(status=2).count(),1)
+                from app.models.business_notice import BusinessNotice, BusinessNoticeMail
+                self.assertEqual(db.query(BusinessNotice).count(),1)
+                self.assertEqual(db.query(BusinessNoticeMail).count(),1)
                 self.assertIsNone(db.get(PmsProjectArchive,archive_id).customer)
             engine.dispose()
 

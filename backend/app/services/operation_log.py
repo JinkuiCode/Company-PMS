@@ -35,6 +35,7 @@ def sanitize_text(value: str) -> str:
     return re.sub(r'(https?://)[^/@\s]+:[^/@\s]+@', r'\1***@', value)
 
 ENTITY_CATALOG_MODULES = {
+    'pms_business_notice': 'business_notice', 'pms_business_notice_mail': 'business_notice_mail',
     'pms_form_draft': 'form_draft',
     'pms_release': 'release', 'pms_release_notice': 'release_notice', 'pms_release_mail': 'release_mail',
     "pms_feedback_report": "feedback",
@@ -113,6 +114,8 @@ SYSTEM_VALUE_LABELS = {
         'manual': '仅手动同步', 'auto': '自动同步', 'conditional': '条件同步'},
     ("pms_project_archive", "data_origin"): {
         'pms': 'PMS新建', 'kingdee_initial': '金蝶期初', 'erp': '金蝶历史档案', 'offline_initial': '线下期初'},
+    ('pms_business_notice', 'event'): {'submitted':'提交待审批','approved':'审批通过','rejected':'审批退回'},
+    ('pms_business_notice_mail', 'status'): {'pending':'待投递','waiting':'等待配置','processing':'投递中','accepted':'服务器已接受','failed':'投递失败','unknown':'结果未知','suppressed':'停止投递'},
     ('pms_release_mail', 'status'): {
         'pending': '待投递', 'waiting': '等待配置', 'processing': '投递中',
         'accepted': '服务器已接受', 'failed': '投递失败', 'unknown': '结果未知'},

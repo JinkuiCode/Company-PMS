@@ -21,6 +21,11 @@ def list_changes(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=500),stat
                  db:Session=Depends(get_db),ctx:dict=Depends(require_permission('project:archive:view'))):
     return service.list_archive_changes(db,ctx,page=page,page_size=page_size,status=status,filters=filters,sort=sort)
 
+@router.get('/requests/{change_id}')
+def get_change(change_id:int,db:Session=Depends(get_db),ctx:dict=Depends(require_permission('project:archive:view'))):
+    from app.services.business_notices import get_request
+    return get_request(db,ctx,change_id)
+
 @router.post('/requests/{change_id}/decide')
 def decide(change_id:int,data:ArchiveChangeDecision,request:Request,db:Session=Depends(get_db),ctx:dict=Depends(require_permission('project:archive:edit'))):
     return service.decide_archive_change(db,change_id,data,ctx['user_id'],request=request,scope_context=ctx)

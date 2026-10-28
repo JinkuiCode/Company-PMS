@@ -21,6 +21,7 @@ from app.models.product_line import SysProductLine, SysRoleProductLine  # noqa: 
 from app.models.feedback import FeedbackReport, FeedbackFollowup, FeedbackAttachment, FeedbackNotification  # noqa: F401
 from app.models.archive_change import ArchiveChange  # noqa: F401
 from app.models.form_draft import PmsFormDraft  # noqa: F401
+from app.models.business_notice import BusinessNotice, BusinessNoticeMail  # noqa: F401
 from app.models.release import PmsRelease, PmsReleaseNotice, PmsReleaseMail  # noqa: F401
 from app.services.user_security_migration import upgrade_user_security, initialize_user_security
 
@@ -471,6 +472,8 @@ def init_db(*, explicit_upgrade=False):
             install_governance_permissions(db.connection())
             from app.services.form_draft_management_migration import install_draft_management_permission
             install_draft_management_permission(db.connection())
+            from app.services.business_notice_migration import notice_permissions
+            notice_permissions(db.connection(), create=True)
         db.commit()
 
     finally:

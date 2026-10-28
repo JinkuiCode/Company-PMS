@@ -1,0 +1,11 @@
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import ElementPlus from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import '@fontsource-variable/noto-sans-sc/wght.css'
+import 'element-plus/dist/index.css'
+import '../../src/styles/pms-theme.css'
+import '../../src/form-system/form-tokens.css'
+import '../../src/theme-system/theme.css'
+import Prototype from './Prototype.vue'
+createApp(Prototype).use(createPinia()).use(ElementPlus, { locale: zhCn }).mount('#app')

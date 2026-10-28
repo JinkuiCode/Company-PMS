@@ -12,6 +12,7 @@ export const guideDestinations = {
   tasks: { permission: 'project:list:view' },
   audit: { permission: 'system:operation-log:view' },
   archive: { permission: 'project:archive:view' },
+  businessNotices: { permission: 'project:archive:view' },
   archiveChanges: { permission: 'project:archive:view' },
   archiveDrafts: { permission: 'project:archive:draft:manage' },
   purchase: { permission: 'report:purchase:view' },

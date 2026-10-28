@@ -15,6 +15,12 @@ from app.models.dict import SysDict,SysDictItem
 from app.models.rbac import SysMenu
 from sqlalchemy.orm import Session
 
+def check_policy_ready(engine):
+ # This historical upgrade targets policy-01; current notice-01 gates have their own contract.
+ from app.services import database_revision as revision
+ from app.services.archive_policy_revision_migration import REVISION
+ with patch.object(revision,'CURRENT_DATABASE_REVISION',REVISION):revision.check_database_ready(engine)
+
 class PolicyUpgrade(unittest.TestCase):
  def setUp(self):
   self.assertTrue(Path('backend/app/services/archive_policy_revision_migration.py').exists(),'bounded policy migration is missing')
@@ -55,8 +61,7 @@ class PolicyUpgrade(unittest.TestCase):
    actual=next(r for r in after['sys_dict_item'] if r['id']==row['id'])
    self.assertEqual({k:v for k,v in actual.items() if k!='item_label'},{k:v for k,v in row.items() if k!='item_label'})
   self.migration.upgrade_archive_policy(self.engine);self.assertEqual(after,self.snapshot())
-  from app.services.database_revision import check_database_ready
-  check_database_ready(self.engine)
+  check_policy_ready(self.engine)
  def test_injected_failure_rolls_back_everything(self):
   before=self.snapshot()
   with patch.object(self.migration,'verify_archive_policy',side_effect=RuntimeError('after-write')):
@@ -86,7 +91,8 @@ class PolicyUpgrade(unittest.TestCase):
     before=self.snapshot()
     with self.assertRaises(RuntimeError):cli.upgrade_database(**{mode:True})
     self.assertEqual(before,self.snapshot())
-  with patch.object(cli,'validate_runtime_config'),patch.object(cli,'engine',self.engine):cli.upgrade_database(archive_policy_only=True)
+  from app.services import database_revision as revision
+  with patch.object(cli,'validate_runtime_config'),patch.object(cli,'engine',self.engine),patch.object(cli,'CURRENT_DATABASE_REVISION',self.migration.REVISION),patch.object(revision,'CURRENT_DATABASE_REVISION',self.migration.REVISION):cli.upgrade_database(archive_policy_only=True)
   with self.engine.connect() as c:self.assertEqual(c.execute(select(PmsDatabaseRevision.revision)).scalar(),self.migration.REVISION)
  def test_full_explicit_finalizer_same_rules_without_version_forgery(self):
   before=self.snapshot();self.migration.finalize_archive_policy_setup(self.engine)
@@ -102,8 +108,7 @@ class PolicyUpgrade(unittest.TestCase):
  def test_legitimately_disabled_optional_unit_does_not_block_runtime(self):
   self.migration.upgrade_archive_policy(self.engine)
   with self.engine.begin() as c:c.exec_driver_sql("UPDATE sys_dict_item SET status=0 WHERE id=8")
-  from app.services.database_revision import check_database_ready
-  check_database_ready(self.engine)
+  check_policy_ready(self.engine)
   with self.assertRaises(RuntimeError):self.migration.upgrade_archive_policy(self.engine)
 
  def test_fake_mssql_full_branch_keeps_parameterization_and_transaction(self):
@@ -154,11 +159,10 @@ class PolicyUpgrade(unittest.TestCase):
   self.migration.upgrade_archive_policy(self.engine)
   from app.services.field_policy import update_field_policies
   from app.schemas.field_policy import FieldPolicyBatchUpdate
-  from app.services.database_revision import check_database_ready
   with Session(self.engine) as db:
    row=db.query(Policy).filter_by(field_key='equipment_series').one()
    update_field_policies(db,'project_archive',FieldPolicyBatchUpdate(items=[dict(field_key='equipment_series',visible=True,editable=True,required=True,list_available=True,expected_updated_at=row.updated_at)]))
-  check_database_ready(self.engine)
+  check_policy_ready(self.engine)
 
  def test_full_mode_rejects_existing_previous_before_any_initializer_or_marker_write(self):
   import importlib.util

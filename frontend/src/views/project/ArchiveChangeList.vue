@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed,defineComponent,h,onMounted,onBeforeUnmount,ref} from 'vue'
+import {computed,defineComponent,h,onMounted,onBeforeUnmount,ref,watch} from 'vue'
 import {ElMessage} from 'element-plus'
 import {Back} from '@element-plus/icons-vue'
 import PmsDataList from '@/components/PmsDataList.vue'
@@ -21,7 +21,10 @@ import {useEnumOptions} from '@/composables/useEnumOptions'
 import {createDetailSwitch} from '@/utils/detailSwitch'
 import {confirmDetailSwitch} from '@/composables/confirmDetailSwitch'
 import request from '@/utils/request'
+import MailDeliveries from '@/business-notices/MailDeliveries.vue'
 
+const props=defineProps<{requestId?:number;focusVersion?:number}>()
+const deepError=ref(''), detailLoading=ref(false)
 const emit=defineEmits<{'back':[];'changed':[]}>()
 ModuleRegistry.registerModules([AllCommunityModule])
 const enums=useEnumOptions(['archive_change_status']),ready=ref(false),metaFailed=ref(false)
@@ -39,12 +42,20 @@ async function loadMetadata(){metaFailed.value=false;try{await enums.load();read
 async function fetchRows(){const serial=++requestSerial;loading.value=true;failed.value=false;clearColumns();try{const result:any=await request.get('/projects/archive-changes',{params:{page:page.value,page_size:pageSize.value,sort:JSON.stringify(sort.value),filters:JSON.stringify(applied.value.map(condition=>({...condition,schemaVersion:2})))}});if(serial!==requestSerial)return;rows.value=result.items;total.value=result.total}catch{if(serial===requestSerial)failed.value=true}finally{if(serial===requestSerial)loading.value=false}}
 async function runQuery(conditions:QueryCondition[]){query.submit(conditions);page.value=1;await fetchRows()}
 async function guard(){if(busy.value)return false;if(!opinion.value.trim())return true;const decision=await confirmDetailSwitch();if(decision==='save'){ElMessage.info('请先通过或退回当前申请，再切换记录');return false}return decision==='discard'}
-const detailSwitch=createDetailSwitch<any>(guard,async row=>{selected.value=row;opinion.value='';error.value=''})
+const detailSwitch=createDetailSwitch<any>(guard,async (row,current)=>{
+  selected.value=null;opinion.value='';error.value='';deepError.value='';detailLoading.value=true
+  try {
+    const result=row.differences ? row : await request.get(`/projects/archive-changes/requests/${row.id}`)
+    if(current()){selected.value=result;detailOpen.value=true}
+  } catch {if(current()){detailOpen.value=false;deepError.value='申请不存在或无权访问，请重新选择'}}
+  finally {if(current())detailLoading.value=false}
+})
+watch([()=>props.requestId,()=>props.focusVersion],([id])=>{if(id)void detailSwitch.select({id})},{immediate:true})
 async function openDetail(row:any){await detailSwitch.select(row);if(selected.value?.id===row.id)detailOpen.value=true}
 async function onRowClick(row:any){if(detailOpen.value)await detailSwitch.select(row)}
 async function closeDetail(done?:()=>void){if(await guard()){detailSwitch.invalidate();detailOpen.value=false;done?.()}}
-async function decide(decision:'approve'|'reject'){if(!selected.value?.can_approve||busy.value)return;if(decision==='reject'&&!opinion.value.trim()){error.value='请填写退回原因';return}busy.value=true;try{const result:any=await request.post(`/projects/archive-changes/requests/${selected.value.id}/decide`,{decision,expected_version:selected.value.version,opinion:opinion.value});Object.assign(selected.value,result,{can_approve:false,can_withdraw:false});opinion.value='';error.value='';await fetchRows();emit('changed');ElMessage.success(decision==='approve'?'审批通过，正式档案已更新':'已退回，正式档案未改变')}catch{error.value='操作失败，意见已保留，请刷新核对后重试'}finally{busy.value=false}}
-async function withdraw(row:any){if(!row.can_withdraw||busy.value)return;busy.value=true;try{await request.post(`/projects/archive-changes/requests/${row.id}/withdraw`,{expected_version:row.version});await fetchRows();emit('changed');ElMessage.success('已撤回，记录保留')}catch{/* Shared handler reports failure. */}finally{busy.value=false}}
+async function decide(decision:'approve'|'reject'){if(!selected.value?.can_approve||busy.value)return;if(decision==='reject'&&!opinion.value.trim()){error.value='请填写退回原因';return}busy.value=true;try{const result:any=await request.post(`/projects/archive-changes/requests/${selected.value.id}/decide`,{decision,expected_version:selected.value.version,opinion:opinion.value});Object.assign(selected.value,result,{can_approve:false,can_withdraw:false});opinion.value='';error.value='';await fetchRows();emit('changed');window.dispatchEvent(new Event('pms:archive-change'));ElMessage.success(decision==='approve'?'审批通过，正式档案已更新':'已退回，正式档案未改变')}catch{error.value='操作失败，意见已保留，请刷新核对后重试'}finally{busy.value=false}}
+async function withdraw(row:any){if(!row.can_withdraw||busy.value)return;busy.value=true;try{const result:any=await request.post(`/projects/archive-changes/requests/${row.id}/withdraw`,{expected_version:row.version});if(selected.value?.id===row.id)Object.assign(selected.value,result,{can_approve:false,can_withdraw:false});await fetchRows();emit('changed');window.dispatchEvent(new Event('pms:archive-change'));ElMessage.success('已撤回，记录保留')}catch{/* Shared handler reports failure. */}finally{busy.value=false}}
 const Actions=defineComponent({props:['params'],setup(props){return()=>h('div',{class:'archive-row-actions'},[
  h('button',{type:'button',class:'pms-table-action',style:{color:'var(--pms-info)'},onClick:(event:Event)=>{event.stopPropagation();openDetail(props.params.data)}},'查看'),
  props.params.data.can_withdraw?h('button',{type:'button',class:'pms-table-action',style:{color:'var(--pms-warning)'},disabled:busy.value,onClick:(event:Event)=>{event.stopPropagation();withdraw(props.params.data)}},'撤回'):null,
@@ -66,6 +77,7 @@ onBeforeUnmount(()=>{requestSerial++;detailSwitch.invalidate()})
   <template #toolbar-right><BusinessExportControl :resource="{kind:'archive_changes'}" :snapshot="exportSnapshot" :disabled="loading||failed||!query.submitted.value||!total"/><PmsListColumnPicker v-model="selectedColumns" :groups="columnGroups" :column-definitions="columnDefs" :default-keys="columns.map(column=>column.field)" :get-grid-api="()=>gridApi" aria-label="档案变更列设置"/><PmsPageGuide page="archiveChanges"/></template>
   <template #filters><PmsQueryWorkspace entry-mode="document" v-model="draft" list-key="archive-changes" :fields="fields" :defaults="defaults" :ready="ready" :loading="loading" @query="runQuery" @clear-columns="clearColumns"/></template>
   <template #grid>
+   <p v-if="deepError" role="alert">{{deepError}}</p><p v-if="detailLoading" role="status">正在读取申请…</p>
    <div v-if="failed||metaFailed" class="pms-list-load-error" role="alert">加载失败，请重试 <el-button class="pms-button-auxiliary" @click="metaFailed?loadMetadata():fetchRows()">重试</el-button></div>
    <AgGridVue class="ag-theme-alpine pms-ag-grid" :row-data="visibleRows" :column-defs="columnDefs" :grid-options="PMS_GRID_OPTIONS" :locale-text="chineseLocaleText" :loading="loading" :default-col-def="{resizable:true,sortable:true,filter:false,comparator:()=>0}" :get-row-id="params=>String(params.data.id)" @grid-ready="gridReady" @sort-changed="sortChanged" @row-clicked="gridRowClicked"/>
   </template>
@@ -75,6 +87,7 @@ onBeforeUnmount(()=>{requestSerial++;detailSwitch.invalidate()})
    <el-table :data="selected?.differences||[]" border class="pms-dense-table"><el-table-column prop="field_label" label="字段" width="130"/><el-table-column prop="before_display" label="修改前"/><el-table-column prop="after_display" label="修改后"/></el-table>
    <PmsFormField v-if="selected?.can_approve" field-id="archive-review-opinion" label="审批意见" :error="error"><PmsTextareaControl id="archive-review-opinion" v-model="opinion" aria-label="审批意见" :rows="3" :maxlength="1024" :disabled="busy" placeholder="退回时必输"/></PmsFormField>
    <p v-else-if="selected?.opinion">审批意见：{{selected.opinion}}</p>
+   <MailDeliveries v-if="selected" :key="selected.id" :change-id="selected.id" />
    <template #footer><el-button type="warning" plain :disabled="busy" @click="closeDetail()">关闭</el-button><template v-if="selected?.can_approve"><el-button type="danger" plain :disabled="busy" @click="decide('reject')">退回</el-button><el-button type="success" :loading="busy" @click="decide('approve')">通过</el-button></template></template>
   </el-dialog>
  </PmsDataList>

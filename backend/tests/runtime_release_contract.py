@@ -39,6 +39,10 @@ class RuntimeRelease(unittest.TestCase):
         admin = runtime.runtime_info({'permissions': ['system:release:manage']})
         self.assertEqual(admin['technical']['commit'], 'a'*40)
 
+    def test_notice_guide_is_registered_for_release_links(self):
+        self.manifest['changes'][0]['guide'] = 'businessNotices'
+        self.assertEqual(runtime.validated_manifest(self.manifest)['changes'][0]['guide'], 'businessNotices')
+
     def test_manifest_rejects_unregistered_guides_wrong_schema_and_multiline_subject(self):
         for change in ({'database_revision': 'wrong'}, {'title': 'bad\nSubject: injected'},
                        {'changes': [{'kind': '新增', 'title': 't', 'description': 'd', 'guide': 'unregistered'}]}):

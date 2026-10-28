@@ -182,6 +182,8 @@ def submit_archive_change(db,archive_id,data,actor,*,request=None,scope_context=
         db.add(row);db.flush()
         record_operation_log(db,module='项目档案变更',action='submit',entity_type='pms_archive_change',entity_id=row.id,
             entity_name=archive.project_code,operator_id=actor,request=request,summary=f'提交档案变更：{archive.project_code}',after_data=serialize_model(row))
+        from app.services.business_notices import queue_archive_notice
+        queue_archive_notice(db,row,'submitted')
         db.commit();return _change_result(row)
     except IntegrityError as exc:
         db.rollback();raise HTTPException(409,'该档案已有活动申请或重复提交，请刷新') from exc
@@ -238,6 +240,8 @@ def decide_archive_change(db,change_id,data,actor,*,request=None,scope_context=N
         row.status=target;row.active_archive_id=None;row.version+=1;row.opinion=data.opinion.strip();row.decided_at=datetime.now()
         record_operation_log(db,module='项目档案变更',action='approve' if target==3 else 'reject',entity_type='pms_archive_change',entity_id=row.id,
             entity_name=archive.project_code,operator_id=actor,request=request,summary=f'{"通过" if target==3 else "退回"}档案变更：{archive.project_code}',before_data=before,after_data=serialize_model(row))
+        from app.services.business_notices import queue_archive_notice
+        queue_archive_notice(db,row,'approved' if target==3 else 'rejected')
         db.commit();return _change_result(row)
     except Exception:db.rollback();raise
 

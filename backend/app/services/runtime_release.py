@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.core.config import settings
 from app.services.database_revision import CURRENT_DATABASE_REVISION
 
-GUIDES = frozenset({'archive', 'archiveChanges', 'archiveDrafts', 'audit', 'feedback', 'inventory', 'purchase', 'stock', 'users', 'roles', 'enums', 'progress', 'tasks'})
+GUIDES = frozenset({'businessNotices', 'archive', 'archiveChanges', 'archiveDrafts', 'audit', 'feedback', 'inventory', 'purchase', 'stock', 'users', 'roles', 'enums', 'progress', 'tasks'})
 
 
 class ReleaseChange(BaseModel):

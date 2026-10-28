@@ -25,7 +25,7 @@ from app.api import feedback
 from app.api import document_history
 from app.api import form_drafts
 from app.api import form_draft_management
-from app.api import releases
+from app.api import releases, business_notices
 from app.services.authorization import get_current_user_context, require_permission
 from app.models.init_db import init_db
 from app.services.database_revision import check_database_ready
@@ -61,6 +61,9 @@ async def lifespan(app: FastAPI):
     from app.services.release_mail import worker as release_worker
     release_runner = threading.Thread(target=release_worker, args=(stop, SessionLocal), daemon=True, name='pms-release-mail-worker') if settings.PMS_RELEASE_MAIL_WORKER_ENABLED else None
     if release_runner: release_runner.start()
+    from app.services.business_notice_mail import worker as notice_worker
+    notice_runner = threading.Thread(target=notice_worker, args=(stop, SessionLocal), daemon=True, name='pms-business-notice-mail-worker') if settings.PMS_BUSINESS_NOTICE_MAIL_WORKER_ENABLED else None
+    if notice_runner: notice_runner.start()
     try:
         yield
     finally:
@@ -68,6 +71,7 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(export_runner.join, 60)
         await asyncio.to_thread(feedback_runner.join, 60)
         if release_runner: await asyncio.to_thread(release_runner.join, 60)
+        if notice_runner: await asyncio.to_thread(notice_runner.join, 60)
         if runner:
             await asyncio.to_thread(runner.join, 300)
 
@@ -75,6 +79,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.APP_NAME, version="development", lifespan=lifespan)
 app.include_router(document_history.router)
 app.include_router(releases.router)
+app.include_router(business_notices.router)
 app.include_router(form_drafts.router)
 app.include_router(form_draft_management.router)
 

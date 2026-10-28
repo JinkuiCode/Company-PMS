@@ -16,6 +16,7 @@ try {
     if (!path.startsWith('/api/')) return route.continue()
     let json = []
     if (path === '/api/auth/me') json = { id: 1, username: 'fixture', permissions: ['project:archive:view', 'feedback:view'] }
+    else if (path === '/api/business-notices') json = { total: 0, unread: 0, items: [] }
     else if (path === '/api/releases/runtime') json = { product: 'PMS 项目管理系统', version: 'v1.0.0', environment: '开发环境', published_at: release.published_at, page_updates: { archive: { version: 'v1.0.0' } } }
     else if (path === '/api/releases') json = { total: 1, items: [release] }
     else if (path === '/api/releases/notices') json = { total: 1, unread: reads ? 0 : 1, items: [{ id: 11, read_at: reads ? '2026-10-15T09:10:00' : null, release }] }
@@ -38,8 +39,9 @@ try {
   await expect(about).toContainText('单据内查看操作记录')
   await page.screenshot({ animations: 'disabled', path: '../outputs/development-governance-20261015-about.png' })
   await about.getByRole('button', { name: '关闭此对话框', exact: true }).click()
-  await page.getByRole('button', { name: /升级通知/ }).click()
-  const notices = page.getByRole('dialog', { name: '升级通知', exact: true })
+  await page.getByRole('button', { name: /^通知/ }).click()
+  await page.getByRole('tab', { name: '升级通知', exact: true }).click()
+  const notices = page.getByRole('dialog', { name: '通知', exact: true })
   await expect(notices.getByRole('button', { name: '标为已读', exact: true })).toBeVisible()
   assert.equal(reads, 0)
   await notices.getByRole('button', { name: '查看邮件预览', exact: true }).click()

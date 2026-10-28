@@ -1,7 +1,7 @@
 import {chromium,expect} from '@playwright/test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-const base='http://127.0.0.1:5174',out='../outputs/form-compliance-20261016'
+const base=process.env.PMS_GOVERNANCE_URL||'http://127.0.0.1:5174',out='../outputs/form-compliance-20261016'
 fs.mkdirSync(out,{recursive:true})
 const browser=await chromium.launch({channel:'msedge',headless:true})
 try {
@@ -18,6 +18,7 @@ try {
   if(!path.startsWith('/api/'))return route.continue()
   let json=[]
   if(path==='/api/auth/me')json={id:1,username:'fixture',real_name:'本机隔离验收',permissions:['project:archive:view',...(manage?['system:release:manage']:[]),...(retryAllowed?['system:release:retry']:[])]}
+  else if(path==='/api/business-notices')json={total:0,unread:0,items:[]}
   else if(path==='/api/releases/runtime')json={product:'PMS 项目管理系统',version:'v1.0.0',environment:'开发环境',published_at:release.published_at,page_updates:{}}
   else if(path==='/api/releases/notices')json={total:1,unread:1,items:[{id:11,read_at:null,release}]}
   else if(path==='/api/releases')json={total:1,items:[release]}
@@ -34,8 +35,9 @@ try {
   return route.fulfill({json})
  })
  async function notices(){
-  await page.goto(base+'/project/archive');await page.getByRole('button',{name:/升级通知/}).click()
-  return page.getByRole('dialog',{name:'升级通知',exact:true})
+  await page.goto(base+'/project/archive');await page.getByRole('button',{name:/^通知/}).click()
+  await page.getByRole('tab',{name:'升级通知',exact:true}).click()
+  return page.getByRole('dialog',{name:'通知',exact:true})
  }
  let notice=await notices()
  await notice.getByRole('row').filter({hasText:'未知状态用户'}).getByRole('button',{name:'受控重试',exact:true}).click()

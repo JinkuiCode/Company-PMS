@@ -64,7 +64,7 @@ ROLE_TEMPLATES = {
 }
 
 # These grants require an explicit human decision, including recreated templates.
-MANUAL_ONLY_PERMISSIONS = frozenset({'project:archive:maintain', 'project:archive:draft:manage', 'system:release:publish', 'system:release:manage', 'system:release:retry'})
+MANUAL_ONLY_PERMISSIONS = frozenset({'project:archive:notification:manage', 'project:archive:notification:retry', 'project:archive:maintain', 'project:archive:draft:manage', 'system:release:publish', 'system:release:manage', 'system:release:retry'})
 
 
 def permission_ids_for_template(db, role_code: str) -> set[int]:

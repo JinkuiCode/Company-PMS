@@ -50,7 +50,7 @@
         </div>
         <div class="header-right">
           <PmsThemeSwitcher />
-          <el-badge :value="releaseStore.unread" :hidden="!releaseStore.unread" :max="99"><el-button class="pms-button-navigation" :icon="Bell" :aria-label="`升级通知${releaseStore.unread ? `，${releaseStore.unread}条未读` : ''}`" @click="openRelease('notices')">升级通知</el-button></el-badge>
+          <el-badge :value="noticeUnread" :hidden="!noticeUnread" :max="99"><el-button class="pms-button-navigation" :icon="Bell" :aria-label="noticeLabel" @click="openNotices">通知<span v-if="noticeError" aria-hidden="true"> · !</span></el-button></el-badge>
           <el-dropdown trigger="click" @command="userCommand"><el-button class="user-name pms-button-navigation" aria-label="用户菜单">{{ authStore.user?.real_name || authStore.user?.username || '当前用户' }}</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="about">关于 PMS</el-dropdown-item><el-dropdown-item command="logout" divided>退出</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
         </div>
       </el-header>
@@ -60,11 +60,14 @@
     </el-container>
   </el-container>
   <el-dialog v-model="releaseVisible" :title="releaseMode === 'about' ? '关于 PMS' : '升级通知'" class="pms-release-dialog" width="min(1000px,96vw)" align-center destroy-on-close><ReleaseCenter :mode="releaseMode" /></el-dialog>
+  <el-dialog v-model="noticeVisible" title="通知" width="min(900px, calc(100vw - 24px))" class="pms-business-notice-dialog" align-center destroy-on-close><NoticeCenter v-if="noticeVisible" @navigate="noticeVisible = false" /></el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { Bell } from '@element-plus/icons-vue'
+import NoticeCenter from '@/business-notices/NoticeCenter.vue'
+import { useBusinessNoticeStore } from '@/business-notices/store'
 import ReleaseCenter from '@/release-center/ReleaseCenter.vue'
 import { useReleaseStore } from '@/release-center/store'
 import { useRouter, useRoute } from 'vue-router'
@@ -78,11 +81,20 @@ const Icons: Record<string, any> = { Setting, SetUp, User, Avatar, Menu, Folder,
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
-const releaseStore = useReleaseStore()
+const releaseStore = useReleaseStore(), businessStore = useBusinessNoticeStore()
+const noticeVisible = ref(false)
+const noticeUnread = computed(() => releaseStore.unread + businessStore.unread)
+const noticeError = computed(() => releaseStore.failed || businessStore.failed)
+const noticeLabel = computed(() => `通知${noticeUnread.value ? `，${noticeUnread.value}条未读` : ''}${noticeError.value ? '，部分通知读取失败' : !releaseStore.known || !businessStore.known ? '，正在读取' : ''}`)
+function refreshNotices() { if (authStore.token && authStore.user && !document.hidden) { void releaseStore.refresh(); void businessStore.refresh() } }
+function openNotices() { noticeVisible.value = true; refreshNotices() }
+watch([() => authStore.token, () => authStore.user?.id], () => { noticeVisible.value = false; releaseVisible.value = false; releaseStore.reset(); businessStore.reset(); refreshNotices() }, {flush:'sync'})
+watch(() => authStore.hasPermission('project:archive:view'), () => void businessStore.refresh())
+let noticeTimer: ReturnType<typeof setInterval>
 const releaseVisible = ref(false), releaseMode = ref<'about' | 'notices'>('about')
 function openRelease(mode: 'about' | 'notices') { releaseMode.value = mode; releaseVisible.value = true }
 function userCommand(command: string) { if (command === 'about') openRelease('about'); else if (command === 'logout') handleLogout() }
-watch(() => route.path, () => { releaseVisible.value = false })
+watch(() => route.path, () => { releaseVisible.value = false; noticeVisible.value = false })
 const currentRoute = computed(() => route.path)
 const isCollapse = ref(true)
 const menuTree = ref<any[]>([])
@@ -135,7 +147,11 @@ async function refreshAuthorization() {
 
 onMounted(() => {
   fetchMenus()
-  void releaseStore.refresh()
+  refreshNotices()
+  window.addEventListener('focus', refreshNotices)
+  window.addEventListener('pms:archive-change', refreshNotices)
+  document.addEventListener('visibilitychange', refreshNotices)
+  noticeTimer = setInterval(refreshNotices, 60000)
   // 如果用户信息为空，先获取
   if (!authStore.user) {
     authStore.fetchUser()
@@ -143,7 +159,7 @@ onMounted(() => {
   window.addEventListener('pms:permission-denied', refreshAuthorization)
 })
 
-onBeforeUnmount(() => { releaseStore.reset(); window.removeEventListener('pms:permission-denied', refreshAuthorization) })
+onBeforeUnmount(() => { releaseStore.reset(); businessStore.reset(); clearInterval(noticeTimer); window.removeEventListener('focus', refreshNotices); window.removeEventListener('pms:archive-change', refreshNotices); document.removeEventListener('visibilitychange', refreshNotices); window.removeEventListener('pms:permission-denied', refreshAuthorization) })
 </script>
 
 <style scoped>
@@ -344,4 +360,9 @@ onBeforeUnmount(() => { releaseStore.reset(); window.removeEventListener('pms:pe
   justify-content: center;
   padding: 0 !important;
 }
+</style>
+
+<style>
+.pms-business-notice-dialog .el-dialog__body{max-height:calc(100dvh - 150px);overflow:auto}
+.pms-business-notice-dialog .el-tabs__content{overflow:visible}
 </style>
